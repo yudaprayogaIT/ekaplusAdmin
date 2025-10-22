@@ -56,7 +56,7 @@ export default function WAAccountCard({
       <div>
         <div className="flex items-center justify-between gap-3 text-xs text-gray-500">
           <div>
-            Wa Number <span className="font-medium">{displayPhone}</span>
+            Whatsapp Number <span className="font-medium">{displayPhone}</span>
           </div>
           {/* <div className="flex gap-2">
             {displayRole ? (

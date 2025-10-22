@@ -68,7 +68,7 @@ export default function WAList({
 
   return (
     <div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-8 sm:grid-cols-2">
         {visible.map((it: WAItem) => {
           const user = it?.user_id ? userMap.get(Number(it.user_id)) ?? null : null;
           return (
