@@ -13,13 +13,12 @@ import {
   CardGiftcard,
   ChatOutlined,
   CurrencyExchange,
+  Email,
   Favorite,
-  Group,
   Groups,
   HomeWork,
   InventoryOutlined,
   ListAltOutlined,
-  Paid,
   Person,
   ShoppingBagOutlined,
   WhatsApp,
@@ -37,8 +36,9 @@ const MAIN_MENU: MenuItem[] = [
 
 const SECONDARY_MENU: MenuItem[] = [
   { label: 'Users', href: '/users', icon: <Person /> },
-  { label: 'WA Accounts', href: '/waAdmin', icon: <WhatsApp /> },
   { label: 'Branches', href: '/branches', icon: <Apartment /> },
+  { label: 'WA Accounts', href: '/waAdmin', icon: <WhatsApp /> },
+  { label: 'Email', href: '/email/accounts', icon: <Email /> },
   { label: 'To-Do', href: '/todo', icon: <ListAltOutlined /> },
 ];
 

@@ -20,6 +20,7 @@ export default function Page() {
       if (r1.ok) setItems(await r1.json());
       if (r2.ok) setUsers(await r2.json());
     } catch (e) {
+      console.error(e)
       // ignore
     } finally {
       setLoading(false);
