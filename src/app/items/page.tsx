@@ -1,23 +1,11 @@
-// "use client";
-
-import ItemCatalog from "@/components/items/ItemCatalog";
-import React from "react";
+// src/app/items/page.tsx
+import ItemList from '@/components/items/ItemList';
 
 export const metadata = {
-  title: "Items - Admin Pengelola Ekatalog",
+  title: 'Items - Ekatalog Ekatunggal',
+  description: 'Kelola item produk di seluruh cabang',
 };
 
-export default function Page() {
-  return (
-    <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-montserrat font-semibold">Items</h1>
-        <p className="text-sm text-gray-500">
-          Daftar item Ekatalog
-        </p>
-      </div>
-
-      <ItemCatalog />
-    </div>
-  );
+export default function ItemsPage() {
+  return <ItemList />;
 }
