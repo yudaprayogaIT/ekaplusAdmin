@@ -1,8 +1,17 @@
+/* src/app/globals.css */
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f9fafb;
+  --foreground: #111827;
+  --black: #171717;
+  --purple_default: #8B5CF6;
+  --purple_light: #A78BFA;
+  --purple_white: #F3E8FF;
+  --blue: #DBEAFE;
+  --yellow: #FEF3C7;
+  --green: #D1FAE5;
+  --red: #FEE2E2;
 }
 
 @theme inline {
@@ -14,21 +23,44 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #F5F6FA;
-    --foreground: #ededed;
-    --primary: #B11F23;
-    --yellow: #FDD100;
-    --blue: #4880FF;
-    --grey: #0000006b;
+    --background: #f9fafb;
   }
 }
 
-html, body {
+html,
+body {
   height: 100%;
 }
 
 body {
   background: var(--background);
-  /* color: var(--foreground); */
-  font-family: poppins, Arial, Helvetica, sans-serif;
+  color: var(--foreground);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c4b5fd;
+  border-radius: 10px;
+  transition: background 0.2s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a78bfa;
+}
+
+/* Smooth transitions */
+* {
+  transition-property: color, background-color, border-color, box-shadow;
+  transition-duration: 150ms;
+  transition-timing-function: ease-in-out;
 }

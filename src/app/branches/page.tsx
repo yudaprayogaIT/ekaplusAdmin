@@ -1,14 +1,11 @@
-import React from 'react';
+// src/app/branches/page.tsx
 import BranchList from '@/components/branches/BranchList';
 
-export const metadata = { title: 'Branches - Admin' };
+export const metadata = {
+  title: 'Branches - Ekatalog Ekatunggal',
+  description: 'Kelola cabang Ekatunggal di seluruh Indonesia',
+};
 
 export default function BranchesPage() {
-  return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-xl shadow p-6">
-        <BranchList />
-      </div>
-    </div>
-  );
+  return <BranchList />;
 }

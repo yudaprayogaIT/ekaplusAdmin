@@ -1,143 +1,186 @@
-'use client';
+// src/components/layout/Sidebar.tsx
+"use client";
 
-import React, { useEffect, useState } from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
-import { usePathname } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
-import HomeIcon from '@mui/icons-material/Home';
+import React, { useEffect, useState } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { usePathname } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  AccountBalanceWallet,
-  Apartment,
-  AutoAwesomeMosaicRounded,
-  CardGiftcard,
-  ChatOutlined,
-  CurrencyExchange,
-  Email,
-  Favorite,
-  Groups,
-  HomeWork,
-  InventoryOutlined,
-  ListAltOutlined,
-  Person,
-  ShoppingBagOutlined,
-  WhatsApp,
-} from '@mui/icons-material';
+  FaHome,
+  FaHeart,
+  FaShoppingBag,
+  FaBoxes,
+  FaTags,
+  FaUsers,
+  FaBuilding,
+  FaWhatsapp,
+  FaEnvelope,
+  FaClipboardList,
+  FaUser,
+  FaUserShield,
+  FaLayerGroup,
+  FaStar,
+} from "react-icons/fa";
+import { MdInventory, MdMessage } from "react-icons/md";
+import { BiSolidPurchaseTag } from "react-icons/bi";
 
 type MenuItem = { label: string; href: string; icon: React.ReactNode | string };
 
 const MAIN_MENU: MenuItem[] = [
-  { label: 'Dashboard', href: '/', icon: <HomeIcon /> },
-  { label: 'Favorites', href: '/favorites', icon: <Favorite /> },
-  { label: 'Inbox', href: '/inbox', icon: <ChatOutlined /> },
-  { label: 'Order Lists', href: '/orders', icon: <ListAltOutlined /> },
-  { label: 'Product Stock', href: '/stock', icon: <InventoryOutlined /> },
+  { label: "Dashboard", href: "/", icon: <FaHome className="w-5 h-5" /> },
+  {
+    label: "Favorites",
+    href: "/favorites",
+    icon: <FaHeart className="w-5 h-5" />,
+  },
+  { label: "Inbox", href: "/inbox", icon: <MdMessage className="w-5 h-5" /> },
+  {
+    label: "Order Lists",
+    href: "/orders",
+    icon: <FaClipboardList className="w-5 h-5" />,
+  },
+  {
+    label: "Product Stock",
+    href: "/stock",
+    icon: <MdInventory className="w-5 h-5" />,
+  },
 ];
 
 const SECONDARY_MENU: MenuItem[] = [
-  { label: 'Users', href: '/users', icon: <Person /> },
-  { label: 'Branches', href: '/branches', icon: <Apartment /> },
-  { label: 'WA Accounts', href: '/waAdmin', icon: <WhatsApp /> },
-  { label: 'Email', href: '/email/accounts', icon: <Email /> },
-  { label: 'To-Do', href: '/todo', icon: <ListAltOutlined /> },
+  { label: "Users", href: "/users", icon: <FaUser className="w-5 h-5" /> },
+  {
+    label: "Branches",
+    href: "/branches",
+    icon: <FaBuilding className="w-5 h-5" />,
+  },
+  {
+    label: "WA Accounts",
+    href: "/waAdmin",
+    icon: <FaWhatsapp className="w-5 h-5" />,
+  },
+  {
+    label: "Email",
+    href: "/email/accounts",
+    icon: <FaEnvelope className="w-5 h-5" />,
+  },
+  {
+    label: "To-Do",
+    href: "/todo",
+    icon: <FaClipboardList className="w-5 h-5" />,
+  },
 ];
 
 const CATALOG_SUBMENU: MenuItem[] = [
-  { label: 'Items', href: '/items', icon: <ShoppingBagOutlined /> },
-  { label: 'Products', href: '/products', icon: <ShoppingBagOutlined /> },
-  { label: 'Categories', href: '/categories', icon: <AutoAwesomeMosaicRounded /> },
+   {
+    label: "Type",
+    href: "/types",
+    icon: <BiSolidPurchaseTag className="w-4 h-4" />,
+  },
+  {
+    label: "Items",
+    href: "/items",
+    icon: <BiSolidPurchaseTag className="w-4 h-4" />,
+  },
+  {
+    label: "Products",
+    href: "/products",
+    icon: <FaShoppingBag className="w-4 h-4" />,
+  },
+  {
+    label: "Categories",
+    href: "/categories",
+    icon: <FaTags className="w-4 h-4" />,
+  },
 ];
 
 const CUSTOMER_SUBMENU: MenuItem[] = [
-  { label: 'Member', href: '/members', icon: <AccountBalanceWallet /> },
-  { label: 'Group', href: '/memberGroups', icon: <HomeWork /> },
-  { label: 'Tiers', href: '/member-tiers', icon: <CurrencyExchange /> },
-  // { label: 'Company', href: '/companies', icon: <AutoAwesomeMosaicRounded /> },
+  {
+    label: "Member",
+    href: "/members",
+    icon: <FaUserShield className="w-4 h-4" />,
+  },
+  {
+    label: "Group",
+    href: "/memberGroups",
+    icon: <FaUsers className="w-4 h-4" />,
+  },
+  {
+    label: "Tiers",
+    href: "/member-tiers",
+    icon: <FaStar className="w-4 h-4" />,
+  },
 ];
 
-export default function Sidebar() {
-  const pathname = usePathname() || '/';
+// Export function untuk digunakan di Header
+export function useSidebarCollapse() {
   const [collapsed, setCollapsed] = useState<boolean>(false);
+
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("sidebar-collapsed");
+      setCollapsed(v === "1");
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("sidebar-collapsed", collapsed ? "1" : "0");
+    } catch {}
+  }, [collapsed]);
+
+  return { collapsed, setCollapsed };
+}
+
+interface SidebarProps {
+  collapsed: boolean;
+  setCollapsed: (value: boolean | ((prev: boolean) => boolean)) => void;
+}
+
+export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
+  const pathname = usePathname() || "/";
   const [catalogOpen, setCatalogOpen] = useState<boolean>(false);
   const [customerOpen, setCustomerOpen] = useState<boolean>(false);
   const [isMobile, setIsMobile] = useState<boolean>(false);
 
   const collapsedWidth = 80;
-  const expandedWidth = 180;
+  const expandedWidth = 200;
 
-  // read persisted collapse preference once on mount (desktop preference)
-  useEffect(() => {
-    try {
-      const v = localStorage.getItem('sidebar-collapsed');
-      setCollapsed(v === '1');
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  // persist collapse preference (only meaningful for desktop)
-  useEffect(() => {
-    try {
-      localStorage.setItem('sidebar-collapsed', collapsed ? '1' : '0');
-    } catch {}
-  }, [collapsed]);
-
-  // detect mobile breakpoints
   useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth < 768);
     };
     handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // auto-open catalog if current route is inside products/categories
   useEffect(() => {
-    if (pathname.startsWith('/products') || pathname.startsWith('/categories') || pathname.startsWith('/items')) {
+    if (
+      pathname.startsWith("/products") ||
+      pathname.startsWith("/categories") ||
+      pathname.startsWith("/items")
+    ) {
       setCatalogOpen(true);
+    }
+    if (
+      pathname.startsWith("/members") ||
+      pathname.startsWith("/memberGroups") ||
+      pathname.startsWith("/member-tiers")
+    ) {
+      setCustomerOpen(true);
     }
   }, [pathname]);
 
-  const isMenuActive = (href: string) => pathname === href || pathname.startsWith(href + '/');
-
-  // Behavior notes:
-  // - On desktop (isMobile === false): sidebar is part of layout and width is collapsedWidth or expandedWidth.
-  // - On mobile (isMobile === true):
-  //    - collapsed === true  => sidebar hidden (off-canvas)
-  //    - collapsed === false => sidebar visible as fixed overlay (width = expandedWidth)
-  //
-  // Provide a floating open button for mobile when sidebar is hidden.
+  const isMenuActive = (href: string) =>
+    pathname === href || pathname.startsWith(href + "/");
 
   return (
     <>
-      {/* Floating open button for mobile when sidebar is hidden */}
-      {isMobile && collapsed && (
-        <button
-          aria-label="Open sidebar"
-          onClick={() => setCollapsed(false)}
-          className="fixed top-4 left-4 z-50 p-2 bg-white rounded-full shadow-md border border-gray-200"
-          title="Open sidebar"
-        >
-          <motion.svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#B11F23"
-            strokeWidth="1.6"
-            initial={false}
-            animate={{ rotate: 0 }}
-          >
-            <path d="M8 6l8 6-8 6" strokeLinecap="round" strokeLinejoin="round" />
-          </motion.svg>
-        </button>
-      )}
-
-      {/* Backdrop for mobile when open */}
+      {/* Backdrop for mobile */}
       {isMobile && !collapsed && (
         <div
-          className="fixed inset-0 bg-black/40 z-40"
+          className="fixed inset-0 bg-black/40 z-40 backdrop-blur-sm"
           onClick={() => setCollapsed(true)}
           aria-hidden
         />
@@ -147,295 +190,370 @@ export default function Sidebar() {
         aria-label="Sidebar"
         initial={false}
         animate={{
-          x: isMobile ? (collapsed ? '-100%' : 0) : 0,
-          width: isMobile ? expandedWidth : collapsed ? collapsedWidth : expandedWidth,
+          x: isMobile ? (collapsed ? "-100%" : 0) : 0,
+          width: isMobile
+            ? expandedWidth
+            : collapsed
+            ? collapsedWidth
+            : expandedWidth,
         }}
-        transition={{ type: 'spring', stiffness: 260, damping: 30 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
         style={{
-          minWidth: isMobile ? expandedWidth : collapsed ? collapsedWidth : expandedWidth,
+          minWidth: isMobile
+            ? expandedWidth
+            : collapsed
+            ? collapsedWidth
+            : expandedWidth,
           maxWidth: expandedWidth,
         }}
-        className={`h-screen bg-white border-r border-gray-200 flex flex-col ${
-          isMobile ? 'fixed top-0 left-0 z-50 shadow-2xl' : ''
+        className={`h-screen bg-white flex flex-col ${
+          isMobile
+            ? "fixed top-0 left-0 z-50 shadow-2xl"
+            : "border-r border-gray-100"
         }`}
       >
-        {/* top: logo + toggle */}
-        <div className="flex items-center justify-between px-4 py-4">
+        {/* Logo section */}
+        <div className="px-4 py-5 border-b border-gray-100">
           <div className="flex items-center gap-3">
             {collapsed && !isMobile ? (
-              <div className="w-8 h-8 flex-shrink-0">
-                <Image src="/images/logo_etm.png" alt="logo" width={32} height={32} className="object-contain" />
+              <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-700 rounded-xl flex items-center justify-center">
+                <span className="text-white font-bold text-lg">E</span>
               </div>
             ) : (
-              <span className="text-base md:text-lg font-semibold text-gray-800">E-Katalog</span>
+              <>
+                <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-700 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <span className="text-white font-bold text-lg">E</span>
+                </div>
+                <span className="text-base font-semibold text-gray-800">
+                  Eka+ Admin
+                </span>
+              </>
             )}
           </div>
-
-          <button
-            aria-label={isMobile ? (collapsed ? 'Open sidebar' : 'Close sidebar') : collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            onClick={() => {
-              // On mobile: toggle between hidden (collapsed=true) and open (collapsed=false)
-              // On desktop: same toggle behavior (narrow vs expanded)
-              setCollapsed((s) => !s);
-            }}
-            className="p-1 rounded hover:bg-gray-100"
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            <motion.svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#B11F23"
-              strokeWidth="1.6"
-              initial={false}
-              animate={{ rotate: collapsed ? 180 : 0 }}
-              transition={{ duration: 0.25 }}
-            >
-              {collapsed ? (
-                <path d="M8 6l8 6-8 6" strokeLinecap="round" strokeLinejoin="round" />
-              ) : (
-                <path d="M16 6l-8 6 8 6" strokeLinecap="round" strokeLinejoin="round" />
-              )}
-            </motion.svg>
-          </button>
         </div>
 
-        {/* nav groups */}
-        <nav className="flex-1 overflow-y-auto mt-3">
-          <ul className="space-y-1 px-2">
-            {/* Main menu items */}
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto py-4">
+          <ul className="space-y-1 px-3">
+            {/* Main menu */}
             {MAIN_MENU.map((m) => {
               const active = isMenuActive(m.href);
               return (
-                <li key={m.href} className="relative">
-                  <Link href={m.href} className="no-underline">
-                    <div className={`relative`}>
-                      <motion.div
-                        layout
-                        transition={{ duration: 0.18 }}
-                        style={{ backgroundColor: active ? '#B11F23' : 'transparent' }}
-                        className={`absolute inset-0 rounded-md pointer-events-none`}
-                      />
-                      <div className={`flex items-center gap-3 rounded-md px-3 py-2 relative z-10 ${collapsed ? 'justify-center' : ''}`}>
-                        <div className={`w-5 h-5 2xl:w-6 2xl:h-6 flex items-center justify-center ${active ? 'text-white' : 'text-gray-600'}`}>
-                          {typeof m.icon === 'string' ? (
-                            <Image src={m.icon} alt={m.label} width={20} height={20} />
-                          ) : (
-                            m.icon
-                          )}
-                        </div>
-                        {!collapsed && <span className={`truncate text-sm 2xl:text-base ${active ? 'text-white' : 'text-gray-700'}`}>{m.label}</span>}
+                <li key={m.href}>
+                  <Link href={m.href} className="no-underline block">
+                    <motion.div
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
+                        active
+                          ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
+                          : "text-gray-600 hover:bg-gray-50"
+                      } ${collapsed ? "justify-center" : ""}`}
+                    >
+                      <div
+                        className={`flex items-center justify-center ${
+                          active ? "text-white" : "text-gray-500"
+                        }`}
+                      >
+                        {typeof m.icon === "string" ? (
+                          <Image
+                            src={m.icon}
+                            alt={m.label}
+                            width={20}
+                            height={20}
+                          />
+                        ) : (
+                          m.icon
+                        )}
                       </div>
-                    </div>
+                      {!collapsed && (
+                        <>
+                          <span className="text-sm font-medium flex-1">
+                            {m.label}
+                          </span>
+                          {active && (
+                            <motion.svg
+                              initial={{ x: -5, opacity: 0 }}
+                              animate={{ x: 0, opacity: 1 }}
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                            >
+                              <path
+                                d="M9 6l6 6-6 6"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </motion.svg>
+                          )}
+                        </>
+                      )}
+                    </motion.div>
                   </Link>
                 </li>
               );
             })}
 
-            {/* separator */}
-            <div className="border-t border-gray-200 my-3" />
+            <div className="my-4 border-t border-gray-100" />
 
-            {/* Catalog parent (dropdown) */}
-            <li className="relative">
+            {/* Catalog parent */}
+            <li>
               {(() => {
-                const parentActive = CATALOG_SUBMENU.some((c) => isMenuActive(c.href));
+                const parentActive = CATALOG_SUBMENU.some((c) =>
+                  isMenuActive(c.href)
+                );
                 return (
-                  <div className="relative">
+                  <>
                     <button
-                      className={`w-full text-left relative`}
+                      className="w-full"
                       onClick={() => setCatalogOpen((s) => !s)}
                       aria-expanded={catalogOpen}
                     >
                       <motion.div
-                        layout
-                        transition={{ duration: 0.18 }}
-                        style={{ backgroundColor: parentActive ? '#B11F23' : 'transparent' }}
-                        className={`absolute inset-0 rounded-md pointer-events-none`}
-                      />
-                      <div className={`flex items-center gap-3 rounded-md px-3 py-2 relative z-10 ${collapsed ? 'justify-center' : ''}`}>
-                        <div className={`w-5 h-5 2xl:w-6 2xl:h-6 flex items-center justify-center ${parentActive ? 'text-white' : 'text-gray-600'}`}>
-                          <CardGiftcard />
-                        </div>
-                        {!collapsed && <span className={`truncate text-sm 2xl:text-base ${parentActive ? 'text-white' : 'text-gray-700'}`}>Catalog</span>}
-
-                        {/* chevron */}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
+                          parentActive
+                            ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
+                            : "text-gray-600 hover:bg-gray-50"
+                        } ${collapsed ? "justify-center" : ""}`}
+                      >
+                        <FaBoxes
+                          className={`w-5 h-5 ${
+                            parentActive ? "text-white" : "text-gray-500"
+                          }`}
+                        />
                         {!collapsed && (
-                          <div className="ml-auto">
+                          <>
+                            <span className="text-sm font-medium flex-1">
+                              Catalog
+                            </span>
                             <motion.svg
-                              width="18"
-                              height="18"
-                              viewBox="0 0 24 24"
-                              initial={false}
                               animate={{ rotate: catalogOpen ? 90 : 0 }}
-                              transition={{ duration: 0.18 }}
-                              className={`${parentActive ? 'text-white' : 'text-gray-400'}`}
+                              transition={{ duration: 0.2 }}
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
                             >
-                              <path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                              <path
+                                d="M9 6l6 6-6 6"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
                             </motion.svg>
-                          </div>
+                          </>
                         )}
-                      </div>
+                      </motion.div>
                     </button>
-                  </div>
+                    <AnimatePresence initial={false}>
+                      {catalogOpen && !collapsed && (
+                        <motion.ul
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="mt-1 ml-3 space-y-1 overflow-hidden"
+                        >
+                          {CATALOG_SUBMENU.map((c) => {
+                            const active = isMenuActive(c.href);
+                            return (
+                              <li key={c.href}>
+                                <Link
+                                  href={c.href}
+                                  className="no-underline block"
+                                >
+                                  <motion.div
+                                    whileHover={{ scale: 1.02, x: 2 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
+                                      active
+                                        ? "bg-gradient-to-r from-pink-400 to-red-500 text-white shadow-md"
+                                        : "text-gray-600 hover:bg-gray-50"
+                                    }`}
+                                  >
+                                    <div
+                                      className={`flex items-center justify-center ${
+                                        active ? "text-white" : "text-gray-400"
+                                      }`}
+                                    >
+                                      {typeof c.icon === "string" ? (
+                                        <Image
+                                          src={c.icon}
+                                          alt={c.label}
+                                          width={16}
+                                          height={16}
+                                        />
+                                      ) : (
+                                        c.icon
+                                      )}
+                                    </div>
+                                    <span className="text-sm">{c.label}</span>
+                                  </motion.div>
+                                </Link>
+                              </li>
+                            );
+                          })}
+                        </motion.ul>
+                      )}
+                    </AnimatePresence>
+                  </>
                 );
               })()}
-              <AnimatePresence initial={false}>
-                {catalogOpen && (
-                  <motion.ul
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.18 }}
-                    className="pl-2 pr-1 mt-2 overflow-hidden"
-                  >
-                    {CATALOG_SUBMENU.map((c) => {
-                      const active = isMenuActive(c.href);
-                      return (
-                        <li key={c.href} className="relative">
-                          <Link href={c.href} className="no-underline">
-                            <div className="relative">
-                              <motion.div
-                                layout
-                                transition={{ duration: 0.18 }}
-                                style={{ backgroundColor: active ? '#B11F23' : 'transparent' }}
-                                className={`absolute inset-0 rounded-md pointer-events-none`}
-                              />
-                              <div className={`flex items-center gap-3 rounded-md px-3 py-2 relative z-10 ml-3 ${collapsed ? 'justify-center' : ''}`}>
-                                <div className={`w-5 h-5 flex items-center justify-center ${active ? 'text-white' : 'text-gray-600'}`}>
-                                  {typeof c.icon === 'string' ? (
-                                    <Image src={c.icon} alt={c.label} width={18} height={18} />
-                                  ) : (
-                                    c.icon
-                                  )}
-                                </div>
-                                {!collapsed && <span className={`truncate text-sm 2xl:text-base ${active ? 'text-white' : 'text-gray-700'}`}>{c.label}</span>}
-                              </div>
-                            </div>
-                          </Link>
-                        </li>
-                      );
-                    })}
-                  </motion.ul>
-                )}
-              </AnimatePresence>
             </li>
 
-            {/* separator */}
-            <div className="border-t border-gray-200 my-3" />
+            <div className="my-4 border-t border-gray-100" />
 
-            {/* Customer parent (dropdown) */}
-            <li className="relative">
+            {/* Customer parent */}
+            <li>
               {(() => {
-                const parentActive = CUSTOMER_SUBMENU.some((c) => isMenuActive(c.href));
+                const parentActive = CUSTOMER_SUBMENU.some((c) =>
+                  isMenuActive(c.href)
+                );
                 return (
-                  <div className="relative">
+                  <>
                     <button
-                      className={`w-full text-left relative`}
+                      className="w-full"
                       onClick={() => setCustomerOpen((s) => !s)}
                       aria-expanded={customerOpen}
                     >
                       <motion.div
-                        layout
-                        transition={{ duration: 0.18 }}
-                        style={{ backgroundColor: parentActive ? '#B11F23' : 'transparent' }}
-                        className={`absolute inset-0 rounded-md pointer-events-none`}
-                      />
-                      <div className={`flex items-center gap-3 rounded-md px-3 py-2 relative z-10 ${collapsed ? 'justify-center' : ''}`}>
-                        <div className={`w-5 h-5 2xl:w-6 2xl:h-6 flex items-center justify-center ${parentActive ? 'text-white' : 'text-gray-600'}`}>
-                          <Groups />
-                        </div>
-                        {!collapsed && <span className={`truncate text-sm 2xl:text-base ${parentActive ? 'text-white' : 'text-gray-700'}`}>Customer</span>}
-
-                        {/* chevron */}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
+                          parentActive
+                            ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
+                            : "text-gray-600 hover:bg-gray-50"
+                        } ${collapsed ? "justify-center" : ""}`}
+                      >
+                        <FaLayerGroup
+                          className={`w-5 h-5 ${
+                            parentActive ? "text-white" : "text-gray-500"
+                          }`}
+                        />
                         {!collapsed && (
-                          <div className="ml-auto">
+                          <>
+                            <span className="text-sm font-medium flex-1">
+                              Customer
+                            </span>
                             <motion.svg
-                              width="18"
-                              height="18"
+                              animate={{ rotate: customerOpen ? 90 : 0 }}
+                              transition={{ duration: 0.2 }}
+                              width="16"
+                              height="16"
                               viewBox="0 0 24 24"
-                              initial={false}
-                              animate={{ rotate: catalogOpen ? 90 : 0 }}
-                              transition={{ duration: 0.18 }}
-                              className={`${parentActive ? 'text-white' : 'text-gray-400'}`}
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
                             >
-                              <path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                              <path
+                                d="M9 6l6 6-6 6"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
                             </motion.svg>
-                          </div>
+                          </>
                         )}
-                      </div>
+                      </motion.div>
                     </button>
-                  </div>
+                    <AnimatePresence initial={false}>
+                      {customerOpen && !collapsed && (
+                        <motion.ul
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="mt-1 ml-3 space-y-1 overflow-hidden"
+                        >
+                          {CUSTOMER_SUBMENU.map((c) => {
+                            const active = isMenuActive(c.href);
+                            return (
+                              <li key={c.href}>
+                                <Link
+                                  href={c.href}
+                                  className="no-underline block"
+                                >
+                                  <motion.div
+                                    whileHover={{ scale: 1.02, x: 2 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
+                                      active
+                                        ? "bg-gradient-to-r from-pink-400 to-red-500 text-white shadow-md"
+                                        : "text-gray-600 hover:bg-gray-50"
+                                    }`}
+                                  >
+                                    <div
+                                      className={`flex items-center justify-center ${
+                                        active ? "text-white" : "text-gray-400"
+                                      }`}
+                                    >
+                                      {typeof c.icon === "string" ? (
+                                        <Image
+                                          src={c.icon}
+                                          alt={c.label}
+                                          width={16}
+                                          height={16}
+                                        />
+                                      ) : (
+                                        c.icon
+                                      )}
+                                    </div>
+                                    <span className="text-sm">{c.label}</span>
+                                  </motion.div>
+                                </Link>
+                              </li>
+                            );
+                          })}
+                        </motion.ul>
+                      )}
+                    </AnimatePresence>
+                  </>
                 );
               })()}
-              <AnimatePresence initial={false}>
-                {customerOpen && (
-                  <motion.ul
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.18 }}
-                    className="pl-2 pr-1 mt-2 overflow-hidden"
-                  >
-                    {CUSTOMER_SUBMENU.map((c) => {
-                      const active = isMenuActive(c.href);
-                      return (
-                        <li key={c.href} className="relative">
-                          <Link href={c.href} className="no-underline">
-                            <div className="relative">
-                              <motion.div
-                                layout
-                                transition={{ duration: 0.18 }}
-                                style={{ backgroundColor: active ? '#B11F23' : 'transparent' }}
-                                className={`absolute inset-0 rounded-md pointer-events-none`}
-                              />
-                              <div className={`flex items-center gap-3 rounded-md px-3 py-2 relative z-10 ml-3 ${collapsed ? 'justify-center' : ''}`}>
-                                <div className={`w-5 h-5 flex items-center justify-center ${active ? 'text-white' : 'text-gray-600'}`}>
-                                  {typeof c.icon === 'string' ? (
-                                    <Image src={c.icon} alt={c.label} width={18} height={18} />
-                                  ) : (
-                                    c.icon
-                                  )}
-                                </div>
-                                {!collapsed && <span className={`truncate text-sm 2xl:text-base ${active ? 'text-white' : 'text-gray-700'}`}>{c.label}</span>}
-                              </div>
-                            </div>
-                          </Link>
-                        </li>
-                      );
-                    })}
-                  </motion.ul>
-                )}
-              </AnimatePresence>
             </li>
 
-            {/* separator */}
-            <div className="border-t border-gray-200 my-3" />
+            <div className="my-4 border-t border-gray-100" />
 
             {/* Secondary menu */}
             {SECONDARY_MENU.map((m) => {
               const active = isMenuActive(m.href);
               return (
-                <li key={m.href} className="relative">
-                  <Link href={m.href} className="no-underline">
-                    <div className={`relative`}>
-                      <motion.div
-                        layout
-                        transition={{ duration: 0.18 }}
-                        style={{ backgroundColor: active ? '#B11F23' : 'transparent' }}
-                        className={`absolute inset-0 rounded-md pointer-events-none`}
-                      />
-                      <div className={`flex items-center gap-3 rounded-md px-3 py-2 relative z-10 ${collapsed ? 'justify-center' : ''}`}>
-                        <div className={`w-5 h-5 2xl:w-6 2xl:h-6 flex items-center justify-center ${active ? 'text-white' : 'text-gray-600'}`}>
-                          {typeof m.icon === 'string' ? (
-                            <Image src={m.icon} alt={m.label} width={20} height={20} />
-                          ) : (
-                            m.icon
-                          )}
-                        </div>
-                        {!collapsed && <span className={`truncate text-sm 2xl:text-base ${active ? 'text-white' : 'text-gray-700'}`}>{m.label}</span>}
+                <li key={m.href}>
+                  <Link href={m.href} className="no-underline block">
+                    <motion.div
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
+                        active
+                          ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
+                          : "text-gray-600 hover:bg-gray-50"
+                      } ${collapsed ? "justify-center" : ""}`}
+                    >
+                      <div
+                        className={`flex items-center justify-center ${
+                          active ? "text-white" : "text-gray-500"
+                        }`}
+                      >
+                        {typeof m.icon === "string" ? (
+                          <Image
+                            src={m.icon}
+                            alt={m.label}
+                            width={20}
+                            height={20}
+                          />
+                        ) : (
+                          m.icon
+                        )}
                       </div>
-                    </div>
+                      {!collapsed && (
+                        <span className="text-sm font-medium">{m.label}</span>
+                      )}
+                    </motion.div>
                   </Link>
                 </li>
               );
@@ -443,16 +561,9 @@ export default function Sidebar() {
           </ul>
         </nav>
 
-        {/* footer */}
-        <div className="px-3 py-3 border-t border-gray-200 text-xs text-gray-500">
-          {!collapsed ? (
-            <div className="flex items-center justify-between">
-              <div>v1.0</div>
-              <div className="text-right">Admin</div>
-            </div>
-          ) : (
-            <div className="text-center">v1.0</div>
-          )}
+        {/* Footer */}
+        <div className="px-3 py-4 border-t border-gray-100">
+          <div className="text-center text-xs text-gray-500">v1.0</div>
         </div>
       </motion.aside>
     </>

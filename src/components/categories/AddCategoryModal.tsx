@@ -3,55 +3,130 @@
 
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { FaTimes, FaUpload, FaImage, FaCheckCircle } from "react-icons/fa";
 
 type Category = {
   id?: number;
   name: string;
-  type: "Material" | "Furniture" | string;
-  points: number;
+  icon?: string;
   image?: string;
   description?: string;
+  title?: string;
+  subtitle?: string;
+  type: {
+    id: number;
+    name: string;
+  };
+  docstatus: number;
+  status: string;
+  disabled: number;
+  updated_at?: string;
+  updated_by?: { id: number; name: string };
+  created_at?: string;
+  created_by?: { id: number; name: string };
+  owner?: { id: number; name: string };
+};
+
+type CategoryType = {
+  id: number;
+  name: string;
+  type_name: string;
+};
+
+type StoredCategory = {
+  id: number;
+  name: string;
+  icon?: string;
+  image?: string;
+  description?: string;
+  title?: string;
+  subtitle?: string;
+  type: {
+    id: number;
+    name: string;
+  };
+  docstatus: number;
+  status: string;
+  disabled: number;
+  updated_at?: string;
+  updated_by?: { id: number; name: string };
+  created_at?: string;
+  created_by?: { id: number; name: string };
+  owner?: { id: number; name: string };
 };
 
 const SNAP_KEY = "ekatalog_categories_snapshot";
 
-export default function AddCategoryModal({ open, onClose, initial }: { open: boolean; onClose: () => void; initial?: Category | null; }) {
+export default function AddCategoryModal({
+  open,
+  onClose,
+  initial,
+  types,
+}: {
+  open: boolean;
+  onClose: () => void;
+  initial?: Category | null;
+  types: CategoryType[];
+}) {
   const [name, setName] = useState("");
-  const [type, setType] = useState<"Material" | "Furniture" | string>("Material");
-  const [points, setPoints] = useState<number>(0);
-  const [imagePath, setImagePath] = useState(""); // can be path or dataURL
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
   const [description, setDescription] = useState("");
+  const [title, setTitle] = useState("");
+  const [subtitle, setSubtitle] = useState("");
+  const [typeId, setTypeId] = useState<number>(1);
+  const [iconPath, setIconPath] = useState("");
+  const [imagePath, setImagePath] = useState("");
+  const [iconFile, setIconFile] = useState<File | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [iconPreview, setIconPreview] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (initial) {
       setName(initial.name ?? "");
-      setType(initial.type ?? "Material");
-      setPoints(initial.points ?? 0);
-      setImagePath(initial.image ?? "");
       setDescription(initial.description ?? "");
-      setPreview(initial.image ?? null);
+      setTitle(initial.title ?? "");
+      setSubtitle(initial.subtitle ?? "");
+      setTypeId(initial.type?.id ?? 1);
+      setIconPath(initial.icon ?? "");
+      setImagePath(initial.image ?? "");
+      setIconPreview(initial.icon ?? null);
+      setImagePreview(initial.image ?? null);
+      setIconFile(null);
       setImageFile(null);
     } else {
       setName("");
-      setType("Material");
-      setPoints(0);
-      setImagePath("");
       setDescription("");
-      setPreview(null);
+      setTitle("");
+      setSubtitle("");
+      setTypeId(types[0]?.id ?? 1);
+      setIconPath("");
+      setImagePath("");
+      setIconPreview(null);
+      setImagePreview(null);
+      setIconFile(null);
       setImageFile(null);
     }
-  }, [initial, open]);
+  }, [initial, open, types]);
 
-  // when user picks a file, create preview (dataURL)
+  // Icon file preview
+  useEffect(() => {
+    if (!iconFile) return;
+    const fr = new FileReader();
+    fr.onload = () => {
+      setIconPreview(String(fr.result));
+      setIconPath(String(fr.result));
+    };
+    fr.readAsDataURL(iconFile);
+  }, [iconFile]);
+
+  // Image file preview
   useEffect(() => {
     if (!imageFile) return;
     const fr = new FileReader();
     fr.onload = () => {
-      setPreview(String(fr.result));
-      setImagePath(String(fr.result)); // store dataURL as imagePath
+      setImagePreview(String(fr.result));
+      setImagePath(String(fr.result));
     };
     fr.readAsDataURL(imageFile);
   }, [imageFile]);
@@ -60,50 +135,46 @@ export default function AddCategoryModal({ open, onClose, initial }: { open: boo
     e.preventDefault();
     setSaving(true);
 
-    const payload = {
+    const selectedType = types.find(t => t.id === typeId);
+    const payload: Omit<StoredCategory, 'id'> = {
       name: name.trim(),
-      type,
-      points: Number(points || 0),
-      image: imagePath || undefined, // either path or dataURL
       description: description || undefined,
+      title: title || undefined,
+      subtitle: subtitle || undefined,
+      type: {
+        id: typeId,
+        name: selectedType?.name || "",
+      },
+      icon: iconPath || undefined,
+      image: imagePath || undefined,
+      docstatus: 1,
+      status: "Enabled",
+      disabled: 0,
     };
 
     try {
-      if (initial && initial.id) {
-        await fetch("/api/categories", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: initial.id, ...payload }) });
-      } else {
-        await fetch("/api/categories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      }
-
-      // try to sync snapshot from server
-      try {
-        const r = await fetch("/api/categories");
-        if (r.ok) {
-          const list = await r.json();
-          localStorage.setItem(SNAP_KEY, JSON.stringify(list));
-          window.dispatchEvent(new Event("ekatalog:categories_update"));
-          setSaving(false);
-          onClose();
-          return;
-        }
-      } catch {}
-    } catch (err) {
-      // ignore, fallback to snapshot
-    }
-
-    // fallback: update local snapshot (merge)
-    try {
       const raw = localStorage.getItem(SNAP_KEY);
-      let list: any[] = raw ? JSON.parse(raw) : [];
+      let list: StoredCategory[] = raw ? JSON.parse(raw) : [];
+      
       if (initial && initial.id) {
-        list = list.map((c) => (c.id === initial.id ? { ...c, ...payload } : c));
+        list = list.map((c) => (c.id === initial.id ? { ...c, ...payload, id: initial.id } : c));
       } else {
-        const maxId = list.reduce((m: number, it: any) => Math.max(m, Number(it.id) || 0), 0);
-        list.push({ id: maxId + 1, ...payload });
+        const maxId = list.reduce((m: number, it: StoredCategory) => Math.max(m, Number(it.id) || 0), 0);
+        const newCategory: StoredCategory = { 
+          id: maxId + 1, 
+          ...payload,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        list.push(newCategory);
       }
+      
       localStorage.setItem(SNAP_KEY, JSON.stringify(list));
       window.dispatchEvent(new Event("ekatalog:categories_update"));
-    } catch {}
+    } catch (error) {
+      console.error('Failed to save category:', error);
+    }
+    
     setSaving(false);
     onClose();
   }
@@ -111,56 +182,242 @@ export default function AddCategoryModal({ open, onClose, initial }: { open: boo
   return (
     <AnimatePresence>
       {open && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-          <motion.div initial={{ y: -8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -8, opacity: 0 }} transition={{ duration: 0.14 }} className="bg-white rounded-xl shadow-lg w-full max-w-[720px] p-6 z-10">
-            <h3 className="text-lg font-medium mb-3">{initial ? "Edit Category" : "Add New Category"}</h3>
-
-            <form onSubmit={submit} className="grid grid-cols-1 gap-3">
-              <div>
-                <label className="text-xs text-gray-600">Name</label>
-                <input value={name} onChange={(e) => setName(e.target.value)} className="w-full px-3 py-2 border rounded mt-1 text-sm" required />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        >
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+          
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+            transition={{ type: "spring", duration: 0.3 }}
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden z-10"
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-red-500 to-red-600 px-6 py-6 text-white relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32" />
+              <div className="absolute bottom-0 left-0 w-48 h-48 bg-black/10 rounded-full -ml-24 -mb-24" />
+              
+              <div className="relative flex items-center justify-between">
                 <div>
-                  <label className="text-xs text-gray-600">Type</label>
-                  <select value={type} onChange={(e) => setType(e.target.value)} className="w-full px-3 py-2 border rounded mt-1 text-sm">
-                    <option value="Material">Material</option>
-                    <option value="Furniture">Furniture</option>
+                  <h3 className="text-2xl font-bold mb-1">
+                    {initial ? "Edit Kategori" : "Tambah Kategori Baru"}
+                  </h3>
+                  <p className="text-red-100 text-sm">
+                    {initial ? "Perbarui informasi kategori" : "Lengkapi form untuk menambahkan kategori"}
+                  </p>
+                </div>
+                <button
+                  onClick={onClose}
+                  className="p-2 hover:bg-white/20 rounded-xl transition-colors"
+                >
+                  <FaTimes className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={submit} className="p-6 space-y-6 max-h-[calc(90vh-140px)] overflow-y-auto">
+              {/* Name & Type Row */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Nama Kategori <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                    placeholder="Contoh: HDP, Quilting, dll"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Tipe <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={typeId}
+                    onChange={(e) => setTypeId(Number(e.target.value))}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                  >
+                    {types.map(type => (
+                      <option key={type.id} value={type.id}>
+                        {type.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Deskripsi
+                </label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all resize-none"
+                  rows={3}
+                  placeholder="Deskripsi singkat kategori..."
+                />
+              </div>
+
+              {/* Title & Subtitle Row */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="text-xs text-gray-600">Points</label>
-                  <input type="number" value={points} onChange={(e) => setPoints(Number(e.target.value))} className="w-full px-3 py-2 border rounded mt-1 text-sm" />
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Judul
+                  </label>
+                  <input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                    placeholder="Nyaman dilihat, nyaman dipakai"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Sub-judul
+                  </label>
+                  <input
+                    value={subtitle}
+                    onChange={(e) => setSubtitle(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                    placeholder="Temukan pilihan motif terbaik"
+                  />
                 </div>
               </div>
 
-              <div>
-                <label className="text-xs text-gray-600">Image (upload or path)</label>
-                <div className="flex flex-column md:flex-row items-center gap-3 mt-1">
-                  <input type="file" accept="image/*" className="" onChange={(e) => setImageFile(e.target.files ? e.target.files[0] : null)}/>
-                  <input value={imagePath} onChange={(e) => { setImagePath(e.target.value); setPreview(e.target.value || null); }} placeholder="/images/categories/..." className="flex-1 px-3 py-2 hidden md:inline-block border rounded text-sm" />
-                </div>
-                <div className="text-xs text-gray-400 mt-1">Pilih file dari komputer atau masukkan path relatif dari folder <code>public/</code>.</div>
-
-                {preview && (
-                  <div className="mt-3 w-40 h-40 bg-gray-50 rounded overflow-hidden flex items-center justify-center border">
-                    {/* jika dataURL atau path, langsung tampilkan */}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={preview} alt="preview" className="object-cover w-full h-full" />
+              {/* Icon & Image Upload */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Icon Upload */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">
+                    Icon Kategori
+                  </label>
+                  <div className="space-y-3">
+                    <label className="flex flex-col items-center justify-center gap-3 px-6 py-8 border-2 border-dashed border-gray-300 rounded-xl hover:border-red-500 hover:bg-red-50 cursor-pointer transition-all group">
+                      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center group-hover:bg-red-100 transition-colors">
+                        <FaUpload className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors" />
+                      </div>
+                      <div className="text-center">
+                        <span className="text-sm font-medium text-gray-700 group-hover:text-red-600 transition-colors">
+                          Upload Icon
+                        </span>
+                        <p className="text-xs text-gray-500 mt-1">PNG, JPG, SVG</p>
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => setIconFile(e.target.files ? e.target.files[0] : null)}
+                      />
+                    </label>
+                    
+                    {iconPreview && (
+                      <div className="relative w-full h-32 bg-gray-50 rounded-xl overflow-hidden border-2 border-gray-200">
+                        <div className="absolute top-2 right-2">
+                          <div className="bg-green-500 text-white p-1 rounded-full">
+                            <FaCheckCircle className="w-4 h-4" />
+                          </div>
+                        </div>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={iconPreview} alt="icon preview" className="object-contain w-full h-full p-3" />
+                      </div>
+                    )}
+                    
+                    <input
+                      value={iconPath}
+                      onChange={(e) => {
+                        setIconPath(e.target.value);
+                        setIconPreview(e.target.value || null);
+                      }}
+                      placeholder="atau path: assets/icons/kategori/..."
+                      className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all text-sm"
+                    />
                   </div>
-                )}
+                </div>
+
+                {/* Image Upload */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">
+                    Gambar Kategori
+                  </label>
+                  <div className="space-y-3">
+                    <label className="flex flex-col items-center justify-center gap-3 px-6 py-8 border-2 border-dashed border-gray-300 rounded-xl hover:border-red-500 hover:bg-red-50 cursor-pointer transition-all group">
+                      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center group-hover:bg-red-100 transition-colors">
+                        <FaImage className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors" />
+                      </div>
+                      <div className="text-center">
+                        <span className="text-sm font-medium text-gray-700 group-hover:text-red-600 transition-colors">
+                          Upload Gambar
+                        </span>
+                        <p className="text-xs text-gray-500 mt-1">PNG, JPG</p>
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => setImageFile(e.target.files ? e.target.files[0] : null)}
+                      />
+                    </label>
+                    
+                    {imagePreview && (
+                      <div className="relative w-full h-32 bg-gray-50 rounded-xl overflow-hidden border-2 border-gray-200">
+                        <div className="absolute top-2 right-2">
+                          <div className="bg-green-500 text-white p-1 rounded-full">
+                            <FaCheckCircle className="w-4 h-4" />
+                          </div>
+                        </div>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={imagePreview} alt="image preview" className="object-cover w-full h-full" />
+                      </div>
+                    )}
+                    
+                    <input
+                      value={imagePath}
+                      onChange={(e) => {
+                        setImagePath(e.target.value);
+                        setImagePreview(e.target.value || null);
+                      }}
+                      placeholder="atau path: assets/images/kategori/..."
+                      className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all text-sm"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="text-xs text-gray-600">Description</label>
-                <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full px-3 py-2 border rounded mt-1 text-sm" rows={3} />
-              </div>
-
-              <div className="flex justify-end gap-2 mt-2">
-                <button type="button" onClick={onClose} className="px-3 py-2 rounded border">Cancel</button>
-                <button type="submit" disabled={saving} className="px-3 py-2 rounded bg-[#2563EB] text-white">{saving ? "Saving..." : (initial ? "Save Changes" : "Add Category")}</button>
+              {/* Actions */}
+              <div className="flex justify-end gap-3 pt-6 border-t-2 border-gray-100">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-6 py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-all font-semibold text-gray-700"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-8 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:shadow-xl hover:shadow-red-200 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {saving ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <span>{initial ? "Simpan Perubahan" : "Tambah Kategori"}</span>
+                  )}
+                </button>
               </div>
             </form>
           </motion.div>
