@@ -410,5 +410,54 @@
       { "id": 11, "name": "Ekatunggal Timur Makassar" },
       { "id": 13, "name": "Ekatunggal Timur Maroso" }
     ]
+  },
+  {
+    "id": 18,
+    "code": "0050060000008#030",
+    "name": "FNT KASUR 200X140X30CM CENTRAL TES",
+    "uom": "LBR",
+    "group": "FURNITURE KASUR",
+    "category": { "id": 15, "name": "Kasur" },
+    "generator_item": "Inject by master",
+    "image": "/images/items/FNT KASUR 200X140X30CM.jpg",
+    "description": "FNT kasur 200x140x30cm Central, per lembar.",
+    "disabled": 0,
+    "panjang": "",
+    "tinggi": "",
+    "lebar": "",
+    "diameter": "",
+    "branches": [
+      { "id": 1, "name": "Ekatunggal Tunas Medan" },
+      { "id": 4, "name": "Ekatunggal Tunas Mandiri" },
+      { "id": 7, "name": "Ekatunggal" },
+      { "id": 10, "name": "Ekatunggal Timur Manado" },
+      { "id": 11, "name": "Ekatunggal Timur Makassar" },
+      { "id": 13, "name": "Ekatunggal Timur Maroso" }
+    ]
+  },
+  {
+    "id": 19,
+    "code": "0081355800000-G13",
+    "name": "KP SOFA BELUDRU CITRUS BIRU TUA G13",
+    "uom": "MTR",
+    "group": "KP SOFA BELUDRU CITRUS BIRU TUA",
+    "category": { "id": 6, "name": "Kain Polos Sofa" },
+    "generator_item": "IGEN-2025-06-2200",
+    "image": "/images/items/KP SOFA BELUDRU CITRUS BIRU TUA.jpeg",
+    "description": "Kain polos sofa Beludru Citrus biru tua, per meter.",
+    "disabled": 0,
+    "panjang": "",
+    "tinggi": "",
+    "lebar": "",
+    "diameter": "",
+    "branches": [
+      { "id": 1, "name": "Ekatunggal Tunas Medan" },
+      { "id": 4, "name": "Ekatunggal Tunas Mandiri" },
+      { "id": 5, "name": "Ekatunggal Tri Mandiri" },
+      { "id": 7, "name": "Ekatunggal" },
+      { "id": 10, "name": "Ekatunggal Timur Manado" },
+      { "id": 11, "name": "Ekatunggal Timur Makassar" },
+      { "id": 13, "name": "Ekatunggal Timur Maroso" }
+    ]
   }
 ]

@@ -83,6 +83,11 @@ const CATALOG_SUBMENU: MenuItem[] = [
     icon: <BiSolidPurchaseTag className="w-4 h-4" />,
   },
   {
+    label: "Variants",
+    href: "/variants",
+    icon: <BiSolidPurchaseTag className="w-4 h-4" />,
+  },
+  {
     label: "Products",
     href: "/products",
     icon: <FaShoppingBag className="w-4 h-4" />,

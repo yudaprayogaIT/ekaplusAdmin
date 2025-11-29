@@ -3,7 +3,7 @@
 
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaTimes, FaUpload } from "react-icons/fa";
+import { FaTimes, FaUpload, FaImage, FaCheckCircle } from "react-icons/fa";
 
 type ItemType = {
   id?: number;
@@ -11,7 +11,30 @@ type ItemType = {
   image?: string;
   description?: string;
   type_name: string;
-  status?: string;
+  docstatus: number;
+  status: string;
+  disabled: number;
+  updated_at?: string;
+  updated_by?: { id: number; name: string };
+  created_at?: string;
+  created_by?: { id: number; name: string };
+  owner?: { id: number; name: string };
+};
+
+type StoredType = {
+  id: number;
+  name: string;
+  image?: string;
+  description?: string;
+  type_name: string;
+  docstatus: number;
+  status: string;
+  disabled: number;
+  updated_at?: string;
+  updated_by?: { id: number; name: string };
+  created_at?: string;
+  created_by?: { id: number; name: string };
+  owner?: { id: number; name: string };
 };
 
 const SNAP_KEY = "ekatalog_types_snapshot";
@@ -26,30 +49,24 @@ export default function AddTypeModal({
   initial?: ItemType | null;
 }) {
   const [name, setName] = useState("");
-  const [typeName, setTypeName] = useState("");
   const [description, setDescription] = useState("");
   const [imagePath, setImagePath] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [status, setStatus] = useState("Enabled");
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (initial) {
       setName(initial.name ?? "");
-      setTypeName(initial.type_name ?? "");
       setDescription(initial.description ?? "");
       setImagePath(initial.image ?? "");
-      setStatus(initial.status ?? "Enabled");
-      setPreview(initial.image ?? null);
+      setImagePreview(initial.image ?? null);
       setImageFile(null);
     } else {
       setName("");
-      setTypeName("");
       setDescription("");
       setImagePath("");
-      setStatus("Enabled");
-      setPreview(null);
+      setImagePreview(null);
       setImageFile(null);
     }
   }, [initial, open]);
@@ -59,7 +76,7 @@ export default function AddTypeModal({
     if (!imageFile) return;
     const fr = new FileReader();
     fr.onload = () => {
-      setPreview(String(fr.result));
+      setImagePreview(String(fr.result));
       setImagePath(String(fr.result));
     };
     fr.readAsDataURL(imageFile);
@@ -69,36 +86,43 @@ export default function AddTypeModal({
     e.preventDefault();
     setSaving(true);
 
-    const payload = {
+    const payload: Omit<StoredType, "id"> = {
       name: name.trim(),
-      type_name: typeName.trim() || name.trim(),
+      type_name: name.trim(),
       description: description || undefined,
       image: imagePath || undefined,
       docstatus: 1,
-      status,
+      status: "Enabled",
       disabled: 0,
     };
 
     try {
-      // Update local snapshot
       const raw = localStorage.getItem(SNAP_KEY);
-      let list: ItemType[] = raw ? JSON.parse(raw) : [];
+      let list: StoredType[] = raw ? JSON.parse(raw) : [];
 
       if (initial && initial.id) {
         list = list.map((t) =>
-          t.id === initial.id ? { ...t, ...payload } : t
+          t.id === initial.id ? { ...t, ...payload, id: initial.id } : t
         );
       } else {
         const maxId = list.reduce(
-          (m: number, it: ItemType) => Math.max(m, Number(it.id) || 0),
+          (m: number, it: StoredType) => Math.max(m, Number(it.id) || 0),
           0
         );
-        list.push({ id: maxId + 1, ...payload });
+        const newType: StoredType = {
+          id: maxId + 1,
+          ...payload,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        list.push(newType);
       }
 
       localStorage.setItem(SNAP_KEY, JSON.stringify(list));
       window.dispatchEvent(new Event("ekatalog:types_update"));
-    } catch {}
+    } catch (error) {
+      console.error("Failed to save type:", error);
+    }
 
     setSaving(false);
     onClose();
@@ -114,150 +138,151 @@ export default function AddTypeModal({
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
         >
           <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
             onClick={onClose}
           />
 
           <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.95, opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto z-10"
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+            transition={{ type: "spring", duration: 0.3 }}
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden z-10"
           >
             {/* Header */}
-            <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
-              <h3 className="text-xl font-semibold text-gray-800">
-                {initial ? "Edit Type" : "Add New Type"}
-              </h3>
-              <button
-                onClick={onClose}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <FaTimes className="w-5 h-5 text-gray-500" />
-              </button>
+            <div className="bg-gradient-to-r from-red-500 to-red-600 px-6 py-6 text-white relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32" />
+              <div className="absolute bottom-0 left-0 w-48 h-48 bg-black/10 rounded-full -ml-24 -mb-24" />
+
+              <div className="relative flex items-center justify-between">
+                <div>
+                  <h3 className="text-2xl font-bold mb-1">
+                    {initial ? "Edit Tipe Item" : "Tambah Tipe Item Baru"}
+                  </h3>
+                  <p className="text-red-100 text-sm">
+                    {initial
+                      ? "Perbarui informasi tipe item"
+                      : "Lengkapi form untuk menambahkan tipe item"}
+                  </p>
+                </div>
+                <button
+                  onClick={onClose}
+                  className="p-2 hover:bg-white/20 rounded-xl transition-colors"
+                >
+                  <FaTimes className="w-6 h-6" />
+                </button>
+              </div>
             </div>
 
             {/* Form */}
-            <form onSubmit={submit} className="p-6 space-y-6">
+            <form
+              onSubmit={submit}
+              className="p-6 space-y-6 max-h-[calc(90vh-140px)] overflow-y-auto"
+            >
               {/* Name */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Name <span className="text-red-500">*</span>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Nama Tipe <span className="text-red-500">*</span>
                 </label>
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
-                  placeholder="e.g. Material Springbed"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                  placeholder="Contoh: Material Springbed, Furniture, dll"
                   required
                 />
               </div>
 
-              {/* Type Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Type Name
-                </label>
-                <input
-                  value={typeName}
-                  onChange={(e) => setTypeName(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
-                  placeholder="Will use Name if empty"
-                />
-              </div>
-
-              {/* Status */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Status
-                </label>
-                <select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
-                >
-                  <option value="Enabled">Enabled</option>
-                  <option value="Disabled">Disabled</option>
-                </select>
-              </div>
-
               {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Description
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Deskripsi
                 </label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all resize-none"
                   rows={3}
-                  placeholder="Deskripsi singkat tipe..."
+                  placeholder="Deskripsi singkat tipe item..."
                 />
               </div>
 
               {/* Image Upload */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Image
+                <label className="block text-sm font-semibold text-gray-700 mb-3">
+                  Gambar Tipe
                 </label>
-                <div className="flex flex-col md:flex-row gap-4">
-                  <div className="flex-1">
-                    <label className="flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-dashed border-gray-300 rounded-lg hover:border-red-500 cursor-pointer transition-colors">
-                      <FaUpload className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm text-gray-600">
-                        Upload Image
+                <div className="space-y-3">
+                  <label className="flex flex-col items-center justify-center gap-3 px-6 py-8 border-2 border-dashed border-gray-300 rounded-xl hover:border-red-500 hover:bg-red-50 cursor-pointer transition-all group">
+                    <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center group-hover:bg-red-100 transition-colors">
+                      <FaImage className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors" />
+                    </div>
+                    <div className="text-center">
+                      <span className="text-sm font-medium text-gray-700 group-hover:text-red-600 transition-colors">
+                        Upload Gambar
                       </span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) =>
-                          setImageFile(
-                            e.target.files ? e.target.files[0] : null
-                          )
-                        }
-                      />
-                    </label>
-                  </div>
+                      <p className="text-xs text-gray-500 mt-1">PNG, JPG</p>
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) =>
+                        setImageFile(e.target.files ? e.target.files[0] : null)
+                      }
+                    />
+                  </label>
 
-                  {preview && (
-                    <div className="w-32 h-24 bg-gray-50 rounded-lg overflow-hidden flex items-center justify-center border border-gray-200">
+                  {imagePreview && (
+                    <div className="relative w-full h-40 bg-gray-50 rounded-xl overflow-hidden border-2 border-gray-200">
+                      <div className="absolute top-2 right-2">
+                        <div className="bg-green-500 text-white p-1 rounded-full">
+                          <FaCheckCircle className="w-4 h-4" />
+                        </div>
+                      </div>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={preview}
-                        alt="preview"
-                        className="object-cover w-full h-full"
+                        src={imagePreview}
+                        alt="image preview"
+                        className="object-contain w-full h-full p-3"
                       />
                     </div>
                   )}
+
+                  <input
+                    value={imagePath}
+                    onChange={(e) => {
+                      setImagePath(e.target.value);
+                      setImagePreview(e.target.value || null);
+                    }}
+                    placeholder="atau path: /images/type/..."
+                    className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all text-sm"
+                  />
                 </div>
-                <input
-                  value={imagePath}
-                  onChange={(e) => {
-                    setImagePath(e.target.value);
-                    setPreview(e.target.value || null);
-                  }}
-                  placeholder="atau masukkan path: assets/images/type/..."
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all mt-2"
-                />
               </div>
 
               {/* Actions */}
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+              <div className="flex justify-end gap-3 pt-6 border-t-2 border-gray-100">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-6 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                  className="px-6 py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-all font-semibold text-gray-700"
                 >
-                  Cancel
+                  Batal
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-6 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:shadow-lg hover:shadow-red-200 transition-all font-medium disabled:opacity-50"
+                  className="px-8 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:shadow-xl hover:shadow-red-200 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
-                  {saving ? "Saving..." : initial ? "Save Changes" : "Add Type"}
+                  {saving ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <span>{initial ? "Simpan Perubahan" : "Tambah Tipe"}</span>
+                  )}
                 </button>
               </div>
             </form>

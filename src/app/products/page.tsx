@@ -1,13 +1,15 @@
 // src/app/products/page.tsx
-"use client";
+import ProductList from '@/components/products/ProductList';
 
-import ProductCatalog from "@/components/products/ProductCatalog";
-import React from "react";
+export const metadata = {
+  title: 'Products - Produk Ekatalog Ekatunggal',
+  description: 'Kelola produk dengan varian material dan furniture',
+};
 
-export default function Page() {
+export default function ProductsPage() {
   return (
     <div className="space-y-6">
-      <ProductCatalog />
+      <ProductList />
     </div>
   );
 }
