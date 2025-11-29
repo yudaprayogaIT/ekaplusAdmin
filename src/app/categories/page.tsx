@@ -1,3 +1,4 @@
+// src/app/categories/page.tsx
 import CategoryList from '@/components/categories/CategoryList';
 
 export const metadata = {
