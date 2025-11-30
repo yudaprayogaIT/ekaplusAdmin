@@ -18,7 +18,7 @@
       ],
       "description": "Acc bed baut sakura dengan besar 5 CM"
     },
-    "productid": 1
+    "productid": 5
   },
   {
     "id": 2,
@@ -41,7 +41,7 @@
       ],
       "description": "Accesories baut bed model Sakura dengan ukuran besar 7 CM."
     },
-    "productid": 1
+    "productid": 5
   },
   {
     "id": 3,
@@ -64,7 +64,7 @@
       ],
       "description": "Accesories baut bed model Sakura ukuran kecil."
     },
-    "productid": 1
+    "productid": 5
   },
   {
     "id": 4,
@@ -265,7 +265,7 @@
       ],
       "description": "Kain polos sofa Beludru Citrus abu muda, per meter."
     },
-    "productid": 5
+    "productid": 6
   },
   {
     "id": 13,
@@ -288,7 +288,7 @@
       ],
       "description": "Kain polos sofa Beludru Citrus biru tua, per meter."
     },
-    "productid": 5
+    "productid": 6
   },
   {
     "id": 14,
@@ -309,7 +309,7 @@
       ],
       "description": "Kain polos sofa Beludru Citrus coklat coffee, per meter."
     },
-    "productid": 5
+    "productid": 6
   },
   {
     "id": 15,
@@ -331,7 +331,7 @@
       ],
       "description": "Kain polos sofa Beludru Citrus hijau stabilo, per meter."
     },
-    "productid": 5
+    "productid": 6
   },
   {
     "id": 16,
@@ -352,7 +352,7 @@
       ],
       "description": "FNT kasur 200x140x30cm KNT INOAC, per lembar."
     },
-    "productid": 6
+    "productid": 1
   },
   {
     "id": 17,
@@ -374,6 +374,6 @@
       ],
       "description": "FNT kasur 200x140x30cm Central, per lembar."
     },
-    "productid": 6
+    "productid": 1
   }
 ]

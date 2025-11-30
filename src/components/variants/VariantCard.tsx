@@ -4,7 +4,7 @@
 import React from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { FaEdit, FaTrash, FaBox, FaLink, FaImage } from "react-icons/fa";
+import { FaTrash, FaBox, FaLink } from "react-icons/fa";
 
 type Branch = {
   id: number;
@@ -19,7 +19,7 @@ type Item = {
   type: string;
   uom: string;
   image?: string;
-  branches: Branch[];
+  branches?: Branch[];
   description?: string;
 };
 
@@ -38,14 +38,12 @@ export default function VariantCard({
   variant,
   product,
   viewMode = "grid",
-  onEdit,
   onDelete,
   onView,
 }: {
   variant: Variant;
   product?: Product;
   viewMode?: "grid" | "list";
-  onEdit?: () => void;
   onDelete?: () => void;
   onView?: () => void;
 }) {
@@ -122,19 +120,6 @@ export default function VariantCard({
                 whileTap={{ scale: 0.97 }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onEdit?.();
-                }}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-gray-200 hover:border-red-500 hover:bg-red-50 transition-all text-sm font-medium"
-              >
-                <FaEdit className="w-3.5 h-3.5" />
-                <span>Edit</span>
-              </motion.button>
-
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                onClick={(e) => {
-                  e.stopPropagation();
                   onDelete?.();
                 }}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-50 border-2 border-red-100 hover:bg-red-100 transition-all text-sm font-medium text-red-600"
@@ -185,7 +170,7 @@ export default function VariantCard({
           <div className="absolute top-4 right-4">
             <div className="px-3 py-1.5 bg-blue-500 text-white rounded-full shadow-lg flex items-center gap-1.5">
               <FaLink className="w-3 h-3" />
-              <span className="text-xs font-bold">{product.name}</span>
+              <span className="text-xs font-bold truncate max-w-[120px]">{product.name}</span>
             </div>
           </div>
         )}
@@ -229,27 +214,12 @@ export default function VariantCard({
             whileTap={{ scale: 0.97 }}
             onClick={(e) => {
               e.stopPropagation();
-              onEdit?.();
-            }}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 border-gray-200 hover:border-red-500 hover:bg-red-50 transition-all group/btn"
-          >
-            <FaEdit className="w-3.5 h-3.5 text-gray-600 group-hover/btn:text-red-600 transition-colors" />
-            <span className="text-sm font-semibold text-gray-700 group-hover/btn:text-red-600 transition-colors">
-              Edit
-            </span>
-          </motion.button>
-
-          <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={(e) => {
-              e.stopPropagation();
               onDelete?.();
             }}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 border-2 border-red-100 hover:bg-red-100 hover:border-red-200 transition-all"
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 border-2 border-red-100 hover:bg-red-100 hover:border-red-200 transition-all"
           >
             <FaTrash className="w-3.5 h-3.5 text-red-600" />
-            <span className="text-sm font-semibold text-red-600">Hapus</span>
+            <span className="text-sm font-semibold text-red-600">Hapus Mapping</span>
           </motion.button>
         </div>
       </div>

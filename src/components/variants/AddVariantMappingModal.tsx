@@ -3,7 +3,8 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaTimes, FaLink, FaCheck } from "react-icons/fa";
+import { FaTimes, FaLink, FaCheck, FaBox } from "react-icons/fa";
+import Image from "next/image";
 
 type Branch = {
   id: number;
@@ -18,7 +19,7 @@ type Item = {
   type: string;
   uom: string;
   image?: string;
-  branches: Branch[];
+  branches?: Branch[];
   description?: string;
 };
 
@@ -35,12 +36,11 @@ type Product = {
     id: number;
     name: string;
   };
-  variants: ItemVariant[];
   disabled: number;
   isHotDeals: boolean;
 };
 
-const VARIANTS_DATA_URL = "/data/variants.json";
+const VARIANTS_SNAP_KEY = "ekatalog_variants_snapshot";
 
 export default function AddVariantMappingModal({
   open,
@@ -60,25 +60,21 @@ export default function AddVariantMappingModal({
   const [existingVariants, setExistingVariants] = useState<ItemVariant[]>([]);
   const [saving, setSaving] = useState(false);
 
-  // Load existing variants to filter out already mapped items
+  // Load existing variants
   useEffect(() => {
     if (open) {
-      async function loadVariants() {
+      const raw = localStorage.getItem(VARIANTS_SNAP_KEY);
+      if (raw) {
         try {
-          const res = await fetch(VARIANTS_DATA_URL, { cache: "no-store" });
-          if (res.ok) {
-            const data = await res.json() as ItemVariant[];
-            setExistingVariants(data);
-          }
-        } catch (err) {
-          console.error("Failed to load variants:", err);
+          setExistingVariants(JSON.parse(raw));
+        } catch {
+          setExistingVariants([]);
         }
       }
-      loadVariants();
     }
   }, [open]);
 
-  // Get unmapped items (items that are not in any variant)
+  // Get unmapped items
   const unmappedItems = useMemo(() => {
     const mappedItemIds = new Set(existingVariants.map(v => v.item.id));
     return items.filter(item => !mappedItemIds.has(item.id));
@@ -87,7 +83,7 @@ export default function AddVariantMappingModal({
   // Get selected item details
   const selectedItem = unmappedItems.find(i => i.id === selectedItemId);
 
-  // Extract first 2 words from item name (Category + Item Group)
+  // Extract first 2 words from item name
   const getItemPrefix = (itemName: string): string => {
     const words = itemName.trim().split(/\s+/);
     return words.slice(0, 2).join(' ').toUpperCase();
@@ -99,14 +95,13 @@ export default function AddVariantMappingModal({
 
     const itemPrefix = getItemPrefix(selectedItem.name);
     
-    // Filter products that start with same 2 words
     return products.filter(product => {
       const productPrefix = getItemPrefix(product.name);
       return productPrefix === itemPrefix;
     });
   }, [selectedItem, products]);
 
-  // Auto-select first matching product when item is selected
+  // Auto-select first matching product
   useEffect(() => {
     if (selectedItem && filteredProducts.length > 0) {
       setSelectedProductId(filteredProducts[0].id);
@@ -128,35 +123,29 @@ export default function AddVariantMappingModal({
 
     setSaving(true);
     try {
-      // Find the item object
       const itemToMap = unmappedItems.find(i => i.id === selectedItemId);
       if (!itemToMap) return;
 
-      // Create new variant entry
+      // Generate new variant ID
+      const maxId = existingVariants.reduce((m, v) => Math.max(m, v.id || 0), 0);
+      
       const newVariant: ItemVariant = {
-        id: Date.now(), // Generate temp ID
+        id: maxId + 1,
         item: itemToMap,
         productid: selectedProductId,
       };
 
-      // Update variants.json
       const updatedVariants = [...existingVariants, newVariant];
-
-      const response = await fetch(VARIANTS_DATA_URL, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedVariants),
-      });
-
-      if (response.ok) {
-        // Trigger refresh
-        if (onSave) onSave();
-        
-        // Close modal
-        onClose();
-      } else {
-        alert("Gagal menyimpan mapping");
-      }
+      
+      // Save to localStorage
+      localStorage.setItem(VARIANTS_SNAP_KEY, JSON.stringify(updatedVariants));
+      
+      // Trigger updates
+      window.dispatchEvent(new Event("ekatalog:variants_update"));
+      window.dispatchEvent(new Event("ekatalog:products_update"));
+      
+      if (onSave) onSave();
+      onClose();
     } catch (err) {
       console.error("Error saving mapping:", err);
       alert("Terjadi error saat menyimpan");
@@ -229,24 +218,45 @@ export default function AddVariantMappingModal({
                 ))}
               </select>
               
-              {/* Item description */}
+              {/* Item preview */}
               {selectedItem && (
-                <motion.p
+                <motion.div
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mt-2 text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-lg"
+                  className="mt-3 flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-200"
                 >
-                  {selectedItem.description || selectedItem.name}
-                </motion.p>
+                  <div className="w-12 h-12 bg-white rounded-lg flex-shrink-0 overflow-hidden border border-gray-200">
+                    {selectedItem.image ? (
+                      <Image
+                        width={48}
+                        height={48}
+                        src={selectedItem.image}
+                        alt={selectedItem.name}
+                        className="object-contain w-full h-full p-1"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <FaBox className="w-5 h-5 text-gray-300" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">
+                      {selectedItem.name}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {selectedItem.description || selectedItem.code}
+                    </p>
+                  </div>
+                </motion.div>
               )}
 
-              {/* Unmapped items count */}
               <p className="mt-2 text-xs text-gray-500">
                 {unmappedItems.length} item belum terhubung
               </p>
             </div>
 
-            {/* Product Selector - Smart filtered */}
+            {/* Product Selector */}
             <div>
               <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
                 <FaLink className="text-red-500" />
@@ -261,12 +271,11 @@ export default function AddVariantMappingModal({
                 <option value="">-- Pilih Product --</option>
                 {filteredProducts.map((product) => (
                   <option key={product.id} value={product.id}>
-                    {product.name}
+                    {product.name} ({product.itemCategory.name})
                   </option>
                 ))}
               </select>
 
-              {/* Smart filtering info */}
               {selectedItem && filteredProducts.length > 0 && (
                 <motion.p
                   initial={{ opacity: 0, y: -10 }}
@@ -274,18 +283,32 @@ export default function AddVariantMappingModal({
                   className="mt-2 text-xs text-green-600 bg-green-50 px-3 py-2 rounded-lg flex items-center gap-2"
                 >
                   <FaCheck className="w-3 h-3" />
-                  Menampilkan {filteredProducts.length} product yang relevan dengan &quot;{getItemPrefix(selectedItem.name)}&quot;
+                  Menampilkan {filteredProducts.length} product yang relevan
                 </motion.p>
               )}
 
               {selectedItem && filteredProducts.length === 0 && (
-                <motion.p
+                <motion.div
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mt-2 text-xs text-orange-600 bg-orange-50 px-3 py-2 rounded-lg"
+                  className="mt-2"
                 >
-                  Tidak ada product yang cocok. Silakan buat product baru dengan prefix &quot;{getItemPrefix(selectedItem.name)}&quot;
-                </motion.p>
+                  <p className="text-xs text-orange-600 bg-orange-50 px-3 py-2 rounded-lg mb-2">
+                    Tidak ada product yang cocok. Menampilkan semua product:
+                  </p>
+                  <select
+                    value={selectedProductId || ""}
+                    onChange={(e) => setSelectedProductId(Number(e.target.value) || null)}
+                    className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all text-gray-700"
+                  >
+                    <option value="">-- Pilih Product --</option>
+                    {products.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.name} ({product.itemCategory.name})
+                      </option>
+                    ))}
+                  </select>
+                </motion.div>
               )}
             </div>
 
@@ -328,9 +351,16 @@ export default function AddVariantMappingModal({
                 type="button"
                 onClick={handleSave}
                 disabled={!canSave || saving}
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl font-semibold shadow-lg shadow-red-200 hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl font-semibold shadow-lg shadow-red-200 hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2"
               >
-                {saving ? "Menyimpan..." : "Tambah Mapping"}
+                {saving ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Menyimpan...</span>
+                  </>
+                ) : (
+                  <span>Tambah Mapping</span>
+                )}
               </button>
             </div>
           </div>

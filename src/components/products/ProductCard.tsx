@@ -5,41 +5,15 @@ import React from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { FaEdit, FaTrash, FaBox, FaTag, FaFire, FaLayerGroup } from "react-icons/fa";
+import type { Product } from "@/types";
 
-type Branch = {
-  id: number;
-  name: string;
-};
-
-type Item = {
-  id: number;
-  code: string;
-  name: string;
-  color: string;
-  type: string;
-  uom: string;
-  image?: string;
-  branches: Branch[];
-  description?: string;
-};
-
-type ItemVariant = {
-  id: number;
-  item: Item;
-  productid: number;
-};
-
-type Product = {
-  id: number;
-  name: string;
-  itemCategory: {
-    id: number;
-    name: string;
-  };
-  variants: ItemVariant[];
-  disabled: number;
-  isHotDeals: boolean;
-};
+interface ProductCardProps {
+  product: Product;
+  viewMode?: 'grid' | 'list';
+  onEdit?: () => void;
+  onDelete?: () => void;
+  onView?: () => void;
+}
 
 export default function ProductCard({
   product,
@@ -47,13 +21,7 @@ export default function ProductCard({
   onEdit,
   onDelete,
   onView,
-}: {
-  product: Product;
-  viewMode?: 'grid' | 'list';
-  onEdit?: () => void;
-  onDelete?: () => void;
-  onView?: () => void;
-}) {
+}: ProductCardProps) {
   const firstVariant = product.variants[0]?.item;
   const variantCount = product.variants.length;
 

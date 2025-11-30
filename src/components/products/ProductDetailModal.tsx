@@ -14,41 +14,15 @@ import {
   FaBox,
 } from "react-icons/fa";
 import Image from "next/image";
+import type { Product } from "@/types";
 
-type Branch = {
-  id: number;
-  name: string;
-};
-
-type Item = {
-  id: number;
-  code: string;
-  name: string;
-  color: string;
-  type: string;
-  uom: string;
-  image?: string;
-  branches: Branch[];
-  description?: string;
-};
-
-type ItemVariant = {
-  id: number;
-  item: Item;
-  productid: number;
-};
-
-type Product = {
-  id: number;
-  name: string;
-  itemCategory: {
-    id: number;
-    name: string;
-  };
-  variants: ItemVariant[];
-  disabled: number;
-  isHotDeals: boolean;
-};
+interface ProductDetailModalProps {
+  open: boolean;
+  onClose: () => void;
+  product?: Product | null;
+  onEdit?: (p: Product) => void;
+  onDelete?: (p: Product) => void;
+}
 
 export default function ProductDetailModal({
   open,
@@ -56,13 +30,7 @@ export default function ProductDetailModal({
   product,
   onEdit,
   onDelete,
-}: {
-  open: boolean;
-  onClose: () => void;
-  product?: Product | null;
-  onEdit?: (p: Product) => void;
-  onDelete?: (p: Product) => void;
-}) {
+}: ProductDetailModalProps) {
   if (!product) return null;
 
   return (

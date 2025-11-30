@@ -3,10 +3,9 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import VariantCard from "./VariantCard";
-// import AddVariantModal from "./AddVariantModal";
 import AddVariantMappingModal from "./AddVariantMappingModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import { FaPlus, FaLink, FaSearch, FaList, FaTh, FaSortAmountDown, FaChevronDown, FaFilter } from "react-icons/fa";
+import { FaLink, FaSearch, FaList, FaTh, FaSortAmountDown, FaChevronDown, FaFilter } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 
 type Branch = {
@@ -22,11 +21,11 @@ type Item = {
   type: string;
   uom: string;
   image?: string;
-  branches: Branch[];
+  branches?: Branch[];
   description?: string;
 };
 
-type Variant = {
+type ItemVariant = {
   id: number;
   item: Item;
   productid: number;
@@ -39,7 +38,6 @@ type Product = {
     id: number;
     name: string;
   };
-  variants: Variant[];
   disabled: number;
   isHotDeals: boolean;
 };
@@ -49,10 +47,10 @@ type SortOption = 'item-asc' | 'item-desc' | 'product' | 'newest' | 'oldest';
 const VARIANTS_DATA_URL = "/data/variants.json";
 const ITEMS_DATA_URL = "/data/items.json";
 const PRODUCTS_DATA_URL = "/data/products.json";
-const SNAP_KEY = "ekatalog_variants_snapshot";
+const VARIANTS_SNAP_KEY = "ekatalog_variants_snapshot";
 
 export default function VariantList() {
-  const [variants, setVariants] = useState<Variant[]>([]);
+  const [variants, setVariants] = useState<ItemVariant[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,10 +62,6 @@ export default function VariantList() {
   const [productDropdownOpen, setProductDropdownOpen] = useState(false);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalInitial, setModalInitial] = useState<Variant | null>(null);
-  
-  // NEW: Smart Mapping Modal state
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -78,6 +72,7 @@ export default function VariantList() {
   // Load data
   useEffect(() => {
     let cancelled = false;
+    
     async function load() {
       setLoading(true);
 
@@ -85,31 +80,39 @@ export default function VariantList() {
         // Load products
         const productsRes = await fetch(PRODUCTS_DATA_URL, { cache: "no-store" });
         if (productsRes.ok) {
-          const productsData = await productsRes.json() as Product[];
+          const productsData = await productsRes.json();
           if (!cancelled) setProducts(productsData);
         }
 
         // Load items
         const itemsRes = await fetch(ITEMS_DATA_URL, { cache: "no-store" });
         if (itemsRes.ok) {
-          const itemsData = await itemsRes.json() as Item[];
+          const itemsData = await itemsRes.json();
           if (!cancelled) setItems(itemsData);
         }
 
-        // Load variants
-        const variantsRes = await fetch(VARIANTS_DATA_URL, { cache: "no-store" });
-        if (variantsRes.ok) {
-          const variantsData = await variantsRes.json() as Variant[];
-          if (!cancelled) {
-            setVariants(variantsData);
-            try {
-              localStorage.setItem(SNAP_KEY, JSON.stringify(variantsData));
-            } catch {
-              // Ignore localStorage errors
-            }
+        // Load variants - check localStorage first, then fetch
+        let variantsData: ItemVariant[] = [];
+        const localVariants = localStorage.getItem(VARIANTS_SNAP_KEY);
+        
+        if (localVariants) {
+          try {
+            variantsData = JSON.parse(localVariants);
+          } catch {
+            // Fall back to API
           }
-        } else {
-          if (!cancelled) setError(`Failed to fetch variants (${variantsRes.status})`);
+        }
+        
+        if (variantsData.length === 0) {
+          const variantsRes = await fetch(VARIANTS_DATA_URL, { cache: "no-store" });
+          if (variantsRes.ok) {
+            variantsData = await variantsRes.json();
+            localStorage.setItem(VARIANTS_SNAP_KEY, JSON.stringify(variantsData));
+          }
+        }
+
+        if (!cancelled) {
+          setVariants(variantsData);
         }
       } catch (err: unknown) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
@@ -117,55 +120,41 @@ export default function VariantList() {
         if (!cancelled) setLoading(false);
       }
     }
+    
     load();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   // Listen for updates
   useEffect(() => {
     function handler() {
-      const raw = localStorage.getItem(SNAP_KEY);
+      const raw = localStorage.getItem(VARIANTS_SNAP_KEY);
       if (!raw) return;
       try {
-        setVariants(JSON.parse(raw) as Variant[]);
+        setVariants(JSON.parse(raw));
       } catch {
-        // Ignore parse errors
+        // Ignore
       }
     }
     window.addEventListener("ekatalog:variants_update", handler);
     return () => window.removeEventListener("ekatalog:variants_update", handler);
   }, []);
 
-  function saveSnapshot(arr: Variant[]) {
-    try {
-      localStorage.setItem(SNAP_KEY, JSON.stringify(arr));
-    } catch {
-      // Ignore localStorage errors
-    }
+  function saveSnapshot(arr: ItemVariant[]) {
+    localStorage.setItem(VARIANTS_SNAP_KEY, JSON.stringify(arr));
     window.dispatchEvent(new Event("ekatalog:variants_update"));
   }
 
-  function promptDeleteVariant(v: Variant) {
+  function promptDeleteVariant(v: ItemVariant) {
     setConfirmTitle("Hapus Variant Mapping");
     setConfirmDesc(`Yakin ingin menghapus mapping "${v.item.name}"?`);
     actionRef.current = async () => {
       const next = variants.filter((x) => x.id !== v.id);
       setVariants(next);
       saveSnapshot(next);
+      window.dispatchEvent(new Event("ekatalog:products_update"));
     };
     setConfirmOpen(true);
-  }
-
-  function handleAdd() {
-    setModalInitial(null);
-    setModalOpen(true);
-  }
-
-  function handleEdit(v: Variant) {
-    setModalInitial(v);
-    setModalOpen(true);
   }
 
   async function confirmOk() {
@@ -181,10 +170,7 @@ export default function VariantList() {
     setConfirmOpen(false);
   }
 
-  // NEW: Handle mapping modal save
   function handleMappingSave() {
-    // Reload all data to reflect new mapping
-    window.dispatchEvent(new Event("ekatalog:variants_update"));
     setMappingModalOpen(false);
   }
 
@@ -203,13 +189,6 @@ export default function VariantList() {
     return (
       <div className="py-8 text-center">
         <div className="inline-flex items-center gap-2 px-4 py-3 bg-red-50 text-red-600 rounded-xl border border-red-100">
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              fillRule="evenodd"
-              d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-              clipRule="evenodd"
-            />
-          </svg>
           <span className="text-sm font-medium">Error: {error}</span>
         </div>
       </div>
@@ -220,10 +199,11 @@ export default function VariantList() {
   let filteredVariants = variants;
 
   if (searchQuery.trim()) {
+    const query = searchQuery.toLowerCase();
     filteredVariants = filteredVariants.filter(
       (v) =>
-        v.item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        v.item.code.toLowerCase().includes(searchQuery.toLowerCase())
+        v.item.name.toLowerCase().includes(query) ||
+        v.item.code.toLowerCase().includes(query)
     );
   }
 
@@ -272,29 +252,36 @@ export default function VariantList() {
           </p>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-3">
-          {/* Tambah Variant Button */}
-          {/* <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={handleAdd}
-            className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl shadow-lg shadow-red-200 hover:shadow-xl transition-all font-medium"
-          >
-            <FaPlus className="w-4 h-4" />
-            <span>Tambah Variant</span>
-          </motion.button> */}
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={() => setMappingModalOpen(true)}
+          className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl shadow-lg shadow-blue-200 hover:shadow-xl transition-all font-medium"
+        >
+          <FaLink className="w-4 h-4" />
+          <span>Smart Mapping</span>
+        </motion.button>
+      </div>
 
-          {/* NEW: Smart Mapping Button */}
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setMappingModalOpen(true)}
-            className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl shadow-lg shadow-blue-200 hover:shadow-xl transition-all font-medium"
-          >
-            <FaLink className="w-4 h-4" />
-            <span>Smart Mapping</span>
-          </motion.button>
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border-2 border-blue-200">
+          <div className="text-sm text-blue-700 font-medium mb-1">Total Mappings</div>
+          <div className="text-3xl font-bold text-blue-900">{variants.length}</div>
+        </div>
+        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-5 border-2 border-green-200">
+          <div className="text-sm text-green-700 font-medium mb-1">Products</div>
+          <div className="text-3xl font-bold text-green-900">{products.length}</div>
+        </div>
+        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-5 border-2 border-purple-200">
+          <div className="text-sm text-purple-700 font-medium mb-1">Items</div>
+          <div className="text-3xl font-bold text-purple-900">{items.length}</div>
+        </div>
+        <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-5 border-2 border-orange-200">
+          <div className="text-sm text-orange-700 font-medium mb-1">Unmapped</div>
+          <div className="text-3xl font-bold text-orange-900">
+            {items.length - variants.length}
+          </div>
         </div>
       </div>
 
@@ -499,7 +486,6 @@ export default function VariantList() {
           )}
         </div>
       ) : selectedProduct ? (
-        // Single product view
         <section>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold text-gray-800">
@@ -523,14 +509,12 @@ export default function VariantList() {
                 variant={v}
                 product={products.find(p => p.id === v.productid)}
                 viewMode={viewMode}
-                onEdit={() => handleEdit(v)}
                 onDelete={() => promptDeleteVariant(v)}
               />
             ))}
           </div>
         </section>
       ) : (
-        // All products view (grouped)
         <div className="space-y-10">
           {groupedByProduct.map(({ product, items }) => (
             <section key={product.id}>
@@ -558,7 +542,6 @@ export default function VariantList() {
                     variant={v}
                     product={product}
                     viewMode={viewMode}
-                    onEdit={() => handleEdit(v)}
                     onDelete={() => promptDeleteVariant(v)}
                   />
                 ))}
@@ -569,15 +552,6 @@ export default function VariantList() {
       )}
 
       {/* Modals */}
-      {/* <AddVariantModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        initial={modalInitial}
-        products={products}
-        items={items}
-      /> */}
-
-      {/* NEW: Smart Mapping Modal */}
       <AddVariantMappingModal
         open={mappingModalOpen}
         onClose={() => setMappingModalOpen(false)}

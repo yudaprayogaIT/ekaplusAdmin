@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaTimes, FaSearch, FaCheck, FaImage, FaBox } from "react-icons/fa";
+import { FaTimes, FaSearch, FaCheck, FaBox } from "react-icons/fa";
 import Image from "next/image";
 
 type Item = {
@@ -67,7 +67,7 @@ export default function ItemSelector({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
         >
           <div
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
