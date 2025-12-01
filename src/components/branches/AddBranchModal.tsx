@@ -21,7 +21,15 @@ type Branch = {
 
 const SNAP_KEY = "ekatalog_branches_snapshot";
 
-const PULAU_OPTIONS = ["Jawa", "Sumatra", "Kalimantan", "Sulawesi", "Nusa Tenggara", "Papua", "Maluku"];
+const PULAU_OPTIONS = [
+  "Jawa",
+  "Sumatra",
+  "Kalimantan",
+  "Sulawesi",
+  "Nusa Tenggara",
+  "Papua",
+  "Maluku",
+];
 const WILAYAH_OPTIONS = ["Barat", "Timur"];
 
 export default function AddBranchModal({
@@ -75,7 +83,7 @@ export default function AddBranchModal({
     e.preventDefault();
     setSaving(true);
 
-    const payload: Omit<Branch, 'id'> = {
+    const payload: Omit<Branch, "id"> = {
       name: name.trim(),
       daerah: daerah.trim(),
       address: address.trim(),
@@ -91,24 +99,29 @@ export default function AddBranchModal({
     try {
       const raw = localStorage.getItem(SNAP_KEY);
       let list: Branch[] = raw ? JSON.parse(raw) : [];
-      
+
       if (initial && initial.id) {
-        list = list.map((b) => (b.id === initial.id ? { ...b, ...payload, id: initial.id } : b));
+        list = list.map((b) =>
+          b.id === initial.id ? { ...b, ...payload, id: initial.id } : b
+        );
       } else {
-        const maxId = list.reduce((m: number, it: Branch) => Math.max(m, Number(it.id) || 0), 0);
-        const newBranch: Branch = { 
-          id: maxId + 1, 
+        const maxId = list.reduce(
+          (m: number, it: Branch) => Math.max(m, Number(it.id) || 0),
+          0
+        );
+        const newBranch: Branch = {
+          id: maxId + 1,
           ...payload,
         };
         list.push(newBranch);
       }
-      
+
       localStorage.setItem(SNAP_KEY, JSON.stringify(list));
       window.dispatchEvent(new Event("ekatalog:branches_update"));
     } catch (error) {
-      console.error('Failed to save branch:', error);
+      console.error("Failed to save branch:", error);
     }
-    
+
     setSaving(false);
     onClose();
   }
@@ -122,8 +135,11 @@ export default function AddBranchModal({
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
         >
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-          
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={onClose}
+          />
+
           <motion.div
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -135,14 +151,16 @@ export default function AddBranchModal({
             <div className="bg-gradient-to-r from-red-500 to-red-600 px-6 py-6 text-white relative overflow-hidden">
               <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32" />
               <div className="absolute bottom-0 left-0 w-48 h-48 bg-black/10 rounded-full -ml-24 -mb-24" />
-              
+
               <div className="relative flex items-center justify-between">
                 <div>
                   <h3 className="text-2xl font-bold mb-1">
                     {initial ? "Edit Cabang" : "Tambah Cabang Baru"}
                   </h3>
                   <p className="text-red-100 text-sm">
-                    {initial ? "Perbarui informasi cabang" : "Lengkapi form untuk menambahkan cabang"}
+                    {initial
+                      ? "Perbarui informasi cabang"
+                      : "Lengkapi form untuk menambahkan cabang"}
                   </p>
                 </div>
                 <button
@@ -155,7 +173,10 @@ export default function AddBranchModal({
             </div>
 
             {/* Form */}
-            <form onSubmit={submit} className="p-6 space-y-6 max-h-[calc(90vh-140px)] overflow-y-auto">
+            <form
+              onSubmit={submit}
+              className="p-6 space-y-6 max-h-[calc(90vh-140px)] overflow-y-auto"
+            >
               {/* Name & Daerah */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
@@ -250,8 +271,10 @@ export default function AddBranchModal({
                     onChange={(e) => setPulau(e.target.value)}
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
                   >
-                    {PULAU_OPTIONS.map(p => (
-                      <option key={p} value={p}>{p}</option>
+                    {PULAU_OPTIONS.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -265,8 +288,10 @@ export default function AddBranchModal({
                     onChange={(e) => setWilayah(e.target.value)}
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
                   >
-                    {WILAYAH_OPTIONS.map(w => (
-                      <option key={w} value={w}>{w}</option>
+                    {WILAYAH_OPTIONS.map((w) => (
+                      <option key={w} value={w}>
+                        {w}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -338,7 +363,9 @@ export default function AddBranchModal({
                       <span>Menyimpan...</span>
                     </>
                   ) : (
-                    <span>{initial ? "Simpan Perubahan" : "Tambah Cabang"}</span>
+                    <span>
+                      {initial ? "Simpan Perubahan" : "Tambah Cabang"}
+                    </span>
                   )}
                 </button>
               </div>

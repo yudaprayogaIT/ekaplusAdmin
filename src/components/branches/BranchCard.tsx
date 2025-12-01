@@ -10,7 +10,6 @@ import {
   FaGlobe,
   FaCity,
 } from "react-icons/fa";
-import Image from "next/image";
 
 type Branch = {
   id: number;
@@ -32,12 +31,16 @@ export default function BranchCard({
   onEdit,
   onDelete,
   onView,
+  canEdit = true,
+  canDelete = true,
 }: {
   branch: Branch;
   viewMode?: "grid" | "list";
   onEdit?: () => void;
   onDelete?: () => void;
   onView?: () => void;
+  canEdit?: boolean;
+  canDelete?: boolean;
 }) {
   if (viewMode === "list") {
     return (
@@ -51,13 +54,9 @@ export default function BranchCard({
         <div className="flex items-start gap-6">
           {/* Map Preview */}
           <div className="hidden md:block w-32 h-32 bg-gradient-to-br from-red-50 to-red-100 rounded-xl overflow-hidden flex-shrink-0">
-            <Image
-              src={`/images/maps.jpg`}
-              alt="Map"
-              width={150}
-              height={150}
-              className="w-full h-full object-cover"
-            />
+            <div className="w-full h-full flex items-center justify-center text-red-300">
+              <FaMapMarkerAlt className="w-12 h-12" />
+            </div>
           </div>
 
           {/* Content */}
@@ -90,31 +89,35 @@ export default function BranchCard({
 
             {/* Actions */}
             <div className="flex gap-2">
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEdit?.();
-                }}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-gray-200 hover:border-red-500 hover:bg-red-50 transition-all text-sm font-medium"
-              >
-                <FaEdit className="w-3.5 h-3.5" />
-                <span>Edit</span>
-              </motion.button>
+              {canEdit && (
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit?.();
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-gray-200 hover:border-red-500 hover:bg-red-50 transition-all text-sm font-medium"
+                >
+                  <FaEdit className="w-3.5 h-3.5" />
+                  <span>Edit</span>
+                </motion.button>
+              )}
 
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete?.();
-                }}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-50 border-2 border-red-100 hover:bg-red-100 transition-all text-sm font-medium text-red-600"
-              >
-                <FaTrash className="w-3.5 h-3.5" />
-                <span>Hapus</span>
-              </motion.button>
+              {canDelete && (
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete?.();
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-50 border-2 border-red-100 hover:bg-red-100 transition-all text-sm font-medium text-red-600"
+                >
+                  <FaTrash className="w-3.5 h-3.5" />
+                  <span>Hapus</span>
+                </motion.button>
+              )}
 
               {branch.url && (
                 <motion.a
@@ -150,13 +153,9 @@ export default function BranchCard({
     >
       {/* Map Preview */}
       <div className="relative h-48 bg-gradient-to-br from-red-50 to-red-100 overflow-hidden">
-        <Image
-          src={`/images/maps.jpg`}
-          alt="Map"
-          width={200}
-          height={200}
-          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-        />
+        <div className="w-full h-full flex items-center justify-center text-red-200">
+          <FaMapMarkerAlt className="w-20 h-20" />
+        </div>
 
         {/* Badges */}
         <div className="absolute top-3 right-3 flex flex-col gap-2">
@@ -171,6 +170,19 @@ export default function BranchCard({
           </span>
           <span className="px-3 py-1 bg-white/95 backdrop-blur-sm rounded-full text-xs font-semibold text-gray-700 shadow-sm">
             {branch.pulau}
+          </span>
+        </div>
+
+        {/* Status Badge */}
+        <div className="absolute top-3 left-3">
+          <span
+            className={`px-3 py-1 backdrop-blur-sm rounded-full text-xs font-semibold ${
+              branch.disabled === 0
+                ? "bg-green-500/90 text-white"
+                : "bg-gray-500/90 text-white"
+            }`}
+          >
+            {branch.disabled === 0 ? "Aktif" : "Nonaktif"}
           </span>
         </div>
 
@@ -196,33 +208,42 @@ export default function BranchCard({
 
         {/* Actions */}
         <div className="flex gap-2 pt-4 border-t border-gray-100">
-          <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit?.();
-            }}
-            className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 border-gray-200 hover:border-red-500 hover:bg-red-50 transition-all group/btn"
-          >
-            <FaEdit className="w-3.5 h-3.5 text-gray-600 group-hover/btn:text-red-600 transition-colors" />
-            <span className="text-sm font-semibold text-gray-700 group-hover/btn:text-red-600 transition-colors">
-              Edit
-            </span>
-          </motion.button>
+          {canEdit ? (
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit?.();
+              }}
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 border-gray-200 hover:border-red-500 hover:bg-red-50 transition-all group/btn"
+            >
+              <FaEdit className="w-3.5 h-3.5 text-gray-600 group-hover/btn:text-red-600 transition-colors" />
+              <span className="text-sm font-semibold text-gray-700 group-hover/btn:text-red-600 transition-colors">
+                Edit
+              </span>
+            </motion.button>
+          ) : (
+            <div className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-gray-50 border-2 border-gray-100 text-gray-400 cursor-not-allowed">
+              <FaEdit className="w-3.5 h-3.5" />
+              <span className="text-sm font-semibold">Edit</span>
+            </div>
+          )}
 
-          <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete?.();
-            }}
-            className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-red-50 border-2 border-red-100 hover:bg-red-100 hover:border-red-200 transition-all"
-          >
-            <FaTrash className="w-3.5 h-3.5 text-red-600" />
-            <span className="text-sm font-semibold text-red-600">Hapus</span>
-          </motion.button>
+          {canDelete && (
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete?.();
+              }}
+              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-red-50 border-2 border-red-100 hover:bg-red-100 hover:border-red-200 transition-all"
+            >
+              <FaTrash className="w-3.5 h-3.5 text-red-600" />
+              <span className="text-sm font-semibold text-red-600">Hapus</span>
+            </motion.button>
+          )}
         </div>
       </div>
     </motion.div>

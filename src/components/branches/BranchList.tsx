@@ -6,7 +6,8 @@ import BranchCard from "./BranchCard";
 import AddBranchModal from "./AddBranchModal";
 import BranchDetailModal from "./BranchDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import { FaPlus, FaFilter, FaSearch, FaList, FaMapMarkedAlt, FaSortAmountDown } from "react-icons/fa";
+import { useAuth } from "@/contexts/AuthContext";
+import { FaPlus, FaFilter, FaSearch, FaList, FaMapMarkedAlt, FaSortAmountDown, FaLock, FaMapMarkerAlt } from "react-icons/fa";
 import { motion } from "framer-motion";
 
 type Branch = {
@@ -29,6 +30,7 @@ const DATA_URL = "/data/branches.json";
 const SNAP_KEY = "ekatalog_branches_snapshot";
 
 export default function BranchList() {
+  const { hasPermission, isAuthenticated, isLoading: authLoading } = useAuth();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,8 +51,17 @@ export default function BranchList() {
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
 
-  // Load branches
+  // Permission checks
+  const canViewBranches = hasPermission('branches.view');
+  const canManageBranches = hasPermission('branches.manage');
+
+  // Load branches - only if authenticated
   useEffect(() => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     async function load() {
       setLoading(true);
@@ -74,7 +85,7 @@ export default function BranchList() {
     }
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [isAuthenticated]);
 
   // Listen for updates
   useEffect(() => {
@@ -144,6 +155,57 @@ export default function BranchList() {
   function confirmCancel() { 
     actionRef.current = null; 
     setConfirmOpen(false); 
+  }
+
+  // Auth loading state
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-red-200 border-t-red-500 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-sm text-gray-600 font-medium">Memuat...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Not authenticated - show login required
+  if (!isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center max-w-md mx-auto">
+          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <FaLock className="w-10 h-10 text-red-500" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-3">Login Diperlukan</h2>
+          <p className="text-gray-600 mb-6">
+            Silakan login terlebih dahulu untuk mengakses data Branches.
+            Klik tombol Login di pojok kanan atas.
+          </p>
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 rounded-xl border border-amber-200 text-sm">
+            <FaMapMarkerAlt className="w-4 h-4" />
+            <span>Data cabang dilindungi untuk keamanan</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Check permission
+  if (!canViewBranches) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center max-w-md mx-auto">
+          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <FaLock className="w-10 h-10 text-gray-400" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-3">Akses Ditolak</h2>
+          <p className="text-gray-600">
+            Anda tidak memiliki permission untuk melihat data Branches.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   if (loading) {
@@ -227,15 +289,22 @@ export default function BranchList() {
           </p>
         </div>
         
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={handleAdd}
-          className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl shadow-lg shadow-red-200 hover:shadow-xl transition-all font-medium"
-        >
-          <FaPlus className="w-4 h-4" />
-          <span>Tambah Cabang</span>
-        </motion.button>
+        {canManageBranches ? (
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={handleAdd}
+            className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl shadow-lg shadow-red-200 hover:shadow-xl transition-all font-medium"
+          >
+            <FaPlus className="w-4 h-4" />
+            <span>Tambah Cabang</span>
+          </motion.button>
+        ) : (
+          <div className="flex items-center gap-2 px-5 py-3 bg-gray-100 text-gray-400 rounded-xl font-medium cursor-not-allowed">
+            <FaLock className="w-4 h-4" />
+            <span>Tambah Cabang</span>
+          </div>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -293,9 +362,6 @@ export default function BranchList() {
                 <option value="daerah-asc">Daerah: A-Z</option>
                 <option value="daerah-desc">Daerah: Z-A</option>
               </select>
-              <svg className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
             </div>
 
             {/* View Toggle */}
@@ -369,44 +435,6 @@ export default function BranchList() {
               </button>
             ))}
           </div>
-
-          {/* Active Filters Info */}
-          {(searchQuery || selectedWilayah || selectedPulau || sortBy !== 'id-asc') && (
-            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
-              <span className="text-xs font-medium text-gray-500">Filter aktif:</span>
-              {searchQuery && (
-                <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-                  Pencarian: &quot;{searchQuery}&quot;
-                </span>
-              )}
-              {selectedWilayah && (
-                <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                  Wilayah: {selectedWilayah}
-                </span>
-              )}
-              {selectedPulau && (
-                <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
-                  Pulau: {selectedPulau}
-                </span>
-              )}
-              {sortBy !== 'id-asc' && (
-                <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">
-                  Sort: {sortBy.split('-').join(' ').toUpperCase()}
-                </span>
-              )}
-              <button
-                onClick={() => {
-                  setSearchQuery('');
-                  setSelectedWilayah(null);
-                  setSelectedPulau(null);
-                  setSortBy('id-asc');
-                }}
-                className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium hover:bg-red-200 transition-colors"
-              >
-                Reset Semua
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
@@ -446,6 +474,8 @@ export default function BranchList() {
                     onEdit={() => handleEdit(branch)}
                     onDelete={() => promptDeleteBranch(branch)}
                     onView={() => openDetail(branch)}
+                    canEdit={canManageBranches}
+                    canDelete={canManageBranches}
                   />
                 ))}
               </div>
@@ -466,7 +496,9 @@ export default function BranchList() {
         onClose={closeDetail} 
         branch={detailItem} 
         onEdit={onDetailEdit} 
-        onDelete={onDetailDelete} 
+        onDelete={onDetailDelete}
+        canEdit={canManageBranches}
+        canDelete={canManageBranches}
       />
 
       <ConfirmDialog 

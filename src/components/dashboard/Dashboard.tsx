@@ -13,9 +13,14 @@ import {
   FaFire,
   FaChartLine,
   FaPlus,
+  FaUsers,
+  FaShieldAlt,
+  FaProjectDiagram,
+  FaLock,
 } from "react-icons/fa";
 import Link from "next/link";
 import Image from "next/image";
+import { useAuth } from "@/contexts/AuthContext";
 import type { Item, ItemVariant, Product, Category } from "@/types";
 
 // Additional types for dashboard
@@ -136,6 +141,127 @@ function StatCard({
           </div>
         </motion.div>
       </Link>
+    </motion.div>
+  );
+}
+
+// Admin Quick Actions Component
+type AdminAction = {
+  name: string;
+  description: string;
+  href: string;
+  icon: React.ElementType;
+  color: string;
+  permission?: string;
+  permissions?: string[];
+};
+
+const adminActions: AdminAction[] = [
+  {
+    name: "Kelola Users",
+    description: "Lihat dan kelola semua pengguna",
+    href: "/users",
+    icon: FaUsers,
+    color: "bg-blue-500",
+    permissions: ['users.view', 'users.view_branch']
+  },
+  {
+    name: "Roles & Permissions",
+    description: "Atur role dan hak akses",
+    href: "/roles",
+    icon: FaShieldAlt,
+    color: "bg-amber-500",
+    permission: 'roles.view'
+  },
+  {
+    name: "Workflow",
+    description: "Kelola approval workflow",
+    href: "/workflows",
+    icon: FaProjectDiagram,
+    color: "bg-purple-500",
+    permission: 'workflows.view'
+  },
+  {
+    name: "Branches",
+    description: "Kelola data cabang",
+    href: "/branches",
+    icon: FaMapMarkerAlt,
+    color: "bg-green-500",
+    permission: 'branches.view'
+  },
+];
+
+function AdminQuickActions() {
+  const { hasPermission, hasAnyPermission, isAuthenticated } = useAuth();
+
+  // Filter actions based on permissions
+  const visibleActions = adminActions.filter((action) => {
+    if (!isAuthenticated) return true; // Show all when not logged in
+    if (action.permission) return hasPermission(action.permission);
+    if (action.permissions) return hasAnyPermission(action.permissions);
+    return true;
+  });
+
+  if (visibleActions.length === 0) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.25 }}
+      className="mb-6"
+    >
+      <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+        <FaShieldAlt className="w-5 h-5 text-gray-400" />
+        Aksi Cepat Admin
+      </h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {adminActions.map((action) => {
+          const hasAccess = !isAuthenticated || (
+            action.permission 
+              ? hasPermission(action.permission) 
+              : action.permissions 
+                ? hasAnyPermission(action.permissions)
+                : true
+          );
+
+          if (!hasAccess) {
+            return (
+              <div 
+                key={action.href}
+                className="bg-gray-50 rounded-2xl p-5 border-2 border-gray-100 opacity-50 cursor-not-allowed"
+              >
+                <div className="w-12 h-12 rounded-xl bg-gray-200 flex items-center justify-center mb-3 text-gray-400">
+                  <FaLock className="w-5 h-5" />
+                </div>
+                <h3 className="font-bold text-gray-400 mb-1">{action.name}</h3>
+                <p className="text-xs text-gray-300">{action.description}</p>
+              </div>
+            );
+          }
+
+          return (
+            <Link key={action.href} href={action.href}>
+              <motion.div
+                whileHover={{ y: -4, boxShadow: "0 20px 40px -10px rgba(0,0,0,0.1)" }}
+                className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm cursor-pointer group h-full"
+              >
+                <div className={`w-12 h-12 rounded-xl ${action.color} flex items-center justify-center mb-3 text-white shadow-lg group-hover:scale-110 transition-transform`}>
+                  <action.icon className="w-5 h-5" />
+                </div>
+                <h3 className="font-bold text-gray-800 mb-1 group-hover:text-red-600 transition-colors">
+                  {action.name}
+                </h3>
+                <p className="text-xs text-gray-500 mb-3">{action.description}</p>
+                <div className="flex items-center text-red-500 text-xs font-medium group-hover:translate-x-1 transition-transform">
+                  <span>Buka</span>
+                  <FaArrowRight className="w-2.5 h-2.5 ml-1" />
+                </div>
+              </motion.div>
+            </Link>
+          );
+        })}
+      </div>
     </motion.div>
   );
 }
@@ -319,7 +445,7 @@ function RecentProducts({ products }: { products: Product[] }) {
   );
 }
 
-// Quick Actions Card
+// Quick Actions Card (Catalog)
 function QuickActions() {
   const actions = [
     { label: "Tambah Produk", href: "/products", icon: FaBox, color: "red" },
@@ -359,8 +485,8 @@ function QuickActions() {
           <FaPlus className="w-5 h-5 text-gray-600" />
         </div>
         <div>
-          <h3 className="font-bold text-gray-900">Aksi Cepat</h3>
-          <p className="text-xs text-gray-500">Shortcut ke fitur utama</p>
+          <h3 className="font-bold text-gray-900">Aksi Cepat Katalog</h3>
+          <p className="text-xs text-gray-500">Shortcut ke fitur katalog</p>
         </div>
       </div>
 
@@ -659,6 +785,9 @@ export default function Dashboard() {
           <span>Overview data katalog Anda</span>
         </div>
       </motion.div>
+
+      {/* Admin Quick Actions */}
+      <AdminQuickActions />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">

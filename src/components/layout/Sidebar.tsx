@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   FaHome,
   FaHeart,
@@ -21,81 +22,136 @@ import {
   FaUserShield,
   FaLayerGroup,
   FaStar,
+  FaShieldAlt,
+  FaProjectDiagram,
+  FaCog,
+  FaLock,
 } from "react-icons/fa";
 import { MdInventory, MdMessage } from "react-icons/md";
 import { BiSolidPurchaseTag } from "react-icons/bi";
 
-type MenuItem = { label: string; href: string; icon: React.ReactNode | string };
+type MenuItem = { 
+  label: string; 
+  href: string; 
+  icon: React.ReactNode | string;
+  permission?: string; // Required permission to see this menu
+  permissions?: string[]; // Any of these permissions
+  requireAuth?: boolean; // Requires authentication to see
+};
 
-const MAIN_MENU: MenuItem[] = [
+// Dashboard - always visible
+const DASHBOARD_MENU: MenuItem[] = [
   { label: "Dashboard", href: "/", icon: <FaHome className="w-5 h-5" /> },
+];
+
+// Main menu - requires auth
+const MAIN_MENU: MenuItem[] = [
   {
     label: "Favorites",
     href: "/favorites",
     icon: <FaHeart className="w-5 h-5" />,
+    requireAuth: true,
   },
-  { label: "Inbox", href: "/inbox", icon: <MdMessage className="w-5 h-5" /> },
+  { label: "Inbox", href: "/inbox", icon: <MdMessage className="w-5 h-5" />, requireAuth: true },
   {
     label: "Order Lists",
     href: "/orders",
     icon: <FaClipboardList className="w-5 h-5" />,
+    requireAuth: true,
   },
   {
     label: "Product Stock",
     href: "/stock",
     icon: <MdInventory className="w-5 h-5" />,
+    requireAuth: true,
   },
 ];
 
 const SECONDARY_MENU: MenuItem[] = [
-  { label: "Users", href: "/users", icon: <FaUser className="w-5 h-5" /> },
+  { 
+    label: "Users", 
+    href: "/users", 
+    icon: <FaUser className="w-5 h-5" />,
+    permissions: ['users.view', 'users.view_branch'],
+    requireAuth: true,
+  },
   {
     label: "Branches",
     href: "/branches",
     icon: <FaBuilding className="w-5 h-5" />,
+    permission: 'branches.view',
+    requireAuth: true,
   },
   {
     label: "WA Accounts",
     href: "/waAdmin",
     icon: <FaWhatsapp className="w-5 h-5" />,
+    requireAuth: true,
   },
   {
     label: "Email",
     href: "/email/accounts",
     icon: <FaEnvelope className="w-5 h-5" />,
+    requireAuth: true,
   },
   {
     label: "To-Do",
     href: "/todo",
     icon: <FaClipboardList className="w-5 h-5" />,
+    requireAuth: true,
+  },
+];
+
+// Menu khusus Admin - hanya muncul jika punya permission
+const ADMIN_MENU: MenuItem[] = [
+  {
+    label: "Roles & Permissions",
+    href: "/roles",
+    icon: <FaShieldAlt className="w-5 h-5" />,
+    permission: 'roles.view',
+    requireAuth: true,
+  },
+  {
+    label: "Workflows",
+    href: "/workflows",
+    icon: <FaProjectDiagram className="w-5 h-5" />,
+    permission: 'workflows.view',
+    requireAuth: true,
   },
 ];
 
 const CATALOG_SUBMENU: MenuItem[] = [
-   {
+  {
     label: "Type",
     href: "/types",
     icon: <BiSolidPurchaseTag className="w-4 h-4" />,
+    requireAuth: true,
   },
   {
     label: "Items",
     href: "/items",
     icon: <BiSolidPurchaseTag className="w-4 h-4" />,
+    permission: 'items.view',
+    requireAuth: true,
   },
   {
     label: "Variants",
     href: "/variants",
     icon: <BiSolidPurchaseTag className="w-4 h-4" />,
+    requireAuth: true,
   },
   {
     label: "Products",
     href: "/products",
     icon: <FaShoppingBag className="w-4 h-4" />,
+    requireAuth: true,
   },
   {
     label: "Categories",
     href: "/categories",
     icon: <FaTags className="w-4 h-4" />,
+    permission: 'categories.view',
+    requireAuth: true,
   },
 ];
 
@@ -104,16 +160,21 @@ const CUSTOMER_SUBMENU: MenuItem[] = [
     label: "Member",
     href: "/members",
     icon: <FaUserShield className="w-4 h-4" />,
+    permission: 'customers.view',
+    requireAuth: true,
   },
   {
     label: "Group",
     href: "/memberGroups",
     icon: <FaUsers className="w-4 h-4" />,
+    requireAuth: true,
   },
   {
     label: "Tiers",
     href: "/member-tiers",
     icon: <FaStar className="w-4 h-4" />,
+    permission: 'memberships.view',
+    requireAuth: true,
   },
 ];
 
@@ -144,12 +205,42 @@ interface SidebarProps {
 
 export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
   const pathname = usePathname() || "/";
+  const { hasPermission, hasAnyPermission, isAuthenticated, currentRole } = useAuth();
+  
   const [catalogOpen, setCatalogOpen] = useState<boolean>(false);
   const [customerOpen, setCustomerOpen] = useState<boolean>(false);
+  const [adminOpen, setAdminOpen] = useState<boolean>(false);
   const [isMobile, setIsMobile] = useState<boolean>(false);
 
   const collapsedWidth = 80;
   const expandedWidth = 200;
+
+  // Check if menu item should be visible based on permission
+  const canSeeMenu = (item: MenuItem): boolean => {
+    // If requires auth and not authenticated, hide
+    if (item.requireAuth && !isAuthenticated) return false;
+    
+    // If no permission required, show (if auth check passed)
+    if (!item.permission && !item.permissions) return true;
+    
+    // If not authenticated and has permission requirement, hide
+    if (!isAuthenticated) return false;
+    
+    // Check single permission
+    if (item.permission) {
+      return hasPermission(item.permission);
+    }
+    
+    // Check multiple permissions (any)
+    if (item.permissions) {
+      return hasAnyPermission(item.permissions);
+    }
+    
+    return true;
+  };
+
+  // Check if admin section should be visible
+  const showAdminSection = isAuthenticated && ADMIN_MENU.some(item => canSeeMenu(item));
 
   useEffect(() => {
     const handleResize = () => {
@@ -175,10 +266,157 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
     ) {
       setCustomerOpen(true);
     }
+    if (
+      pathname.startsWith("/roles") ||
+      pathname.startsWith("/workflows") ||
+      pathname.startsWith("/users")
+    ) {
+      setAdminOpen(true);
+    }
   }, [pathname]);
 
   const isMenuActive = (href: string) =>
     pathname === href || pathname.startsWith(href + "/");
+
+  // Render menu item
+  const renderMenuItem = (m: MenuItem, isSubmenu = false) => {
+    if (!canSeeMenu(m)) return null;
+    
+    const active = isMenuActive(m.href);
+    
+    return (
+      <li key={m.href}>
+        <Link href={m.href} className="no-underline block">
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className={`flex items-center gap-3 px-3 ${isSubmenu ? 'py-2' : 'py-2.5'} ${isSubmenu ? 'rounded-lg' : 'rounded-xl'} transition-all ${
+              active
+                ? isSubmenu 
+                  ? "bg-gradient-to-r from-pink-400 to-red-500 text-white shadow-md"
+                  : "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
+                : "text-gray-600 hover:bg-gray-50"
+            } ${collapsed && !isMobile ? "justify-center" : ""}`}
+          >
+            <div
+              className={`flex items-center justify-center ${
+                active ? "text-white" : isSubmenu ? "text-gray-400" : "text-gray-500"
+              }`}
+            >
+              {typeof m.icon === "string" ? (
+                <Image
+                  src={m.icon}
+                  alt={m.label}
+                  width={isSubmenu ? 16 : 20}
+                  height={isSubmenu ? 16 : 20}
+                />
+              ) : (
+                m.icon
+              )}
+            </div>
+            {(!collapsed || isMobile) && (
+              <>
+                <span className={`${isSubmenu ? 'text-sm' : 'text-sm font-medium'} flex-1`}>
+                  {m.label}
+                </span>
+                {active && !isSubmenu && (
+                  <motion.svg
+                    initial={{ x: -5, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path
+                      d="M9 6l6 6-6 6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </motion.svg>
+                )}
+              </>
+            )}
+          </motion.div>
+        </Link>
+      </li>
+    );
+  };
+
+  // Render submenu parent
+  const renderSubmenuParent = (
+    label: string,
+    icon: React.ReactNode,
+    isOpen: boolean,
+    setIsOpen: (v: boolean | ((p: boolean) => boolean)) => void,
+    submenu: MenuItem[]
+  ) => {
+    // Filter visible submenu items
+    const visibleSubmenu = submenu.filter(canSeeMenu);
+    if (visibleSubmenu.length === 0) return null;
+    
+    const parentActive = visibleSubmenu.some((c) => isMenuActive(c.href));
+    
+    return (
+      <li>
+        <button
+          className="w-full"
+          onClick={() => setIsOpen((s) => !s)}
+          aria-expanded={isOpen}
+        >
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
+              parentActive
+                ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
+                : "text-gray-600 hover:bg-gray-50"
+            } ${collapsed && !isMobile ? "justify-center" : ""}`}
+          >
+            <div className={`${parentActive ? "text-white" : "text-gray-500"}`}>
+              {icon}
+            </div>
+            {(!collapsed || isMobile) && (
+              <>
+                <span className="text-sm font-medium flex-1">{label}</span>
+                <motion.svg
+                  animate={{ rotate: isOpen ? 90 : 0 }}
+                  transition={{ duration: 0.2 }}
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path
+                    d="M9 6l6 6-6 6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </motion.svg>
+              </>
+            )}
+          </motion.div>
+        </button>
+        <AnimatePresence initial={false}>
+          {isOpen && (!collapsed || isMobile) && (
+            <motion.ul
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              className="mt-1 ml-3 space-y-1 overflow-hidden"
+            >
+              {visibleSubmenu.map((c) => renderMenuItem(c, true))}
+            </motion.ul>
+          )}
+        </AnimatePresence>
+      </li>
+    );
+  };
 
   return (
     <>
@@ -240,334 +478,104 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-4">
           <ul className="space-y-1 px-3">
-            {/* Main menu */}
-            {MAIN_MENU.map((m) => {
-              const active = isMenuActive(m.href);
-              return (
-                <li key={m.href}>
-                  <Link href={m.href} className="no-underline block">
-                    <motion.div
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
-                        active
-                          ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
-                          : "text-gray-600 hover:bg-gray-50"
-                      } ${collapsed ? "justify-center" : ""}`}
-                    >
-                      <div
-                        className={`flex items-center justify-center ${
-                          active ? "text-white" : "text-gray-500"
-                        }`}
-                      >
-                        {typeof m.icon === "string" ? (
-                          <Image
-                            src={m.icon}
-                            alt={m.label}
-                            width={20}
-                            height={20}
-                          />
-                        ) : (
-                          m.icon
-                        )}
-                      </div>
-                      {!collapsed && (
-                        <>
-                          <span className="text-sm font-medium flex-1">
-                            {m.label}
-                          </span>
-                          {active && (
-                            <motion.svg
-                              initial={{ x: -5, opacity: 0 }}
-                              animate={{ x: 0, opacity: 1 }}
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                            >
-                              <path
-                                d="M9 6l6 6-6 6"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </motion.svg>
-                          )}
-                        </>
-                      )}
-                    </motion.div>
-                  </Link>
-                </li>
-              );
-            })}
+            {/* Dashboard - always visible */}
+            {DASHBOARD_MENU.map((m) => renderMenuItem(m))}
 
-            <div className="my-4 border-t border-gray-100" />
+            {/* Show login prompt if not authenticated */}
+            {!isAuthenticated && (
+              <div className="mt-6 mx-2 p-4 bg-gradient-to-br from-red-50 to-orange-50 rounded-xl border border-red-100">
+                <div className="flex items-center gap-2 mb-2">
+                  <FaLock className="w-4 h-4 text-red-500" />
+                  <span className="text-sm font-semibold text-gray-700">Login Required</span>
+                </div>
+                <p className="text-xs text-gray-500 mb-3">
+                  Silakan login untuk mengakses menu lainnya
+                </p>
+                <div className="flex items-center gap-1 text-xs text-red-600">
+                  <span>Klik</span>
+                  <span className="font-semibold">Login</span>
+                  <span>di pojok kanan atas</span>
+                </div>
+              </div>
+            )}
 
-            {/* Catalog parent */}
-            <li>
-              {(() => {
-                const parentActive = CATALOG_SUBMENU.some((c) =>
-                  isMenuActive(c.href)
-                );
-                return (
+            {/* Other menus - only show when authenticated */}
+            {isAuthenticated && (
+              <>
+                {/* Main menu */}
+                {MAIN_MENU.filter(canSeeMenu).map((m) => renderMenuItem(m))}
+
+                <div className="my-4 border-t border-gray-100" />
+
+                {/* Catalog submenu */}
+                {renderSubmenuParent(
+                  "Catalog",
+                  <FaBoxes className="w-5 h-5" />,
+                  catalogOpen,
+                  setCatalogOpen,
+                  CATALOG_SUBMENU
+                )}
+
+                <div className="my-4 border-t border-gray-100" />
+
+                {/* Customer submenu */}
+                {renderSubmenuParent(
+                  "Customer",
+                  <FaLayerGroup className="w-5 h-5" />,
+                  customerOpen,
+                  setCustomerOpen,
+                  CUSTOMER_SUBMENU
+                )}
+
+                <div className="my-4 border-t border-gray-100" />
+
+                {/* Secondary menu */}
+                {SECONDARY_MENU.filter(canSeeMenu).map((m) => renderMenuItem(m))}
+
+                {/* Admin Section - only visible if user has admin permissions */}
+                {showAdminSection && (
                   <>
-                    <button
-                      className="w-full"
-                      onClick={() => setCatalogOpen((s) => !s)}
-                      aria-expanded={catalogOpen}
-                    >
-                      <motion.div
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
-                          parentActive
-                            ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
-                            : "text-gray-600 hover:bg-gray-50"
-                        } ${collapsed ? "justify-center" : ""}`}
-                      >
-                        <FaBoxes
-                          className={`w-5 h-5 ${
-                            parentActive ? "text-white" : "text-gray-500"
-                          }`}
-                        />
-                        {!collapsed && (
-                          <>
-                            <span className="text-sm font-medium flex-1">
-                              Catalog
-                            </span>
-                            <motion.svg
-                              animate={{ rotate: catalogOpen ? 90 : 0 }}
-                              transition={{ duration: 0.2 }}
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                            >
-                              <path
-                                d="M9 6l6 6-6 6"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </motion.svg>
-                          </>
-                        )}
-                      </motion.div>
-                    </button>
-                    <AnimatePresence initial={false}>
-                      {catalogOpen && !collapsed && (
-                        <motion.ul
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="mt-1 ml-3 space-y-1 overflow-hidden"
-                        >
-                          {CATALOG_SUBMENU.map((c) => {
-                            const active = isMenuActive(c.href);
-                            return (
-                              <li key={c.href}>
-                                <Link
-                                  href={c.href}
-                                  className="no-underline block"
-                                >
-                                  <motion.div
-                                    whileHover={{ scale: 1.02, x: 2 }}
-                                    whileTap={{ scale: 0.98 }}
-                                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
-                                      active
-                                        ? "bg-gradient-to-r from-pink-400 to-red-500 text-white shadow-md"
-                                        : "text-gray-600 hover:bg-gray-50"
-                                    }`}
-                                  >
-                                    <div
-                                      className={`flex items-center justify-center ${
-                                        active ? "text-white" : "text-gray-400"
-                                      }`}
-                                    >
-                                      {typeof c.icon === "string" ? (
-                                        <Image
-                                          src={c.icon}
-                                          alt={c.label}
-                                          width={16}
-                                          height={16}
-                                        />
-                                      ) : (
-                                        c.icon
-                                      )}
-                                    </div>
-                                    <span className="text-sm">{c.label}</span>
-                                  </motion.div>
-                                </Link>
-                              </li>
-                            );
-                          })}
-                        </motion.ul>
-                      )}
-                    </AnimatePresence>
-                  </>
-                );
-              })()}
-            </li>
-
-            <div className="my-4 border-t border-gray-100" />
-
-            {/* Customer parent */}
-            <li>
-              {(() => {
-                const parentActive = CUSTOMER_SUBMENU.some((c) =>
-                  isMenuActive(c.href)
-                );
-                return (
-                  <>
-                    <button
-                      className="w-full"
-                      onClick={() => setCustomerOpen((s) => !s)}
-                      aria-expanded={customerOpen}
-                    >
-                      <motion.div
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
-                          parentActive
-                            ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
-                            : "text-gray-600 hover:bg-gray-50"
-                        } ${collapsed ? "justify-center" : ""}`}
-                      >
-                        <FaLayerGroup
-                          className={`w-5 h-5 ${
-                            parentActive ? "text-white" : "text-gray-500"
-                          }`}
-                        />
-                        {!collapsed && (
-                          <>
-                            <span className="text-sm font-medium flex-1">
-                              Customer
-                            </span>
-                            <motion.svg
-                              animate={{ rotate: customerOpen ? 90 : 0 }}
-                              transition={{ duration: 0.2 }}
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                            >
-                              <path
-                                d="M9 6l6 6-6 6"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </motion.svg>
-                          </>
-                        )}
-                      </motion.div>
-                    </button>
-                    <AnimatePresence initial={false}>
-                      {customerOpen && !collapsed && (
-                        <motion.ul
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="mt-1 ml-3 space-y-1 overflow-hidden"
-                        >
-                          {CUSTOMER_SUBMENU.map((c) => {
-                            const active = isMenuActive(c.href);
-                            return (
-                              <li key={c.href}>
-                                <Link
-                                  href={c.href}
-                                  className="no-underline block"
-                                >
-                                  <motion.div
-                                    whileHover={{ scale: 1.02, x: 2 }}
-                                    whileTap={{ scale: 0.98 }}
-                                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
-                                      active
-                                        ? "bg-gradient-to-r from-pink-400 to-red-500 text-white shadow-md"
-                                        : "text-gray-600 hover:bg-gray-50"
-                                    }`}
-                                  >
-                                    <div
-                                      className={`flex items-center justify-center ${
-                                        active ? "text-white" : "text-gray-400"
-                                      }`}
-                                    >
-                                      {typeof c.icon === "string" ? (
-                                        <Image
-                                          src={c.icon}
-                                          alt={c.label}
-                                          width={16}
-                                          height={16}
-                                        />
-                                      ) : (
-                                        c.icon
-                                      )}
-                                    </div>
-                                    <span className="text-sm">{c.label}</span>
-                                  </motion.div>
-                                </Link>
-                              </li>
-                            );
-                          })}
-                        </motion.ul>
-                      )}
-                    </AnimatePresence>
-                  </>
-                );
-              })()}
-            </li>
-
-            <div className="my-4 border-t border-gray-100" />
-
-            {/* Secondary menu */}
-            {SECONDARY_MENU.map((m) => {
-              const active = isMenuActive(m.href);
-              return (
-                <li key={m.href}>
-                  <Link href={m.href} className="no-underline block">
-                    <motion.div
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
-                        active
-                          ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
-                          : "text-gray-600 hover:bg-gray-50"
-                      } ${collapsed ? "justify-center" : ""}`}
-                    >
-                      <div
-                        className={`flex items-center justify-center ${
-                          active ? "text-white" : "text-gray-500"
-                        }`}
-                      >
-                        {typeof m.icon === "string" ? (
-                          <Image
-                            src={m.icon}
-                            alt={m.label}
-                            width={20}
-                            height={20}
-                          />
-                        ) : (
-                          m.icon
-                        )}
+                    <div className="my-4 border-t border-gray-100" />
+                    
+                    {(!collapsed || isMobile) && (
+                      <div className="px-3 mb-2">
+                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                          <FaLock className="w-3 h-3" />
+                          Admin Only
+                        </span>
                       </div>
-                      {!collapsed && (
-                        <span className="text-sm font-medium">{m.label}</span>
-                      )}
-                    </motion.div>
-                  </Link>
-                </li>
-              );
-            })}
+                    )}
+
+                    {renderSubmenuParent(
+                      "System",
+                      <FaCog className="w-5 h-5" />,
+                      adminOpen,
+                      setAdminOpen,
+                      ADMIN_MENU
+                    )}
+                  </>
+                )}
+              </>
+            )}
           </ul>
         </nav>
 
         {/* Footer */}
         <div className="px-3 py-4 border-t border-gray-100">
+          {(!collapsed || isMobile) && currentRole && (
+            <div className="mb-2 px-3">
+              <span 
+                className="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg"
+                style={{ 
+                  backgroundColor: `${currentRole.color}15`,
+                  color: currentRole.color 
+                }}
+              >
+                <FaUserShield className="w-3 h-3" />
+                {currentRole.display_name}
+              </span>
+            </div>
+          )}
           <div className="text-center text-xs text-gray-500">v1.0</div>
         </div>
       </motion.aside>

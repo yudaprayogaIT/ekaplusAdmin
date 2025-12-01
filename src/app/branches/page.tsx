@@ -2,7 +2,7 @@
 import BranchList from '@/components/branches/BranchList';
 
 export const metadata = {
-  title: 'Branches - Ekatalog Ekatunggal',
+  title: 'Branches - EKA+ Admin',
   description: 'Kelola cabang Ekatunggal di seluruh Indonesia',
 };
 

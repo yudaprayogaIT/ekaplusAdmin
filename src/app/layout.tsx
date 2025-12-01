@@ -1,34 +1,25 @@
 // src/app/layout.tsx
-'use client';
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+import AdminLayout from "@/components/layout/AdminLayout";
 
-import Header from '../components/layout/Header';
-import Sidebar, { useSidebarCollapse } from '../components/layout/Sidebar';
-import './globals.css';
-import { Poppins, Montserrat } from 'next/font/google';
+const inter = Inter({ subsets: ["latin"] });
 
-const poppins = Poppins({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-poppins',
-});
+export const metadata: Metadata = {
+  title: "EKA+ Admin - Web Admin Ekatunggal",
+  description: "Web Admin untuk sistem EKA+ Ekatunggal Group",
+};
 
-const montserrat = Montserrat({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-montserrat',
-});
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const { collapsed, setCollapsed } = useSidebarCollapse();
-
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="en" className={`${poppins.variable} ${montserrat.variable}`}>
-      <body className="font-poppins flex bg-gray-50 text-gray-800">
-        <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
-        <div className="flex flex-col flex-1 h-screen overflow-hidden">
-          <Header collapsed={collapsed} setCollapsed={setCollapsed} />
-          <main className="flex-1 overflow-y-auto p-6 bg-gray-50">{children}</main>
-        </div>
+    <html lang="id">
+      <body className={inter.className}>
+        <AdminLayout>{children}</AdminLayout>
       </body>
     </html>
   );

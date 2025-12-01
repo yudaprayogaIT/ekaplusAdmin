@@ -3,8 +3,7 @@
 
 import React from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { FaTimes, FaEdit, FaTrash, FaMapMarkerAlt, FaGlobe, FaCity, FaMapPin, FaExternalLinkAlt } from "react-icons/fa";
-import Image from "next/image";
+import { FaTimes, FaEdit, FaTrash, FaMapMarkerAlt, FaGlobe, FaCity, FaMapPin, FaExternalLinkAlt, FaLock } from "react-icons/fa";
 
 type Branch = {
   id: number;
@@ -26,17 +25,20 @@ export default function BranchDetailModal({
   branch,
   onEdit,
   onDelete,
+  canEdit = true,
+  canDelete = true,
 }: {
   open: boolean;
   onClose: () => void;
   branch?: Branch | null;
   onEdit?: (b: Branch) => void;
   onDelete?: (b: Branch) => void;
+  canEdit?: boolean;
+  canDelete?: boolean;
 }) {
   if (!branch) return null;
 
   const googleMapsUrl = `https://www.google.com/maps?q=${branch.lat},${branch.lng}`;
-  const mapImageUrl = `https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/pin-l+ef4444(${branch.lng},${branch.lat})/${branch.lng},${branch.lat},13,0/800x400@2x?access_token=pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw`;
 
   return (
     <AnimatePresence>
@@ -107,13 +109,9 @@ export default function BranchDetailModal({
                   rel="noopener noreferrer"
                   className="block relative rounded-2xl overflow-hidden border-2 border-gray-200 shadow-lg hover:shadow-xl transition-all group"
                 >
-                  <Image
-                    src={'/images/maps.jpg'}
-                    alt="Map location"
-                    width={400}
-                    height={400}
-                    className="w-full h-80 object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
+                  <div className="w-full h-80 bg-gradient-to-br from-red-50 to-red-100 flex items-center justify-center">
+                    <FaMapMarkerAlt className="w-24 h-24 text-red-200" />
+                  </div>
                   <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-6">
                     <div className="px-6 py-3 bg-white/95 backdrop-blur-sm rounded-full flex items-center gap-2 font-semibold text-gray-800">
                       <FaExternalLinkAlt className="w-4 h-4" />
@@ -193,25 +191,39 @@ export default function BranchDetailModal({
 
               {/* Actions */}
               <div className="flex gap-4 pt-6 border-t-2 border-gray-100">
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => onEdit?.(branch)}
-                  className="flex-1 flex items-center justify-center gap-3 px-6 py-4 bg-gray-100 hover:bg-gray-200 rounded-2xl transition-all font-semibold text-gray-800 shadow-sm"
-                >
-                  <FaEdit className="w-5 h-5" />
-                  <span>Edit Cabang</span>
-                </motion.button>
+                {canEdit ? (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => onEdit?.(branch)}
+                    className="flex-1 flex items-center justify-center gap-3 px-6 py-4 bg-gray-100 hover:bg-gray-200 rounded-2xl transition-all font-semibold text-gray-800 shadow-sm"
+                  >
+                    <FaEdit className="w-5 h-5" />
+                    <span>Edit Cabang</span>
+                  </motion.button>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center gap-3 px-6 py-4 bg-gray-50 rounded-2xl text-gray-400 cursor-not-allowed">
+                    <FaLock className="w-5 h-5" />
+                    <span>Edit Cabang</span>
+                  </div>
+                )}
 
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => onDelete?.(branch)}
-                  className="flex-1 flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-2xl transition-all font-semibold shadow-lg shadow-red-200"
-                >
-                  <FaTrash className="w-5 h-5" />
-                  <span>Hapus</span>
-                </motion.button>
+                {canDelete ? (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => onDelete?.(branch)}
+                    className="flex-1 flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-2xl transition-all font-semibold shadow-lg shadow-red-200"
+                  >
+                    <FaTrash className="w-5 h-5" />
+                    <span>Hapus</span>
+                  </motion.button>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center gap-3 px-6 py-4 bg-gray-50 rounded-2xl text-gray-400 cursor-not-allowed">
+                    <FaLock className="w-5 h-5" />
+                    <span>Hapus</span>
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
