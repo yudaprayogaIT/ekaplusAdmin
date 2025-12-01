@@ -491,10 +491,8 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                 <p className="text-xs text-gray-500 mb-3">
                   Silakan login untuk mengakses menu lainnya
                 </p>
-                <div className="flex items-center gap-1 text-xs text-red-600">
-                  <span>Klik</span>
-                  <span className="font-semibold">Login</span>
-                  <span>di pojok kanan atas</span>
+                <div className="text-xs text-red-600">
+                  Klik <span className="font-semibold">Login</span> di pojok kanan atas
                 </div>
               </div>
             )}
