@@ -1,4 +1,5 @@
 // src/app/roles/page.tsx
+import RequireAuth from "@/components/auth/RequireAuth";
 import RoleList from "@/components/roles/RoleList";
 
 export const metadata = {
@@ -7,5 +8,9 @@ export const metadata = {
 };
 
 export default function RolesPage() {
-  return <RoleList />;
+  return (
+    <RequireAuth permission="roles.view">
+      <RoleList />
+    </RequireAuth>
+  );
 }

@@ -1,4 +1,5 @@
 // src/app/products/page.tsx
+import RequireAuth from '@/components/auth/RequireAuth';
 import ProductList from '@/components/products/ProductList';
 
 export const metadata = {
@@ -8,8 +9,8 @@ export const metadata = {
 
 export default function ProductsPage() {
   return (
-    <div className="space-y-6">
+    <RequireAuth>
       <ProductList />
-    </div>
+    </RequireAuth>
   );
 }

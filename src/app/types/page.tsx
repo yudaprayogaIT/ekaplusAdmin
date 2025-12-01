@@ -1,5 +1,6 @@
 // src/app/types/page.tsx
 
+import RequireAuth from "@/components/auth/RequireAuth";
 import TypeList from "@/components/types/Typelist";
 
 export const metadata = {
@@ -9,8 +10,8 @@ export const metadata = {
 
 export default function TypesPage() {
   return (
-    <div className="space-y-6">
+    <RequireAuth>
       <TypeList />
-    </div>
+    </RequireAuth>
   );
 }
