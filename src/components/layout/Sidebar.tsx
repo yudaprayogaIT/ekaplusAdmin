@@ -34,9 +34,9 @@ type MenuItem = {
   label: string; 
   href: string; 
   icon: React.ReactNode | string;
-  permission?: string; // Required permission to see this menu
-  permissions?: string[]; // Any of these permissions
-  requireAuth?: boolean; // Requires authentication to see
+  permission?: string;
+  permissions?: string[];
+  requireAuth?: boolean;
 };
 
 // Dashboard - always visible
@@ -102,7 +102,6 @@ const SECONDARY_MENU: MenuItem[] = [
   },
 ];
 
-// Menu khusus Admin - hanya muncul jika punya permission
 const ADMIN_MENU: MenuItem[] = [
   {
     label: "Roles & Permissions",
@@ -131,7 +130,6 @@ const CATALOG_SUBMENU: MenuItem[] = [
     label: "Items",
     href: "/items",
     icon: <BiSolidPurchaseTag className="w-4 h-4" />,
-    permission: 'items.view',
     requireAuth: true,
   },
   {
@@ -150,7 +148,6 @@ const CATALOG_SUBMENU: MenuItem[] = [
     label: "Categories",
     href: "/categories",
     icon: <FaTags className="w-4 h-4" />,
-    permission: 'categories.view',
     requireAuth: true,
   },
 ];
@@ -160,7 +157,6 @@ const CUSTOMER_SUBMENU: MenuItem[] = [
     label: "Member",
     href: "/members",
     icon: <FaUserShield className="w-4 h-4" />,
-    permission: 'customers.view',
     requireAuth: true,
   },
   {
@@ -173,27 +169,36 @@ const CUSTOMER_SUBMENU: MenuItem[] = [
     label: "Tiers",
     href: "/member-tiers",
     icon: <FaStar className="w-4 h-4" />,
-    permission: 'memberships.view',
     requireAuth: true,
   },
 ];
 
-// Export function untuk digunakan di Header
+// Export hook untuk digunakan di AdminLayout
 export function useSidebarCollapse() {
+  // Default: expanded (false = not collapsed)
   const [collapsed, setCollapsed] = useState<boolean>(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
     try {
       const v = localStorage.getItem("sidebar-collapsed");
-      setCollapsed(v === "1");
-    } catch {}
+      // Only collapse if explicitly set to "1", otherwise default expanded
+      if (v === "1") {
+        setCollapsed(true);
+      }
+      setIsInitialized(true);
+    } catch {
+      setIsInitialized(true);
+    }
   }, []);
 
   useEffect(() => {
-    try {
-      localStorage.setItem("sidebar-collapsed", collapsed ? "1" : "0");
-    } catch {}
-  }, [collapsed]);
+    if (isInitialized) {
+      try {
+        localStorage.setItem("sidebar-collapsed", collapsed ? "1" : "0");
+      } catch {}
+    }
+  }, [collapsed, isInitialized]);
 
   return { collapsed, setCollapsed };
 }
@@ -212,76 +217,50 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
   const [adminOpen, setAdminOpen] = useState<boolean>(false);
   const [isMobile, setIsMobile] = useState<boolean>(false);
 
-  const collapsedWidth = 80;
-  const expandedWidth = 200;
+  const collapsedWidth = 72;
+  const expandedWidth = 240;
 
-  // Check if menu item should be visible based on permission
   const canSeeMenu = (item: MenuItem): boolean => {
-    // If requires auth and not authenticated, hide
     if (item.requireAuth && !isAuthenticated) return false;
-    
-    // If no permission required, show (if auth check passed)
     if (!item.permission && !item.permissions) return true;
-    
-    // If not authenticated and has permission requirement, hide
     if (!isAuthenticated) return false;
-    
-    // Check single permission
-    if (item.permission) {
-      return hasPermission(item.permission);
-    }
-    
-    // Check multiple permissions (any)
-    if (item.permissions) {
-      return hasAnyPermission(item.permissions);
-    }
-    
+    if (item.permission) return hasPermission(item.permission);
+    if (item.permissions) return hasAnyPermission(item.permissions);
     return true;
   };
 
-  // Check if admin section should be visible
   const showAdminSection = isAuthenticated && ADMIN_MENU.some(item => canSeeMenu(item));
 
   useEffect(() => {
     const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      // Auto collapse on mobile
+      if (mobile) {
+        setCollapsed(true);
+      }
     };
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  }, [setCollapsed]);
 
   useEffect(() => {
-    if (
-      pathname.startsWith("/products") ||
-      pathname.startsWith("/categories") ||
-      pathname.startsWith("/items")
-    ) {
+    if (pathname.startsWith("/products") || pathname.startsWith("/categories") || pathname.startsWith("/items") || pathname.startsWith("/types") || pathname.startsWith("/variants")) {
       setCatalogOpen(true);
     }
-    if (
-      pathname.startsWith("/members") ||
-      pathname.startsWith("/memberGroups") ||
-      pathname.startsWith("/member-tiers")
-    ) {
+    if (pathname.startsWith("/members") || pathname.startsWith("/memberGroups") || pathname.startsWith("/member-tiers")) {
       setCustomerOpen(true);
     }
-    if (
-      pathname.startsWith("/roles") ||
-      pathname.startsWith("/workflows") ||
-      pathname.startsWith("/users")
-    ) {
+    if (pathname.startsWith("/roles") || pathname.startsWith("/workflows")) {
       setAdminOpen(true);
     }
   }, [pathname]);
 
-  const isMenuActive = (href: string) =>
-    pathname === href || pathname.startsWith(href + "/");
+  const isMenuActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
-  // Render menu item
   const renderMenuItem = (m: MenuItem, isSubmenu = false) => {
     if (!canSeeMenu(m)) return null;
-    
     const active = isMenuActive(m.href);
     
     return (
@@ -296,45 +275,24 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                   ? "bg-gradient-to-r from-pink-400 to-red-500 text-white shadow-md"
                   : "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
                 : "text-gray-600 hover:bg-gray-50"
-            } ${collapsed && !isMobile ? "justify-center" : ""}`}
+            } ${collapsed && !isMobile ? "justify-center px-2" : ""}`}
+            title={collapsed && !isMobile ? m.label : undefined}
           >
-            <div
-              className={`flex items-center justify-center ${
-                active ? "text-white" : isSubmenu ? "text-gray-400" : "text-gray-500"
-              }`}
-            >
+            <div className={`flex items-center justify-center flex-shrink-0 ${active ? "text-white" : isSubmenu ? "text-gray-400" : "text-gray-500"}`}>
               {typeof m.icon === "string" ? (
-                <Image
-                  src={m.icon}
-                  alt={m.label}
-                  width={isSubmenu ? 16 : 20}
-                  height={isSubmenu ? 16 : 20}
-                />
+                <Image src={m.icon} alt={m.label} width={isSubmenu ? 16 : 20} height={isSubmenu ? 16 : 20} />
               ) : (
                 m.icon
               )}
             </div>
             {(!collapsed || isMobile) && (
               <>
-                <span className={`${isSubmenu ? 'text-sm' : 'text-sm font-medium'} flex-1`}>
+                <span className={`${isSubmenu ? 'text-sm' : 'text-sm font-medium'} flex-1 truncate`}>
                   {m.label}
                 </span>
                 {active && !isSubmenu && (
-                  <motion.svg
-                    initial={{ x: -5, opacity: 0 }}
-                    animate={{ x: 0, opacity: 1 }}
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path
-                      d="M9 6l6 6-6 6"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
+                  <motion.svg initial={{ x: -5, opacity: 0 }} animate={{ x: 0, opacity: 1 }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
                   </motion.svg>
                 )}
               </>
@@ -345,7 +303,6 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
     );
   };
 
-  // Render submenu parent
   const renderSubmenuParent = (
     label: string,
     icon: React.ReactNode,
@@ -353,10 +310,8 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
     setIsOpen: (v: boolean | ((p: boolean) => boolean)) => void,
     submenu: MenuItem[]
   ) => {
-    // Filter visible submenu items
     const visibleSubmenu = submenu.filter(canSeeMenu);
     if (visibleSubmenu.length === 0) return null;
-    
     const parentActive = visibleSubmenu.some((c) => isMenuActive(c.href));
     
     return (
@@ -365,6 +320,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
           className="w-full"
           onClick={() => setIsOpen((s) => !s)}
           aria-expanded={isOpen}
+          title={collapsed && !isMobile ? label : undefined}
         >
           <motion.div
             whileHover={{ scale: 1.02 }}
@@ -373,29 +329,16 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
               parentActive
                 ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
                 : "text-gray-600 hover:bg-gray-50"
-            } ${collapsed && !isMobile ? "justify-center" : ""}`}
+            } ${collapsed && !isMobile ? "justify-center px-2" : ""}`}
           >
-            <div className={`${parentActive ? "text-white" : "text-gray-500"}`}>
+            <div className={`flex-shrink-0 ${parentActive ? "text-white" : "text-gray-500"}`}>
               {icon}
             </div>
             {(!collapsed || isMobile) && (
               <>
-                <span className="text-sm font-medium flex-1">{label}</span>
-                <motion.svg
-                  animate={{ rotate: isOpen ? 90 : 0 }}
-                  transition={{ duration: 0.2 }}
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path
-                    d="M9 6l6 6-6 6"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
+                <span className="text-sm font-medium flex-1 text-left">{label}</span>
+                <motion.svg animate={{ rotate: isOpen ? 90 : 0 }} transition={{ duration: 0.2 }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
                 </motion.svg>
               </>
             )}
@@ -434,123 +377,91 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
         initial={false}
         animate={{
           x: isMobile ? (collapsed ? "-100%" : 0) : 0,
-          width: isMobile
-            ? expandedWidth
-            : collapsed
-            ? collapsedWidth
-            : expandedWidth,
+          width: isMobile ? expandedWidth : collapsed ? collapsedWidth : expandedWidth,
         }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         style={{
-          minWidth: isMobile
-            ? expandedWidth
-            : collapsed
-            ? collapsedWidth
-            : expandedWidth,
+          minWidth: isMobile ? expandedWidth : collapsed ? collapsedWidth : expandedWidth,
           maxWidth: expandedWidth,
         }}
         className={`h-screen bg-white flex flex-col ${
-          isMobile
-            ? "fixed top-0 left-0 z-50 shadow-2xl"
-            : "border-r border-gray-100"
+          isMobile ? "fixed top-0 left-0 z-50 shadow-2xl" : "relative border-r border-gray-100"
         }`}
       >
         {/* Logo section */}
-        <div className="px-4 py-5 border-b border-gray-100">
+        <div className="px-3 py-4 border-b border-gray-100">
           <div className="flex items-center gap-3">
-            {collapsed && !isMobile ? (
-              <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-700 rounded-xl flex items-center justify-center">
-                <span className="text-white font-bold text-lg">E</span>
-              </div>
-            ) : (
-              <>
-                <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-700 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <span className="text-white font-bold text-lg">E</span>
-                </div>
-                <span className="text-base font-semibold text-gray-800">
-                  Eka+ Admin
-                </span>
-              </>
+            <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-700 rounded-xl flex items-center justify-center flex-shrink-0">
+              <span className="text-white font-bold text-lg">E</span>
+            </div>
+            {(!collapsed || isMobile) && (
+              <span className="text-base font-semibold text-gray-800 truncate">Eka+ Admin</span>
             )}
           </div>
         </div>
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-4">
-          <ul className="space-y-1 px-3">
+          <ul className="space-y-1 px-2">
             {/* Dashboard - always visible */}
             {DASHBOARD_MENU.map((m) => renderMenuItem(m))}
 
-            {/* Show login prompt if not authenticated */}
-            {!isAuthenticated && (
-              <div className="mt-6 mx-2 p-4 bg-gradient-to-br from-red-50 to-orange-50 rounded-xl border border-red-100">
+            {/* Show login prompt if not authenticated - only when expanded */}
+            {!isAuthenticated && (!collapsed || isMobile) && (
+              <div className="mt-4 mx-1 p-3 bg-gradient-to-br from-red-50 to-orange-50 rounded-xl border border-red-100">
                 <div className="flex items-center gap-2 mb-2">
-                  <FaLock className="w-4 h-4 text-red-500" />
-                  <span className="text-sm font-semibold text-gray-700">Login Required</span>
+                  <FaLock className="w-3.5 h-3.5 text-red-500" />
+                  <span className="text-xs font-semibold text-gray-700">Login Required</span>
                 </div>
-                <p className="text-xs text-gray-500 mb-3">
+                <p className="text-xs text-gray-500 mb-2">
                   Silakan login untuk mengakses menu lainnya
                 </p>
                 <div className="text-xs text-red-600">
-                  Klik <span className="font-semibold">Login</span> di pojok kanan atas
+                  Klik <span className="font-semibold">Login</span> di kanan atas
                 </div>
               </div>
+            )}
+
+            {/* Show lock icon when collapsed and not authenticated */}
+            {!isAuthenticated && collapsed && !isMobile && (
+              <li className="flex justify-center py-4">
+                <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center" title="Login required">
+                  <FaLock className="w-4 h-4 text-red-400" />
+                </div>
+              </li>
             )}
 
             {/* Other menus - only show when authenticated */}
             {isAuthenticated && (
               <>
-                {/* Main menu */}
                 {MAIN_MENU.filter(canSeeMenu).map((m) => renderMenuItem(m))}
 
-                <div className="my-4 border-t border-gray-100" />
+                <div className="my-3 border-t border-gray-100 mx-1" />
 
-                {/* Catalog submenu */}
-                {renderSubmenuParent(
-                  "Catalog",
-                  <FaBoxes className="w-5 h-5" />,
-                  catalogOpen,
-                  setCatalogOpen,
-                  CATALOG_SUBMENU
-                )}
+                {renderSubmenuParent("Catalog", <FaBoxes className="w-5 h-5" />, catalogOpen, setCatalogOpen, CATALOG_SUBMENU)}
 
-                <div className="my-4 border-t border-gray-100" />
+                <div className="my-3 border-t border-gray-100 mx-1" />
 
-                {/* Customer submenu */}
-                {renderSubmenuParent(
-                  "Customer",
-                  <FaLayerGroup className="w-5 h-5" />,
-                  customerOpen,
-                  setCustomerOpen,
-                  CUSTOMER_SUBMENU
-                )}
+                {renderSubmenuParent("Customer", <FaLayerGroup className="w-5 h-5" />, customerOpen, setCustomerOpen, CUSTOMER_SUBMENU)}
 
-                <div className="my-4 border-t border-gray-100" />
+                <div className="my-3 border-t border-gray-100 mx-1" />
 
-                {/* Secondary menu */}
                 {SECONDARY_MENU.filter(canSeeMenu).map((m) => renderMenuItem(m))}
 
-                {/* Admin Section - only visible if user has admin permissions */}
                 {showAdminSection && (
                   <>
-                    <div className="my-4 border-t border-gray-100" />
+                    <div className="my-3 border-t border-gray-100 mx-1" />
                     
                     {(!collapsed || isMobile) && (
                       <div className="px-3 mb-2">
                         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                          <FaLock className="w-3 h-3" />
+                          <FaLock className="w-2.5 h-2.5" />
                           Admin Only
                         </span>
                       </div>
                     )}
 
-                    {renderSubmenuParent(
-                      "System",
-                      <FaCog className="w-5 h-5" />,
-                      adminOpen,
-                      setAdminOpen,
-                      ADMIN_MENU
-                    )}
+                    {renderSubmenuParent("System", <FaCog className="w-5 h-5" />, adminOpen, setAdminOpen, ADMIN_MENU)}
                   </>
                 )}
               </>
@@ -559,22 +470,19 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
         </nav>
 
         {/* Footer */}
-        <div className="px-3 py-4 border-t border-gray-100">
+        <div className="px-2 py-3 border-t border-gray-100">
           {(!collapsed || isMobile) && currentRole && (
-            <div className="mb-2 px-3">
+            <div className="mb-2 px-2">
               <span 
                 className="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg"
-                style={{ 
-                  backgroundColor: `${currentRole.color}15`,
-                  color: currentRole.color 
-                }}
+                style={{ backgroundColor: `${currentRole.color}15`, color: currentRole.color }}
               >
                 <FaUserShield className="w-3 h-3" />
                 {currentRole.display_name}
               </span>
             </div>
           )}
-          <div className="text-center text-xs text-gray-500">v1.0</div>
+          <div className="text-center text-xs text-gray-400">v1.0</div>
         </div>
       </motion.aside>
     </>

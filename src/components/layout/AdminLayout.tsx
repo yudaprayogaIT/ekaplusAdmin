@@ -19,6 +19,10 @@ function LayoutContent({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  const handleToggleSidebar = () => {
+    setCollapsed((prev) => !prev);
+  };
+
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
@@ -28,8 +32,9 @@ function LayoutContent({ children }: { children: ReactNode }) {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <Header 
-          onToggleSidebar={() => setCollapsed((prev) => !prev)} 
+          onToggleSidebar={handleToggleSidebar} 
           isMobile={isMobile}
+          sidebarCollapsed={collapsed}
         />
 
         {/* Page Content */}
