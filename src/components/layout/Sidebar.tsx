@@ -26,13 +26,15 @@ import {
   FaProjectDiagram,
   FaCog,
   FaLock,
+  FaDatabase,
 } from "react-icons/fa";
 import { MdInventory, MdMessage } from "react-icons/md";
 import { BiSolidPurchaseTag } from "react-icons/bi";
+import { AiFillProduct } from "react-icons/ai";
 
-type MenuItem = { 
-  label: string; 
-  href: string; 
+type MenuItem = {
+  label: string;
+  href: string;
   icon: React.ReactNode | string;
   permission?: string;
   permissions?: string[];
@@ -52,7 +54,12 @@ const MAIN_MENU: MenuItem[] = [
     icon: <FaHeart className="w-5 h-5" />,
     requireAuth: true,
   },
-  { label: "Inbox", href: "/inbox", icon: <MdMessage className="w-5 h-5" />, requireAuth: true },
+  {
+    label: "Inbox",
+    href: "/inbox",
+    icon: <MdMessage className="w-5 h-5" />,
+    requireAuth: true,
+  },
   {
     label: "Order Lists",
     href: "/orders",
@@ -68,20 +75,14 @@ const MAIN_MENU: MenuItem[] = [
 ];
 
 const SECONDARY_MENU: MenuItem[] = [
-  { 
-    label: "Users", 
-    href: "/users", 
-    icon: <FaUser className="w-5 h-5" />,
-    permissions: ['users.view', 'users.view_branch'],
-    requireAuth: true,
-  },
   {
-    label: "Branches",
-    href: "/branches",
-    icon: <FaBuilding className="w-5 h-5" />,
-    permission: 'branches.view',
+    label: "Users",
+    href: "/users",
+    icon: <FaUser className="w-5 h-5" />,
+    permissions: ["users.view", "users.view_branch"],
     requireAuth: true,
   },
+
   {
     label: "WA Accounts",
     href: "/waAdmin",
@@ -90,7 +91,7 @@ const SECONDARY_MENU: MenuItem[] = [
   },
   {
     label: "Email",
-    href: "/email/accounts",
+    href: "/emails",
     icon: <FaEnvelope className="w-5 h-5" />,
     requireAuth: true,
   },
@@ -107,14 +108,30 @@ const ADMIN_MENU: MenuItem[] = [
     label: "Roles & Permissions",
     href: "/roles",
     icon: <FaShieldAlt className="w-5 h-5" />,
-    permission: 'roles.view',
+    permission: "roles.view",
     requireAuth: true,
   },
   {
     label: "Workflows",
     href: "/workflows",
     icon: <FaProjectDiagram className="w-5 h-5" />,
-    permission: 'workflows.view',
+    permission: "workflows.view",
+    requireAuth: true,
+  },
+];
+
+const MASTER_MENU: MenuItem[] = [
+  {
+    label: "Branches",
+    href: "/branches",
+    icon: <FaBuilding className="w-5 h-5" />,
+    permission: "branches.view",
+    requireAuth: true,
+  },
+  {
+    label: "Items",
+    href: "/items",
+    icon: <BiSolidPurchaseTag className="w-4 h-4" />,
     requireAuth: true,
   },
 ];
@@ -127,15 +144,9 @@ const CATALOG_SUBMENU: MenuItem[] = [
     requireAuth: true,
   },
   {
-    label: "Items",
-    href: "/items",
-    icon: <BiSolidPurchaseTag className="w-4 h-4" />,
-    requireAuth: true,
-  },
-  {
-    label: "Variants",
-    href: "/variants",
-    icon: <BiSolidPurchaseTag className="w-4 h-4" />,
+    label: "Categories",
+    href: "/categories",
+    icon: <FaTags className="w-4 h-4" />,
     requireAuth: true,
   },
   {
@@ -145,9 +156,9 @@ const CATALOG_SUBMENU: MenuItem[] = [
     requireAuth: true,
   },
   {
-    label: "Categories",
-    href: "/categories",
-    icon: <FaTags className="w-4 h-4" />,
+    label: "Variants",
+    href: "/variants",
+    icon: <AiFillProduct className="w-4 h-4" />,
     requireAuth: true,
   },
 ];
@@ -210,9 +221,11 @@ interface SidebarProps {
 
 export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
   const pathname = usePathname() || "/";
-  const { hasPermission, hasAnyPermission, isAuthenticated, currentRole } = useAuth();
-  
+  const { hasPermission, hasAnyPermission, isAuthenticated, currentRole } =
+    useAuth();
+
   const [catalogOpen, setCatalogOpen] = useState<boolean>(false);
+  const [masterOpen, setMasterOpen] = useState<boolean>(false);
   const [customerOpen, setCustomerOpen] = useState<boolean>(false);
   const [adminOpen, setAdminOpen] = useState<boolean>(false);
   const [isMobile, setIsMobile] = useState<boolean>(false);
@@ -229,7 +242,8 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
     return true;
   };
 
-  const showAdminSection = isAuthenticated && ADMIN_MENU.some(item => canSeeMenu(item));
+  const showAdminSection =
+    isAuthenticated && ADMIN_MENU.some((item) => canSeeMenu(item));
 
   useEffect(() => {
     const handleResize = () => {
@@ -246,10 +260,22 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
   }, [setCollapsed]);
 
   useEffect(() => {
-    if (pathname.startsWith("/products") || pathname.startsWith("/categories") || pathname.startsWith("/items") || pathname.startsWith("/types") || pathname.startsWith("/variants")) {
+    if (pathname.startsWith("/branches") || pathname.startsWith("/items")) {
+      setMasterOpen(true);
+    }
+    if (
+      pathname.startsWith("/products") ||
+      pathname.startsWith("/categories") ||
+      pathname.startsWith("/types") ||
+      pathname.startsWith("/variants")
+    ) {
       setCatalogOpen(true);
     }
-    if (pathname.startsWith("/members") || pathname.startsWith("/memberGroups") || pathname.startsWith("/member-tiers")) {
+    if (
+      pathname.startsWith("/members") ||
+      pathname.startsWith("/memberGroups") ||
+      pathname.startsWith("/member-tiers")
+    ) {
       setCustomerOpen(true);
     }
     if (pathname.startsWith("/roles") || pathname.startsWith("/workflows")) {
@@ -257,42 +283,75 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
     }
   }, [pathname]);
 
-  const isMenuActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  const isMenuActive = (href: string) =>
+    pathname === href || pathname.startsWith(href + "/");
 
   const renderMenuItem = (m: MenuItem, isSubmenu = false) => {
     if (!canSeeMenu(m)) return null;
     const active = isMenuActive(m.href);
-    
+
     return (
       <li key={m.href}>
         <Link href={m.href} className="no-underline block">
           <motion.div
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            className={`flex items-center gap-3 px-3 ${isSubmenu ? 'py-2' : 'py-2.5'} ${isSubmenu ? 'rounded-lg' : 'rounded-xl'} transition-all ${
+            className={`flex items-center gap-3 px-3 ${
+              isSubmenu ? "py-2" : "py-2.5"
+            } ${isSubmenu ? "rounded-lg" : "rounded-xl"} transition-all ${
               active
-                ? isSubmenu 
+                ? isSubmenu
                   ? "bg-gradient-to-r from-pink-400 to-red-500 text-white shadow-md"
                   : "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
                 : "text-gray-600 hover:bg-gray-50"
             } ${collapsed && !isMobile ? "justify-center px-2" : ""}`}
             title={collapsed && !isMobile ? m.label : undefined}
           >
-            <div className={`flex items-center justify-center flex-shrink-0 ${active ? "text-white" : isSubmenu ? "text-gray-400" : "text-gray-500"}`}>
+            <div
+              className={`flex items-center justify-center flex-shrink-0 ${
+                active
+                  ? "text-white"
+                  : isSubmenu
+                  ? "text-gray-400"
+                  : "text-gray-500"
+              }`}
+            >
               {typeof m.icon === "string" ? (
-                <Image src={m.icon} alt={m.label} width={isSubmenu ? 16 : 20} height={isSubmenu ? 16 : 20} />
+                <Image
+                  src={m.icon}
+                  alt={m.label}
+                  width={isSubmenu ? 16 : 20}
+                  height={isSubmenu ? 16 : 20}
+                />
               ) : (
                 m.icon
               )}
             </div>
             {(!collapsed || isMobile) && (
               <>
-                <span className={`${isSubmenu ? 'text-sm' : 'text-sm font-medium'} flex-1 truncate`}>
+                <span
+                  className={`${
+                    isSubmenu ? "text-sm" : "text-sm font-medium"
+                  } flex-1 truncate`}
+                >
                   {m.label}
                 </span>
                 {active && !isSubmenu && (
-                  <motion.svg initial={{ x: -5, opacity: 0 }} animate={{ x: 0, opacity: 1 }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                  <motion.svg
+                    initial={{ x: -5, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path
+                      d="M9 6l6 6-6 6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </motion.svg>
                 )}
               </>
@@ -313,7 +372,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
     const visibleSubmenu = submenu.filter(canSeeMenu);
     if (visibleSubmenu.length === 0) return null;
     const parentActive = visibleSubmenu.some((c) => isMenuActive(c.href));
-    
+
     return (
       <li>
         <button
@@ -331,14 +390,33 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                 : "text-gray-600 hover:bg-gray-50"
             } ${collapsed && !isMobile ? "justify-center px-2" : ""}`}
           >
-            <div className={`flex-shrink-0 ${parentActive ? "text-white" : "text-gray-500"}`}>
+            <div
+              className={`flex-shrink-0 ${
+                parentActive ? "text-white" : "text-gray-500"
+              }`}
+            >
               {icon}
             </div>
             {(!collapsed || isMobile) && (
               <>
-                <span className="text-sm font-medium flex-1 text-left">{label}</span>
-                <motion.svg animate={{ rotate: isOpen ? 90 : 0 }} transition={{ duration: 0.2 }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                <span className="text-sm font-medium flex-1 text-left">
+                  {label}
+                </span>
+                <motion.svg
+                  animate={{ rotate: isOpen ? 90 : 0 }}
+                  transition={{ duration: 0.2 }}
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path
+                    d="M9 6l6 6-6 6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </motion.svg>
               </>
             )}
@@ -377,15 +455,25 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
         initial={false}
         animate={{
           x: isMobile ? (collapsed ? "-100%" : 0) : 0,
-          width: isMobile ? expandedWidth : collapsed ? collapsedWidth : expandedWidth,
+          width: isMobile
+            ? expandedWidth
+            : collapsed
+            ? collapsedWidth
+            : expandedWidth,
         }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         style={{
-          minWidth: isMobile ? expandedWidth : collapsed ? collapsedWidth : expandedWidth,
+          minWidth: isMobile
+            ? expandedWidth
+            : collapsed
+            ? collapsedWidth
+            : expandedWidth,
           maxWidth: expandedWidth,
         }}
         className={`h-screen bg-white flex flex-col ${
-          isMobile ? "fixed top-0 left-0 z-50 shadow-2xl" : "relative border-r border-gray-100"
+          isMobile
+            ? "fixed top-0 left-0 z-50 shadow-2xl"
+            : "relative border-r border-gray-100"
         }`}
       >
         {/* Logo section */}
@@ -395,7 +483,9 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
               <span className="text-white font-bold text-lg">E</span>
             </div>
             {(!collapsed || isMobile) && (
-              <span className="text-base font-semibold text-gray-800 truncate">Eka+ Admin</span>
+              <span className="text-base font-semibold text-gray-800 truncate">
+                Eka+ Admin
+              </span>
             )}
           </div>
         </div>
@@ -411,13 +501,16 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
               <div className="mt-4 mx-1 p-3 bg-gradient-to-br from-red-50 to-orange-50 rounded-xl border border-red-100">
                 <div className="flex items-center gap-2 mb-2">
                   <FaLock className="w-3.5 h-3.5 text-red-500" />
-                  <span className="text-xs font-semibold text-gray-700">Login Required</span>
+                  <span className="text-xs font-semibold text-gray-700">
+                    Login Required
+                  </span>
                 </div>
                 <p className="text-xs text-gray-500 mb-2">
                   Silakan login untuk mengakses menu lainnya
                 </p>
                 <div className="text-xs text-red-600">
-                  Klik <span className="font-semibold">Login</span> di kanan atas
+                  Klik <span className="font-semibold">Login</span> di kanan
+                  atas
                 </div>
               </div>
             )}
@@ -425,7 +518,10 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
             {/* Show lock icon when collapsed and not authenticated */}
             {!isAuthenticated && collapsed && !isMobile && (
               <li className="flex justify-center py-4">
-                <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center" title="Login required">
+                <div
+                  className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center"
+                  title="Login required"
+                >
                   <FaLock className="w-4 h-4 text-red-400" />
                 </div>
               </li>
@@ -438,20 +534,44 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
 
                 <div className="my-3 border-t border-gray-100 mx-1" />
 
-                {renderSubmenuParent("Catalog", <FaBoxes className="w-5 h-5" />, catalogOpen, setCatalogOpen, CATALOG_SUBMENU)}
+                {renderSubmenuParent(
+                  "Master Data",
+                  <FaDatabase className="w-5 h-5" />,
+                  masterOpen,
+                  setMasterOpen,
+                  MASTER_MENU
+                )}
 
                 <div className="my-3 border-t border-gray-100 mx-1" />
 
-                {renderSubmenuParent("Customer", <FaLayerGroup className="w-5 h-5" />, customerOpen, setCustomerOpen, CUSTOMER_SUBMENU)}
+                {renderSubmenuParent(
+                  "Catalog",
+                  <FaBoxes className="w-5 h-5" />,
+                  catalogOpen,
+                  setCatalogOpen,
+                  CATALOG_SUBMENU
+                )}
 
                 <div className="my-3 border-t border-gray-100 mx-1" />
 
-                {SECONDARY_MENU.filter(canSeeMenu).map((m) => renderMenuItem(m))}
+                {renderSubmenuParent(
+                  "Customer",
+                  <FaLayerGroup className="w-5 h-5" />,
+                  customerOpen,
+                  setCustomerOpen,
+                  CUSTOMER_SUBMENU
+                )}
+
+                <div className="my-3 border-t border-gray-100 mx-1" />
+
+                {SECONDARY_MENU.filter(canSeeMenu).map((m) =>
+                  renderMenuItem(m)
+                )}
 
                 {showAdminSection && (
                   <>
                     <div className="my-3 border-t border-gray-100 mx-1" />
-                    
+
                     {(!collapsed || isMobile) && (
                       <div className="px-3 mb-2">
                         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
@@ -461,7 +581,13 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                       </div>
                     )}
 
-                    {renderSubmenuParent("System", <FaCog className="w-5 h-5" />, adminOpen, setAdminOpen, ADMIN_MENU)}
+                    {renderSubmenuParent(
+                      "System",
+                      <FaCog className="w-5 h-5" />,
+                      adminOpen,
+                      setAdminOpen,
+                      ADMIN_MENU
+                    )}
                   </>
                 )}
               </>
@@ -473,9 +599,12 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
         <div className="px-2 py-3 border-t border-gray-100">
           {(!collapsed || isMobile) && currentRole && (
             <div className="mb-2 px-2">
-              <span 
+              <span
                 className="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg"
-                style={{ backgroundColor: `${currentRole.color}15`, color: currentRole.color }}
+                style={{
+                  backgroundColor: `${currentRole.color}15`,
+                  color: currentRole.color,
+                }}
               >
                 <FaUserShield className="w-3 h-3" />
                 {currentRole.display_name}
