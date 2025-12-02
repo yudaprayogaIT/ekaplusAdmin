@@ -14,6 +14,7 @@ import {
   FaShieldAlt,
 } from "react-icons/fa";
 import type { User, Role } from "./UserList";
+import Image from "next/image";
 
 function getInitials(name: string): string {
   return name
@@ -70,9 +71,11 @@ export default function UserCard({
             style={{ backgroundColor: bgColor }}
           >
             {user.profile_pic || user.picture ? (
-              <img
+              <Image
                 src={user.profile_pic || user.picture || ""}
                 alt={user.full_name}
+                width={100}
+                height={100}
                 className="w-full h-full rounded-xl object-cover"
               />
             ) : (
@@ -242,9 +245,11 @@ export default function UserCard({
           style={{ backgroundColor: bgColor }}
         >
           {user.profile_pic || user.picture ? (
-            <img
+            <Image
               src={user.profile_pic || user.picture || ""}
               alt={user.full_name}
+              width={200}
+              height={200}
               className="w-full h-full rounded-xl object-cover"
             />
           ) : (

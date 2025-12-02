@@ -1,5 +1,6 @@
 // components/MemberApprovalTable.tsx
 "use client"
+import Image from "next/image";
 import React, { useMemo, useState } from "react";
 
 type Member = {
@@ -118,9 +119,11 @@ export default function MemberApprovalTable() {
                 <td className="py-4 px-4">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-md bg-slate-100 overflow-hidden flex items-center justify-center">
-                      <img
+                      <Image
                         src={m.avatar ?? "/avatar-placeholder.png"}
                         alt={m.name}
+                        width={50}
+                        height={50}
                         className="w-12 h-12 object-cover"
                       />
                     </div>

@@ -10,6 +10,7 @@ import {
   FaGlobe,
   FaCity,
 } from "react-icons/fa";
+import Image from "next/image";
 
 type Branch = {
   id: number;
@@ -53,11 +54,18 @@ export default function BranchCard({
       >
         <div className="flex items-start gap-6">
           {/* Map Preview */}
-          <div className="hidden md:block w-32 h-32 bg-gradient-to-br from-red-50 to-red-100 rounded-xl overflow-hidden flex-shrink-0">
+          <Image
+            src="/images/map.png"
+            alt="map"
+            width={200}
+            height={200}
+            className="w-full object-fill"
+          />
+          {/* <div className="hidden md:block w-32 h-32 bg-gradient-to-br from-red-50 to-red-100 rounded-xl overflow-hidden flex-shrink-0">
             <div className="w-full h-full flex items-center justify-center text-red-300">
               <FaMapMarkerAlt className="w-12 h-12" />
             </div>
-          </div>
+          </div> */}
 
           {/* Content */}
           <div className="flex-1 min-w-0">
@@ -153,9 +161,16 @@ export default function BranchCard({
     >
       {/* Map Preview */}
       <div className="relative h-48 bg-gradient-to-br from-red-50 to-red-100 overflow-hidden">
-        <div className="w-full h-full flex items-center justify-center text-red-200">
+        {/* <div className="w-full h-full flex items-center justify-center text-red-200">
           <FaMapMarkerAlt className="w-20 h-20" />
-        </div>
+        </div> */}
+        <Image
+          src="/images/maps.jpg"
+          alt="map"
+          width={200}
+          height={200}
+          className="w-full object-fill"
+        />
 
         {/* Badges */}
         <div className="absolute top-3 right-3 flex flex-col gap-2">

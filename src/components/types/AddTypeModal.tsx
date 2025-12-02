@@ -3,7 +3,8 @@
 
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaTimes, FaUpload, FaImage, FaCheckCircle } from "react-icons/fa";
+import { FaTimes, FaImage, FaCheckCircle } from "react-icons/fa";
+import Image from "next/image";
 
 type ItemType = {
   id?: number;
@@ -240,10 +241,11 @@ export default function AddTypeModal({
                           <FaCheckCircle className="w-4 h-4" />
                         </div>
                       </div>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                      <Image
                         src={imagePreview}
                         alt="image preview"
+                        width={1000}
+                        height={1000}
                         className="object-contain w-full h-full p-3"
                       />
                     </div>

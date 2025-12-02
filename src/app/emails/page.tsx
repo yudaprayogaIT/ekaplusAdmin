@@ -9,7 +9,7 @@ export const metadata = {
 
 export default function EmailsPage() {
   return (
-    <RequireAuth>
+    <RequireAuth permission="emails.view">
       <EmailLogList />
     </RequireAuth>
   );

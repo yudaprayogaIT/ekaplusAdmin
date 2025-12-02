@@ -10,7 +10,6 @@ import {
   FaEnvelope,
   FaPhone,
   FaMapMarkerAlt,
-  FaCalendarAlt,
   FaCheckCircle,
   FaTimesCircle,
   FaGoogle,
@@ -22,6 +21,7 @@ import {
   FaKey,
 } from "react-icons/fa";
 import type { User, Role } from "./UserList";
+import Image from "next/image";
 
 function getInitials(name: string): string {
   return name
@@ -122,9 +122,11 @@ export default function UserDetailModal({
                   style={{ backgroundColor: "rgba(255,255,255,0.2)" }}
                 >
                   {user.profile_pic || user.picture ? (
-                    <img
+                    <Image
                       src={user.profile_pic || user.picture || ""}
                       alt={user.full_name}
+                      width={120}
+                      height={120}
                       className="w-full h-full rounded-xl object-cover"
                     />
                   ) : (

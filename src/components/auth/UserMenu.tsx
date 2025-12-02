@@ -1,31 +1,62 @@
 // src/components/auth/UserMenu.tsx
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
+import LoginForm from "./LoginForm";
 import {
   FaSignInAlt,
   FaSignOutAlt,
-  FaUser,
   FaKey,
   FaChevronDown,
   FaUserCircle,
   FaCog,
 } from "react-icons/fa";
-import LoginForm from "./LoginForm";
 
 export default function UserMenu() {
-  const {
-    currentUser,
-    currentRole,
-    permissions,
-    isAuthenticated,
-    isLoading,
-    logout,
-  } = useAuth();
+  const { currentUser, currentRole, permissions, isAuthenticated, isLoading, logout } = useAuth();
   const [showLoginForm, setShowLoginForm] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
+  
+  // Ref for click outside detection
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Click outside handler
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+
+    // Add event listener when dropdown is open
+    if (showDropdown) {
+      // Use mousedown for better UX - closes before the click completes
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showDropdown]);
+
+  // Close dropdown on escape key
+  useEffect(() => {
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setShowDropdown(false);
+      }
+    }
+
+    if (showDropdown) {
+      document.addEventListener("keydown", handleEscape);
+    }
+
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [showDropdown]);
 
   // Get initials for avatar
   const getInitials = (name: string) => {
@@ -72,21 +103,21 @@ export default function UserMenu() {
 
   return (
     <>
-      <div className="relative">
+      <div className="relative" ref={dropdownRef}>
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={() => setShowDropdown(!showDropdown)}
-          className="flex items-center gap-3 px-3 py-2 bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all"
+          className={`flex items-center gap-3 px-3 py-2 bg-white rounded-xl border shadow-sm hover:shadow-md transition-all ${
+            showDropdown ? "border-red-300 ring-2 ring-red-100" : "border-gray-200"
+          }`}
         >
           {/* Avatar */}
           <div
             className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-sm"
             style={{
               backgroundColor:
-                currentUser?.profile_bg_color ||
-                currentRole?.color ||
-                "#6B7280",
+                currentUser?.profile_bg_color || currentRole?.color || "#6B7280",
             }}
           >
             {currentUser ? getInitials(currentUser.full_name) : "?"}
@@ -114,7 +145,7 @@ export default function UserMenu() {
           </div>
 
           <FaChevronDown
-            className={`w-3 h-3 text-gray-400 transition-transform ${
+            className={`w-3 h-3 text-gray-400 transition-transform duration-200 ${
               showDropdown ? "rotate-180" : ""
             }`}
           />
@@ -123,98 +154,93 @@ export default function UserMenu() {
         {/* Dropdown Menu */}
         <AnimatePresence>
           {showDropdown && (
-            <>
-              {/* Backdrop */}
-              <div
-                className="fixed inset-0 z-40"
-                onClick={() => setShowDropdown(false)}
-              />
-
-              <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                transition={{ duration: 0.15 }}
-                className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-50"
-              >
-                {/* User Info Header */}
-                <div className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold"
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+              className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-50"
+            >
+              {/* User Info Header */}
+              <div className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold"
+                    style={{
+                      backgroundColor:
+                        currentUser?.profile_bg_color ||
+                        currentRole?.color ||
+                        "#6B7280",
+                    }}
+                  >
+                    {currentUser ? getInitials(currentUser.full_name) : "?"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-800 truncate">
+                      {currentUser?.full_name}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {currentUser?.email}
+                    </p>
+                    <span
+                      className="inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded-full"
                       style={{
-                        backgroundColor:
-                          currentUser?.profile_bg_color ||
-                          currentRole?.color ||
-                          "#6B7280",
+                        backgroundColor: `${currentRole?.color}20`,
+                        color: currentRole?.color,
                       }}
                     >
-                      {currentUser ? getInitials(currentUser.full_name) : "?"}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-800">
-                        {currentUser?.full_name}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {currentUser?.email}
-                      </p>
-                      <span
-                        className="inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded-full"
-                        style={{
-                          backgroundColor: `${currentRole?.color}20`,
-                          color: currentRole?.color,
-                        }}
-                      >
-                        {currentRole?.display_name}
-                      </span>
-                    </div>
+                      {currentRole?.display_name}
+                    </span>
                   </div>
                 </div>
+              </div>
 
-                {/* Menu Items */}
-                <div className="py-2">
-                  <button
-                    onClick={() => {
-                      setShowDropdown(false);
-                      // Navigate to profile
-                    }}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    <FaUserCircle className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm">Profil Saya</span>
-                  </button>
+              {/* Menu Items */}
+              <div className="py-2">
+                <button
+                  onClick={() => {
+                    setShowDropdown(false);
+                    // Navigate to profile
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <FaUserCircle className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm">Profil Saya</span>
+                </button>
 
-                  <button
-                    onClick={() => {
-                      setShowDropdown(false);
-                      // Navigate to settings
-                    }}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    <FaCog className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm">Pengaturan</span>
-                  </button>
+                <button
+                  onClick={() => {
+                    setShowDropdown(false);
+                    // Navigate to settings
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <FaCog className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm">Pengaturan</span>
+                </button>
 
-                  <div className="my-2 border-t border-gray-100" />
+                <div className="my-2 border-t border-gray-100" />
 
-                  <button
-                    onClick={() => {
-                      setShowDropdown(false);
-                      logout();
-                    }}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-red-600 hover:bg-red-50 transition-colors"
-                  >
-                    <FaSignOutAlt className="w-4 h-4" />
-                    <span className="text-sm font-medium">Logout</span>
-                  </button>
-                </div>
-              </motion.div>
-            </>
+                <button
+                  onClick={() => {
+                    setShowDropdown(false);
+                    logout();
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  <FaSignOutAlt className="w-4 h-4" />
+                  <span className="text-sm font-medium">Logout</span>
+                </button>
+              </div>
+            </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      <LoginForm open={showLoginForm} onClose={() => setShowLoginForm(false)} />
+      <LoginForm
+        open={showLoginForm}
+        onClose={() => setShowLoginForm(false)}
+      />
     </>
   );
 }

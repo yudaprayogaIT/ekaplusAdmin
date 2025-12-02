@@ -278,6 +278,15 @@
       "description": "Dapat mengelola data cabang",
       "scope": "all",
       "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_082",
+      "module": "emails",
+      "name": "emails.view",
+      "display_name": "Melihat Log Email",
+      "description": "Dapat mengelola Log Email",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
     }
   ],
   "meta": {

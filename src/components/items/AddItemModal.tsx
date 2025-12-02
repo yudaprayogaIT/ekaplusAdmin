@@ -10,6 +10,7 @@ import {
   FaBarcode,
   FaTag,
 } from "react-icons/fa";
+import Image from "next/image";
 
 type Item = {
   id?: number;
@@ -444,10 +445,11 @@ export default function AddItemModal({
                       <div className="absolute top-2 right-2 bg-green-500 text-white p-1 rounded-full">
                         <FaCheckCircle className="w-4 h-4" />
                       </div>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                      <Image
                         src={imagePreview}
                         alt="preview"
+                        width={1000}
+                        height={1000}
                         className="object-contain w-full h-full p-3"
                       />
                     </div>

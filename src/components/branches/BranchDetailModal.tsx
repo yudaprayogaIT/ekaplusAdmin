@@ -4,6 +4,7 @@
 import React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { FaTimes, FaEdit, FaTrash, FaMapMarkerAlt, FaGlobe, FaCity, FaMapPin, FaExternalLinkAlt, FaLock } from "react-icons/fa";
+import Image from "next/image";
 
 type Branch = {
   id: number;
@@ -109,9 +110,10 @@ export default function BranchDetailModal({
                   rel="noopener noreferrer"
                   className="block relative rounded-2xl overflow-hidden border-2 border-gray-200 shadow-lg hover:shadow-xl transition-all group"
                 >
-                  <div className="w-full h-80 bg-gradient-to-br from-red-50 to-red-100 flex items-center justify-center">
+                  <Image src="/images/maps.jpg" alt="alt" width={1000} height={1000} className="h-80 w-full object-cover"/>
+                  {/* <div className="w-full h-80 bg-gradient-to-br from-red-50 to-red-100 flex items-center justify-center">
                     <FaMapMarkerAlt className="w-24 h-24 text-red-200" />
-                  </div>
+                  </div> */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-6">
                     <div className="px-6 py-3 bg-white/95 backdrop-blur-sm rounded-full flex items-center gap-2 font-semibold text-gray-800">
                       <FaExternalLinkAlt className="w-4 h-4" />
