@@ -65,6 +65,7 @@ type AuthContextType = {
   hasPermission: (permission: string) => boolean;
   hasAnyPermission: (permissions: string[]) => boolean;
   hasAllPermissions: (permissions: string[]) => boolean;
+  canAccessBranch: (branchId?: string | null) => boolean;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -275,6 +276,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return perms.every(p => permissions.includes(p));
   }
 
+  // <-- new: canAccessBranch implementation
+  function canAccessBranch(branchId?: string | null): boolean {
+    // if no branch specified, allow (permission check not applicable)
+    if (branchId === undefined || branchId === null || branchId === "") {
+      return true;
+    }
+
+    // if not logged in, deny
+    if (!currentUser) return false;
+
+    // admins and system users can access any branch
+    if (currentRole?.name === "administrator" || currentUser.is_system) {
+      return true;
+    }
+
+    // otherwise only allow if user's branch matches requested branch
+    return currentUser.branch_id === branchId;
+  }
+
   const value: AuthContextType = {
     currentUser,
     currentRole,
@@ -286,6 +306,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     hasPermission,
     hasAnyPermission,
     hasAllPermissions,
+    canAccessBranch, // <-- include here
   };
 
   return (
