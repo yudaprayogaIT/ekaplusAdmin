@@ -163,7 +163,7 @@ const adminActions: AdminAction[] = [
     href: "/users",
     icon: FaUsers,
     color: "bg-blue-500",
-    permissions: ['users.view', 'users.view_branch']
+    permissions: ["users.view", "users.view_branch"],
   },
   {
     name: "Roles & Permissions",
@@ -171,7 +171,7 @@ const adminActions: AdminAction[] = [
     href: "/roles",
     icon: FaShieldAlt,
     color: "bg-amber-500",
-    permission: 'roles.view'
+    permission: "roles.view",
   },
   {
     name: "Workflow",
@@ -179,7 +179,7 @@ const adminActions: AdminAction[] = [
     href: "/workflows",
     icon: FaProjectDiagram,
     color: "bg-purple-500",
-    permission: 'workflows.view'
+    permission: "workflows.view",
   },
   {
     name: "Branches",
@@ -187,7 +187,7 @@ const adminActions: AdminAction[] = [
     href: "/branches",
     icon: FaMapMarkerAlt,
     color: "bg-green-500",
-    permission: 'branches.view'
+    permission: "branches.view",
   },
 ];
 
@@ -217,17 +217,17 @@ function AdminQuickActions() {
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {adminActions.map((action) => {
-          const hasAccess = !isAuthenticated || (
-            action.permission 
-              ? hasPermission(action.permission) 
-              : action.permissions 
-                ? hasAnyPermission(action.permissions)
-                : true
-          );
+          const hasAccess =
+            !isAuthenticated ||
+            (action.permission
+              ? hasPermission(action.permission)
+              : action.permissions
+              ? hasAnyPermission(action.permissions)
+              : true);
 
           if (!hasAccess) {
             return (
-              <div 
+              <div
                 key={action.href}
                 className="bg-gray-50 rounded-2xl p-5 border-2 border-gray-100 opacity-50 cursor-not-allowed"
               >
@@ -243,16 +243,23 @@ function AdminQuickActions() {
           return (
             <Link key={action.href} href={action.href}>
               <motion.div
-                whileHover={{ y: -4, boxShadow: "0 20px 40px -10px rgba(0,0,0,0.1)" }}
+                whileHover={{
+                  y: -4,
+                  boxShadow: "0 20px 40px -10px rgba(0,0,0,0.1)",
+                }}
                 className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm cursor-pointer group h-full"
               >
-                <div className={`w-12 h-12 rounded-xl ${action.color} flex items-center justify-center mb-3 text-white shadow-lg group-hover:scale-110 transition-transform`}>
+                <div
+                  className={`w-12 h-12 rounded-xl ${action.color} flex items-center justify-center mb-3 text-white shadow-lg group-hover:scale-110 transition-transform`}
+                >
                   <action.icon className="w-5 h-5" />
                 </div>
                 <h3 className="font-bold text-gray-800 mb-1 group-hover:text-red-600 transition-colors">
                   {action.name}
                 </h3>
-                <p className="text-xs text-gray-500 mb-3">{action.description}</p>
+                <p className="text-xs text-gray-500 mb-3">
+                  {action.description}
+                </p>
                 <div className="flex items-center text-red-500 text-xs font-medium group-hover:translate-x-1 transition-transform">
                   <span>Buka</span>
                   <FaArrowRight className="w-2.5 h-2.5 ml-1" />
@@ -786,6 +793,9 @@ export default function Dashboard() {
         </div>
       </motion.div>
 
+      {/* Hot Deals Section */}
+      <HotDealsSection products={products} />
+
       {/* Admin Quick Actions */}
       <AdminQuickActions />
 
@@ -834,9 +844,6 @@ export default function Dashboard() {
           delay={0.2}
         />
       </div>
-
-      {/* Hot Deals Section */}
-      <HotDealsSection products={products} />
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
