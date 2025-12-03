@@ -45,14 +45,14 @@ const ROLE_ICONS: Record<string, React.ReactNode> = {
   administrator: <FaShieldAlt className="w-6 h-6" />,
   admin_pusat: <FaUserTie className="w-6 h-6" />,
   admin_cabang: <FaUserCog className="w-6 h-6" />,
-  user: <FaUser className="w-6 h-6" />,
+  customer: <FaUser className="w-6 h-6" />,
 };
 
 const ROLE_COLORS: Record<string, string> = {
   administrator: "#F59E0B",
   admin_pusat: "#8B5CF6",
   admin_cabang: "#10B981",
-  user: "#6B7280",
+  customer: "#6B7280",
 };
 
 export default function LoginSelector() {
@@ -104,7 +104,7 @@ export default function LoginSelector() {
           });
 
         // Sort by role level (admin first)
-        const roleOrder = ['administrator', 'admin_pusat', 'admin_cabang', 'user'];
+        const roleOrder = ['administrator', 'admin_pusat', 'admin_cabang', 'customer'];
         options.sort((a, b) => roleOrder.indexOf(a.role) - roleOrder.indexOf(b.role));
 
         setUsers(options);

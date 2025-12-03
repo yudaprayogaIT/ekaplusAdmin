@@ -309,7 +309,7 @@ export default function UserList() {
   // Admin cabang can only see users in their branch
   if (currentRole?.name === 'admin_cabang' && currentUser?.branch_id) {
     filteredUsers = filteredUsers.filter(u => 
-      u.branch_id === currentUser.branch_id || u.role === 'user'
+      u.branch_id === currentUser.branch_id || u.role === 'customer'
     );
   }
   
@@ -356,7 +356,7 @@ export default function UserList() {
     admins: users.filter(u => u.role === 'administrator').length,
     adminPusat: users.filter(u => u.role === 'admin_pusat').length,
     adminCabang: users.filter(u => u.role === 'admin_cabang').length,
-    regularUsers: users.filter(u => u.role === 'user').length,
+    regularUsers: users.filter(u => u.role === 'customer').length,
     active: users.filter(u => u.status === 'active').length,
   };
 
@@ -423,7 +423,7 @@ export default function UserList() {
         <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border-2 border-gray-200">
           <div className="flex items-center gap-2 mb-2">
             <FaUsers className="w-4 h-4 text-gray-600" />
-            <span className="text-xs text-gray-700 font-medium">Users</span>
+            <span className="text-xs text-gray-700 font-medium">Customer</span>
           </div>
           <div className="text-2xl font-bold text-gray-900">{stats.regularUsers}</div>
         </div>

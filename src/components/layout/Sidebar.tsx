@@ -76,13 +76,6 @@ const MAIN_MENU: MenuItem[] = [
 
 const SECONDARY_MENU: MenuItem[] = [
   {
-    label: "Users",
-    href: "/users",
-    icon: <FaUser className="w-5 h-5" />,
-    permissions: ["users.view", "users.view_branch"],
-    requireAuth: true,
-  },
-  {
     label: "Whatsapp",
     href: "/whatsapp",
     icon: <FaWhatsapp className="w-5 h-5" />,
@@ -109,6 +102,13 @@ const ADMIN_MENU: MenuItem[] = [
     href: "/roles",
     icon: <FaShieldAlt className="w-4 h-4" />,
     permission: "roles.view",
+    requireAuth: true,
+  },
+  {
+    label: "Users",
+    href: "/users",
+    icon: <FaUser className="w-5 h-5" />,
+    permissions: ["users.view", "users.view_branch"],
     requireAuth: true,
   },
   {
@@ -222,7 +222,8 @@ type SubmenuName = "master" | "catalog" | "customer" | "admin" | null;
 
 export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
   const pathname = usePathname() || "/";
-  const { hasPermission, hasAnyPermission, isAuthenticated, currentRole } = useAuth();
+  const { hasPermission, hasAnyPermission, isAuthenticated, currentRole } =
+    useAuth();
 
   // Single state for accordion - only one submenu can be open at a time
   const [openSubmenu, setOpenSubmenu] = useState<SubmenuName>(null);
@@ -245,7 +246,8 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
     return true;
   };
 
-  const showAdminSection = isAuthenticated && ADMIN_MENU.some((item) => canSeeMenu(item));
+  const showAdminSection =
+    isAuthenticated && ADMIN_MENU.some((item) => canSeeMenu(item));
 
   useEffect(() => {
     const handleResize = () => {
@@ -286,7 +288,8 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
     }
   }, [pathname]);
 
-  const isMenuActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  const isMenuActive = (href: string) =>
+    pathname === href || pathname.startsWith(href + "/");
 
   const renderMenuItem = (m: MenuItem, isSubmenu = false) => {
     if (!canSeeMenu(m)) return null;
@@ -298,9 +301,9 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
           <motion.div
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            className={`flex items-center gap-3 px-3 ${isSubmenu ? "py-2" : "py-2.5"} ${
-              isSubmenu ? "rounded-lg" : "rounded-xl"
-            } transition-all ${
+            className={`flex items-center gap-3 px-3 ${
+              isSubmenu ? "py-2" : "py-2.5"
+            } ${isSubmenu ? "rounded-lg" : "rounded-xl"} transition-all ${
               active
                 ? isSubmenu
                   ? "bg-gradient-to-r from-pink-400 to-red-500 text-white shadow-md"
@@ -311,18 +314,31 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
           >
             <div
               className={`flex items-center justify-center flex-shrink-0 ${
-                active ? "text-white" : isSubmenu ? "text-gray-400" : "text-gray-500"
+                active
+                  ? "text-white"
+                  : isSubmenu
+                  ? "text-gray-400"
+                  : "text-gray-500"
               }`}
             >
               {typeof m.icon === "string" ? (
-                <Image src={m.icon} alt={m.label} width={isSubmenu ? 16 : 20} height={isSubmenu ? 16 : 20} />
+                <Image
+                  src={m.icon}
+                  alt={m.label}
+                  width={isSubmenu ? 16 : 20}
+                  height={isSubmenu ? 16 : 20}
+                />
               ) : (
                 m.icon
               )}
             </div>
             {(!collapsed || isMobile) && (
               <>
-                <span className={`${isSubmenu ? "text-sm" : "text-sm font-medium"} flex-1 truncate`}>
+                <span
+                  className={`${
+                    isSubmenu ? "text-sm" : "text-sm font-medium"
+                  } flex-1 truncate`}
+                >
                   {m.label}
                 </span>
                 {active && !isSubmenu && (
@@ -336,7 +352,11 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                     stroke="currentColor"
                     strokeWidth="2"
                   >
-                    <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                    <path
+                      d="M9 6l6 6-6 6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </motion.svg>
                 )}
               </>
@@ -376,12 +396,18 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                 : "text-gray-600 hover:bg-gray-50"
             } ${collapsed && !isMobile ? "justify-center px-2" : ""}`}
           >
-            <div className={`flex-shrink-0 ${parentActive ? "text-white" : "text-gray-500"}`}>
+            <div
+              className={`flex-shrink-0 ${
+                parentActive ? "text-white" : "text-gray-500"
+              }`}
+            >
               {icon}
             </div>
             {(!collapsed || isMobile) && (
               <>
-                <span className="text-sm font-medium flex-1 text-left">{label}</span>
+                <span className="text-sm font-medium flex-1 text-left">
+                  {label}
+                </span>
                 <motion.svg
                   animate={{ rotate: isOpen ? 90 : 0 }}
                   transition={{ duration: 0.2 }}
@@ -392,7 +418,11 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                   stroke="currentColor"
                   strokeWidth="2"
                 >
-                  <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                  <path
+                    d="M9 6l6 6-6 6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </motion.svg>
               </>
             )}
@@ -431,15 +461,25 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
         initial={false}
         animate={{
           x: isMobile ? (collapsed ? "-100%" : 0) : 0,
-          width: isMobile ? expandedWidth : collapsed ? collapsedWidth : expandedWidth,
+          width: isMobile
+            ? expandedWidth
+            : collapsed
+            ? collapsedWidth
+            : expandedWidth,
         }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         style={{
-          minWidth: isMobile ? expandedWidth : collapsed ? collapsedWidth : expandedWidth,
+          minWidth: isMobile
+            ? expandedWidth
+            : collapsed
+            ? collapsedWidth
+            : expandedWidth,
           maxWidth: expandedWidth,
         }}
         className={`h-screen bg-white flex flex-col ${
-          isMobile ? "fixed top-0 left-0 z-50 shadow-2xl" : "relative border-r border-gray-100"
+          isMobile
+            ? "fixed top-0 left-0 z-50 shadow-2xl"
+            : "relative border-r border-gray-100"
         }`}
       >
         {/* Logo section */}
@@ -449,7 +489,9 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
               <span className="text-white font-bold text-lg">E</span>
             </div>
             {(!collapsed || isMobile) && (
-              <span className="text-base font-semibold text-gray-800 truncate">Eka+ Admin</span>
+              <span className="text-base font-semibold text-gray-800 truncate">
+                Eka+ Admin
+              </span>
             )}
           </div>
         </div>
@@ -465,11 +507,16 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
               <div className="mt-4 mx-1 p-3 bg-gradient-to-br from-red-50 to-orange-50 rounded-xl border border-red-100">
                 <div className="flex items-center gap-2 mb-2">
                   <FaLock className="w-3.5 h-3.5 text-red-500" />
-                  <span className="text-xs font-semibold text-gray-700">Login Required</span>
+                  <span className="text-xs font-semibold text-gray-700">
+                    Login Required
+                  </span>
                 </div>
-                <p className="text-xs text-gray-500 mb-2">Silakan login untuk mengakses menu lainnya</p>
+                <p className="text-xs text-gray-500 mb-2">
+                  Silakan login untuk mengakses menu lainnya
+                </p>
                 <div className="text-xs text-red-600">
-                  Klik <span className="font-semibold">Login</span> di kanan atas
+                  Klik <span className="font-semibold">Login</span> di kanan
+                  atas
                 </div>
               </div>
             )}
@@ -477,7 +524,10 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
             {/* Show lock icon when collapsed and not authenticated */}
             {!isAuthenticated && collapsed && !isMobile && (
               <li className="flex justify-center py-4">
-                <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center" title="Login required">
+                <div
+                  className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center"
+                  title="Login required"
+                >
                   <FaLock className="w-4 h-4 text-red-400" />
                 </div>
               </li>
@@ -490,19 +540,36 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
 
                 <div className="my-3 border-t border-gray-100 mx-1" />
 
-                {renderSubmenuParent("Master Data", <FaDatabase className="w-5 h-5" />, "master", MASTER_MENU)}
+                {renderSubmenuParent(
+                  "Master Data",
+                  <FaDatabase className="w-5 h-5" />,
+                  "master",
+                  MASTER_MENU
+                )}
 
                 <div className="my-3 border-t border-gray-100 mx-1" />
 
-                {renderSubmenuParent("Catalog", <FaBoxes className="w-5 h-5" />, "catalog", CATALOG_SUBMENU)}
+                {renderSubmenuParent(
+                  "Catalog",
+                  <FaBoxes className="w-5 h-5" />,
+                  "catalog",
+                  CATALOG_SUBMENU
+                )}
 
                 <div className="my-3 border-t border-gray-100 mx-1" />
 
-                {renderSubmenuParent("Customer", <FaLayerGroup className="w-5 h-5" />, "customer", CUSTOMER_SUBMENU)}
+                {renderSubmenuParent(
+                  "Customer",
+                  <FaLayerGroup className="w-5 h-5" />,
+                  "customer",
+                  CUSTOMER_SUBMENU
+                )}
 
                 <div className="my-3 border-t border-gray-100 mx-1" />
 
-                {SECONDARY_MENU.filter(canSeeMenu).map((m) => renderMenuItem(m))}
+                {SECONDARY_MENU.filter(canSeeMenu).map((m) =>
+                  renderMenuItem(m)
+                )}
 
                 {showAdminSection && (
                   <>
@@ -517,7 +584,12 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                       </div>
                     )}
 
-                    {renderSubmenuParent("System", <FaCog className="w-5 h-5" />, "admin", ADMIN_MENU)}
+                    {renderSubmenuParent(
+                      "System",
+                      <FaCog className="w-5 h-5" />,
+                      "admin",
+                      ADMIN_MENU
+                    )}
                   </>
                 )}
               </>

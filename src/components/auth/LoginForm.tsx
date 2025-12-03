@@ -122,7 +122,7 @@ export default function LoginForm({ open, onClose, onSuccess }: LoginFormProps) 
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 20 }}
           transition={{ type: "spring", damping: 25, stiffness: 300 }}
-          className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden z-50 max-h-[90vh] overflow-auto"
+          className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden z-50 max-h-[90vh]"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}

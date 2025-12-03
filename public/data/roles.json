@@ -44,8 +44,8 @@
     },
     {
       "id": "role_004",
-      "name": "user",
-      "display_name": "User/Customer",
+      "name": "customer",
+      "display_name": "Customer",
       "description": "Pengguna aplikasi EKA+",
       "level": 10,
       "color": "#6B7280",

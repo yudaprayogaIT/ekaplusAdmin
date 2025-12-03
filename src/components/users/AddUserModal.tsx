@@ -122,7 +122,7 @@ export default function AddUserModal({
       postal_code: postalCode.trim() || null,
       country: "Indonesia",
       role_id: roleId,
-      role: selectedRole?.name || "user",
+      role: selectedRole?.name || "customer",
       status,
       profile_bg_color: profileBgColor,
       updated_at: now,

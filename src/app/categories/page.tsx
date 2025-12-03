@@ -1,14 +1,17 @@
 // src/app/categories/page.tsx
-import CategoryList from '@/components/categories/CategoryList';
+import RequireAuth from "@/components/auth/RequireAuth";
+import CategoryList from "@/components/categories/CategoryList";
 
 export const metadata = {
-  title: 'Categories - Kategori Barang Ekatalog Ekatunggal',
+  title: "Categories - Kategori Barang Ekatalog Ekatunggal",
 };
 
 export default function Page() {
   return (
     <div className="space-y-6">
-      <CategoryList />
+      <RequireAuth>
+        <CategoryList />
+      </RequireAuth>
     </div>
   );
 }

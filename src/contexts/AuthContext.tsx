@@ -1,7 +1,14 @@
 // src/contexts/AuthContext.tsx
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+  useCallback,
+} from "react";
 
 // Types
 export type User = {
@@ -113,45 +120,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Login internal function - by user ID (for session restore)
-  const loginByUserId = useCallback(async (userId: string): Promise<boolean> => {
-    try {
-      // Try localStorage first
-      const usersSnap = localStorage.getItem("ekaplus_users_snapshot");
-      let users: User[] = [];
-      
-      if (usersSnap) {
-        users = JSON.parse(usersSnap);
-      } else {
-        // Fallback to JSON file
-        const res = await fetch("/data/users.json");
-        if (res.ok) {
-          const data = await res.json();
-          users = data.users || [];
-        }
-      }
+  const loginByUserId = useCallback(
+    async (userId: string): Promise<boolean> => {
+      try {
+        // Try localStorage first
+        const usersSnap = localStorage.getItem("ekaplus_users_snapshot");
+        let users: User[] = [];
 
-      const user = users.find(u => u.id === userId);
-      if (!user) {
+        if (usersSnap) {
+          users = JSON.parse(usersSnap);
+        } else {
+          // Fallback to JSON file
+          const res = await fetch("/data/users.json");
+          if (res.ok) {
+            const data = await res.json();
+            users = data.users || [];
+          }
+        }
+
+        const user = users.find((u) => u.id === userId);
+        if (!user) {
+          return false;
+        }
+
+        // Find role
+        const role = roles.find(
+          (r) => r.id === user.role_id || r.name === user.role
+        );
+
+        // Get permissions
+        const rp = rolePermissions.find(
+          (r) => r.role_id === user.role_id || r.role_name === user.role
+        );
+        const userPermissions = rp?.permissions || [];
+
+        setCurrentUser(user);
+        setCurrentRole(role || null);
+        setPermissions(userPermissions);
+
+        return true;
+      } catch (error) {
+        console.error("Login by ID failed:", error);
         return false;
       }
-
-      // Find role
-      const role = roles.find(r => r.id === user.role_id || r.name === user.role);
-      
-      // Get permissions
-      const rp = rolePermissions.find(r => r.role_id === user.role_id || r.role_name === user.role);
-      const userPermissions = rp?.permissions || [];
-
-      setCurrentUser(user);
-      setCurrentRole(role || null);
-      setPermissions(userPermissions);
-
-      return true;
-    } catch (error) {
-      console.error("Login by ID failed:", error);
-      return false;
-    }
-  }, [roles, rolePermissions]);
+    },
+    [roles, rolePermissions]
+  );
 
   // Check for existing session
   useEffect(() => {
@@ -167,19 +181,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
       }
     }
-    
+
     if (dataLoaded) {
       checkSession();
     }
   }, [dataLoaded, roles, loginByUserId]);
 
   // Login with username/phone + password
-  async function login(identifier: string, password: string): Promise<LoginResult> {
+  async function login(
+    identifier: string,
+    password: string
+  ): Promise<LoginResult> {
     try {
       // Load users
       const usersSnap = localStorage.getItem("ekaplus_users_snapshot");
       let users: User[] = [];
-      
+
       if (usersSnap) {
         users = JSON.parse(usersSnap);
       } else {
@@ -192,57 +209,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Find user by username or phone
       const normalizedIdentifier = identifier.toLowerCase().trim();
-      const user = users.find(u => 
-        u.username.toLowerCase() === normalizedIdentifier ||
-        u.phone === normalizedIdentifier ||
-        u.phone === normalizedIdentifier.replace(/^0/, '62') || // Handle 08xxx format
-        u.email.toLowerCase() === normalizedIdentifier
+      const user = users.find(
+        (u) =>
+          u.username.toLowerCase() === normalizedIdentifier ||
+          u.phone === normalizedIdentifier ||
+          u.phone === normalizedIdentifier.replace(/^0/, "62") || // Handle 08xxx format
+          u.email.toLowerCase() === normalizedIdentifier
       );
 
       if (!user) {
-        return { 
-          success: false, 
-          message: "Username, email, atau nomor telepon tidak ditemukan" 
+        return {
+          success: false,
+          message: "Username, email, atau nomor telepon tidak ditemukan",
         };
       }
 
       // Check password (demo mode - accept DEMO_PASSWORD or "hashed_password_here")
-      if (password !== DEMO_PASSWORD && user.password !== "hashed_password_here") {
-        return { 
-          success: false, 
-          message: "Password salah" 
+      if (
+        password !== DEMO_PASSWORD &&
+        user.password !== "hashed_password_here"
+      ) {
+        return {
+          success: false,
+          message: "Password salah",
         };
       }
 
       // Check user status
       if (user.status !== "active") {
-        return { 
-          success: false, 
-          message: "Akun tidak aktif. Hubungi administrator." 
+        return {
+          success: false,
+          message: "Akun tidak aktif. Hubungi administrator.",
         };
       }
 
       // Find role
-      const role = roles.find(r => r.id === user.role_id || r.name === user.role);
-      
+      const role = roles.find(
+        (r) => r.id === user.role_id || r.name === user.role
+      );
+
       // Get permissions
-      const rp = rolePermissions.find(r => r.role_id === user.role_id || r.role_name === user.role);
+      const rp = rolePermissions.find(
+        (r) => r.role_id === user.role_id || r.role_name === user.role
+      );
       const userPermissions = rp?.permissions || [];
 
       // Set state
       setCurrentUser(user);
       setCurrentRole(role || null);
       setPermissions(userPermissions);
-      
+
       // Save session
       localStorage.setItem(AUTH_KEY, user.id);
 
       return { success: true };
     } catch (error) {
       console.error("Login failed:", error);
-      return { 
-        success: false, 
-        message: "Terjadi kesalahan saat login" 
+      return {
+        success: false,
+        message: "Terjadi kesalahan saat login",
       };
     }
   }
@@ -256,27 +281,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function hasPermission(permission: string): boolean {
     // Administrator has all permissions
-    if (currentRole?.name === 'administrator') {
+    if (currentRole?.name === "administrator") {
       return true;
     }
     return permissions.includes(permission);
   }
 
   function hasAnyPermission(perms: string[]): boolean {
-    if (currentRole?.name === 'administrator') {
+    if (currentRole?.name === "administrator") {
       return true;
     }
-    return perms.some(p => permissions.includes(p));
+    return perms.some((p) => permissions.includes(p));
   }
 
   function hasAllPermissions(perms: string[]): boolean {
-    if (currentRole?.name === 'administrator') {
+    if (currentRole?.name === "administrator") {
       return true;
     }
-    return perms.every(p => permissions.includes(p));
+    return perms.every((p) => permissions.includes(p));
   }
 
-  // <-- new: canAccessBranch implementation
   function canAccessBranch(branchId?: string | null): boolean {
     // if no branch specified, allow (permission check not applicable)
     if (branchId === undefined || branchId === null || branchId === "") {
@@ -309,11 +333,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     canAccessBranch, // <-- include here
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

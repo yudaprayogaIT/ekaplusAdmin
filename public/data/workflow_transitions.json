@@ -7,7 +7,7 @@
       "display_name": "Submit Pengajuan",
       "from_state": "draft",
       "to_state": "pending_verification",
-      "allowed_roles": ["user", "admin_cabang", "admin_pusat", "administrator"],
+      "allowed_roles": ["customer", "admin_cabang", "admin_pusat", "administrator"],
       "required_permissions": [],
       "conditions": [],
       "actions": [

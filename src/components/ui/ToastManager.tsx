@@ -42,7 +42,7 @@ export default function ConfirmActionModal({
     action === "approve"
       ? `Anda akan menyetujui aplikasi member dari "${targetName ?? "user"}". Lanjutkan?`
       : requireReason
-      ? `Anda akan menolak aplikasi member dari "${targetName ?? "user"}". Alasan penolakan wajib diisi.`
+      ? `Anda akan menolak aplikasi member dari "${targetName ?? ""}". Alasan penolakan wajib diisi.`
       : `Anda akan menolak aplikasi member dari "${targetName ?? "user"}". Mohon isi alasan penolakan (opsional).`;
 
   const reasonRequiredForThisAction = action === "reject" && requireReason;

@@ -32,7 +32,7 @@ const quickActions: QuickAction[] = [
     href: "/users",
     icon: <FaUsers className="w-6 h-6" />,
     color: "bg-blue-500",
-    permissions: ["users.view", "users.view_branch"],
+    permissions: ["users.view", "users.view_branch",],
   },
   {
     name: "Roles & Permissions",
