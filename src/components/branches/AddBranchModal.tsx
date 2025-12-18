@@ -4,33 +4,33 @@
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaTimes, FaMapMarkerAlt, FaGlobe } from "react-icons/fa";
+import { useAuth } from "@/contexts/AuthContext";
+import { getResourceUrl, getAuthHeaders, API_CONFIG } from "@/config/api";
 
 type Branch = {
   id?: number;
   name: string;
-  daerah: string;
+  city: string; // Changed from 'daerah' to match API
   address: string;
   lat: number;
   lng: number;
-  pulau: string;
-  wilayah: string;
+  island: string; // Changed from 'pulau' to match API
+  area: string; // Changed from 'wilayah' to match API
   url: string;
   token: string;
   disabled: number;
 };
 
-const SNAP_KEY = "ekatalog_branches_snapshot";
-
-const PULAU_OPTIONS = [
-  "Jawa",
+const ISLAND_OPTIONS = [
   "Sumatra",
+  "Jawa",
   "Kalimantan",
   "Sulawesi",
   "Nusa Tenggara",
   "Papua",
   "Maluku",
 ];
-const WILAYAH_OPTIONS = ["Barat", "Timur"];
+const AREA_OPTIONS = ["Barat", "Timur"];
 
 export default function AddBranchModal({
   open,
@@ -41,89 +41,143 @@ export default function AddBranchModal({
   onClose: () => void;
   initial?: Branch | null;
 }) {
+  const { token: authToken } = useAuth();
   const [name, setName] = useState("");
-  const [daerah, setDaerah] = useState("");
+  const [city, setCity] = useState("");
   const [address, setAddress] = useState("");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
-  const [pulau, setPulau] = useState("Jawa");
-  const [wilayah, setWilayah] = useState("Barat");
+  const [island, setIsland] = useState("Jawa");
+  const [area, setArea] = useState("Barat");
   const [url, setUrl] = useState("");
-  const [token, setToken] = useState("token:key");
+  const [token, setToken] = useState("");
   const [disabled, setDisabled] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setError(null);
     if (initial) {
       setName(initial.name ?? "");
-      setDaerah(initial.daerah ?? "");
+      setCity(initial.city ?? "");
       setAddress(initial.address ?? "");
       setLat(String(initial.lat ?? ""));
       setLng(String(initial.lng ?? ""));
-      setPulau(initial.pulau ?? "Jawa");
-      setWilayah(initial.wilayah ?? "Barat");
+      setIsland(initial.island ?? "Jawa");
+      setArea(initial.area ?? "Barat");
       setUrl(initial.url ?? "");
-      setToken(initial.token ?? "token:key");
+      setToken(initial.token ?? "");
       setDisabled(initial.disabled ?? 0);
     } else {
       setName("");
-      setDaerah("");
+      setCity("");
       setAddress("");
       setLat("");
       setLng("");
-      setPulau("Jawa");
-      setWilayah("Barat");
+      setIsland("Jawa");
+      setArea("Barat");
       setUrl("");
-      setToken("token:key");
+      setToken("");
       setDisabled(0);
     }
   }, [initial, open]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+S or Cmd+S to save
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        if (!saving) {
+          // Trigger form submission
+          const form = document.querySelector("form");
+          if (form) {
+            form.requestSubmit();
+          }
+        }
+      }
+      // Escape to cancel
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (!saving) {
+          onClose();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, saving, onClose]);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
+    setError(null);
 
-    const payload: Omit<Branch, "id"> = {
-      name: name.trim(),
-      daerah: daerah.trim(),
+    const apiPayload = {
+      branch_name: name.trim(),
+      city: city.trim(),
       address: address.trim(),
-      lat: parseFloat(lat) || 0,
-      lng: parseFloat(lng) || 0,
-      pulau,
-      wilayah,
+      lat: lat.trim(),
+      lng: lng.trim(),
+      island: island,
+      area: area,
       url: url.trim(),
       token: token.trim(),
-      disabled,
+      disabled: disabled,
     };
 
     try {
-      const raw = localStorage.getItem(SNAP_KEY);
-      let list: Branch[] = raw ? JSON.parse(raw) : [];
-
-      if (initial && initial.id) {
-        list = list.map((b) =>
-          b.id === initial.id ? { ...b, ...payload, id: initial.id } : b
-        );
-      } else {
-        const maxId = list.reduce(
-          (m: number, it: Branch) => Math.max(m, Number(it.id) || 0),
-          0
-        );
-        const newBranch: Branch = {
-          id: maxId + 1,
-          ...payload,
-        };
-        list.push(newBranch);
+      if (!authToken) {
+        throw new Error("Not authenticated");
       }
 
-      localStorage.setItem(SNAP_KEY, JSON.stringify(list));
-      window.dispatchEvent(new Event("ekatalog:branches_update"));
-    } catch (error) {
-      console.error("Failed to save branch:", error);
-    }
+      const headers = getAuthHeaders(authToken);
 
-    setSaving(false);
-    onClose();
+      let response;
+
+      if (initial && initial.id) {
+        // UPDATE existing branch
+        response = await fetch(
+          getResourceUrl(API_CONFIG.ENDPOINTS.BRANCH, initial.id),
+          {
+            method: "PUT",
+            headers,
+            body: JSON.stringify(apiPayload),
+          }
+        );
+      } else {
+        // CREATE new branch
+        response = await fetch(getResourceUrl(API_CONFIG.ENDPOINTS.BRANCH), {
+          method: "POST",
+          headers,
+          body: JSON.stringify(apiPayload),
+        });
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message || `Failed to save branch (${response.status})`
+        );
+      }
+
+      const result = await response.json();
+      console.log("Branch saved successfully:", result);
+
+      // Trigger reload in BranchList
+      window.dispatchEvent(new Event("ekatalog:branches_update"));
+
+      setSaving(false);
+      onClose();
+    } catch (err: unknown) {
+      console.error("Failed to save branch:", err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(errorMessage);
+      setSaving(false);
+    }
   }
 
   return (
@@ -162,10 +216,22 @@ export default function AddBranchModal({
                       ? "Perbarui informasi cabang"
                       : "Lengkapi form untuk menambahkan cabang"}
                   </p>
+                  <p className="text-red-200 text-xs mt-1 opacity-80">
+                    💡 Tekan{" "}
+                    <kbd className="px-1.5 py-0.5 bg-white/20 rounded text-xs">
+                      Ctrl+S
+                    </kbd>{" "}
+                    untuk simpan atau{" "}
+                    <kbd className="px-1.5 py-0.5 bg-white/20 rounded text-xs">
+                      Esc
+                    </kbd>{" "}
+                    untuk batal
+                  </p>
                 </div>
                 <button
                   onClick={onClose}
-                  className="p-2 hover:bg-white/20 rounded-xl transition-colors"
+                  disabled={saving}
+                  className="p-2 hover:bg-white/20 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <FaTimes className="w-6 h-6" />
                 </button>
@@ -177,7 +243,14 @@ export default function AddBranchModal({
               onSubmit={submit}
               className="p-6 space-y-6 max-h-[calc(90vh-140px)] overflow-y-auto"
             >
-              {/* Name & Daerah */}
+              {/* Error Message */}
+              {error && (
+                <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4">
+                  <p className="text-sm text-red-600 font-medium">{error}</p>
+                </div>
+              )}
+
+              {/* Name & City */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -187,20 +260,20 @@ export default function AddBranchModal({
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
-                    placeholder="Ekatunggal Tunas Medan"
+                    placeholder="Ekatunggal Tunas Mandiri"
                     required
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Daerah <span className="text-red-500">*</span>
+                    Kota <span className="text-red-500">*</span>
                   </label>
                   <input
-                    value={daerah}
-                    onChange={(e) => setDaerah(e.target.value)}
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
-                    placeholder="Medan"
+                    placeholder="Bogor"
                     required
                   />
                 </div>
@@ -216,7 +289,7 @@ export default function AddBranchModal({
                   onChange={(e) => setAddress(e.target.value)}
                   className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all resize-none"
                   rows={3}
-                  placeholder="Kompleks Golden Star No. 8C, Limau Manis..."
+                  placeholder="Jl. Pahlawan No.29A, Sanja..."
                   required
                 />
               </div>
@@ -253,25 +326,25 @@ export default function AddBranchModal({
                       type="number"
                       step="any"
                       className="w-full pl-11 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
-                      placeholder="98.7878248"
+                      placeholder="98.78782"
                       required
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Pulau & Wilayah */}
+              {/* Island & Area */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Pulau <span className="text-red-500">*</span>
                   </label>
                   <select
-                    value={pulau}
-                    onChange={(e) => setPulau(e.target.value)}
+                    value={island}
+                    onChange={(e) => setIsland(e.target.value)}
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
                   >
-                    {PULAU_OPTIONS.map((p) => (
+                    {ISLAND_OPTIONS.map((p) => (
                       <option key={p} value={p}>
                         {p}
                       </option>
@@ -281,14 +354,14 @@ export default function AddBranchModal({
 
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Wilayah <span className="text-red-500">*</span>
+                    Area <span className="text-red-500">*</span>
                   </label>
                   <select
-                    value={wilayah}
-                    onChange={(e) => setWilayah(e.target.value)}
+                    value={area}
+                    onChange={(e) => setArea(e.target.value)}
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
                   >
-                    {WILAYAH_OPTIONS.map((w) => (
+                    {AREA_OPTIONS.map((w) => (
                       <option key={w} value={w}>
                         {w}
                       </option>
@@ -348,14 +421,14 @@ export default function AddBranchModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-6 py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-all font-semibold text-gray-700"
+                  className="px-3 py-1 md:px-6 md:py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-all font-semibold text-gray-700"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-8 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:shadow-xl hover:shadow-red-200 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="px-3 py-1 md:px-8 md:py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:shadow-xl hover:shadow-red-200 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {saving ? (
                     <>

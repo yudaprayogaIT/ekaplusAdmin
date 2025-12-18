@@ -15,12 +15,12 @@ import Image from "next/image";
 type Branch = {
   id: number;
   name: string;
-  daerah: string;
+  city: string;
   address: string;
   lat: number;
   lng: number;
-  pulau: string;
-  wilayah: string;
+  island: string;
+  area: string;
   url: string;
   token: string;
   disabled: number;
@@ -50,53 +50,50 @@ export default function BranchCard({
         animate={{ opacity: 1, x: 0 }}
         whileHover={{ x: 4 }}
         onClick={() => onView?.()}
-        className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 cursor-pointer transition-all group hover:shadow-lg"
+        className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-6 cursor-pointer transition-all group hover:shadow-lg"
       >
-        <div className="flex items-start gap-6">
-          {/* Map Preview */}
-          <Image
-            src="/images/map.png"
-            alt="map"
-            width={200}
-            height={200}
-            className="w-full object-fill"
-          />
-          {/* <div className="hidden md:block w-32 h-32 bg-gradient-to-br from-red-50 to-red-100 rounded-xl overflow-hidden flex-shrink-0">
-            <div className="w-full h-full flex items-center justify-center text-red-300">
-              <FaMapMarkerAlt className="w-12 h-12" />
-            </div>
-          </div> */}
+        <div className="flex items-start gap-4 md:gap-6">
+          {/* Map Preview Icon - Hidden on mobile for space */}
+          <div className="hidden md:flex w-20 h-20 lg:w-24 lg:h-24 bg-gradient-to-br from-red-50 to-red-100 rounded-xl flex-shrink-0 items-center justify-center">
+            <Image
+              src="/images/maps.jpg"
+              alt="map"
+              width={250}
+              height={250}
+              className="w-25 h-25 object-cover rounded-xl"
+            />
+          </div>
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-4 mb-3">
-              <div className="flex-1">
-                <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-red-600 transition-colors">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 mb-3">
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base md:text-lg font-bold text-gray-900 mb-1.5 group-hover:text-red-600 transition-colors truncate">
                   {branch.name}
                 </h3>
-                <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
+                <div className="flex flex-wrap items-center gap-2 text-xs md:text-sm text-gray-600">
                   <div className="flex items-center gap-1.5">
-                    <FaCity className="w-3.5 h-3.5 text-gray-400" />
-                    <span>{branch.daerah}</span>
+                    <FaCity className="w-3 h-3 md:w-3.5 md:h-3.5 text-gray-400" />
+                    <span>{branch.city}</span>
                   </div>
-                  <span className="w-1 h-1 bg-gray-300 rounded-full" />
+                  <span className="w-1 h-1 bg-gray-300 rounded-full hidden sm:block" />
                   <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-                    {branch.pulau}
+                    {branch.island}
                   </span>
                   <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
-                    {branch.wilayah}
+                    Area {branch.area}
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="flex items-start gap-2 text-sm text-gray-600 mb-4">
-              <FaMapMarkerAlt className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-              <p className="line-clamp-2">{branch.address}</p>
+            <div className="flex items-start gap-2 text-xs md:text-sm text-gray-600 mb-3 md:mb-4">
+              <FaMapMarkerAlt className="w-3 h-3 md:w-4 md:h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <p className="line-clamp-1 md:line-clamp-2">{branch.address}</p>
             </div>
 
             {/* Actions */}
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {canEdit && (
                 <motion.button
                   whileHover={{ scale: 1.03 }}
@@ -176,15 +173,15 @@ export default function BranchCard({
         <div className="absolute top-3 right-3 flex flex-col gap-2">
           <span
             className={`px-3 py-1 backdrop-blur-sm rounded-full text-xs font-semibold shadow-sm ${
-              branch.wilayah === "Barat"
+              branch.area === "Barat"
                 ? "bg-green-500/90 text-white"
                 : "bg-purple-500/90 text-white"
             }`}
           >
-            {branch.wilayah}
+            {branch.area}
           </span>
           <span className="px-3 py-1 bg-white/95 backdrop-blur-sm rounded-full text-xs font-semibold text-gray-700 shadow-sm">
-            {branch.pulau}
+            {branch.island}
           </span>
         </div>
 
@@ -213,7 +210,7 @@ export default function BranchCard({
 
         <div className="flex items-center gap-2 text-sm text-gray-600 mb-3">
           <FaCity className="w-3.5 h-3.5 text-gray-400" />
-          <span className="font-medium">{branch.daerah}</span>
+          <span className="font-medium">{branch.city}</span>
         </div>
 
         <div className="flex items-start gap-2 text-sm text-gray-600 mb-4">

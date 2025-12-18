@@ -56,7 +56,7 @@ const quickActions: QuickAction[] = [
     href: "/branches",
     icon: <FaMapMarkerAlt className="w-6 h-6" />,
     color: "bg-green-500",
-    permission: "branches.view",
+    // permission: "branches.view",
   },
 ];
 

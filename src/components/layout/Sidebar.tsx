@@ -89,33 +89,34 @@ const SECONDARY_MENU: MenuItem[] = [
   },
 ];
 
+// DISABLED: Permission checks disabled (migrasi ke SQL) - all menu items visible to authenticated users
 const ADMIN_MENU: MenuItem[] = [
   {
     label: "Email",
     href: "/emails",
     icon: <FaEnvelope className="w-4 h-4" />,
-    permission: "emails.view",
+    // permission: "emails.view", // DISABLED
     requireAuth: true,
   },
   {
     label: "Roles & Permissions",
     href: "/roles",
     icon: <FaShieldAlt className="w-4 h-4" />,
-    permission: "roles.view",
+    // permission: "roles.view", // DISABLED
     requireAuth: true,
   },
   {
     label: "Users",
     href: "/users",
     icon: <FaUser className="w-5 h-5" />,
-    permissions: ["users.view", "users.view_branch"],
+    // permissions: ["users.view", "users.view_branch"], // DISABLED
     requireAuth: true,
   },
   {
     label: "Workflows",
     href: "/workflows",
     icon: <FaProjectDiagram className="w-4 h-4" />,
-    permission: "workflows.view",
+    // permission: "workflows.view", // DISABLED
     requireAuth: true,
   },
 ];
@@ -125,7 +126,7 @@ const MASTER_MENU: MenuItem[] = [
     label: "Branches",
     href: "/branches",
     icon: <FaBuilding className="w-4 h-4" />,
-    permission: "branches.view",
+    // permission: "branches.view",
     requireAuth: true,
   },
   {

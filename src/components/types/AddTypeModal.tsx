@@ -5,6 +5,8 @@ import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaTimes, FaImage, FaCheckCircle } from "react-icons/fa";
 import Image from "next/image";
+import { useAuth } from "@/contexts/AuthContext";
+import { getResourceUrl, getAuthHeaders, API_CONFIG } from "@/config/api";
 
 type ItemType = {
   id?: number;
@@ -22,24 +24,6 @@ type ItemType = {
   owner?: { id: number; name: string };
 };
 
-type StoredType = {
-  id: number;
-  name: string;
-  image?: string;
-  description?: string;
-  type_name: string;
-  docstatus: number;
-  status: string;
-  disabled: number;
-  updated_at?: string;
-  updated_by?: { id: number; name: string };
-  created_at?: string;
-  created_by?: { id: number; name: string };
-  owner?: { id: number; name: string };
-};
-
-const SNAP_KEY = "ekatalog_types_snapshot";
-
 export default function AddTypeModal({
   open,
   onClose,
@@ -49,14 +33,17 @@ export default function AddTypeModal({
   onClose: () => void;
   initial?: ItemType | null;
 }) {
+  const { token: authToken } = useAuth();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [imagePath, setImagePath] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setError(null);
     if (initial) {
       setName(initial.name ?? "");
       setDescription(initial.description ?? "");
@@ -83,50 +70,97 @@ export default function AddTypeModal({
     fr.readAsDataURL(imageFile);
   }, [imageFile]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+S or Cmd+S to save
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        if (!saving) {
+          const form = document.querySelector("form");
+          if (form) {
+            form.requestSubmit();
+          }
+        }
+      }
+      // Escape to cancel
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (!saving) {
+          onClose();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, saving, onClose]);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
+    setError(null);
 
-    const payload: Omit<StoredType, "id"> = {
+    const apiPayload = {
       name: name.trim(),
       type_name: name.trim(),
-      description: description || undefined,
-      image: imagePath || undefined,
-      docstatus: 1,
-      status: "Enabled",
+      description: description.trim() || null,
+      image: imagePath.trim() || null,
+      docstatus: 0, // 0 = Draft, 1 = Submitted
       disabled: 0,
     };
 
     try {
-      const raw = localStorage.getItem(SNAP_KEY);
-      let list: StoredType[] = raw ? JSON.parse(raw) : [];
-
-      if (initial && initial.id) {
-        list = list.map((t) =>
-          t.id === initial.id ? { ...t, ...payload, id: initial.id } : t
-        );
-      } else {
-        const maxId = list.reduce(
-          (m: number, it: StoredType) => Math.max(m, Number(it.id) || 0),
-          0
-        );
-        const newType: StoredType = {
-          id: maxId + 1,
-          ...payload,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        list.push(newType);
+      if (!authToken) {
+        throw new Error("Not authenticated");
       }
 
-      localStorage.setItem(SNAP_KEY, JSON.stringify(list));
-      window.dispatchEvent(new Event("ekatalog:types_update"));
-    } catch (error) {
-      console.error("Failed to save type:", error);
-    }
+      const headers = getAuthHeaders(authToken);
 
-    setSaving(false);
-    onClose();
+      let response;
+
+      if (initial && initial.id) {
+        // UPDATE existing type
+        response = await fetch(
+          getResourceUrl(API_CONFIG.ENDPOINTS.TYPE, initial.id),
+          {
+            method: "PUT",
+            headers,
+            body: JSON.stringify(apiPayload),
+          }
+        );
+      } else {
+        // CREATE new type
+        response = await fetch(getResourceUrl(API_CONFIG.ENDPOINTS.TYPE), {
+          method: "POST",
+          headers,
+          body: JSON.stringify(apiPayload),
+        });
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message || `Failed to save type (${response.status})`
+        );
+      }
+
+      const result = await response.json();
+      console.log("Type saved successfully:", result);
+
+      // Trigger reload in TypeList
+      window.dispatchEvent(new Event("ekatalog:types_update"));
+
+      setSaving(false);
+      onClose();
+    } catch (err: unknown) {
+      console.error("Failed to save type:", err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(errorMessage);
+      setSaving(false);
+    }
   }
 
   return (
@@ -165,10 +199,22 @@ export default function AddTypeModal({
                       ? "Perbarui informasi tipe item"
                       : "Lengkapi form untuk menambahkan tipe item"}
                   </p>
+                  <p className="text-red-200 text-xs mt-1 opacity-80">
+                    💡 Tekan{" "}
+                    <kbd className="px-1.5 py-0.5 bg-white/20 rounded text-xs">
+                      Ctrl+S
+                    </kbd>{" "}
+                    untuk simpan atau{" "}
+                    <kbd className="px-1.5 py-0.5 bg-white/20 rounded text-xs">
+                      Esc
+                    </kbd>{" "}
+                    untuk batal
+                  </p>
                 </div>
                 <button
                   onClick={onClose}
-                  className="p-2 hover:bg-white/20 rounded-xl transition-colors"
+                  disabled={saving}
+                  className="p-2 hover:bg-white/20 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <FaTimes className="w-6 h-6" />
                 </button>
@@ -180,6 +226,13 @@ export default function AddTypeModal({
               onSubmit={submit}
               className="p-6 space-y-6 max-h-[calc(90vh-140px)] overflow-y-auto"
             >
+              {/* Error Message */}
+              {error && (
+                <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4">
+                  <p className="text-sm text-red-600 font-medium">{error}</p>
+                </div>
+              )}
+
               {/* Name */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">

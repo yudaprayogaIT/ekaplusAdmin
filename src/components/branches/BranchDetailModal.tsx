@@ -9,12 +9,12 @@ import Image from "next/image";
 type Branch = {
   id: number;
   name: string;
-  daerah: string;
+  city: string; // Changed from 'daerah' to match API
   address: string;
   lat: number;
   lng: number;
-  pulau: string;
-  wilayah: string;
+  island: string; // Changed from 'pulau' to match API
+  area: string; // Changed from 'wilayah' to match API
   url: string;
   token: string;
   disabled: number;
@@ -75,12 +75,12 @@ export default function BranchDetailModal({
                 {/* Badges */}
                 <div className="flex items-center gap-2 mb-4">
                   <span className="px-4 py-1.5 bg-white/20 backdrop-blur-sm rounded-full text-sm font-semibold">
-                    {branch.pulau}
+                    {branch.island}
                   </span>
                   <span className={`px-4 py-1.5 backdrop-blur-sm rounded-full text-sm font-semibold ${
-                    branch.wilayah === 'Barat' ? 'bg-green-500/90' : 'bg-purple-500/90'
+                    branch.area === 'Barat' ? 'bg-green-500/90' : 'bg-purple-500/90'
                   }`}>
-                    Wilayah {branch.wilayah}
+                    Area {branch.area}
                   </span>
                   <span className={`px-4 py-1.5 backdrop-blur-sm rounded-full text-sm font-semibold ${
                     branch.disabled === 0 ? 'bg-green-500/90' : 'bg-gray-500/90'
@@ -94,7 +94,7 @@ export default function BranchDetailModal({
                 
                 <div className="flex items-center gap-2 text-lg text-red-100">
                   <FaCity className="w-5 h-5" />
-                  <span>{branch.daerah}</span>
+                  <span>{branch.city}</span>
                 </div>
               </div>
             </div>

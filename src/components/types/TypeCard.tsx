@@ -1,7 +1,7 @@
 // src/components/types/TypeCard.tsx
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { FaEdit, FaTrash, FaBox, FaTag } from "react-icons/fa";
@@ -28,6 +28,13 @@ export default function TypeCard({
   onDelete?: () => void;
   onView?: () => void;
 }) {
+  const [imageError, setImageError] = useState(false);
+
+  // Reset error when type changes
+  useEffect(() => {
+    setImageError(false);
+  }, [type.image]);
+
   if (viewMode === "list") {
     return (
       <motion.div
@@ -40,12 +47,13 @@ export default function TypeCard({
         <div className="flex items-start gap-6">
           {/* Image Preview */}
           <div className="hidden md:flex w-24 h-24 bg-gradient-to-br from-gray-50 via-white to-gray-50 rounded-xl overflow-hidden flex-shrink-0 items-center justify-center p-4 border-2 border-gray-100">
-            {type.image ? (
+            {type.image && !imageError ? (
               <Image
                 width={96}
                 height={96}
                 src={type.image}
                 alt={type.name}
+                onError={() => setImageError(true)}
                 className="object-contain w-full h-full group-hover:scale-110 transition-transform duration-500"
               />
             ) : (
@@ -121,13 +129,14 @@ export default function TypeCard({
     >
       {/* Image Container */}
       <div className="relative h-52 bg-gradient-to-br from-gray-50 via-white to-gray-50 overflow-hidden">
-        {type.image ? (
+        {type.image && !imageError ? (
           <div className="relative w-full h-full p-6">
             <Image
               width={400}
               height={400}
               src={type.image}
               alt={type.name}
+              onError={() => setImageError(true)}
               className="object-contain w-full h-full group-hover:scale-110 transition-transform duration-500"
             />
           </div>
