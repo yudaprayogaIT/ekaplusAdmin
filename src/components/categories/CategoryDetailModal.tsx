@@ -3,30 +3,18 @@
 
 import React from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { FaTimes, FaEdit, FaTrash, FaTag, FaBox, FaCalendar, FaUser, FaCheckCircle } from "react-icons/fa";
+import {
+  FaTimes,
+  FaEdit,
+  FaTrash,
+  FaTag,
+  FaBox,
+  FaCalendar,
+  FaUser,
+  FaCheckCircle,
+} from "react-icons/fa";
 import Image from "next/image";
-
-type Category = {
-  id: number;
-  name: string;
-  icon?: string;
-  image?: string;
-  description?: string;
-  title?: string;
-  subtitle?: string;
-  type: {
-    id: number;
-    name: string;
-  };
-  docstatus: number;
-  status: string;
-  disabled: number;
-  updated_at?: string;
-  updated_by?: { id: number; name: string };
-  created_at?: string;
-  created_by?: { id: number; name: string };
-  owner?: { id: number; name: string };
-};
+import { Category } from "./CategoryList";
 
 export default function CategoryDetailModal({
   open,
@@ -44,15 +32,15 @@ export default function CategoryDetailModal({
   if (!category) return null;
 
   const formatDate = (dateStr?: string) => {
-    if (!dateStr) return '-';
+    if (!dateStr) return "-";
     try {
-      return new Date(dateStr).toLocaleDateString('id-ID', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
+      return new Date(dateStr).toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
       });
     } catch {
-      return '-';
+      return "-";
     }
   };
 
@@ -65,7 +53,10 @@ export default function CategoryDetailModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={onClose} />
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-md"
+            onClick={onClose}
+          />
 
           <motion.div
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
@@ -78,7 +69,7 @@ export default function CategoryDetailModal({
             <div className="bg-gradient-to-r from-red-500 via-red-600 to-red-700 px-8 py-10 text-white relative overflow-hidden">
               <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full -mr-48 -mt-48" />
               <div className="absolute bottom-0 left-0 w-64 h-64 bg-black/10 rounded-full -ml-32 -mb-32" />
-              
+
               <button
                 onClick={onClose}
                 className="absolute top-5 right-5 p-2.5 hover:bg-white/20 rounded-xl transition-colors z-10"
@@ -90,16 +81,18 @@ export default function CategoryDetailModal({
                 {/* Type Badge */}
                 <div className="inline-flex items-center gap-2 mb-4 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-full">
                   <FaTag className="w-3.5 h-3.5" />
-                  <span className="text-sm font-semibold">{category.type.name}</span>
+                  <span className="text-sm font-semibold">
+                    {category.type.name}
+                  </span>
                 </div>
 
                 {/* Title */}
                 <h2 className="text-4xl font-bold mb-3">{category.name}</h2>
-                
+
                 {category.title && (
                   <p className="text-lg text-red-100 mb-2">{category.title}</p>
                 )}
-                
+
                 {category.subtitle && (
                   <p className="text-sm text-red-200">{category.subtitle}</p>
                 )}
@@ -113,7 +106,9 @@ export default function CategoryDetailModal({
                 {/* Icon */}
                 {category.icon ? (
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-3">Icon</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-3">
+                      Icon
+                    </label>
                     <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-8 flex items-center justify-center h-56 border-2 border-gray-200 shadow-inner">
                       <Image
                         width={200}
@@ -129,7 +124,9 @@ export default function CategoryDetailModal({
                 {/* Image */}
                 {category.image ? (
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-3">Image</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-3">
+                      Image
+                    </label>
                     <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl overflow-hidden h-56 border-2 border-gray-200 shadow-inner">
                       <Image
                         width={400}
@@ -147,7 +144,9 @@ export default function CategoryDetailModal({
                   <div className="col-span-2">
                     <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-12 flex flex-col items-center justify-center h-56 border-2 border-dashed border-gray-300">
                       <FaBox className="w-16 h-16 text-gray-300 mb-3" />
-                      <span className="text-sm font-medium text-gray-400">Tidak ada gambar</span>
+                      <span className="text-sm font-medium text-gray-400">
+                        Tidak ada gambar
+                      </span>
                     </div>
                   </div>
                 )}
@@ -156,9 +155,13 @@ export default function CategoryDetailModal({
               {/* Description */}
               {category.description && (
                 <div className="mb-8">
-                  <label className="block text-sm font-semibold text-gray-700 mb-3">Deskripsi</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">
+                    Deskripsi
+                  </label>
                   <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl p-6 border-2 border-gray-100">
-                    <p className="text-gray-700 leading-relaxed">{category.description}</p>
+                    <p className="text-gray-700 leading-relaxed">
+                      {category.description}
+                    </p>
                   </div>
                 </div>
               )}
@@ -169,11 +172,13 @@ export default function CategoryDetailModal({
                 <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-5 border-2 border-green-200">
                   <div className="flex items-center gap-2 mb-2">
                     <FaCheckCircle className="w-4 h-4 text-green-600" />
-                    <label className="text-xs font-bold text-green-900 uppercase tracking-wide">Status</label>
+                    <label className="text-xs font-bold text-green-900 uppercase tracking-wide">
+                      Status
+                    </label>
                   </div>
                   <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded-full text-sm font-semibold">
                     <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                    {category.status || 'Active'}
+                    {category.status || "Active"}
                   </span>
                 </div>
 
@@ -182,9 +187,13 @@ export default function CategoryDetailModal({
                   <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-5 border-2 border-blue-200">
                     <div className="flex items-center gap-2 mb-2">
                       <FaCalendar className="w-4 h-4 text-blue-600" />
-                      <label className="text-xs font-bold text-blue-900 uppercase tracking-wide">Dibuat</label>
+                      <label className="text-xs font-bold text-blue-900 uppercase tracking-wide">
+                        Dibuat
+                      </label>
                     </div>
-                    <p className="text-sm font-semibold text-blue-900">{formatDate(category.created_at)}</p>
+                    <p className="text-sm font-semibold text-blue-900">
+                      {formatDate(category.created_at)}
+                    </p>
                   </div>
                 )}
 
@@ -193,9 +202,13 @@ export default function CategoryDetailModal({
                   <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-5 border-2 border-purple-200">
                     <div className="flex items-center gap-2 mb-2">
                       <FaUser className="w-4 h-4 text-purple-600" />
-                      <label className="text-xs font-bold text-purple-900 uppercase tracking-wide">Diupdate Oleh</label>
+                      <label className="text-xs font-bold text-purple-900 uppercase tracking-wide">
+                        Diupdate Oleh
+                      </label>
                     </div>
-                    <p className="text-sm font-semibold text-purple-900">{category.updated_by.name}</p>
+                    <p className="text-sm font-semibold text-purple-900">
+                      {category.updated_by.name}
+                    </p>
                   </div>
                 )}
               </div>

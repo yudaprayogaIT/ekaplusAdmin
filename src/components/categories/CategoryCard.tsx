@@ -1,37 +1,33 @@
 // src/components/categories/CategoryCard.tsx
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { FaEdit, FaTrash, FaBox, FaTag } from "react-icons/fa";
-
-type Category = {
-  id: number;
-  name: string;
-  icon?: string;
-  image?: string;
-  description?: string;
-  type: {
-    id: number;
-    name: string;
-  };
-};
+import { Category } from "./CategoryList";
 
 export default function CategoryCard({
   category,
-  viewMode = 'grid',
+  viewMode = "grid",
   onEdit,
   onDelete,
   onView,
 }: {
   category: Category;
-  viewMode?: 'grid' | 'list';
+  viewMode?: "grid" | "list";
   onEdit?: () => void;
   onDelete?: () => void;
   onView?: () => void;
 }) {
-  if (viewMode === 'list') {
+  const [imageError, setImageError] = useState(false);
+  const imageSrc = category.icon || category.image;
+
+  // Reset error when type changes
+  useEffect(() => {
+    setImageError(false);
+  }, [category.icon, category.image]);
+  if (viewMode === "list") {
     return (
       <motion.div
         initial={{ opacity: 0, x: -20 }}
@@ -43,12 +39,14 @@ export default function CategoryCard({
         <div className="flex items-start gap-6">
           {/* Icon/Image Preview */}
           <div className="hidden md:flex w-24 h-24 bg-gradient-to-br from-gray-50 via-white to-gray-50 rounded-xl overflow-hidden flex-shrink-0 items-center justify-center p-4 border-2 border-gray-100">
-            {category.icon || category.image ? (
+            {imageSrc && !imageError ? (
               <Image
                 width={96}
                 height={96}
-                src={category.icon || category.image || ""}
+                src={imageSrc}
                 alt={category.name}
+                unoptimized
+                onError={() => setImageError(true)}
                 className="object-contain w-full h-full group-hover:scale-110 transition-transform duration-500"
               />
             ) : (
@@ -82,22 +80,22 @@ export default function CategoryCard({
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
-                onClick={(e) => { 
-                  e.stopPropagation(); 
-                  onEdit?.(); 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit?.();
                 }}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-gray-200 hover:border-red-500 hover:bg-red-50 transition-all text-sm font-medium"
               >
                 <FaEdit className="w-3.5 h-3.5" />
                 <span>Edit</span>
               </motion.button>
-              
+
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
-                onClick={(e) => { 
-                  e.stopPropagation(); 
-                  onDelete?.(); 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete?.();
                 }}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-50 border-2 border-red-100 hover:bg-red-100 transition-all text-sm font-medium text-red-600"
               >
@@ -115,19 +113,24 @@ export default function CategoryCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -6, boxShadow: "0 20px 40px -10px rgba(239, 68, 68, 0.15)" }}
+      whileHover={{
+        y: -6,
+        boxShadow: "0 20px 40px -10px rgba(239, 68, 68, 0.15)",
+      }}
       onClick={() => onView?.()}
       className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden cursor-pointer transition-all group"
     >
       {/* Image Container */}
       <div className="relative h-52 bg-gradient-to-br from-gray-50 via-white to-gray-50 overflow-hidden">
-        {category.icon || category.image ? (
+        {imageSrc && !imageError ? (
           <div className="relative w-full h-full p-6">
             <Image
               width={400}
               height={400}
-              src={category.icon || category.image || ""}
+              src={imageSrc}
               alt={category.name}
+              unoptimized
+              onError={() => setImageError(true)}
               className="object-contain w-full h-full group-hover:scale-110 transition-transform duration-500"
             />
           </div>
@@ -138,11 +141,13 @@ export default function CategoryCard({
             </div>
           </div>
         )}
-        
+
         {/* Type Badge */}
         <div className="absolute top-4 right-4">
           <div className="px-3 py-1.5 bg-white/95 backdrop-blur-sm rounded-full shadow-sm border border-gray-100">
-            <span className="text-xs font-semibold text-gray-700">{category.type.name}</span>
+            <span className="text-xs font-semibold text-gray-700">
+              {category.type.name}
+            </span>
           </div>
         </div>
 
@@ -155,7 +160,7 @@ export default function CategoryCard({
         <h3 className="font-bold text-gray-900 text-lg mb-2 line-clamp-1 group-hover:text-red-600 transition-colors">
           {category.name}
         </h3>
-        
+
         {category.description && (
           <p className="text-sm text-gray-600 line-clamp-2 mb-4 leading-relaxed">
             {category.description}
@@ -167,22 +172,24 @@ export default function CategoryCard({
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              onEdit?.(); 
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit?.();
             }}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 border-gray-200 hover:border-red-500 hover:bg-red-50 transition-all group/btn"
           >
             <FaEdit className="w-3.5 h-3.5 text-gray-600 group-hover/btn:text-red-600 transition-colors" />
-            <span className="text-sm font-semibold text-gray-700 group-hover/btn:text-red-600 transition-colors">Edit</span>
+            <span className="text-sm font-semibold text-gray-700 group-hover/btn:text-red-600 transition-colors">
+              Edit
+            </span>
           </motion.button>
-          
+
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              onDelete?.(); 
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete?.();
             }}
             className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 border-2 border-red-100 hover:bg-red-100 hover:border-red-200 transition-all"
           >

@@ -13,22 +13,7 @@ import {
   FaCheckCircle,
 } from "react-icons/fa";
 import Image from "next/image";
-
-type ItemType = {
-  id: number;
-  name: string;
-  image?: string;
-  description?: string;
-  type_name: string;
-  docstatus: number;
-  status: string;
-  disabled: number;
-  updated_at?: string;
-  updated_by?: { id: number; name: string };
-  created_at?: string;
-  created_by?: { id: number; name: string };
-  owner?: { id: number; name: string };
-};
+import { ItemType } from "./Typelist";
 
 export default function TypeDetailModal({
   open,
@@ -121,6 +106,7 @@ export default function TypeDetailModal({
                       height={300}
                       src={type.image}
                       alt={type.name}
+                      unoptimized
                       className="object-contain max-h-64 drop-shadow-lg"
                     />
                   </div>

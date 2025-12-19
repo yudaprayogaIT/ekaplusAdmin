@@ -25,7 +25,7 @@ import {
 } from "react-icons/fa";
 import { motion } from "framer-motion";
 
-type Branch = {
+export type Branch = {
   id: number;
   name: string;
   city: string;

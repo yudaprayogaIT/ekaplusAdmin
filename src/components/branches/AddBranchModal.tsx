@@ -5,7 +5,11 @@ import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaTimes, FaMapMarkerAlt, FaGlobe } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
-import { getResourceUrl, getAuthHeaders, API_CONFIG } from "@/config/api";
+import {
+  getResourceUrl,
+  getAuthHeadersFormData,
+  API_CONFIG,
+} from "@/config/api";
 
 type Branch = {
   id?: number;
@@ -116,25 +120,25 @@ export default function AddBranchModal({
     setSaving(true);
     setError(null);
 
-    const apiPayload = {
-      branch_name: name.trim(),
-      city: city.trim(),
-      address: address.trim(),
-      lat: lat.trim(),
-      lng: lng.trim(),
-      island: island,
-      area: area,
-      url: url.trim(),
-      token: token.trim(),
-      disabled: disabled,
-    };
-
     try {
       if (!authToken) {
         throw new Error("Not authenticated");
       }
 
-      const headers = getAuthHeaders(authToken);
+      // Prepare FormData for API
+      const formData = new FormData();
+      formData.append("branch_name", name.trim());
+      formData.append("city", city.trim());
+      formData.append("address", address.trim());
+      formData.append("lat", lat.trim());
+      formData.append("lng", lng.trim());
+      formData.append("island", island);
+      formData.append("area", area);
+      formData.append("url", url.trim());
+      formData.append("token", token.trim());
+      formData.append("disabled", disabled.toString());
+
+      const headers = getAuthHeadersFormData(authToken);
 
       let response;
 
@@ -145,7 +149,7 @@ export default function AddBranchModal({
           {
             method: "PUT",
             headers,
-            body: JSON.stringify(apiPayload),
+            body: formData,
           }
         );
       } else {
@@ -153,7 +157,7 @@ export default function AddBranchModal({
         response = await fetch(getResourceUrl(API_CONFIG.ENDPOINTS.BRANCH), {
           method: "POST",
           headers,
-          body: JSON.stringify(apiPayload),
+          body: formData,
         });
       }
 

@@ -11,20 +11,7 @@ import {
   FaCity,
 } from "react-icons/fa";
 import Image from "next/image";
-
-type Branch = {
-  id: number;
-  name: string;
-  city: string;
-  address: string;
-  lat: number;
-  lng: number;
-  island: string;
-  area: string;
-  url: string;
-  token: string;
-  disabled: number;
-};
+import type { Branch } from "./BranchList";
 
 export default function BranchCard({
   branch,

@@ -5,15 +5,7 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { FaEdit, FaTrash, FaBox, FaTag } from "react-icons/fa";
-
-type ItemType = {
-  id: number;
-  name: string;
-  image?: string;
-  description?: string;
-  type_name: string;
-  status: string;
-};
+import { ItemType } from "./Typelist";
 
 export default function TypeCard({
   type,
@@ -53,6 +45,7 @@ export default function TypeCard({
                 height={96}
                 src={type.image}
                 alt={type.name}
+                unoptimized
                 onError={() => setImageError(true)}
                 className="object-contain w-full h-full group-hover:scale-110 transition-transform duration-500"
               />
@@ -136,6 +129,7 @@ export default function TypeCard({
               height={400}
               src={type.image}
               alt={type.name}
+              unoptimized
               onError={() => setImageError(true)}
               className="object-contain w-full h-full group-hover:scale-110 transition-transform duration-500"
             />

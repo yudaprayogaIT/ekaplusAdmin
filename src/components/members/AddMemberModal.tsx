@@ -60,7 +60,24 @@ export default function AddMemberModal({
     };
 
     try {
-      const res = await fetch("/api/members", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+      // Prepare FormData for API
+      const formData = new FormData();
+      formData.append("user_id", String(payload.user_id));
+      formData.append("user_name", payload.user_name);
+      formData.append("member_tier", payload.member_tier || "");
+      formData.append("loyalty_points", String(payload.loyalty_points || 0));
+      formData.append("branch_id", String(payload.branch_id || 0));
+      formData.append("branch_name", payload.branch_name || "");
+      formData.append("member_status", payload.member_status || "");
+      formData.append("member_since", payload.member_since || "");
+      formData.append("application_date", payload.application_date || "");
+      formData.append("company_name", payload.company_name || "");
+      formData.append("company_address", payload.company_address || "");
+
+      const res = await fetch("/api/members", {
+        method: "POST",
+        body: formData,
+      });
       if (res.ok) {
         const created = await res.json();
         window.dispatchEvent(new Event("ekatalog:members_snapshot_update"));

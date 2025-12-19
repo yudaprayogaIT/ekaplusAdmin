@@ -6,23 +6,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { FaTimes, FaImage, FaCheckCircle } from "react-icons/fa";
 import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
-import { getResourceUrl, getAuthHeaders, API_CONFIG } from "@/config/api";
-
-type ItemType = {
-  id?: number;
-  name: string;
-  image?: string;
-  description?: string;
-  type_name: string;
-  docstatus: number;
-  status: string;
-  disabled: number;
-  updated_at?: string;
-  updated_by?: { id: number; name: string };
-  created_at?: string;
-  created_by?: { id: number; name: string };
-  owner?: { id: number; name: string };
-};
+import {
+  getResourceUrl,
+  getAuthHeadersFormData,
+  API_CONFIG,
+} from "@/config/api";
+import { ItemType } from "./Typelist";
 
 export default function AddTypeModal({
   open,
@@ -36,7 +25,7 @@ export default function AddTypeModal({
   const { token: authToken } = useAuth();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [imagePath, setImagePath] = useState("");
+  const [imageUuid, setImageUuid] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -47,27 +36,31 @@ export default function AddTypeModal({
     if (initial) {
       setName(initial.name ?? "");
       setDescription(initial.description ?? "");
-      setImagePath(initial.image ?? "");
-      setImagePreview(initial.image ?? null);
+      // Extract UUID from full URL if present
+      const imageUrl = initial.image ?? "";
+      const uuidMatch = imageUrl.match(/\/files\/(.+)$/);
+      const uuid = uuidMatch ? uuidMatch[1] : imageUrl;
+      setImageUuid(uuid);
+      setImagePreview(initial.image || null);
       setImageFile(null);
     } else {
       setName("");
       setDescription("");
-      setImagePath("");
+      setImageUuid("");
       setImagePreview(null);
       setImageFile(null);
     }
   }, [initial, open]);
 
-  // Image file preview
+  // Handle file selection and preview
   useEffect(() => {
     if (!imageFile) return;
-    const fr = new FileReader();
-    fr.onload = () => {
-      setImagePreview(String(fr.result));
-      setImagePath(String(fr.result));
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreview(reader.result as string);
     };
-    fr.readAsDataURL(imageFile);
+    reader.readAsDataURL(imageFile);
   }, [imageFile]);
 
   // Keyboard shortcuts
@@ -103,21 +96,29 @@ export default function AddTypeModal({
     setSaving(true);
     setError(null);
 
-    const apiPayload = {
-      name: name.trim(),
-      type_name: name.trim(),
-      description: description.trim() || null,
-      image: imagePath.trim() || null,
-      docstatus: 0, // 0 = Draft, 1 = Submitted
-      disabled: 0,
-    };
-
     try {
       if (!authToken) {
         throw new Error("Not authenticated");
       }
 
-      const headers = getAuthHeaders(authToken);
+      // Prepare FormData for API - kirim file langsung bersama data
+      const formData = new FormData();
+      formData.append("name", name.trim());
+      formData.append("type_name", name.trim());
+      formData.append("description", description.trim() || "");
+      formData.append("status", "Draft");
+      formData.append("docstatus", "0");
+      formData.append("disabled", "0");
+
+      // Jika ada file baru, kirim file nya
+      // Jika tidak ada file baru tapi ada imageUuid, kirim UUID nya
+      if (imageFile) {
+        formData.append("image", imageFile);
+      } else if (imageUuid) {
+        formData.append("image", imageUuid.trim());
+      }
+
+      const headers = getAuthHeadersFormData(authToken);
 
       let response;
 
@@ -128,7 +129,7 @@ export default function AddTypeModal({
           {
             method: "PUT",
             headers,
-            body: JSON.stringify(apiPayload),
+            body: formData,
           }
         );
       } else {
@@ -136,7 +137,7 @@ export default function AddTypeModal({
         response = await fetch(getResourceUrl(API_CONFIG.ENDPOINTS.TYPE), {
           method: "POST",
           headers,
-          body: JSON.stringify(apiPayload),
+          body: formData,
         });
       }
 
@@ -266,53 +267,63 @@ export default function AddTypeModal({
                 <label className="block text-sm font-semibold text-gray-700 mb-3">
                   Gambar Tipe
                 </label>
+
+                {/* Upload Area */}
                 <div className="space-y-3">
-                  <label className="flex flex-col items-center justify-center gap-3 px-6 py-8 border-2 border-dashed border-gray-300 rounded-xl hover:border-red-500 hover:bg-red-50 cursor-pointer transition-all group">
-                    <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center group-hover:bg-red-100 transition-colors">
+                  <label className="flex flex-col items-center justify-center gap-3 px-6 py-8 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer transition-all group hover:border-red-500 hover:bg-red-50">
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center transition-colors bg-gray-100 group-hover:bg-red-100">
                       <FaImage className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors" />
                     </div>
                     <div className="text-center">
                       <span className="text-sm font-medium text-gray-700 group-hover:text-red-600 transition-colors">
                         Upload Gambar
                       </span>
-                      <p className="text-xs text-gray-500 mt-1">PNG, JPG</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        PNG, JPG, JPEG (Max 5MB)
+                      </p>
                     </div>
                     <input
                       type="file"
                       accept="image/*"
                       className="hidden"
-                      onChange={(e) =>
-                        setImageFile(e.target.files ? e.target.files[0] : null)
-                      }
+                      disabled={saving}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          // Validate file size (5MB)
+                          if (file.size > 5 * 1024 * 1024) {
+                            setError("Ukuran file terlalu besar. Maksimal 5MB");
+                            return;
+                          }
+                          setImageFile(file);
+                          setError(null);
+                        }
+                      }}
                     />
                   </label>
 
+                  {/* Image Preview */}
                   {imagePreview && (
-                    <div className="relative w-full h-40 bg-gray-50 rounded-xl overflow-hidden border-2 border-gray-200">
-                      <div className="absolute top-2 right-2">
-                        <div className="bg-green-500 text-white p-1 rounded-full">
+                    <div className="relative w-full h-48 bg-gray-50 rounded-xl overflow-hidden border-2 border-gray-200">
+                      <div className="absolute top-2 right-2 z-10">
+                        <div className="bg-green-500 text-white p-2 rounded-full shadow-lg">
                           <FaCheckCircle className="w-4 h-4" />
                         </div>
                       </div>
                       <Image
                         src={imagePreview}
-                        alt="image preview"
-                        width={1000}
-                        height={1000}
-                        className="object-contain w-full h-full p-3"
+                        alt="Preview"
+                        fill
+                        unoptimized
+                        className="object-contain p-4"
                       />
+                      {imageFile && (
+                        <div className="absolute bottom-2 left-2 right-2 bg-black/70 backdrop-blur-sm text-white px-3 py-2 rounded-lg text-xs truncate">
+                          {imageFile.name}
+                        </div>
+                      )}
                     </div>
                   )}
-
-                  <input
-                    value={imagePath}
-                    onChange={(e) => {
-                      setImagePath(e.target.value);
-                      setImagePreview(e.target.value || null);
-                    }}
-                    placeholder="atau path: /images/type/..."
-                    className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all text-sm"
-                  />
                 </div>
               </div>
 
@@ -321,7 +332,8 @@ export default function AddTypeModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-6 py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-all font-semibold text-gray-700"
+                  disabled={saving}
+                  className="px-6 py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-all font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Batal
                 </button>

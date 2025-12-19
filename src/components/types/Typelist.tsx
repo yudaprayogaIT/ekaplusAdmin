@@ -17,7 +17,7 @@ import {
   API_CONFIG,
 } from "@/config/api";
 
-type ItemType = {
+export type ItemType = {
   id: number;
   name: string;
   image?: string;
