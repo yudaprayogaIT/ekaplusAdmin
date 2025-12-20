@@ -6,6 +6,7 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 import { FaEdit, FaTrash, FaBox, FaTag } from "react-icons/fa";
 import { Category } from "./CategoryList";
+import { getFileUrl } from "@/config/api";
 
 export default function CategoryCard({
   category,
@@ -21,12 +22,12 @@ export default function CategoryCard({
   onView?: () => void;
 }) {
   const [imageError, setImageError] = useState(false);
-  const imageSrc = category.icon || category.image;
+  const imageSrc = getFileUrl(category.icon || category.image);
 
   // Reset error when type changes
   useEffect(() => {
     setImageError(false);
-  }, [category.icon, category.image]);
+  }, [category.image, category.icon]);
   if (viewMode === "list") {
     return (
       <motion.div
@@ -59,7 +60,7 @@ export default function CategoryCard({
             <div className="flex items-start justify-between gap-4 mb-3">
               <div className="flex-1">
                 <h3 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-red-600 transition-colors">
-                  {category.name}
+                  {category.category_name}
                 </h3>
                 <div className="flex items-center gap-2 mb-3">
                   <FaTag className="w-3.5 h-3.5 text-gray-400" />
@@ -158,7 +159,7 @@ export default function CategoryCard({
       {/* Content */}
       <div className="p-5">
         <h3 className="font-bold text-gray-900 text-lg mb-2 line-clamp-1 group-hover:text-red-600 transition-colors">
-          {category.name}
+          {category.category_name}
         </h3>
 
         {category.description && (

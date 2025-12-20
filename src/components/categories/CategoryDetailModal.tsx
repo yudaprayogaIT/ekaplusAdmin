@@ -1,7 +1,7 @@
 // src/components/categories/CategoryDetailModal.tsx
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   FaTimes,
@@ -15,6 +15,7 @@ import {
 } from "react-icons/fa";
 import Image from "next/image";
 import { Category } from "./CategoryList";
+import { getFileUrl } from "@/config/api";
 
 export default function CategoryDetailModal({
   open,
@@ -87,7 +88,9 @@ export default function CategoryDetailModal({
                 </div>
 
                 {/* Title */}
-                <h2 className="text-4xl font-bold mb-3">{category.name}</h2>
+                <h2 className="text-4xl font-bold mb-3">
+                  {category.category_name}
+                </h2>
 
                 {category.title && (
                   <p className="text-lg text-red-100 mb-2">{category.title}</p>
@@ -113,8 +116,9 @@ export default function CategoryDetailModal({
                       <Image
                         width={200}
                         height={200}
-                        src={category.icon}
+                        src={getFileUrl(category.icon) || ""}
                         alt={category.name}
+                        unoptimized
                         className="object-contain max-h-full drop-shadow-lg"
                       />
                     </div>
@@ -131,8 +135,9 @@ export default function CategoryDetailModal({
                       <Image
                         width={400}
                         height={300}
-                        src={category.image}
+                        src={getFileUrl(category.image) || ""}
                         alt={category.name}
+                        unoptimized
                         className="object-cover w-full h-full"
                       />
                     </div>

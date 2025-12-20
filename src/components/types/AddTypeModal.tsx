@@ -23,7 +23,8 @@ export default function AddTypeModal({
   initial?: ItemType | null;
 }) {
   const { token: authToken } = useAuth();
-  const [name, setName] = useState("");
+  // const [name, setName] = useState("");
+  const [type_name, setTypeName] = useState("");
   const [description, setDescription] = useState("");
   const [imageUuid, setImageUuid] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -34,7 +35,7 @@ export default function AddTypeModal({
   useEffect(() => {
     setError(null);
     if (initial) {
-      setName(initial.name ?? "");
+      setTypeName(initial.type_name ?? "");
       setDescription(initial.description ?? "");
       // Extract UUID from full URL if present
       const imageUrl = initial.image ?? "";
@@ -44,7 +45,7 @@ export default function AddTypeModal({
       setImagePreview(initial.image || null);
       setImageFile(null);
     } else {
-      setName("");
+      setTypeName("");
       setDescription("");
       setImageUuid("");
       setImagePreview(null);
@@ -103,13 +104,12 @@ export default function AddTypeModal({
 
       // Prepare FormData for API - kirim file langsung bersama data
       const formData = new FormData();
-      formData.append("name", name.trim());
-      formData.append("type_name", name.trim());
+      formData.append("name", type_name.trim());
+      formData.append("type_name", type_name.trim());
       formData.append("description", description.trim() || "");
       formData.append("status", "Draft");
       formData.append("docstatus", "0");
       formData.append("disabled", "0");
-
       // Jika ada file baru, kirim file nya
       // Jika tidak ada file baru tapi ada imageUuid, kirim UUID nya
       if (imageFile) {
@@ -240,8 +240,8 @@ export default function AddTypeModal({
                   Nama Tipe <span className="text-red-500">*</span>
                 </label>
                 <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  value={type_name}
+                  onChange={(e) => setTypeName(e.target.value)}
                   className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
                   placeholder="Contoh: Material Springbed, Furniture, dll"
                   required

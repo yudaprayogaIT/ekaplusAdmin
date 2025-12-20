@@ -44,7 +44,7 @@ export default function TypeCard({
                 width={96}
                 height={96}
                 src={type.image}
-                alt={type.name}
+                alt={type.type_name}
                 unoptimized
                 onError={() => setImageError(true)}
                 className="object-contain w-full h-full group-hover:scale-110 transition-transform duration-500"
@@ -59,7 +59,7 @@ export default function TypeCard({
             <div className="flex items-start justify-between gap-4 mb-3">
               <div className="flex-1">
                 <h3 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-red-600 transition-colors">
-                  {type.name}
+                  {type.type_name}
                 </h3>
                 <div className="flex items-center gap-2 mb-3">
                   <FaTag className="w-3.5 h-3.5 text-gray-400" />
@@ -128,7 +128,7 @@ export default function TypeCard({
               width={400}
               height={400}
               src={type.image}
-              alt={type.name}
+              alt={type.type_name}
               unoptimized
               onError={() => setImageError(true)}
               className="object-contain w-full h-full group-hover:scale-110 transition-transform duration-500"
@@ -158,7 +158,7 @@ export default function TypeCard({
       {/* Content */}
       <div className="p-5">
         <h3 className="font-bold text-gray-900 text-lg mb-2 line-clamp-1 group-hover:text-red-600 transition-colors">
-          {type.name}
+          {type.type_name}
         </h3>
 
         {type.description && (

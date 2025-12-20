@@ -6,7 +6,14 @@ import CategoryCard from "./CategoryCard";
 import AddCategoryModal from "./AddCategoryModal";
 import CategoryDetailModal from "./CategoryDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import { FaPlus, FaFilter, FaSearch, FaList, FaTh } from "react-icons/fa";
+import {
+  FaPlus,
+  FaFilter,
+  FaSearch,
+  FaList,
+  FaTh,
+  FaSortAmountDown,
+} from "react-icons/fa";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -101,6 +108,8 @@ type TypeAPIResponse = {
   meta: Record<string, unknown>;
 };
 
+type SortOption = "name-asc" | "name-desc" | "id-asc" | "id-desc";
+
 const SNAP_KEY = "ekatalog_categories_snapshot";
 const TYPES_SNAP_KEY = "ekatalog_types_snapshot";
 
@@ -113,6 +122,7 @@ export default function CategoryList() {
   const [selectedType, setSelectedType] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [sortBy, setSortBy] = useState<SortOption>("id-asc");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<Category | null>(null);
@@ -456,11 +466,27 @@ export default function CategoryList() {
     );
   }
 
+  // Sort categories
+  const sortedCategories = [...filteredCategories].sort((a, b) => {
+    switch (sortBy) {
+      case "name-asc":
+        return a.category_name.localeCompare(b.category_name);
+      case "name-desc":
+        return b.category_name.localeCompare(a.category_name);
+      case "id-asc":
+        return a.id - b.id;
+      case "id-desc":
+        return b.id - a.id;
+      default:
+        return 0;
+    }
+  });
+
   // Group by type for "All" view
   const groupedByType = types
     .map((type) => ({
       type,
-      items: filteredCategories.filter((c) => c.type.id === type.id),
+      items: sortedCategories.filter((c) => c.type.id === type.id),
     }))
     .filter((group) => group.items.length > 0);
 
@@ -488,10 +514,85 @@ export default function CategoryList() {
         </motion.button>
       </div>
 
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 mb-6">
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border-2 border-blue-200">
+          <div className="text-sm text-blue-700 font-medium mb-1">
+            Total Kategori
+          </div>
+          <div className="text-3xl font-bold text-blue-900">
+            {categories.length}
+          </div>
+        </div>
+        {types.map((type, index) => {
+          const count = categories.filter((c) => c.type.id === type.id).length;
+          const colors = [
+            {
+              from: "from-green-50",
+              to: "to-green-100",
+              border: "border-green-200",
+              text: "text-green-700",
+              textDark: "text-green-900",
+            },
+            {
+              from: "from-purple-50",
+              to: "to-purple-100",
+              border: "border-purple-200",
+              text: "text-purple-700",
+              textDark: "text-purple-900",
+            },
+            {
+              from: "from-orange-50",
+              to: "to-orange-100",
+              border: "border-orange-200",
+              text: "text-orange-700",
+              textDark: "text-orange-900",
+            },
+            {
+              from: "from-pink-50",
+              to: "to-pink-100",
+              border: "border-pink-200",
+              text: "text-pink-700",
+              textDark: "text-pink-900",
+            },
+            {
+              from: "from-indigo-50",
+              to: "to-indigo-100",
+              border: "border-indigo-200",
+              text: "text-indigo-700",
+              textDark: "text-indigo-900",
+            },
+            {
+              from: "from-teal-50",
+              to: "to-teal-100",
+              border: "border-teal-200",
+              text: "text-teal-700",
+              textDark: "text-teal-900",
+            },
+          ];
+          const color = colors[index % colors.length];
+          return (
+            <div
+              key={type.id}
+              className={`bg-gradient-to-br ${color.from} ${color.to} rounded-xl p-5 border-2 ${color.border}`}
+            >
+              <div
+                className={`text-sm ${color.text} font-medium mb-1 line-clamp-1`}
+              >
+                {type.name}
+              </div>
+              <div className={`text-3xl font-bold ${color.textDark}`}>
+                {count}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
       {/* Search & Filter */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 mb-6">
         <div className="flex flex-col gap-4">
-          {/* Search & View Toggle */}
+          {/* Search, Sort & View Toggle */}
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1 relative">
               <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -500,8 +601,23 @@ export default function CategoryList() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari kategori..."
-                className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                className="w-full pl-11 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
               />
+            </div>
+
+            {/* Sort Dropdown */}
+            <div className="relative">
+              <FaSortAmountDown className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortOption)}
+                className="pl-11 pr-10 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all font-medium text-gray-700 bg-white appearance-none cursor-pointer min-w-[200px]"
+              >
+                <option value="id-asc">ID: Terlama</option>
+                <option value="id-desc">ID: Terbaru</option>
+                <option value="name-asc">Nama: A-Z</option>
+                <option value="name-desc">Nama: Z-A</option>
+              </select>
             </div>
 
             {/* View Toggle */}
@@ -565,7 +681,7 @@ export default function CategoryList() {
       </div>
 
       {/* Categories Display */}
-      {filteredCategories.length === 0 ? (
+      {sortedCategories.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
           <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <FaSearch className="w-8 h-8 text-gray-400" />
@@ -587,7 +703,7 @@ export default function CategoryList() {
               {types.find((t) => t.id === selectedType)?.name}
             </h2>
             <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-              {filteredCategories.length} items
+              {sortedCategories.length} items
             </span>
           </div>
 
@@ -598,7 +714,7 @@ export default function CategoryList() {
                 : "space-y-4"
             }
           >
-            {filteredCategories.map((c) => (
+            {sortedCategories.map((c) => (
               <CategoryCard
                 key={c.id}
                 category={c}

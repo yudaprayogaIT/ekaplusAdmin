@@ -48,7 +48,7 @@ export default function AddCategoryModal({
   useEffect(() => {
     setError(null);
     if (initial) {
-      setName(initial.name ?? "");
+      setName(initial.category_name ?? "");
       setDescription(initial.description ?? "");
       setTitle(initial.title ?? "");
       setSubtitle(initial.subtitle ?? "");

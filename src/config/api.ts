@@ -5,7 +5,7 @@
  */
 export const API_CONFIG = {
   BASE_URL: "http://192.168.101.214:8000/api",
-  FILE_BASE_URL: "http://192.168.101.214:8000", // Base URL untuk files
+  FILE_BASE_URL: "http://192.168.101.214:8000",
 
   // Endpoints
   ENDPOINTS: {
@@ -15,7 +15,7 @@ export const API_CONFIG = {
     ME: "/auth/me",
 
     // File Upload
-    UPLOAD: "/upload", // Endpoint untuk upload file
+    UPLOAD: "/upload",
 
     // Resources
     BRANCH: "/resource/branch",

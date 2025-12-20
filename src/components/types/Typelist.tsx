@@ -6,7 +6,13 @@ import TypeCard from "./TypeCard";
 import AddTypeModal from "./AddTypeModal";
 import TypeDetailModal from "./TypeDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import { FaPlus, FaSearch, FaList, FaTh } from "react-icons/fa";
+import {
+  FaPlus,
+  FaSearch,
+  FaList,
+  FaTh,
+  FaSortAmountDown,
+} from "react-icons/fa";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -56,6 +62,8 @@ type TypeAPIResponse = {
   meta: Record<string, unknown>;
 };
 
+type SortOption = "name-asc" | "name-desc" | "id-asc" | "id-desc";
+
 const SNAP_KEY = "ekatalog_types_snapshot";
 
 export default function TypeList() {
@@ -65,6 +73,7 @@ export default function TypeList() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [sortBy, setSortBy] = useState<SortOption>("id-asc");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<ItemType | null>(null);
@@ -327,6 +336,22 @@ export default function TypeList() {
     );
   }
 
+  // Sort types
+  const sortedTypes = [...filteredTypes].sort((a, b) => {
+    switch (sortBy) {
+      case "name-asc":
+        return a.type_name.localeCompare(b.type_name);
+      case "name-desc":
+        return b.type_name.localeCompare(a.type_name);
+      case "id-asc":
+        return a.id - b.id;
+      case "id-desc":
+        return b.id - a.id;
+      default:
+        return 0;
+    }
+  });
+
   return (
     <div>
       {/* Header */}
@@ -351,7 +376,35 @@ export default function TypeList() {
         </motion.button>
       </div>
 
-      {/* Search & View Toggle */}
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border-2 border-blue-200">
+          <div className="text-sm text-blue-700 font-medium mb-1">
+            Total Tipe
+          </div>
+          <div className="text-3xl font-bold text-blue-900">
+            {types.length}
+          </div>
+        </div>
+        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-5 border-2 border-green-200">
+          <div className="text-sm text-green-700 font-medium mb-1">
+            Tipe Aktif
+          </div>
+          <div className="text-3xl font-bold text-green-900">
+            {types.filter((t) => t.disabled === 0).length}
+          </div>
+        </div>
+        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-5 border-2 border-purple-200">
+          <div className="text-sm text-purple-700 font-medium mb-1">
+            Dengan Gambar
+          </div>
+          <div className="text-3xl font-bold text-purple-900">
+            {types.filter((t) => t.image).length}
+          </div>
+        </div>
+      </div>
+
+      {/* Search, Sort & View Toggle */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 mb-6">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1 relative">
@@ -361,8 +414,23 @@ export default function TypeList() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Cari tipe item..."
-              className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+              className="w-full pl-11 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
             />
+          </div>
+
+          {/* Sort Dropdown */}
+          <div className="relative">
+            <FaSortAmountDown className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortOption)}
+              className="pl-11 pr-10 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all font-medium text-gray-700 bg-white appearance-none cursor-pointer min-w-[200px]"
+            >
+              <option value="id-asc">ID: Terlama</option>
+              <option value="id-desc">ID: Terbaru</option>
+              <option value="name-asc">Nama: A-Z</option>
+              <option value="name-desc">Nama: Z-A</option>
+            </select>
           </div>
 
           {/* View Toggle */}
@@ -392,7 +460,7 @@ export default function TypeList() {
       </div>
 
       {/* Types Display */}
-      {filteredTypes.length === 0 ? (
+      {sortedTypes.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
           <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <FaSearch className="w-8 h-8 text-gray-400" />
@@ -413,7 +481,7 @@ export default function TypeList() {
               Semua Tipe Item
             </h2>
             <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-              {filteredTypes.length} items
+              {sortedTypes.length} items
             </span>
           </div>
 
@@ -424,7 +492,7 @@ export default function TypeList() {
                 : "space-y-4"
             }
           >
-            {filteredTypes.map((t) => (
+            {sortedTypes.map((t) => (
               <TypeCard
                 key={t.id}
                 type={t}

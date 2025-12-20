@@ -84,7 +84,7 @@ export default function TypeDetailModal({
                 </div>
 
                 {/* Title */}
-                <h2 className="text-4xl font-bold mb-3">{type.name}</h2>
+                <h2 className="text-4xl font-bold mb-3">{type.type_name}</h2>
 
                 {type.description && (
                   <p className="text-lg text-red-100">{type.description}</p>
@@ -105,7 +105,7 @@ export default function TypeDetailModal({
                       width={400}
                       height={300}
                       src={type.image}
-                      alt={type.name}
+                      alt={type.type_name}
                       unoptimized
                       className="object-contain max-h-64 drop-shadow-lg"
                     />
