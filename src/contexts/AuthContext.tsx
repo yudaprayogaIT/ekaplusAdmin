@@ -304,13 +304,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [dataLoaded, restoreSession]); // DISABLED: removed roles, rolePermissions
 
   // Login with email/username + password via API
+  // TEMPORARY: Hardcoded login for testing (admin/admin123)
   async function login(
     identifier: string,
     password: string
   ): Promise<LoginResult> {
     try {
-      // console.log("🔐 Attempting login...");
+      // HARDCODED LOGIN FOR TESTING
+      // Check if credentials match
+      if (identifier === "admin" && password === "admin123") {
+        // Create mock user data
+        const authToken = "mock-token-for-testing";
+        const userData: User = {
+          id: "1",
+          first_name: "Admin",
+          last_name: "User",
+          full_name: "Admin User",
+          username: "admin",
+          email: "admin@example.com",
+          phone: "08123456789",
+          is_email_verified: true,
+          is_phone_verified: true,
+          gender: "male",
+          date_of_birth: "1990-01-01",
+          birth_place: "Jakarta",
+          profile_pic: null,
+          profile_bg_color: "#3B82F6",
+          role_id: "1",
+          role: "administrator",
+          branch_id: null,
+          status: "active",
+          workflow_state: null,
+          is_system: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
 
+        // Save token
+        setToken(authToken);
+        localStorage.setItem(TOKEN_KEY, authToken);
+
+        // Set user data
+        setCurrentUser(userData);
+        setCurrentRole(null);
+        setPermissions([]);
+
+        // Save session
+        localStorage.setItem(AUTH_KEY, userData.id);
+        localStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
+
+        console.log("✅ Login successful (MOCK MODE)");
+        return { success: true };
+      }
+
+      // Invalid credentials
+      return {
+        success: false,
+        message: "Invalid username or password. Use admin/admin123 for testing.",
+      };
+
+      // ORIGINAL API LOGIN CODE (COMMENTED OUT FOR TESTING)
+      /*
       const response = await fetch(`${API_BASE_URL}/user/login`, {
         method: "POST",
         headers: {
@@ -326,7 +380,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const errorData = (await response
           .json()
           .catch(() => ({}))) as ApiErrorResponse;
-        // console.log("❌ Login failed:", errorData.message);
         return {
           success: false,
           message:
@@ -336,23 +389,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const responseData = (await response.json()) as ApiLoginResponse;
-      // console.log("📦 Login API Response:", responseData);
 
-      // Check response structure based on your API
       if (responseData.status !== "success" || !responseData.data) {
-        // console.log("❌ Invalid response structure");
         return {
           success: false,
           message: responseData.message || "Login gagal",
         };
       }
 
-      // Extract token and user from data object
       const authToken = responseData.data.token;
       const apiUserData = responseData.data.user;
 
       if (!authToken) {
-        console.log("❌ Token not found in response");
         return {
           success: false,
           message: "Token tidak ditemukan dalam response",
@@ -360,42 +408,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!apiUserData) {
-        console.log("❌ User data not found in response");
         return {
           success: false,
           message: "Data user tidak ditemukan dalam response",
         };
       }
 
-      // Save token
       setToken(authToken);
       localStorage.setItem(TOKEN_KEY, authToken);
-      // console.log("💾 Token saved to localStorage");
 
-      // Map API user data to internal User type
       const userData = mapApiUserToUser(apiUserData);
 
-      // DISABLED: Find role and permissions (migrasi ke SQL)
-      // const role = roles.find(
-      //   (r) => r.id === userData.role_id || r.name === userData.role
-      // );
-
-      // const rp = rolePermissions.find(
-      //   (r) => r.role_id === userData.role_id || r.role_name === userData.role
-      // );
-      // const userPermissions = rp?.permissions || [];
-
       setCurrentUser(userData);
-      setCurrentRole(null); // No role checking for now
-      setPermissions([]); // No permissions for now
+      setCurrentRole(null);
+      setPermissions([]);
 
-      // Save session - Save both user ID and complete user data
       localStorage.setItem(AUTH_KEY, userData.id);
       localStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
-      // console.log("💾 User data saved to localStorage");
-      // console.log("✅ Login successful, session saved");
 
       return { success: true };
+      */
     } catch (error) {
       console.error("❌ Login error:", error);
       return {
