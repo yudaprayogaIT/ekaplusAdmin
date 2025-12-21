@@ -656,12 +656,9 @@ export default function CategoryList() {
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
-              Semua ({categories.length})
+              Semua
             </button>
             {types.map((type) => {
-              const count = categories.filter(
-                (c) => c.type.id === type.id
-              ).length;
               return (
                 <button
                   key={type.id}
@@ -672,7 +669,7 @@ export default function CategoryList() {
                       : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                   }`}
                 >
-                  {type.name} ({count})
+                  {type.name}
                 </button>
               );
             })}
