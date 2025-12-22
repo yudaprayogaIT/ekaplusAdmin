@@ -22,7 +22,11 @@ type LoginFormProps = {
   onSuccess?: () => void;
 };
 
-export default function LoginForm({ open, onClose, onSuccess }: LoginFormProps) {
+export default function LoginForm({
+  open,
+  onClose,
+  onSuccess,
+}: LoginFormProps) {
   const { login } = useAuth();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -162,18 +166,22 @@ export default function LoginForm({ open, onClose, onSuccess }: LoginFormProps) 
 
             {/* Username/Phone Field */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Username atau Nomor Telepon
+              <label
+                htmlFor="user"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
+                Email, Username atau Nomor Telepon
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <FaUser className="w-5 h-5 text-gray-400" />
                 </div>
                 <input
+                  id="user"
                   type="text"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="contoh: superadmin atau 6281000000001"
+                  placeholder="Masukkan email, username atau nomor telepon"
                   disabled={loading}
                   autoFocus
                   className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:ring-2 focus:ring-red-100 outline-none transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
@@ -183,7 +191,10 @@ export default function LoginForm({ open, onClose, onSuccess }: LoginFormProps) 
 
             {/* Password Field */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Password
               </label>
               <div className="relative">
@@ -191,6 +202,7 @@ export default function LoginForm({ open, onClose, onSuccess }: LoginFormProps) 
                   <FaLock className="w-5 h-5 text-gray-400" />
                 </div>
                 <input
+                  id="password"
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -233,33 +245,6 @@ export default function LoginForm({ open, onClose, onSuccess }: LoginFormProps) 
                 </>
               )}
             </motion.button>
-
-            {/* Demo accounts */}
-            <div className="mt-6 p-4 bg-gray-50 rounded-xl border border-gray-100">
-              <p className="text-xs text-gray-500 font-medium mb-3">
-                Akun Demo (password: admin123):
-              </p>
-              <div className="space-y-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Administrator:</span>
-                  <code className="px-2 py-1 bg-amber-100 text-amber-700 rounded font-mono">
-                    superadmin
-                  </code>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Admin Pusat:</span>
-                  <code className="px-2 py-1 bg-purple-100 text-purple-700 rounded font-mono">
-                    dewilestari
-                  </code>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Admin Cabang:</span>
-                  <code className="px-2 py-1 bg-green-100 text-green-700 rounded font-mono">
-                    budisantoso
-                  </code>
-                </div>
-              </div>
-            </div>
           </form>
         </motion.div>
       </motion.div>

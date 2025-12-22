@@ -4,29 +4,32 @@
  * Change the base URL here when switching to production or different server
  */
 export const API_CONFIG = {
-  BASE_URL: "http://192.168.101.214:8000/api",
-  FILE_BASE_URL: "http://192.168.101.214:8000",
+  // BASE_URL: "http://192.168.101.214:8000",
+  BASE_URL: "https://estrella-subgeniculate-dollie.ngrok-free.dev",
+  // FILE_BASE_URL: "http://192.168.101.214:8000",
+  FILE_BASE_URL: "https://estrella-subgeniculate-dollie.ngrok-free.dev",
 
   // Endpoints
   ENDPOINTS: {
     // Authentication
-    LOGIN: "/auth/login",
-    LOGOUT: "/auth/logout",
+    LOGIN: "/api/auth/login",
+    LOGOUT: "/api/auth/logout",
     ME: "/auth/me",
 
     // File Upload
-    UPLOAD: "/upload",
+    UPLOAD: "/api/upload",
 
     // Resources
-    BRANCH: "/resource/branch",
-    TYPE: "/resource/ekatalog_type",
-    CATEGORY: "/resource/ekatalog_category",
-    ITEM: "/resource/item",
-    ROLE: "/resource/role",
+    BRANCH: "/api/resource/branch",
+    TYPE: "/api/resource/ekatalog_type",
+    CATEGORY: "/api/resource/ekatalog_category",
+    ITEM: "/api/resource/item",
+    PRODUCT: "/api/resource/ekatalog_product",
+    ROLE: "/api/resource/role",
     PERMISSION: "/resource/permission",
-    USER: "/resource/user",
+    USER: "/api/resource/user",
     EMAIL: "/resource/email",
-    WHATSAPP: "/resource/whatsapp",
+    WHATSAPP: "/api/resource/whatsapp",
   },
 } as const;
 
@@ -76,6 +79,7 @@ export function getAuthHeaders(token: string): HeadersInit {
 export function getAuthHeadersFormData(token: string): HeadersInit {
   return {
     Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
   };
 }
 

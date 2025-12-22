@@ -11,19 +11,41 @@ import LoadMoreButton from "@/components/ui/LoadMoreButton";
 import PerPageSelector from "@/components/ui/PerPageSelector";
 import { FaPlus, FaFilter, FaSearch, FaList, FaTh, FaFire, FaSortAmountDown, FaChevronDown } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
-import type { Item, ItemVariant, Product, ProductFormData, Category } from "@/types";
+import type { Item, Product, ProductFormData, Category } from "@/types";
+import { useAuth } from "@/contexts/AuthContext";
+import { API_CONFIG, getQueryUrl, getAuthHeaders, getResourceUrl } from "@/config/api";
 
 type SortOption = 'name-asc' | 'name-desc' | 'category' | 'variants-most' | 'variants-least' | 'newest' | 'oldest';
 type PaginationMode = 'pagination' | 'loadmore' | 'all';
 
-const PRODUCTS_DATA_URL = "/data/products.json";
-const VARIANTS_DATA_URL = "/data/variants.json";
-const ITEMS_DATA_URL = "/data/items.json";
-const CATEGORIES_DATA_URL = "/data/itemCategories.json";
 const SNAP_KEY = "ekatalog_products_snapshot";
-const VARIANTS_SNAP_KEY = "ekatalog_variants_snapshot";
+
+// API Response Types
+interface ItemApiResponse {
+  id: number;
+  item_code: string;
+  item_name: string;
+  item_desc?: string;
+  item_category: string;
+  item_group: string;
+  ekatalog_type: string;
+  item_color: string;
+  image?: string;
+  disabled: number;
+}
+
+interface ProductApiResponse {
+  id: number;
+  product_name: string;
+  item_category: number;
+  hot_deals: number;
+  disabled: number;
+  docstatus: number;
+  status: string;
+}
 
 export default function ProductList() {
+  const { token } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [availableItems, setAvailableItems] = useState<Item[]>([]);
@@ -54,45 +76,67 @@ export default function ProductList() {
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
 
-  // Helper function to load and merge data
+  // Helper function to load and merge data from API
   async function loadAllData() {
-    // Load categories
-    const categoriesRes = await fetch(CATEGORIES_DATA_URL, { cache: "no-store" });
+    if (!token) return { categoriesData: [], itemsData: [], productsWithVariants: [] };
+
+    const headers = getAuthHeaders(token);
+
+    // Load categories from API
+    const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, { fields: ["*"] });
+    const categoriesRes = await fetch(categoriesUrl, { method: "GET", cache: "no-store", headers });
     let categoriesData: Category[] = [];
     if (categoriesRes.ok) {
-      categoriesData = await categoriesRes.json();
+      const response = await categoriesRes.json();
+      categoriesData = response.data.map((cat: { id: number; category_name: string }) => ({
+        id: cat.id,
+        name: cat.category_name,
+      }));
     }
 
-    // Load items
-    const itemsRes = await fetch(ITEMS_DATA_URL, { cache: "no-store" });
+    // Load items from API
+    const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, { fields: ["*"] });
+    const itemsRes = await fetch(itemsUrl, { method: "GET", cache: "no-store", headers });
     let itemsData: Item[] = [];
     if (itemsRes.ok) {
-      itemsData = await itemsRes.json();
+      const response = await itemsRes.json();
+      itemsData = response.data.map((item: ItemApiResponse) => ({
+        id: item.id,
+        code: item.item_code,
+        name: item.item_name,
+        description: item.item_desc || "",
+        category: item.item_category,
+        group: item.item_group,
+        type: item.ekatalog_type,
+        color: item.item_color,
+        image: item.image,
+        disabled: item.disabled,
+      }));
     }
 
-    // Load variants
-    const variantsRes = await fetch(VARIANTS_DATA_URL, { cache: "no-store" });
-    let variantsData: ItemVariant[] = [];
-    if (variantsRes.ok) {
-      variantsData = await variantsRes.json();
-      localStorage.setItem(VARIANTS_SNAP_KEY, JSON.stringify(variantsData));
-    }
-
-    // Load products
-    const productsRes = await fetch(PRODUCTS_DATA_URL, { cache: "no-store" });
-    let productsData: Omit<Product, 'variants'>[] = [];
+    // Load products from API
+    const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, { fields: ["*"] });
+    const productsRes = await fetch(productsUrl, { method: "GET", cache: "no-store", headers });
+    let productsWithVariants: Product[] = [];
     if (productsRes.ok) {
-      productsData = await productsRes.json();
-    }
+      const response = await productsRes.json();
+      productsWithVariants = response.data.map((prod: ProductApiResponse) => {
+        // Find the category object for this product
+        const category = categoriesData.find(c => c.id === prod.item_category) || {
+          id: prod.item_category,
+          name: `Category ${prod.item_category}`,
+        };
 
-    // Map products with variants
-    const productsWithVariants: Product[] = productsData.map(product => {
-      const productVariants = variantsData.filter(v => v.productid === product.id);
-      return {
-        ...product,
-        variants: productVariants
-      };
-    });
+        return {
+          id: prod.id,
+          name: prod.product_name,
+          itemCategory: category,
+          disabled: prod.disabled,
+          isHotDeals: Boolean(prod.hot_deals),
+          variants: [], // Variants will be loaded separately if needed
+        };
+      });
+    }
 
     return { categoriesData, itemsData, productsWithVariants };
   }
@@ -161,17 +205,25 @@ export default function ProductList() {
     setConfirmTitle("Hapus Produk");
     setConfirmDesc(`Yakin ingin menghapus produk "${p.name}"?`);
     actionRef.current = async () => {
-      const next = products.filter((x) => x.id !== p.id);
-      setProducts(next);
-      saveSnapshot(next);
-      
-      // Also remove variants for this product
-      const variantsRaw = localStorage.getItem(VARIANTS_SNAP_KEY);
-      if (variantsRaw) {
-        const variants: ItemVariant[] = JSON.parse(variantsRaw);
-        const filteredVariants = variants.filter(v => v.productid !== p.id);
-        localStorage.setItem(VARIANTS_SNAP_KEY, JSON.stringify(filteredVariants));
-        window.dispatchEvent(new Event("ekatalog:variants_update"));
+      if (!token) return;
+
+      try {
+        const headers = getAuthHeaders(token);
+        const url = getResourceUrl(API_CONFIG.ENDPOINTS.PRODUCT, p.id);
+        const response = await fetch(url, { method: "DELETE", headers });
+
+        if (response.ok) {
+          // Remove from local state
+          const next = products.filter((x) => x.id !== p.id);
+          setProducts(next);
+          saveSnapshot(next);
+        } else {
+          const errorData = await response.json();
+          alert(`Gagal menghapus produk: ${errorData.message || "Unknown error"}`);
+        }
+      } catch (error) {
+        console.error("Error deleting product:", error);
+        alert("Gagal menghapus produk. Silakan coba lagi.");
       }
     };
     setConfirmOpen(true);

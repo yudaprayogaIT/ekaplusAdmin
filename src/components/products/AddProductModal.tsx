@@ -17,10 +17,9 @@ import {
   FaCheck,
 } from "react-icons/fa";
 import Image from "next/image";
-import type { Item, Category, ProductFormData, ItemVariant, Product } from "@/types";
-
-const SNAP_KEY = "ekatalog_products_snapshot";
-const VARIANTS_SNAP_KEY = "ekatalog_variants_snapshot";
+import type { Item, Category, ProductFormData } from "@/types";
+import { useAuth } from "@/contexts/AuthContext";
+import { API_CONFIG, getQueryUrl, getAuthHeaders, getResourceUrl, getAuthHeadersFormData } from "@/config/api";
 
 // Props interface
 interface AddProductModalProps {
@@ -222,6 +221,7 @@ export default function AddProductModal({
   categories,
   availableItems,
 }: AddProductModalProps) {
+  const { token } = useAuth();
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [isHotDeals, setIsHotDeals] = useState(false);
@@ -253,69 +253,43 @@ export default function AddProductModal({
   };
 
   const handleSave = async () => {
-    if (!name.trim() || !categoryId) return;
+    if (!name.trim() || !categoryId || !token) return;
 
     setSaving(true);
 
     try {
-      // Load existing products
-      const productsRaw = localStorage.getItem(SNAP_KEY);
-      const existingProducts: Product[] = productsRaw ? JSON.parse(productsRaw) : [];
+      const formData = new FormData();
+      formData.append("product_name", name.trim());
+      formData.append("item_category", String(categoryId));
+      formData.append("hot_deals", isHotDeals ? "1" : "0");
+      formData.append("disabled", String(initial?.disabled ?? 0));
+      formData.append("docstatus", "0");
+      formData.append("status", "Draft");
 
-      // Load existing variants
-      const variantsRaw = localStorage.getItem(VARIANTS_SNAP_KEY);
-      const existingVariants: ItemVariant[] = variantsRaw ? JSON.parse(variantsRaw) : [];
+      // Add variants as array of item IDs
+      selectedVariants.forEach((item, index) => {
+        formData.append(`variants[${index}]`, String(item.id));
+      });
 
-      // Generate new product ID
-      const productId = initial?.id || Math.max(0, ...existingProducts.map((p) => p.id)) + 1;
+      const headers = getAuthHeadersFormData(token);
+      const method = initial ? "PUT" : "POST";
+      const url = initial
+        ? getResourceUrl(API_CONFIG.ENDPOINTS.PRODUCT, initial.id)
+        : getResourceUrl(API_CONFIG.ENDPOINTS.PRODUCT);
 
-      // Remove old variants for this product if editing
-      let updatedVariants = existingVariants.filter((v) => v.productid !== productId);
+      const response = await fetch(url, { method, headers, body: formData });
 
-      // Create new ItemVariant[] from selected Item[]
-      const maxVariantId = Math.max(0, ...updatedVariants.map((v) => v.id));
-      const newVariants: ItemVariant[] = selectedVariants.map((item, index) => ({
-        id: maxVariantId + index + 1,
-        item: item,
-        productid: productId,
-      }));
-
-      // Add new variants
-      updatedVariants = [...updatedVariants, ...newVariants];
-
-      // Create/update product
-      const newProduct: Product = {
-        id: productId,
-        name: name.trim(),
-        itemCategory: selectedCategory!,
-        variants: newVariants,
-        disabled: initial?.disabled ?? 0,
-        isHotDeals: isHotDeals,
-      };
-
-      // Update products list
-      let updatedProducts: Product[];
-      if (initial?.id) {
-        // Edit existing
-        updatedProducts = existingProducts.map((p) =>
-          p.id === initial.id ? newProduct : p
-        );
+      if (response.ok) {
+        // Dispatch event to trigger reload
+        window.dispatchEvent(new Event("ekatalog:products_update"));
+        onClose();
       } else {
-        // Add new
-        updatedProducts = [...existingProducts, newProduct];
+        const errorData = await response.json();
+        alert(`Gagal menyimpan produk: ${errorData.message || "Unknown error"}`);
       }
-
-      // Save to localStorage
-      localStorage.setItem(SNAP_KEY, JSON.stringify(updatedProducts));
-      localStorage.setItem(VARIANTS_SNAP_KEY, JSON.stringify(updatedVariants));
-
-      // Dispatch events
-      window.dispatchEvent(new Event("ekatalog:products_update"));
-      window.dispatchEvent(new Event("ekatalog:variants_update"));
-
-      onClose();
     } catch (error) {
       console.error("Error saving product:", error);
+      alert("Gagal menyimpan produk. Silakan coba lagi.");
     } finally {
       setSaving(false);
     }
