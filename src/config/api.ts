@@ -21,6 +21,7 @@ export const API_CONFIG = {
     BRANCH: "/resource/branch",
     TYPE: "/resource/ekatalog_type",
     CATEGORY: "/resource/ekatalog_category",
+    ITEM: "/resource/item",
     ROLE: "/resource/role",
     PERMISSION: "/resource/permission",
     USER: "/resource/user",

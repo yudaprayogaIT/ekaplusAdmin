@@ -11,74 +11,43 @@ import {
   FaTag,
 } from "react-icons/fa";
 import Image from "next/image";
+import { Item } from "./ItemList";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  getQueryUrl,
+  getResourceUrl,
+  getAuthHeaders,
+  getAuthHeadersFormData,
+  API_CONFIG,
+} from "@/config/api";
 
-type Item = {
-  id?: number;
-  code: string;
-  name: string;
-  uom: string;
-  group: string;
-  category: {
-    id: number;
-    name: string;
-  };
-  generator_item: string;
-  image: string;
-  description: string;
-  disabled: number;
-  panjang?: string;
-  tinggi?: string;
-  lebar?: string;
-  diameter?: string;
-  branches: Array<{
-    id: number;
-    name: string;
-  }>;
-};
-
-type Category = {
-  id: number;
-  name: string;
-};
-
-const SNAP_KEY = "ekatalog_items_snapshot";
 const UOM_OPTIONS = ["PCS", "MTR", "SET", "PSG", "LBR", "UNIT", "BOX"];
 
-// Mock branches - ideally load from API/localStorage
-const AVAILABLE_BRANCHES = [
-  { id: 1, name: "Ekatunggal Tunas Medan" },
-  { id: 2, name: "Ekatunggal Tunas Melaju" },
-  { id: 3, name: "Ekatunggal Tunas Musi" },
-  { id: 4, name: "Ekatunggal Tunas Mandiri" },
-  { id: 5, name: "Ekatunggal Tri Mandiri" },
-  { id: 6, name: "Ekatunggal Tumbuh Mandiri" },
-  { id: 7, name: "Ekatunggal" },
-  { id: 8, name: "Ekatunggal Tunas Malindo" },
-  { id: 9, name: "Ekatunggal Samarinda Mahakam" },
-  { id: 10, name: "Ekatunggal Timur Manado" },
-  { id: 11, name: "Ekatunggal Timur Makassar" },
-  { id: 12, name: "Ekatunggal Timur Manisa" },
-  { id: 13, name: "Ekatunggal Timur Maroso" },
-];
+type Branch = {
+  id: number;
+  name: string;
+  branch_name: string;
+};
 
 export default function AddItemModal({
   open,
   onClose,
   initial,
-  categories,
 }: {
   open: boolean;
   onClose: () => void;
   initial?: Item | null;
-  categories: Category[];
 }) {
+  const { token } = useAuth();
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [loadingBranches, setLoadingBranches] = useState(true);
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [uom, setUom] = useState("PCS");
   const [group, setGroup] = useState("");
-  const [categoryId, setCategoryId] = useState<number>(categories[0]?.id || 1);
+  const [category, setCategory] = useState("");
   const [generatorItem, setGeneratorItem] = useState("");
-  const [imagePath, setImagePath] = useState("");
+  const [imageUuid, setImageUuid] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [description, setDescription] = useState("");
@@ -90,16 +59,61 @@ export default function AddItemModal({
   const [selectedBranches, setSelectedBranches] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
 
+  // Load branches from API
+  useEffect(() => {
+    if (!open || !token) return;
+
+    async function loadBranches() {
+      if (!token) return; // Guard for async function
+      setLoadingBranches(true);
+      try {
+        const DATA_URL = getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH, {
+          fields: ["*"],
+        });
+        const headers = getAuthHeaders(token);
+
+        const res = await fetch(DATA_URL, {
+          method: "GET",
+          cache: "no-store",
+          headers,
+        });
+
+        if (res.ok) {
+          const response = await res.json();
+          const mappedBranches: Branch[] = response.data.map((b: { id: number; branch_name: string }) => ({
+            id: b.id,
+            name: b.branch_name,
+            branch_name: b.branch_name,
+          }));
+          setBranches(mappedBranches);
+        }
+      } catch (error) {
+        console.error("Failed to load branches:", error);
+      } finally {
+        setLoadingBranches(false);
+      }
+    }
+
+    loadBranches();
+  }, [open, token]);
+
   useEffect(() => {
     if (initial) {
       setCode(initial.code ?? "");
       setName(initial.name ?? "");
       setUom(initial.uom ?? "PCS");
       setGroup(initial.group ?? "");
-      setCategoryId(initial.category?.id ?? (categories[0]?.id || 1));
+      setCategory(initial.category ?? "");
       setGeneratorItem(initial.generator_item ?? "");
-      setImagePath(initial.image ?? "");
-      setImagePreview(initial.image ?? null);
+
+      // Extract UUID from full URL if present for image
+      const imageUrl = initial.image ?? "";
+      const imageUuidMatch = imageUrl.match(/\/files\/(.+)$/);
+      const imageUuidExtracted = imageUuidMatch ? imageUuidMatch[1] : imageUrl;
+      setImageUuid(imageUuidExtracted);
+      setImagePreview(initial.image || null);
+      setImageFile(null);
+
       setDescription(initial.description ?? "");
       setDisabled(initial.disabled ?? 0);
       setPanjang(initial.panjang ?? "");
@@ -107,16 +121,16 @@ export default function AddItemModal({
       setLebar(initial.lebar ?? "");
       setDiameter(initial.diameter ?? "");
       setSelectedBranches(initial.branches?.map((b) => b.id) ?? []);
-      setImageFile(null);
     } else {
       setCode("");
       setName("");
       setUom("PCS");
       setGroup("");
-      setCategoryId(categories[0]?.id || 1);
+      setCategory("");
       setGeneratorItem("Inject by master");
-      setImagePath("");
+      setImageUuid("");
       setImagePreview(null);
+      setImageFile(null);
       setDescription("");
       setDisabled(0);
       setPanjang("");
@@ -124,9 +138,8 @@ export default function AddItemModal({
       setLebar("");
       setDiameter("");
       setSelectedBranches([]);
-      setImageFile(null);
     }
-  }, [initial, open, categories]);
+  }, [initial, open]);
 
   // Image file preview
   useEffect(() => {
@@ -134,7 +147,6 @@ export default function AddItemModal({
     const fr = new FileReader();
     fr.onload = () => {
       setImagePreview(String(fr.result));
-      setImagePath(String(fr.result));
     };
     fr.readAsDataURL(imageFile);
   }, [imageFile]);
@@ -148,7 +160,7 @@ export default function AddItemModal({
   }
 
   function selectAllBranches() {
-    setSelectedBranches(AVAILABLE_BRANCHES.map((b) => b.id));
+    setSelectedBranches(branches.map((b) => b.id));
   }
 
   function deselectAllBranches() {
@@ -157,63 +169,87 @@ export default function AddItemModal({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!token) {
+      alert("Not authenticated");
+      return;
+    }
     setSaving(true);
 
-    const selectedCategory = categories.find((c) => c.id === categoryId);
-    const branches = AVAILABLE_BRANCHES.filter((b) =>
-      selectedBranches.includes(b.id)
-    );
-
-    const payload: Omit<Item, "id"> = {
-      code: code.trim(),
-      name: name.trim(),
-      uom,
-      group: group.trim(),
-      category: {
-        id: categoryId,
-        name: selectedCategory?.name || "",
-      },
-      generator_item: generatorItem.trim() || "Inject by master",
-      image: imagePath || "",
-      description: description.trim(),
-      disabled,
-      panjang: panjang.trim(),
-      tinggi: tinggi.trim(),
-      lebar: lebar.trim(),
-      diameter: diameter.trim(),
-      branches,
-    };
-
     try {
-      const raw = localStorage.getItem(SNAP_KEY);
-      let list: Item[] = raw ? JSON.parse(raw) : [];
+      // Create FormData for file upload
+      const formData = new FormData();
+      formData.append("item_code", code.trim());
+      formData.append("item_name", name.trim());
+      formData.append("generator_item", generatorItem.trim() || "Inject by master");
+      formData.append("uom", uom);
+      formData.append("item_group", group.trim());
+      formData.append("item_category", category.trim());
 
-      if (initial && initial.id) {
-        list = list.map((item) =>
-          item.id === initial.id
-            ? { ...item, ...payload, id: initial.id }
-            : item
-        );
-      } else {
-        const maxId = list.reduce(
-          (m: number, it: Item) => Math.max(m, Number(it.id) || 0),
-          0
-        );
-        const newItem: Item = {
-          id: maxId + 1,
-          ...payload,
-        };
-        list.push(newItem);
+      // Format branches untuk FormData: branches[0][branch]=56, branches[1][branch]=58, etc
+      selectedBranches.forEach((branchId, index) => {
+        formData.append(`branches[${index}][branch]`, String(branchId));
+      });
+
+      formData.append("status", "Draft");
+      formData.append("docstatus", "0");
+      formData.append("disabled", String(disabled));
+
+      // Optional fields
+      if (description.trim()) {
+        formData.append("item_desc", description.trim());
+      }
+      if (panjang.trim()) {
+        formData.append("panjang", panjang.trim());
+      }
+      if (lebar.trim()) {
+        formData.append("lebar", lebar.trim());
+      }
+      if (tinggi.trim()) {
+        formData.append("tinggi", tinggi.trim());
+      }
+      if (diameter.trim()) {
+        formData.append("diameter", diameter.trim());
       }
 
-      localStorage.setItem(SNAP_KEY, JSON.stringify(list));
+      // If new image file, send the file object
+      // If no new file but has UUID, send the UUID string
+      if (imageFile) {
+        formData.append("image", imageFile);
+      } else if (imageUuid) {
+        formData.append("image", imageUuid.trim());
+      }
+
+      const headers = getAuthHeadersFormData(token);
+      const method = initial ? "PUT" : "POST";
+      const url = initial
+        ? getResourceUrl(API_CONFIG.ENDPOINTS.ITEM, initial.id)
+        : getResourceUrl(API_CONFIG.ENDPOINTS.ITEM);
+
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message || `Failed to save item (${response.status})`
+        );
+      }
+
+      console.log("Item saved successfully");
+
+      // Trigger reload
       window.dispatchEvent(new Event("ekatalog:items_update"));
+      setSaving(false);
+      onClose();
     } catch (error) {
       console.error("Failed to save item:", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      alert(`Gagal menyimpan item: ${errorMessage}`);
+      setSaving(false);
     }
-
-    setSaving(false);
-    onClose();
   }
 
   return (
@@ -322,17 +358,13 @@ export default function AddItemModal({
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Kategori <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    value={categoryId}
-                    onChange={(e) => setCategoryId(Number(e.target.value))}
+                  <input
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
-                  >
-                    {categories.map((cat) => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Masukkan kategori"
+                    required
+                  />
                 </div>
 
                 <div>
@@ -451,19 +483,10 @@ export default function AddItemModal({
                         width={1000}
                         height={1000}
                         className="object-contain w-full h-full p-3"
+                        unoptimized
                       />
                     </div>
                   )}
-
-                  <input
-                    value={imagePath}
-                    onChange={(e) => {
-                      setImagePath(e.target.value);
-                      setImagePreview(e.target.value || null);
-                    }}
-                    placeholder="atau path: /images/items/..."
-                    className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all text-sm"
-                  />
                 </div>
               </div>
 
@@ -477,40 +500,53 @@ export default function AddItemModal({
                     <button
                       type="button"
                       onClick={selectAllBranches}
-                      className="text-xs px-3 py-1 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors font-medium"
+                      disabled={loadingBranches}
+                      className="text-xs px-3 py-1 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors font-medium disabled:opacity-50"
                     >
                       Pilih Semua
                     </button>
                     <button
                       type="button"
                       onClick={deselectAllBranches}
-                      className="text-xs px-3 py-1 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                      disabled={loadingBranches}
+                      className="text-xs px-3 py-1 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium disabled:opacity-50"
                     >
                       Hapus Semua
                     </button>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-64 overflow-y-auto p-4 bg-gray-50 rounded-xl border-2 border-gray-200">
-                  {AVAILABLE_BRANCHES.map((branch) => (
-                    <label
-                      key={branch.id}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all ${
-                        selectedBranches.includes(branch.id)
-                          ? "bg-green-100 border-2 border-green-500"
-                          : "bg-white border-2 border-gray-200 hover:border-gray-300"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedBranches.includes(branch.id)}
-                        onChange={() => toggleBranch(branch.id)}
-                        className="w-4 h-4 text-red-600 rounded focus:ring-red-500"
-                      />
-                      <span className="text-xs font-medium text-gray-700">
-                        {branch.name}
-                      </span>
-                    </label>
-                  ))}
+                  {loadingBranches ? (
+                    <div className="col-span-full text-center py-8">
+                      <div className="w-8 h-8 border-2 border-red-200 border-t-red-500 rounded-full animate-spin mx-auto mb-2"></div>
+                      <p className="text-xs text-gray-500">Memuat cabang...</p>
+                    </div>
+                  ) : branches.length === 0 ? (
+                    <div className="col-span-full text-center py-8">
+                      <p className="text-xs text-gray-500">Tidak ada cabang tersedia</p>
+                    </div>
+                  ) : (
+                    branches.map((branch) => (
+                      <label
+                        key={branch.id}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all ${
+                          selectedBranches.includes(branch.id)
+                            ? "bg-green-100 border-2 border-green-500"
+                            : "bg-white border-2 border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedBranches.includes(branch.id)}
+                          onChange={() => toggleBranch(branch.id)}
+                          className="w-4 h-4 text-red-600 rounded focus:ring-red-500"
+                        />
+                        <span className="text-xs font-medium text-gray-700">
+                          {branch.name}
+                        </span>
+                      </label>
+                    ))
+                  )}
                 </div>
                 <p className="text-xs text-gray-500 mt-2">
                   {selectedBranches.length} cabang dipilih

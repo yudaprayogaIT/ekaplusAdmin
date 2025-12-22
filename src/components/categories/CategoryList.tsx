@@ -35,7 +35,7 @@ export type Category = {
   description?: string;
   title?: string;
   subtitle?: string;
-  item_type: number; // Type ID from API
+  item_type: number;
   type: {
     id: number;
     name: string;
