@@ -13,6 +13,8 @@ import {
   FaList,
   FaTh,
   FaSortAmountDown,
+  FaLock,
+  FaTags,
 } from "react-icons/fa";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -417,6 +419,30 @@ export default function CategoryList() {
   function confirmCancel() {
     actionRef.current = null;
     setConfirmOpen(false);
+  }
+
+  // Not authenticated - show login required
+  if (!isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center max-w-md mx-auto">
+          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <FaLock className="w-10 h-10 text-red-500" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-3">
+            Login Diperlukan
+          </h2>
+          <p className="text-gray-600 mb-6">
+            Silakan login terlebih dahulu untuk mengakses data Kategori. Klik
+            tombol Login di pojok kanan atas.
+          </p>
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 rounded-xl border border-amber-200 text-sm">
+            <FaTags className="w-4 h-4" />
+            <span>Data kategori dilindungi untuk keamanan</span>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (loading) {

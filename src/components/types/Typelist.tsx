@@ -12,6 +12,7 @@ import {
   FaList,
   FaTh,
   FaSortAmountDown,
+  FaLock,
 } from "react-icons/fa";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,6 +23,7 @@ import {
   getFileUrl,
   API_CONFIG,
 } from "@/config/api";
+import { BiSolidPurchaseTag } from "react-icons/bi";
 
 export type ItemType = {
   id: number;
@@ -295,6 +297,30 @@ export default function TypeList() {
     setConfirmOpen(false);
   }
 
+  // Not authenticated - show login required
+  if (!isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center max-w-md mx-auto">
+          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <FaLock className="w-10 h-10 text-red-500" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-3">
+            Login Diperlukan
+          </h2>
+          <p className="text-gray-600 mb-6">
+            Silakan login terlebih dahulu untuk mengakses data Tipe. Klik tombol
+            Login di pojok kanan atas.
+          </p>
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 rounded-xl border border-amber-200 text-sm">
+            <BiSolidPurchaseTag className="w-4 h-4" />
+            <span>Data tipe dilindungi untuk keamanan</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -382,9 +408,7 @@ export default function TypeList() {
           <div className="text-sm text-blue-700 font-medium mb-1">
             Total Tipe
           </div>
-          <div className="text-3xl font-bold text-blue-900">
-            {types.length}
-          </div>
+          <div className="text-3xl font-bold text-blue-900">{types.length}</div>
         </div>
         <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-5 border-2 border-green-200">
           <div className="text-sm text-green-700 font-medium mb-1">
