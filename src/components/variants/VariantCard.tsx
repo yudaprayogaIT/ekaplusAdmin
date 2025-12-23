@@ -65,6 +65,7 @@ export default function VariantCard({
                 height={80}
                 src={variant.item.image}
                 alt={variant.item.name}
+                unoptimized
                 className="object-contain w-full h-full group-hover:scale-110 transition-transform duration-500"
               />
             ) : (
@@ -154,6 +155,7 @@ export default function VariantCard({
               height={400}
               src={variant.item.image}
               alt={variant.item.name}
+              unoptimized
               className="object-contain w-full h-full group-hover:scale-110 transition-transform duration-500"
             />
           </div>
@@ -170,7 +172,9 @@ export default function VariantCard({
           <div className="absolute top-4 right-4">
             <div className="px-3 py-1.5 bg-blue-500 text-white rounded-full shadow-lg flex items-center gap-1.5">
               <FaLink className="w-3 h-3" />
-              <span className="text-xs font-bold truncate max-w-[120px]">{product.name}</span>
+              <span className="text-xs font-bold truncate max-w-[120px]">
+                {product.name}
+              </span>
             </div>
           </div>
         )}
@@ -219,7 +223,9 @@ export default function VariantCard({
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 border-2 border-red-100 hover:bg-red-100 hover:border-red-200 transition-all"
           >
             <FaTrash className="w-3.5 h-3.5 text-red-600" />
-            <span className="text-sm font-semibold text-red-600">Hapus Mapping</span>
+            <span className="text-sm font-semibold text-red-600">
+              Hapus Mapping
+            </span>
           </motion.button>
         </div>
       </div>

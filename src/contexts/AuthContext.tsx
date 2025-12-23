@@ -143,8 +143,8 @@ const AuthContext = createContext<AuthContextType | null>(null);
 const AUTH_KEY = "ekaplus_current_user";
 const TOKEN_KEY = "ekaplus_auth_token";
 const USER_DATA_KEY = "ekaplus_user_data";
-// const API_BASE_URL = "http://192.168.100.203:8000/api";
-const API_BASE_URL = "https://estrella-subgeniculate-dollie.ngrok-free.dev/api";
+const API_BASE_URL = "http://192.168.101.214:8000/api";
+// const API_BASE_URL = "https://estrella-subgeniculate-dollie.ngrok-free.dev/api";
 
 // Mapping API response fields to internal User type
 function mapApiUserToUser(apiUser: ApiUser): User {

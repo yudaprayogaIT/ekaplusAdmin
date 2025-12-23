@@ -51,7 +51,10 @@ export type ItemVariant = {
 
 // Request types untuk API (simplified - backend auto-generates the rest)
 export type CreateVariantRequest = {
-  item: number; // Item ID only
+  item: number; // Item ID
+  parent_id?: number; // Product ID (optional - required when creating standalone, auto-set when creating from product form)
+  parent_type?: string; // "ekatalog_product" (optional - defaults to ekatalog_product)
+  parent_field?: string; // "variants" (optional - defaults to variants)
 };
 
 export type UpdateVariantRequest = {

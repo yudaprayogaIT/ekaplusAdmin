@@ -16,7 +16,13 @@ import {
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import { fetchVariants, deleteVariant } from "@/services/variantService";
-import { API_CONFIG, getQueryUrl, getAuthHeaders } from "@/config/api";
+import {
+  API_CONFIG,
+  getQueryUrl,
+  getAuthHeaders,
+  getFileUrl,
+} from "@/config/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 type Branch = {
   id: number;
@@ -55,6 +61,7 @@ type Product = {
 type SortOption = "item-asc" | "item-desc" | "product" | "newest" | "oldest";
 
 export default function VariantList() {
+  const { token } = useAuth();
   const [variants, setVariants] = useState<ItemVariant[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [items, setItems] = useState<Item[]>([]);
@@ -82,8 +89,12 @@ export default function VariantList() {
       setLoading(true);
 
       try {
-        // Get auth token
-        const token = localStorage.getItem("auth_token") || "";
+        if (!token) {
+          console.error("No auth token found - redirecting to login");
+          setError("Session expired. Please login again.");
+          setLoading(false);
+          return;
+        }
 
         // Load products from API
         const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, {
@@ -96,20 +107,28 @@ export default function VariantList() {
         let productsData: Product[] = [];
         if (productsRes.ok) {
           const json = await productsRes.json();
-          productsData = json.data.map((p: any) => ({
-            id: p.id,
-            name: p.product_name,
-            itemCategory: {
-              id: p.item_category,
-              name: `Category ${p.item_category}`,
-            },
-            disabled: p.disabled,
-            isHotDeals: Boolean(p.hot_deals),
-          }));
+          productsData = json.data.map(
+            (p: {
+              id: number;
+              product_name: string;
+              item_category: number;
+              disabled: number;
+              hot_deals: boolean;
+            }) => ({
+              id: p.id,
+              name: p.product_name,
+              itemCategory: {
+                id: p.item_category,
+                name: `Category ${p.item_category}`,
+              },
+              disabled: p.disabled,
+              isHotDeals: Boolean(p.hot_deals),
+            })
+          );
         }
 
         // Load items from API
-        const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT_VARIANT, {
+        const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
           fields: ["*"],
         });
         const itemsRes = await fetch(itemsUrl, {
@@ -139,7 +158,7 @@ export default function VariantList() {
               color: i.item_color || "",
               type: i.ekatalog_type || "",
               uom: i.uom,
-              image: i.image,
+              image: getFileUrl(i.image),
               description: i.item_desc,
               category: i.item_category,
               group: i.item_group,
@@ -168,12 +187,12 @@ export default function VariantList() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [token]);
 
   // Listen for variant updates and refresh from API
   useEffect(() => {
     async function handler() {
-      const token = localStorage.getItem("auth_token") || "";
+      if (!token) return;
       try {
         const variantsData = await fetchVariants(token, items);
         setVariants(variantsData);
@@ -184,11 +203,11 @@ export default function VariantList() {
     window.addEventListener("ekatalog:variants_update", handler);
     return () =>
       window.removeEventListener("ekatalog:variants_update", handler);
-  }, [items]);
+  }, [items, token]);
 
   // Helper to refresh variants from API
   async function refreshVariants() {
-    const token = localStorage.getItem("auth_token") || "";
+    if (!token) return;
     try {
       const variantsData = await fetchVariants(token, items);
       setVariants(variantsData);
@@ -202,7 +221,7 @@ export default function VariantList() {
     setConfirmTitle("Hapus Variant Mapping");
     setConfirmDesc(`Yakin ingin menghapus mapping "${v.item.name}"?`);
     actionRef.current = async () => {
-      const token = localStorage.getItem("auth_token") || "";
+      if (!token) return;
       try {
         await deleteVariant(token, v.id);
         await refreshVariants();

@@ -31,8 +31,6 @@ export default function ProductCard({
 }: ProductCardProps) {
   const firstVariant = product.variants[0]?.item;
   const variantCount = product.variants.length;
-  console.log("bbbbbbbbbbbbbbbbbbbbbbb");
-  console.log(variantCount);
 
   if (viewMode === "list") {
     return (

@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { FaTimes, FaLink, FaCheck, FaBox } from "react-icons/fa";
 import Image from "next/image";
 import { fetchVariants, createVariant } from "@/services/variantService";
+import { useAuth } from "@/contexts/AuthContext";
 
 type Branch = {
   id: number;
@@ -54,37 +55,39 @@ export default function AddVariantMappingModal({
   products: Product[];
   onSave?: () => void;
 }) {
+  const { token } = useAuth();
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
-  const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<number | null>(
+    null
+  );
   const [existingVariants, setExistingVariants] = useState<ItemVariant[]>([]);
   const [saving, setSaving] = useState(false);
 
   // Load existing variants from API
   useEffect(() => {
-    if (open) {
-      const token = localStorage.getItem("auth_token") || "";
+    if (open && token) {
       fetchVariants(token, items)
-        .then(variants => setExistingVariants(variants))
-        .catch(err => {
+        .then((variants) => setExistingVariants(variants))
+        .catch((err) => {
           console.error("Failed to load variants:", err);
           setExistingVariants([]);
         });
     }
-  }, [open, items]);
+  }, [open, items, token]);
 
   // Get unmapped items
   const unmappedItems = useMemo(() => {
-    const mappedItemIds = new Set(existingVariants.map(v => v.item.id));
-    return items.filter(item => !mappedItemIds.has(item.id));
+    const mappedItemIds = new Set(existingVariants.map((v) => v.item.id));
+    return items.filter((item) => !mappedItemIds.has(item.id));
   }, [items, existingVariants]);
 
   // Get selected item details
-  const selectedItem = unmappedItems.find(i => i.id === selectedItemId);
+  const selectedItem = unmappedItems.find((i) => i.id === selectedItemId);
 
   // Extract first 2 words from item name
   const getItemPrefix = (itemName: string): string => {
     const words = itemName.trim().split(/\s+/);
-    return words.slice(0, 2).join(' ').toUpperCase();
+    return words.slice(0, 2).join(" ").toUpperCase();
   };
 
   // Smart filter products based on selected item
@@ -92,8 +95,8 @@ export default function AddVariantMappingModal({
     if (!selectedItem) return products;
 
     const itemPrefix = getItemPrefix(selectedItem.name);
-    
-    return products.filter(product => {
+
+    return products.filter((product) => {
       const productPrefix = getItemPrefix(product.name);
       return productPrefix === itemPrefix;
     });
@@ -117,24 +120,21 @@ export default function AddVariantMappingModal({
   }, [open]);
 
   const handleSave = async () => {
-    if (!selectedItemId || !selectedProductId) return;
+    if (!selectedItemId || !selectedProductId || !token) return;
 
     setSaving(true);
     try {
-      const token = localStorage.getItem("auth_token") || "";
-
-      // Calculate display_order (next in sequence for this product)
-      const existingForProduct = existingVariants.filter(v => v.productid === selectedProductId);
-      const maxOrder = Math.max(0, ...existingForProduct.map(v => v.displayOrder || 0));
-
-      // Create variant via API
-      await createVariant(token, {
-        item: selectedItemId,
-        product: selectedProductId,
-        display_order: maxOrder + 1,
-        is_active: 1,
-        is_default: existingForProduct.length === 0 ? 1 : 0, // First variant is default
-      }, items);
+      // Create variant via API - backend auto-generates idx, name, etc.
+      await createVariant(
+        token,
+        {
+          item: selectedItemId,
+          parent_id: selectedProductId,
+          parent_type: "ekatalog_product",
+          parent_field: "variants",
+        },
+        items
+      );
 
       // Trigger updates
       window.dispatchEvent(new Event("ekatalog:variants_update"));
@@ -203,7 +203,9 @@ export default function AddVariantMappingModal({
               </label>
               <select
                 value={selectedItemId || ""}
-                onChange={(e) => setSelectedItemId(Number(e.target.value) || null)}
+                onChange={(e) =>
+                  setSelectedItemId(Number(e.target.value) || null)
+                }
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all text-gray-700"
               >
                 <option value="">-- Pilih Item --</option>
@@ -213,7 +215,7 @@ export default function AddVariantMappingModal({
                   </option>
                 ))}
               </select>
-              
+
               {/* Item preview */}
               {selectedItem && (
                 <motion.div
@@ -228,6 +230,7 @@ export default function AddVariantMappingModal({
                         height={48}
                         src={selectedItem.image}
                         alt={selectedItem.name}
+                        unoptimized
                         className="object-contain w-full h-full p-1"
                       />
                     ) : (
@@ -260,7 +263,9 @@ export default function AddVariantMappingModal({
               </label>
               <select
                 value={selectedProductId || ""}
-                onChange={(e) => setSelectedProductId(Number(e.target.value) || null)}
+                onChange={(e) =>
+                  setSelectedProductId(Number(e.target.value) || null)
+                }
                 disabled={!selectedItem}
                 className="w-full px-4 py-3 border-2 border-red-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
               >
@@ -294,7 +299,9 @@ export default function AddVariantMappingModal({
                   </p>
                   <select
                     value={selectedProductId || ""}
-                    onChange={(e) => setSelectedProductId(Number(e.target.value) || null)}
+                    onChange={(e) =>
+                      setSelectedProductId(Number(e.target.value) || null)
+                    }
                     className="w-full px-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all text-gray-700"
                   >
                     <option value="">-- Pilih Product --</option>
@@ -327,7 +334,7 @@ export default function AddVariantMappingModal({
                   </span>
                   {" → "}
                   <span className="font-semibold text-blue-900">
-                    {products.find(p => p.id === selectedProductId)?.name}
+                    {products.find((p) => p.id === selectedProductId)?.name}
                   </span>
                 </p>
               </motion.div>
