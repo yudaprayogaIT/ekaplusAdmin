@@ -80,11 +80,13 @@ export default function AddItemModal({
 
         if (res.ok) {
           const response = await res.json();
-          const mappedBranches: Branch[] = response.data.map((b: { id: number; branch_name: string }) => ({
-            id: b.id,
-            name: b.branch_name,
-            branch_name: b.branch_name,
-          }));
+          const mappedBranches: Branch[] = response.data.map(
+            (b: { id: number; branch_name: string }) => ({
+              id: b.id,
+              name: b.branch_name,
+              branch_name: b.branch_name,
+            })
+          );
           setBranches(mappedBranches);
         }
       } catch (error) {
@@ -127,7 +129,7 @@ export default function AddItemModal({
       setUom("PCS");
       setGroup("");
       setCategory("");
-      setGeneratorItem("Inject by master");
+      setGeneratorItem("");
       setImageUuid("");
       setImagePreview(null);
       setImageFile(null);
@@ -180,12 +182,15 @@ export default function AddItemModal({
       const formData = new FormData();
       formData.append("item_code", code.trim());
       formData.append("item_name", name.trim());
-      formData.append("generator_item", generatorItem.trim() || "Inject by master");
+      formData.append(
+        "generator_item",
+        generatorItem.trim() || "Inject by master"
+      );
       formData.append("uom", uom);
       formData.append("item_group", group.trim());
       formData.append("item_category", category.trim());
 
-      // Format branches untuk FormData: branches[0][branch]=56, branches[1][branch]=58, etc
+      // Format branches untuk FormData
       selectedBranches.forEach((branchId, index) => {
         formData.append(`branches[${index}][branch]`, String(branchId));
       });
@@ -225,6 +230,13 @@ export default function AddItemModal({
         ? getResourceUrl(API_CONFIG.ENDPOINTS.ITEM, initial.id)
         : getResourceUrl(API_CONFIG.ENDPOINTS.ITEM);
 
+      console.log("Saving item with method:", method);
+      console.log("URL:", url);
+      console.log("FormData contents:");
+      for (const [key, value] of formData.entries()) {
+        console.log(`  ${key}:`, value);
+      }
+
       const response = await fetch(url, {
         method,
         headers,
@@ -233,6 +245,7 @@ export default function AddItemModal({
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error("Error response:", errorData);
         throw new Error(
           errorData.message || `Failed to save item (${response.status})`
         );
@@ -246,7 +259,8 @@ export default function AddItemModal({
       onClose();
     } catch (error) {
       console.error("Failed to save item:", error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       alert(`Gagal menyimpan item: ${errorMessage}`);
       setSaving(false);
     }
@@ -523,7 +537,9 @@ export default function AddItemModal({
                     </div>
                   ) : branches.length === 0 ? (
                     <div className="col-span-full text-center py-8">
-                      <p className="text-xs text-gray-500">Tidak ada cabang tersedia</p>
+                      <p className="text-xs text-gray-500">
+                        Tidak ada cabang tersedia
+                      </p>
                     </div>
                   ) : (
                     branches.map((branch) => (

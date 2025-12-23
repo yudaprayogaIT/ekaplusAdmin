@@ -134,6 +134,7 @@ export default function ProductDetailModal({
                                 height={96}
                                 src={variant.item.image}
                                 alt={variant.item.name}
+                                unoptimized
                                 className="object-contain w-full h-full p-2 group-hover:scale-110 transition-transform"
                               />
                             ) : (

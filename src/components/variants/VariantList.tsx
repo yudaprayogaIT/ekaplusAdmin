@@ -5,8 +5,18 @@ import React, { useEffect, useRef, useState } from "react";
 import VariantCard from "./VariantCard";
 import AddVariantMappingModal from "./AddVariantMappingModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import { FaLink, FaSearch, FaList, FaTh, FaSortAmountDown, FaChevronDown, FaFilter } from "react-icons/fa";
+import {
+  FaLink,
+  FaSearch,
+  FaList,
+  FaTh,
+  FaSortAmountDown,
+  FaChevronDown,
+  FaFilter,
+} from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
+import { fetchVariants, deleteVariant } from "@/services/variantService";
+import { API_CONFIG, getQueryUrl, getAuthHeaders } from "@/config/api";
 
 type Branch = {
   id: number;
@@ -42,12 +52,7 @@ type Product = {
   isHotDeals: boolean;
 };
 
-type SortOption = 'item-asc' | 'item-desc' | 'product' | 'newest' | 'oldest';
-
-const VARIANTS_DATA_URL = "/data/variants.json";
-const ITEMS_DATA_URL = "/data/items.json";
-const PRODUCTS_DATA_URL = "/data/products.json";
-const VARIANTS_SNAP_KEY = "ekatalog_variants_snapshot";
+type SortOption = "item-asc" | "item-desc" | "product" | "newest" | "oldest";
 
 export default function VariantList() {
   const [variants, setVariants] = useState<ItemVariant[]>([]);
@@ -58,7 +63,7 @@ export default function VariantList() {
   const [selectedProduct, setSelectedProduct] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [sortBy, setSortBy] = useState<SortOption>('newest');
+  const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [productDropdownOpen, setProductDropdownOpen] = useState(false);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
 
@@ -69,90 +74,143 @@ export default function VariantList() {
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
 
-  // Load data
+  // Load data from API
   useEffect(() => {
     let cancelled = false;
-    
+
     async function load() {
       setLoading(true);
 
       try {
-        // Load products
-        const productsRes = await fetch(PRODUCTS_DATA_URL, { cache: "no-store" });
+        // Get auth token
+        const token = localStorage.getItem("auth_token") || "";
+
+        // Load products from API
+        const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, {
+          fields: ["*"],
+        });
+        const productsRes = await fetch(productsUrl, {
+          headers: getAuthHeaders(token),
+        });
+
+        let productsData: Product[] = [];
         if (productsRes.ok) {
-          const productsData = await productsRes.json();
-          if (!cancelled) setProducts(productsData);
+          const json = await productsRes.json();
+          productsData = json.data.map((p: any) => ({
+            id: p.id,
+            name: p.product_name,
+            itemCategory: {
+              id: p.item_category,
+              name: `Category ${p.item_category}`,
+            },
+            disabled: p.disabled,
+            isHotDeals: Boolean(p.hot_deals),
+          }));
         }
 
-        // Load items
-        const itemsRes = await fetch(ITEMS_DATA_URL, { cache: "no-store" });
+        // Load items from API
+        const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT_VARIANT, {
+          fields: ["*"],
+        });
+        const itemsRes = await fetch(itemsUrl, {
+          headers: getAuthHeaders(token),
+        });
+
+        let itemsData: Item[] = [];
         if (itemsRes.ok) {
-          const itemsData = await itemsRes.json();
-          if (!cancelled) setItems(itemsData);
+          const json = await itemsRes.json();
+          itemsData = json.data.map(
+            (i: {
+              id: number;
+              item_code: string;
+              item_name: string;
+              item_color?: string;
+              ekatalog_type?: string;
+              uom: string;
+              image?: string;
+              item_desc?: string;
+              item_category?: string;
+              item_group?: string;
+              disabled?: number;
+            }) => ({
+              id: i.id,
+              code: i.item_code,
+              name: i.item_name,
+              color: i.item_color || "",
+              type: i.ekatalog_type || "",
+              uom: i.uom,
+              image: i.image,
+              description: i.item_desc,
+              category: i.item_category,
+              group: i.item_group,
+              disabled: i.disabled,
+            })
+          );
         }
 
-        // Load variants - check localStorage first, then fetch
-        let variantsData: ItemVariant[] = [];
-        const localVariants = localStorage.getItem(VARIANTS_SNAP_KEY);
-        
-        if (localVariants) {
-          try {
-            variantsData = JSON.parse(localVariants);
-          } catch {
-            // Fall back to API
-          }
-        }
-        
-        if (variantsData.length === 0) {
-          const variantsRes = await fetch(VARIANTS_DATA_URL, { cache: "no-store" });
-          if (variantsRes.ok) {
-            variantsData = await variantsRes.json();
-            localStorage.setItem(VARIANTS_SNAP_KEY, JSON.stringify(variantsData));
-          }
-        }
+        // Load variants from API
+        const variantsData = await fetchVariants(token, itemsData);
 
         if (!cancelled) {
+          setProducts(productsData);
+          setItems(itemsData);
           setVariants(variantsData);
         }
       } catch (err: unknown) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        if (!cancelled)
+          setError(err instanceof Error ? err.message : String(err));
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
-    
+
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Listen for updates
+  // Listen for variant updates and refresh from API
   useEffect(() => {
-    function handler() {
-      const raw = localStorage.getItem(VARIANTS_SNAP_KEY);
-      if (!raw) return;
+    async function handler() {
+      const token = localStorage.getItem("auth_token") || "";
       try {
-        setVariants(JSON.parse(raw));
-      } catch {
-        // Ignore
+        const variantsData = await fetchVariants(token, items);
+        setVariants(variantsData);
+      } catch (err) {
+        console.error("Failed to refresh variants:", err);
       }
     }
     window.addEventListener("ekatalog:variants_update", handler);
-    return () => window.removeEventListener("ekatalog:variants_update", handler);
-  }, []);
+    return () =>
+      window.removeEventListener("ekatalog:variants_update", handler);
+  }, [items]);
 
-  function saveSnapshot(arr: ItemVariant[]) {
-    localStorage.setItem(VARIANTS_SNAP_KEY, JSON.stringify(arr));
-    window.dispatchEvent(new Event("ekatalog:variants_update"));
+  // Helper to refresh variants from API
+  async function refreshVariants() {
+    const token = localStorage.getItem("auth_token") || "";
+    try {
+      const variantsData = await fetchVariants(token, items);
+      setVariants(variantsData);
+      window.dispatchEvent(new Event("ekatalog:variants_update"));
+    } catch (err) {
+      console.error("Failed to refresh variants:", err);
+    }
   }
 
   function promptDeleteVariant(v: ItemVariant) {
     setConfirmTitle("Hapus Variant Mapping");
     setConfirmDesc(`Yakin ingin menghapus mapping "${v.item.name}"?`);
     actionRef.current = async () => {
-      const next = variants.filter((x) => x.id !== v.id);
-      setVariants(next);
-      saveSnapshot(next);
-      window.dispatchEvent(new Event("ekatalog:products_update"));
+      const token = localStorage.getItem("auth_token") || "";
+      try {
+        await deleteVariant(token, v.id);
+        await refreshVariants();
+        window.dispatchEvent(new Event("ekatalog:products_update"));
+      } catch (err) {
+        console.error("Failed to delete variant:", err);
+        alert("Gagal menghapus variant. Silakan coba lagi.");
+      }
     };
     setConfirmOpen(true);
   }
@@ -179,7 +237,9 @@ export default function VariantList() {
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-red-200 border-t-red-500 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-sm text-gray-600 font-medium">Memuat variants...</p>
+          <p className="text-sm text-gray-600 font-medium">
+            Memuat variants...
+          </p>
         </div>
       </div>
     );
@@ -208,23 +268,25 @@ export default function VariantList() {
   }
 
   if (selectedProduct) {
-    filteredVariants = filteredVariants.filter((v) => v.productid === selectedProduct);
+    filteredVariants = filteredVariants.filter(
+      (v) => v.productid === selectedProduct
+    );
   }
 
   // Sort variants
   const sortedVariants = [...filteredVariants].sort((a, b) => {
     switch (sortBy) {
-      case 'item-asc':
+      case "item-asc":
         return a.item.name.localeCompare(b.item.name);
-      case 'item-desc':
+      case "item-desc":
         return b.item.name.localeCompare(a.item.name);
-      case 'product':
-        const productA = products.find(p => p.id === a.productid)?.name || '';
-        const productB = products.find(p => p.id === b.productid)?.name || '';
+      case "product":
+        const productA = products.find((p) => p.id === a.productid)?.name || "";
+        const productB = products.find((p) => p.id === b.productid)?.name || "";
         return productA.localeCompare(productB);
-      case 'newest':
+      case "newest":
         return (b.id || 0) - (a.id || 0);
-      case 'oldest':
+      case "oldest":
         return (a.id || 0) - (b.id || 0);
       default:
         return 0;
@@ -266,19 +328,31 @@ export default function VariantList() {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border-2 border-blue-200">
-          <div className="text-sm text-blue-700 font-medium mb-1">Total Mappings</div>
-          <div className="text-3xl font-bold text-blue-900">{variants.length}</div>
+          <div className="text-sm text-blue-700 font-medium mb-1">
+            Total Mappings
+          </div>
+          <div className="text-3xl font-bold text-blue-900">
+            {variants.length}
+          </div>
         </div>
         <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-5 border-2 border-green-200">
-          <div className="text-sm text-green-700 font-medium mb-1">Products</div>
-          <div className="text-3xl font-bold text-green-900">{products.length}</div>
+          <div className="text-sm text-green-700 font-medium mb-1">
+            Products
+          </div>
+          <div className="text-3xl font-bold text-green-900">
+            {products.length}
+          </div>
         </div>
         <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-5 border-2 border-purple-200">
           <div className="text-sm text-purple-700 font-medium mb-1">Items</div>
-          <div className="text-3xl font-bold text-purple-900">{items.length}</div>
+          <div className="text-3xl font-bold text-purple-900">
+            {items.length}
+          </div>
         </div>
         <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-5 border-2 border-orange-200">
-          <div className="text-sm text-orange-700 font-medium mb-1">Unmapped</div>
+          <div className="text-sm text-orange-700 font-medium mb-1">
+            Unmapped
+          </div>
           <div className="text-3xl font-bold text-orange-900">
             {items.length - variants.length}
           </div>
@@ -344,17 +418,21 @@ export default function VariantList() {
                 <FaFilter className="w-3.5 h-3.5" />
                 <span>
                   {selectedProduct !== null
-                    ? products.find(p => p.id === selectedProduct)?.name
+                    ? products.find((p) => p.id === selectedProduct)?.name
                     : `Semua Products (${variants.length})`}
                 </span>
-                <FaChevronDown className={`w-3 h-3 transition-transform ${productDropdownOpen ? 'rotate-180' : ''}`} />
+                <FaChevronDown
+                  className={`w-3 h-3 transition-transform ${
+                    productDropdownOpen ? "rotate-180" : ""
+                  }`}
+                />
               </button>
 
               <AnimatePresence>
                 {productDropdownOpen && (
                   <>
-                    <div 
-                      className="fixed inset-0 z-10" 
+                    <div
+                      className="fixed inset-0 z-10"
                       onClick={() => setProductDropdownOpen(false)}
                     />
                     <motion.div
@@ -369,13 +447,17 @@ export default function VariantList() {
                           setProductDropdownOpen(false);
                         }}
                         className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors ${
-                          selectedProduct === null ? 'text-red-600 bg-red-50' : 'text-gray-700'
+                          selectedProduct === null
+                            ? "text-red-600 bg-red-50"
+                            : "text-gray-700"
                         }`}
                       >
                         Semua ({variants.length})
                       </button>
                       {products.map((product) => {
-                        const count = variants.filter(v => v.productid === product.id).length;
+                        const count = variants.filter(
+                          (v) => v.productid === product.id
+                        ).length;
                         return (
                           <button
                             key={product.id}
@@ -384,7 +466,9 @@ export default function VariantList() {
                               setProductDropdownOpen(false);
                             }}
                             className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors ${
-                              selectedProduct === product.id ? 'text-red-600 bg-red-50' : 'text-gray-700'
+                              selectedProduct === product.id
+                                ? "text-red-600 bg-red-50"
+                                : "text-gray-700"
                             }`}
                           >
                             {product.name} ({count})
@@ -408,20 +492,24 @@ export default function VariantList() {
               >
                 <FaSortAmountDown className="w-3.5 h-3.5" />
                 <span>
-                  {sortBy === 'item-asc' && 'Item A-Z'}
-                  {sortBy === 'item-desc' && 'Item Z-A'}
-                  {sortBy === 'product' && 'Product'}
-                  {sortBy === 'newest' && 'Terbaru'}
-                  {sortBy === 'oldest' && 'Terlama'}
+                  {sortBy === "item-asc" && "Item A-Z"}
+                  {sortBy === "item-desc" && "Item Z-A"}
+                  {sortBy === "product" && "Product"}
+                  {sortBy === "newest" && "Terbaru"}
+                  {sortBy === "oldest" && "Terlama"}
                 </span>
-                <FaChevronDown className={`w-3 h-3 transition-transform ${sortDropdownOpen ? 'rotate-180' : ''}`} />
+                <FaChevronDown
+                  className={`w-3 h-3 transition-transform ${
+                    sortDropdownOpen ? "rotate-180" : ""
+                  }`}
+                />
               </button>
 
               <AnimatePresence>
                 {sortDropdownOpen && (
                   <>
-                    <div 
-                      className="fixed inset-0 z-10" 
+                    <div
+                      className="fixed inset-0 z-10"
                       onClick={() => setSortDropdownOpen(false)}
                     />
                     <motion.div
@@ -431,11 +519,11 @@ export default function VariantList() {
                       className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 py-2 min-w-[200px] z-20"
                     >
                       {[
-                        { value: 'newest' as SortOption, label: 'Terbaru' },
-                        { value: 'oldest' as SortOption, label: 'Terlama' },
-                        { value: 'item-asc' as SortOption, label: 'Item A-Z' },
-                        { value: 'item-desc' as SortOption, label: 'Item Z-A' },
-                        { value: 'product' as SortOption, label: 'Product' },
+                        { value: "newest" as SortOption, label: "Terbaru" },
+                        { value: "oldest" as SortOption, label: "Terlama" },
+                        { value: "item-asc" as SortOption, label: "Item A-Z" },
+                        { value: "item-desc" as SortOption, label: "Item Z-A" },
+                        { value: "product" as SortOption, label: "Product" },
                       ].map((option) => (
                         <button
                           key={option.value}
@@ -444,7 +532,9 @@ export default function VariantList() {
                             setSortDropdownOpen(false);
                           }}
                           className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors ${
-                            sortBy === option.value ? 'text-red-600 bg-red-50' : 'text-gray-700'
+                            sortBy === option.value
+                              ? "text-red-600 bg-red-50"
+                              : "text-gray-700"
                           }`}
                         >
                           {option.label}
@@ -507,7 +597,7 @@ export default function VariantList() {
               <VariantCard
                 key={v.id}
                 variant={v}
-                product={products.find(p => p.id === v.productid)}
+                product={products.find((p) => p.id === v.productid)}
                 viewMode={viewMode}
                 onDelete={() => promptDeleteVariant(v)}
               />

@@ -4,10 +4,10 @@
  * Change the base URL here when switching to production or different server
  */
 export const API_CONFIG = {
-  // BASE_URL: "http://192.168.101.214:8000",
-  BASE_URL: "https://estrella-subgeniculate-dollie.ngrok-free.dev",
-  // FILE_BASE_URL: "http://192.168.101.214:8000",
-  FILE_BASE_URL: "https://estrella-subgeniculate-dollie.ngrok-free.dev",
+  BASE_URL: "http://192.168.101.214:8000",
+  // BASE_URL: "https://estrella-subgeniculate-dollie.ngrok-free.dev",
+  FILE_BASE_URL: "http://192.168.101.214:8000",
+  // FILE_BASE_URL: "https://estrella-subgeniculate-dollie.ngrok-free.dev",
 
   // Endpoints
   ENDPOINTS: {
@@ -25,6 +25,7 @@ export const API_CONFIG = {
     CATEGORY: "/api/resource/ekatalog_category",
     ITEM: "/api/resource/item",
     PRODUCT: "/api/resource/ekatalog_product",
+    PRODUCT_VARIANT: "/api/resource/ekatalog_variant",
     ROLE: "/api/resource/role",
     PERMISSION: "/resource/permission",
     USER: "/api/resource/user",
@@ -79,7 +80,7 @@ export function getAuthHeaders(token: string): HeadersInit {
 export function getAuthHeadersFormData(token: string): HeadersInit {
   return {
     Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
+    // DO NOT set Content-Type for FormData - browser will set multipart/form-data with boundary
   };
 }
 

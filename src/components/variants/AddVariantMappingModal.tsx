@@ -5,6 +5,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaTimes, FaLink, FaCheck, FaBox } from "react-icons/fa";
 import Image from "next/image";
+import { fetchVariants, createVariant } from "@/services/variantService";
 
 type Branch = {
   id: number;
@@ -40,8 +41,6 @@ type Product = {
   isHotDeals: boolean;
 };
 
-const VARIANTS_SNAP_KEY = "ekatalog_variants_snapshot";
-
 export default function AddVariantMappingModal({
   open,
   onClose,
@@ -60,19 +59,18 @@ export default function AddVariantMappingModal({
   const [existingVariants, setExistingVariants] = useState<ItemVariant[]>([]);
   const [saving, setSaving] = useState(false);
 
-  // Load existing variants
+  // Load existing variants from API
   useEffect(() => {
     if (open) {
-      const raw = localStorage.getItem(VARIANTS_SNAP_KEY);
-      if (raw) {
-        try {
-          setExistingVariants(JSON.parse(raw));
-        } catch {
+      const token = localStorage.getItem("auth_token") || "";
+      fetchVariants(token, items)
+        .then(variants => setExistingVariants(variants))
+        .catch(err => {
+          console.error("Failed to load variants:", err);
           setExistingVariants([]);
-        }
-      }
+        });
     }
-  }, [open]);
+  }, [open, items]);
 
   // Get unmapped items
   const unmappedItems = useMemo(() => {
@@ -123,27 +121,25 @@ export default function AddVariantMappingModal({
 
     setSaving(true);
     try {
-      const itemToMap = unmappedItems.find(i => i.id === selectedItemId);
-      if (!itemToMap) return;
+      const token = localStorage.getItem("auth_token") || "";
 
-      // Generate new variant ID
-      const maxId = existingVariants.reduce((m, v) => Math.max(m, v.id || 0), 0);
-      
-      const newVariant: ItemVariant = {
-        id: maxId + 1,
-        item: itemToMap,
-        productid: selectedProductId,
-      };
+      // Calculate display_order (next in sequence for this product)
+      const existingForProduct = existingVariants.filter(v => v.productid === selectedProductId);
+      const maxOrder = Math.max(0, ...existingForProduct.map(v => v.displayOrder || 0));
 
-      const updatedVariants = [...existingVariants, newVariant];
-      
-      // Save to localStorage
-      localStorage.setItem(VARIANTS_SNAP_KEY, JSON.stringify(updatedVariants));
-      
+      // Create variant via API
+      await createVariant(token, {
+        item: selectedItemId,
+        product: selectedProductId,
+        display_order: maxOrder + 1,
+        is_active: 1,
+        is_default: existingForProduct.length === 0 ? 1 : 0, // First variant is default
+      }, items);
+
       // Trigger updates
       window.dispatchEvent(new Event("ekatalog:variants_update"));
       window.dispatchEvent(new Event("ekatalog:products_update"));
-      
+
       if (onSave) onSave();
       onClose();
     } catch (err) {

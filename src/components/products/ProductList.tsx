@@ -9,14 +9,37 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Pagination from "@/components/ui/Pagination";
 import LoadMoreButton from "@/components/ui/LoadMoreButton";
 import PerPageSelector from "@/components/ui/PerPageSelector";
-import { FaPlus, FaFilter, FaSearch, FaList, FaTh, FaFire, FaSortAmountDown, FaChevronDown } from "react-icons/fa";
+import {
+  FaPlus,
+  FaFilter,
+  FaSearch,
+  FaList,
+  FaTh,
+  FaFire,
+  FaSortAmountDown,
+  FaChevronDown,
+} from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Item, Product, ProductFormData, Category } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_CONFIG, getQueryUrl, getAuthHeaders, getResourceUrl } from "@/config/api";
+import {
+  API_CONFIG,
+  getQueryUrl,
+  getAuthHeaders,
+  getResourceUrl,
+  getFileUrl,
+} from "@/config/api";
+import { fetchVariants } from "@/services/variantService";
 
-type SortOption = 'name-asc' | 'name-desc' | 'category' | 'variants-most' | 'variants-least' | 'newest' | 'oldest';
-type PaginationMode = 'pagination' | 'loadmore' | 'all';
+type SortOption =
+  | "name-asc"
+  | "name-desc"
+  | "category"
+  | "variants-most"
+  | "variants-least"
+  | "newest"
+  | "oldest";
+type PaginationMode = "pagination" | "loadmore" | "all";
 
 const SNAP_KEY = "ekatalog_products_snapshot";
 
@@ -55,18 +78,21 @@ export default function ProductList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [showHotDealsOnly, setShowHotDealsOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<SortOption>('newest');
+  const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
-  
+
   // Pagination states
-  const [paginationMode, setPaginationMode] = useState<PaginationMode>('pagination');
+  const [paginationMode, setPaginationMode] =
+    useState<PaginationMode>("pagination");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(24);
   const [loadedItems, setLoadedItems] = useState(24);
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalInitial, setModalInitial] = useState<ProductFormData | null>(null);
+  const [modalInitial, setModalInitial] = useState<ProductFormData | null>(
+    null
+  );
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<Product | null>(null);
@@ -78,25 +104,38 @@ export default function ProductList() {
 
   // Helper function to load and merge data from API
   async function loadAllData() {
-    if (!token) return { categoriesData: [], itemsData: [], productsWithVariants: [] };
+    if (!token)
+      return { categoriesData: [], itemsData: [], productsWithVariants: [] };
 
     const headers = getAuthHeaders(token);
 
     // Load categories from API
-    const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, { fields: ["*"] });
-    const categoriesRes = await fetch(categoriesUrl, { method: "GET", cache: "no-store", headers });
+    const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
+      fields: ["*"],
+    });
+    const categoriesRes = await fetch(categoriesUrl, {
+      method: "GET",
+      cache: "no-store",
+      headers,
+    });
     let categoriesData: Category[] = [];
     if (categoriesRes.ok) {
       const response = await categoriesRes.json();
-      categoriesData = response.data.map((cat: { id: number; category_name: string }) => ({
-        id: cat.id,
-        name: cat.category_name,
-      }));
+      categoriesData = response.data.map(
+        (cat: { id: number; category_name: string }) => ({
+          id: cat.id,
+          name: cat.category_name,
+        })
+      );
     }
 
     // Load items from API
     const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, { fields: ["*"] });
-    const itemsRes = await fetch(itemsUrl, { method: "GET", cache: "no-store", headers });
+    const itemsRes = await fetch(itemsUrl, {
+      method: "GET",
+      cache: "no-store",
+      headers,
+    });
     let itemsData: Item[] = [];
     if (itemsRes.ok) {
       const response = await itemsRes.json();
@@ -109,23 +148,41 @@ export default function ProductList() {
         group: item.item_group,
         type: item.ekatalog_type,
         color: item.item_color,
-        image: item.image,
+        image: getFileUrl(item.image),
         disabled: item.disabled,
       }));
+      console.log(itemsData);
     }
 
     // Load products from API
-    const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, { fields: ["*"] });
-    const productsRes = await fetch(productsUrl, { method: "GET", cache: "no-store", headers });
+    const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, {
+      fields: ["*"],
+    });
+    const productsRes = await fetch(productsUrl, {
+      method: "GET",
+      cache: "no-store",
+      headers,
+    });
     let productsWithVariants: Product[] = [];
     if (productsRes.ok) {
       const response = await productsRes.json();
+
+      // Load variants from API
+      const variantsData = await fetchVariants(token!, itemsData);
+
       productsWithVariants = response.data.map((prod: ProductApiResponse) => {
         // Find the category object for this product
-        const category = categoriesData.find(c => c.id === prod.item_category) || {
+        const category = categoriesData.find(
+          (c) => c.id === prod.item_category
+        ) || {
           id: prod.item_category,
           name: `Category ${prod.item_category}`,
         };
+
+        // Filter variants for this product
+        const productVariants = variantsData.filter(
+          (v) => v.productid === prod.id
+        );
 
         return {
           id: prod.id,
@@ -133,7 +190,7 @@ export default function ProductList() {
           itemCategory: category,
           disabled: prod.disabled,
           isHotDeals: Boolean(prod.hot_deals),
-          variants: [], // Variants will be loaded separately if needed
+          variants: productVariants, // Variants from API
         };
       });
     }
@@ -144,12 +201,13 @@ export default function ProductList() {
   // Initial load
   useEffect(() => {
     let cancelled = false;
-    
+
     async function load() {
       setLoading(true);
       try {
-        const { categoriesData, itemsData, productsWithVariants } = await loadAllData();
-        
+        const { categoriesData, itemsData, productsWithVariants } =
+          await loadAllData();
+
         if (!cancelled) {
           setCategories(categoriesData);
           setAvailableItems(itemsData);
@@ -164,9 +222,11 @@ export default function ProductList() {
         if (!cancelled) setLoading(false);
       }
     }
-    
+
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Listen for updates
@@ -180,10 +240,10 @@ export default function ProductList() {
         // Ignore errors on update
       }
     }
-    
+
     window.addEventListener("ekatalog:products_update", handler);
     window.addEventListener("ekatalog:variants_update", handler);
-    
+
     return () => {
       window.removeEventListener("ekatalog:products_update", handler);
       window.removeEventListener("ekatalog:variants_update", handler);
@@ -219,7 +279,9 @@ export default function ProductList() {
           saveSnapshot(next);
         } else {
           const errorData = await response.json();
-          alert(`Gagal menghapus produk: ${errorData.message || "Unknown error"}`);
+          alert(
+            `Gagal menghapus produk: ${errorData.message || "Unknown error"}`
+          );
         }
       } catch (error) {
         console.error("Error deleting product:", error);
@@ -242,7 +304,7 @@ export default function ProductList() {
       itemCategory: p.itemCategory,
       disabled: p.disabled,
       isHotDeals: p.isHotDeals,
-      variants: p.variants.map(v => v.item), // Extract Item from ItemVariant
+      variants: p.variants.map((v) => v.item), // Extract Item from ItemVariant
     };
   }
 
@@ -337,19 +399,19 @@ export default function ProductList() {
   // Sort products
   const sortedProducts = [...filteredProducts].sort((a, b) => {
     switch (sortBy) {
-      case 'name-asc':
+      case "name-asc":
         return a.name.localeCompare(b.name);
-      case 'name-desc':
+      case "name-desc":
         return b.name.localeCompare(a.name);
-      case 'category':
+      case "category":
         return a.itemCategory.name.localeCompare(b.itemCategory.name);
-      case 'variants-most':
+      case "variants-most":
         return b.variants.length - a.variants.length;
-      case 'variants-least':
+      case "variants-least":
         return a.variants.length - b.variants.length;
-      case 'newest':
+      case "newest":
         return (b.id || 0) - (a.id || 0);
-      case 'oldest':
+      case "oldest":
         return (a.id || 0) - (b.id || 0);
       default:
         return 0;
@@ -359,23 +421,23 @@ export default function ProductList() {
   // Pagination logic
   const totalItems = sortedProducts.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
-  
+
   let paginatedProducts = sortedProducts;
-  if (paginationMode === 'pagination') {
+  if (paginationMode === "pagination") {
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     paginatedProducts = sortedProducts.slice(startIndex, endIndex);
-  } else if (paginationMode === 'loadmore') {
+  } else if (paginationMode === "loadmore") {
     paginatedProducts = sortedProducts.slice(0, loadedItems);
   }
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleLoadMore = () => {
-    setLoadedItems(prev => Math.min(prev + itemsPerPage, totalItems));
+    setLoadedItems((prev) => Math.min(prev + itemsPerPage, totalItems));
   };
 
   const handleItemsPerPageChange = (value: number) => {
@@ -459,33 +521,33 @@ export default function ProductList() {
             {/* Pagination Mode Selector */}
             <div className="flex gap-2">
               <button
-                onClick={() => setPaginationMode('pagination')}
+                onClick={() => setPaginationMode("pagination")}
                 className={`px-4 py-2.5 rounded-lg text-xs font-medium transition-all ${
-                  paginationMode === 'pagination'
-                    ? 'bg-blue-500 text-white shadow-lg'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  paginationMode === "pagination"
+                    ? "bg-blue-500 text-white shadow-lg"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
                 title="Pagination (halaman)"
               >
                 📄 Page
               </button>
               <button
-                onClick={() => setPaginationMode('loadmore')}
+                onClick={() => setPaginationMode("loadmore")}
                 className={`px-4 py-2.5 rounded-lg text-xs font-medium transition-all ${
-                  paginationMode === 'loadmore'
-                    ? 'bg-blue-500 text-white shadow-lg'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  paginationMode === "loadmore"
+                    ? "bg-blue-500 text-white shadow-lg"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
                 title="Load More (infinite scroll)"
               >
                 ⬇️ Load
               </button>
               <button
-                onClick={() => setPaginationMode('all')}
+                onClick={() => setPaginationMode("all")}
                 className={`px-4 py-2.5 rounded-lg text-xs font-medium transition-all ${
-                  paginationMode === 'all'
-                    ? 'bg-blue-500 text-white shadow-lg'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  paginationMode === "all"
+                    ? "bg-blue-500 text-white shadow-lg"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
                 title="Show All (tampilkan semua)"
               >
@@ -513,17 +575,21 @@ export default function ProductList() {
                   <FaFilter className="w-3.5 h-3.5" />
                   <span>
                     {selectedCategory !== null
-                      ? categories.find(c => c.id === selectedCategory)?.name
+                      ? categories.find((c) => c.id === selectedCategory)?.name
                       : `Semua (${products.length})`}
                   </span>
-                  <FaChevronDown className={`w-3 h-3 transition-transform ${categoryDropdownOpen ? 'rotate-180' : ''}`} />
+                  <FaChevronDown
+                    className={`w-3 h-3 transition-transform ${
+                      categoryDropdownOpen ? "rotate-180" : ""
+                    }`}
+                  />
                 </button>
 
                 <AnimatePresence>
                   {categoryDropdownOpen && (
                     <>
-                      <div 
-                        className="fixed inset-0 z-10" 
+                      <div
+                        className="fixed inset-0 z-10"
                         onClick={() => setCategoryDropdownOpen(false)}
                       />
                       <motion.div
@@ -538,13 +604,17 @@ export default function ProductList() {
                             setCategoryDropdownOpen(false);
                           }}
                           className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors ${
-                            selectedCategory === null ? 'text-red-600 bg-red-50' : 'text-gray-700'
+                            selectedCategory === null
+                              ? "text-red-600 bg-red-50"
+                              : "text-gray-700"
                           }`}
                         >
                           Semua ({products.length})
                         </button>
                         {categories.map((cat) => {
-                          const count = products.filter(p => p.itemCategory.id === cat.id).length;
+                          const count = products.filter(
+                            (p) => p.itemCategory.id === cat.id
+                          ).length;
                           return (
                             <button
                               key={cat.id}
@@ -553,7 +623,9 @@ export default function ProductList() {
                                 setCategoryDropdownOpen(false);
                               }}
                               className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors ${
-                                selectedCategory === cat.id ? 'text-red-600 bg-red-50' : 'text-gray-700'
+                                selectedCategory === cat.id
+                                  ? "text-red-600 bg-red-50"
+                                  : "text-gray-700"
                               }`}
                             >
                               {cat.name} ({count})
@@ -577,22 +649,26 @@ export default function ProductList() {
                 >
                   <FaSortAmountDown className="w-3.5 h-3.5" />
                   <span>
-                    {sortBy === 'name-asc' && 'A-Z'}
-                    {sortBy === 'name-desc' && 'Z-A'}
-                    {sortBy === 'category' && 'Kategori'}
-                    {sortBy === 'variants-most' && 'Terbanyak Varian'}
-                    {sortBy === 'variants-least' && 'Tersedikit Varian'}
-                    {sortBy === 'newest' && 'Terbaru'}
-                    {sortBy === 'oldest' && 'Terlama'}
+                    {sortBy === "name-asc" && "A-Z"}
+                    {sortBy === "name-desc" && "Z-A"}
+                    {sortBy === "category" && "Kategori"}
+                    {sortBy === "variants-most" && "Terbanyak Varian"}
+                    {sortBy === "variants-least" && "Tersedikit Varian"}
+                    {sortBy === "newest" && "Terbaru"}
+                    {sortBy === "oldest" && "Terlama"}
                   </span>
-                  <FaChevronDown className={`w-3 h-3 transition-transform ${sortDropdownOpen ? 'rotate-180' : ''}`} />
+                  <FaChevronDown
+                    className={`w-3 h-3 transition-transform ${
+                      sortDropdownOpen ? "rotate-180" : ""
+                    }`}
+                  />
                 </button>
 
                 <AnimatePresence>
                   {sortDropdownOpen && (
                     <>
-                      <div 
-                        className="fixed inset-0 z-10" 
+                      <div
+                        className="fixed inset-0 z-10"
                         onClick={() => setSortDropdownOpen(false)}
                       />
                       <motion.div
@@ -602,13 +678,28 @@ export default function ProductList() {
                         className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 py-2 min-w-[200px] z-20"
                       >
                         {[
-                          { value: 'newest' as SortOption, label: 'Terbaru' },
-                          { value: 'oldest' as SortOption, label: 'Terlama' },
-                          { value: 'name-asc' as SortOption, label: 'Nama A-Z' },
-                          { value: 'name-desc' as SortOption, label: 'Nama Z-A' },
-                          { value: 'category' as SortOption, label: 'Kategori' },
-                          { value: 'variants-most' as SortOption, label: 'Terbanyak Varian' },
-                          { value: 'variants-least' as SortOption, label: 'Tersedikit Varian' },
+                          { value: "newest" as SortOption, label: "Terbaru" },
+                          { value: "oldest" as SortOption, label: "Terlama" },
+                          {
+                            value: "name-asc" as SortOption,
+                            label: "Nama A-Z",
+                          },
+                          {
+                            value: "name-desc" as SortOption,
+                            label: "Nama Z-A",
+                          },
+                          {
+                            value: "category" as SortOption,
+                            label: "Kategori",
+                          },
+                          {
+                            value: "variants-most" as SortOption,
+                            label: "Terbanyak Varian",
+                          },
+                          {
+                            value: "variants-least" as SortOption,
+                            label: "Tersedikit Varian",
+                          },
                         ].map((option) => (
                           <button
                             key={option.value}
@@ -617,7 +708,9 @@ export default function ProductList() {
                               setSortDropdownOpen(false);
                             }}
                             className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors ${
-                              sortBy === option.value ? 'text-red-600 bg-red-50' : 'text-gray-700'
+                              sortBy === option.value
+                                ? "text-red-600 bg-red-50"
+                                : "text-gray-700"
                             }`}
                           >
                             {option.label}
@@ -642,9 +735,9 @@ export default function ProductList() {
                 <span>Hot Deals</span>
               </button>
             </div>
-            
+
             {/* Per Page Selector */}
-            {paginationMode !== 'all' && (
+            {paginationMode !== "all" && (
               <PerPageSelector
                 value={itemsPerPage}
                 onChange={handleItemsPerPageChange}
@@ -702,7 +795,7 @@ export default function ProductList() {
             </div>
           </section>
 
-          {paginationMode === 'pagination' && totalPages > 1 && (
+          {paginationMode === "pagination" && totalPages > 1 && (
             <Pagination
               currentPage={currentPage}
               totalPages={totalPages}
@@ -712,7 +805,7 @@ export default function ProductList() {
             />
           )}
 
-          {paginationMode === 'loadmore' && (
+          {paginationMode === "loadmore" && (
             <LoadMoreButton
               onClick={handleLoadMore}
               loading={false}
@@ -758,7 +851,7 @@ export default function ProductList() {
             ))}
           </div>
 
-          {paginationMode === 'pagination' && totalPages > 1 && (
+          {paginationMode === "pagination" && totalPages > 1 && (
             <Pagination
               currentPage={currentPage}
               totalPages={totalPages}
@@ -768,7 +861,7 @@ export default function ProductList() {
             />
           )}
 
-          {paginationMode === 'loadmore' && (
+          {paginationMode === "loadmore" && (
             <LoadMoreButton
               onClick={handleLoadMore}
               loading={false}

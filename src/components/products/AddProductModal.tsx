@@ -15,11 +15,19 @@ import {
   FaSave,
   FaSearch,
   FaCheck,
+  FaExclamationTriangle,
 } from "react-icons/fa";
 import Image from "next/image";
 import type { Item, Category, ProductFormData } from "@/types";
+import { DraggableVariantList } from "./DraggableVariantList";
+import { VariantSuggestions } from "./VariantSuggestions";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_CONFIG, getQueryUrl, getAuthHeaders, getResourceUrl, getAuthHeadersFormData } from "@/config/api";
+import {
+  API_CONFIG,
+  getQueryUrl,
+  getAuthHeaders,
+  getResourceUrl,
+} from "@/config/api";
 
 // Props interface
 interface AddProductModalProps {
@@ -46,21 +54,66 @@ function ItemSelectorModal({
 }) {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Item[]>(selectedItems);
+  const [filterCategory, setFilterCategory] = useState<string | null>(null);
+  const [filterType, setFilterType] = useState<string | null>(null);
+  const [filterColor, setFilterColor] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       setSelected(selectedItems);
       setSearch("");
+      setFilterCategory(null);
+      setFilterType(null);
+      setFilterColor(null);
     }
   }, [open, selectedItems]);
 
-  const filteredItems = items.filter(
-    (item) =>
+  // Extract first 2 words dari item name untuk smart prefix matching
+  const getItemPrefix = (itemName: string): string => {
+    const words = itemName.trim().split(/\s+/);
+    return words.slice(0, 2).join(" ").toUpperCase();
+  };
+
+  // Select semua items dengan prefix yang sama
+  const selectByPrefix = (query: string) => {
+    if (!query.trim()) return;
+    const prefix = getItemPrefix(query);
+    const matching = items.filter((item) => {
+      const itemPrefix = getItemPrefix(item.name);
+      return itemPrefix === prefix;
+    });
+    setSelected([
+      ...selected,
+      ...matching.filter((m) => !selected.some((s) => s.id === m.id)),
+    ]);
+  };
+
+  // Get unique values untuk filters
+  const uniqueCategories = [
+    ...new Set(items.map((i) => i.category).filter(Boolean)),
+  ];
+  const uniqueTypes = [...new Set(items.map((i) => i.type).filter(Boolean))];
+  const uniqueColors = [...new Set(items.map((i) => i.color).filter(Boolean))];
+
+  const filteredItems = items.filter((item) => {
+    // Text search
+    const matchesSearch =
       item.name.toLowerCase().includes(search.toLowerCase()) ||
       item.code.toLowerCase().includes(search.toLowerCase()) ||
       item.color?.toLowerCase().includes(search.toLowerCase()) ||
-      item.type?.toLowerCase().includes(search.toLowerCase())
-  );
+      item.type?.toLowerCase().includes(search.toLowerCase());
+
+    // Category filter
+    const matchesCategory = !filterCategory || item.category === filterCategory;
+
+    // Type filter
+    const matchesType = !filterType || item.type === filterType;
+
+    // Color filter
+    const matchesColor = !filterColor || item.color === filterColor;
+
+    return matchesSearch && matchesCategory && matchesType && matchesColor;
+  });
 
   const toggleItem = (item: Item) => {
     const exists = selected.some((s) => s.id === item.id);
@@ -114,7 +167,7 @@ function ItemSelectorModal({
           </div>
 
           {/* Search */}
-          <div className="relative">
+          <div className="relative mb-4">
             <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"
@@ -123,6 +176,88 @@ function ItemSelectorModal({
               placeholder="Cari item berdasarkan nama, kode, warna, atau tipe..."
               className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent"
             />
+          </div>
+
+          {/* Bulk Action Buttons */}
+          <div className="flex gap-2 flex-wrap mb-4">
+            <button
+              onClick={() => selectByPrefix(search)}
+              disabled={!search.trim()}
+              className="px-3 py-1.5 bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-blue-600 transition-colors"
+            >
+              Select all matching &quot;{search}&quot;
+            </button>
+
+            <button
+              onClick={() =>
+                setSelected([
+                  ...selected,
+                  ...filteredItems.filter(
+                    (f) => !selected.some((s) => s.id === f.id)
+                  ),
+                ])
+              }
+              disabled={filteredItems.length === 0}
+              className="px-3 py-1.5 bg-purple-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-purple-600 transition-colors"
+            >
+              Select all filtered ({filteredItems.length})
+            </button>
+
+            <button
+              onClick={() => setSelected([])}
+              disabled={selected.length === 0}
+              className="px-3 py-1.5 bg-gray-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-gray-600 transition-colors"
+            >
+              Clear selection
+            </button>
+          </div>
+
+          {/* Filter Dropdowns */}
+          <div className="flex gap-2 flex-wrap">
+            {uniqueCategories.length > 0 && (
+              <select
+                value={filterCategory || ""}
+                onChange={(e) => setFilterCategory(e.target.value || null)}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
+              >
+                <option value="">All Categories</option>
+                {uniqueCategories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {uniqueTypes.length > 0 && (
+              <select
+                value={filterType || ""}
+                onChange={(e) => setFilterType(e.target.value || null)}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
+              >
+                <option value="">All Types</option>
+                {uniqueTypes.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {uniqueColors.length > 0 && (
+              <select
+                value={filterColor || ""}
+                onChange={(e) => setFilterColor(e.target.value || null)}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
+              >
+                <option value="">All Colors</option>
+                {uniqueColors.map((color) => (
+                  <option key={color} value={color}>
+                    {color}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
 
@@ -162,6 +297,7 @@ function ItemSelectorModal({
                           height={96}
                           src={item.image}
                           alt={item.name}
+                          unoptimized
                           className="object-contain w-full h-full p-2"
                         />
                       ) : (
@@ -258,38 +394,63 @@ export default function AddProductModal({
     setSaving(true);
 
     try {
-      const formData = new FormData();
-      formData.append("product_name", name.trim());
-      formData.append("item_category", String(categoryId));
-      formData.append("hot_deals", isHotDeals ? "1" : "0");
-      formData.append("disabled", String(initial?.disabled ?? 0));
-      formData.append("docstatus", "0");
-      formData.append("status", "Draft");
+      // Prepare variants - SIMPLE format: just {item: id}
+      const variantsData = selectedVariants.map((item) => ({
+        item: item.id,
+      }));
 
-      // Add variants as array of item IDs
-      selectedVariants.forEach((item, index) => {
-        formData.append(`variants[${index}]`, String(item.id));
-      });
+      // Build JSON payload
+      const payload = {
+        product_name: name.trim(),
+        item_category: categoryId,
+        hot_deals: isHotDeals ? 1 : 0,
+        variants: variantsData, // Backend auto-generates idx, name, etc.
+      };
 
-      const headers = getAuthHeadersFormData(token);
+      const headers = getAuthHeaders(token);
       const method = initial ? "PUT" : "POST";
       const url = initial
         ? getResourceUrl(API_CONFIG.ENDPOINTS.PRODUCT, initial.id)
         : getResourceUrl(API_CONFIG.ENDPOINTS.PRODUCT);
 
-      const response = await fetch(url, { method, headers, body: formData });
+      console.log("Saving product to:", url, "Method:", method);
+      console.log("Payload:", JSON.stringify(payload, null, 2));
+
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: JSON.stringify(payload),
+      });
 
       if (response.ok) {
         // Dispatch event to trigger reload
         window.dispatchEvent(new Event("ekatalog:products_update"));
         onClose();
       } else {
-        const errorData = await response.json();
-        alert(`Gagal menyimpan produk: ${errorData.message || "Unknown error"}`);
+        const errorText = await response.text();
+        console.error("Product save failed:", response.status, errorText);
+
+        let errorMessage = "Unknown error";
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.message || errorData.exc || errorText;
+        } catch {
+          errorMessage = errorText;
+        }
+
+        if (response.status === 401) {
+          alert("Session expired. Please login again.");
+        } else {
+          alert(`Gagal menyimpan produk: ${errorMessage}`);
+        }
       }
     } catch (error) {
       console.error("Error saving product:", error);
-      alert("Gagal menyimpan produk. Silakan coba lagi.");
+      alert(
+        `Gagal menyimpan produk. Silakan coba lagi.\n\nError: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
     } finally {
       setSaving(false);
     }
@@ -423,71 +584,70 @@ export default function AddProductModal({
                   </motion.button>
                 </div>
 
+                {/* Smart Suggestions */}
+                {name.trim() && (
+                  <VariantSuggestions
+                    productName={name}
+                    items={availableItems}
+                    currentVariants={selectedVariants}
+                    onSelect={(items) =>
+                      setSelectedVariants([...selectedVariants, ...items])
+                    }
+                  />
+                )}
+
+                {/* Warning: No variants */}
+                {selectedVariants.length === 0 && name.trim() && categoryId && (
+                  <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg flex items-start gap-2 mb-4">
+                    <FaExclamationTriangle className="text-orange-500 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-orange-900">
+                        No variants added
+                      </p>
+                      <p className="text-xs text-orange-700">
+                        Products without variants won&apos;t be visible to
+                        customers
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Warning: Too many variants */}
+                {selectedVariants.length > 50 && (
+                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-2 mb-4">
+                    <FaExclamationTriangle className="text-yellow-500 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-yellow-900">
+                        Many variants ({selectedVariants.length})
+                      </p>
+                      <p className="text-xs text-yellow-700">
+                        Consider splitting into multiple products for better
+                        organization
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {selectedVariants.length === 0 ? (
                   <div className="bg-gray-50 rounded-xl p-8 text-center border-2 border-dashed border-gray-300">
                     <FaBox className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-500 font-medium">Belum ada varian</p>
+                    <p className="text-gray-500 font-medium">
+                      Belum ada varian
+                    </p>
                     <p className="text-sm text-gray-400 mt-1">
                       Klik &quot;Pilih Item&quot; untuk menambahkan varian
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {selectedVariants.map((item) => (
-                      <motion.div
-                        key={item.id}
-                        layout
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, x: -10 }}
-                        className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl border border-gray-200 group hover:bg-gray-100 transition-colors"
-                      >
-                        <div className="w-16 h-16 bg-white rounded-lg overflow-hidden flex-shrink-0 border border-gray-200">
-                          {item.image ? (
-                            <Image
-                              width={64}
-                              height={64}
-                              src={item.image}
-                              alt={item.name}
-                              className="object-contain w-full h-full p-1"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <FaImage className="w-6 h-6 text-gray-300" />
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-semibold text-gray-900 text-sm line-clamp-1">
-                            {item.name}
-                          </h4>
-                          <p className="text-xs text-gray-500 font-mono">
-                            {item.code}
-                          </p>
-                          <div className="flex gap-1.5 mt-1.5">
-                            {item.color && (
-                              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
-                                {item.color}
-                              </span>
-                            )}
-                            {item.type && (
-                              <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">
-                                {item.type}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => removeVariant(item.id)}
-                          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                        >
-                          <FaTrash className="w-4 h-4" />
-                        </button>
-                      </motion.div>
-                    ))}
-                  </div>
+                  <DraggableVariantList
+                    variants={selectedVariants}
+                    onReorder={setSelectedVariants}
+                    onRemove={(id) =>
+                      setSelectedVariants(
+                        selectedVariants.filter((v) => v.id !== id)
+                      )
+                    }
+                  />
                 )}
               </div>
             </div>
@@ -509,7 +669,11 @@ export default function AddProductModal({
               className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl font-medium hover:from-red-600 hover:to-red-700 transition-all shadow-lg shadow-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <FaSave className="w-4 h-4" />
-              {saving ? "Menyimpan..." : initial ? "Simpan Perubahan" : "Simpan Produk"}
+              {saving
+                ? "Menyimpan..."
+                : initial
+                ? "Simpan Perubahan"
+                : "Simpan Produk"}
             </motion.button>
           </div>
         </motion.div>

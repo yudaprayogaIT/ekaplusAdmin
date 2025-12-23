@@ -4,12 +4,19 @@
 import React from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { FaEdit, FaTrash, FaBox, FaTag, FaFire, FaLayerGroup } from "react-icons/fa";
+import {
+  FaEdit,
+  FaTrash,
+  FaBox,
+  FaTag,
+  FaFire,
+  FaLayerGroup,
+} from "react-icons/fa";
 import type { Product } from "@/types";
 
 interface ProductCardProps {
   product: Product;
-  viewMode?: 'grid' | 'list';
+  viewMode?: "grid" | "list";
   onEdit?: () => void;
   onDelete?: () => void;
   onView?: () => void;
@@ -17,15 +24,17 @@ interface ProductCardProps {
 
 export default function ProductCard({
   product,
-  viewMode = 'grid',
+  viewMode = "grid",
   onEdit,
   onDelete,
   onView,
 }: ProductCardProps) {
   const firstVariant = product.variants[0]?.item;
   const variantCount = product.variants.length;
+  console.log("bbbbbbbbbbbbbbbbbbbbbbb");
+  console.log(variantCount);
 
-  if (viewMode === 'list') {
+  if (viewMode === "list") {
     return (
       <motion.div
         initial={{ opacity: 0, x: -20 }}
@@ -43,6 +52,7 @@ export default function ProductCard({
                 height={96}
                 src={firstVariant.image}
                 alt={product.name}
+                unoptimized
                 className="object-contain w-full h-full group-hover:scale-110 transition-transform duration-500"
               />
             ) : (
@@ -97,22 +107,22 @@ export default function ProductCard({
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
-                onClick={(e) => { 
-                  e.stopPropagation(); 
-                  onEdit?.(); 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit?.();
                 }}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-gray-200 hover:border-red-500 hover:bg-red-50 transition-all text-sm font-medium"
               >
                 <FaEdit className="w-3.5 h-3.5" />
                 <span>Edit</span>
               </motion.button>
-              
+
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
-                onClick={(e) => { 
-                  e.stopPropagation(); 
-                  onDelete?.(); 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete?.();
                 }}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-50 border-2 border-red-100 hover:bg-red-100 transition-all text-sm font-medium text-red-600"
               >
@@ -130,7 +140,10 @@ export default function ProductCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -6, boxShadow: "0 20px 40px -10px rgba(239, 68, 68, 0.15)" }}
+      whileHover={{
+        y: -6,
+        boxShadow: "0 20px 40px -10px rgba(239, 68, 68, 0.15)",
+      }}
       onClick={() => onView?.()}
       className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden cursor-pointer transition-all group"
     >
@@ -143,6 +156,7 @@ export default function ProductCard({
               height={400}
               src={firstVariant.image}
               alt={product.name}
+              unoptimized
               className="object-contain w-full h-full group-hover:scale-110 transition-transform duration-500"
             />
           </div>
@@ -153,7 +167,7 @@ export default function ProductCard({
             </div>
           </div>
         )}
-        
+
         {/* Badges */}
         <div className="absolute top-4 right-4 flex flex-col gap-2">
           {product.isHotDeals && (
@@ -163,7 +177,9 @@ export default function ProductCard({
             </div>
           )}
           <div className="px-3 py-1.5 bg-white/95 backdrop-blur-sm rounded-full shadow-sm border border-gray-100">
-            <span className="text-xs font-semibold text-gray-700">{product.itemCategory.name}</span>
+            <span className="text-xs font-semibold text-gray-700">
+              {product.itemCategory.name}
+            </span>
           </div>
         </div>
 
@@ -184,7 +200,7 @@ export default function ProductCard({
         <h3 className="font-bold text-gray-900 text-lg mb-2 line-clamp-1 group-hover:text-red-600 transition-colors">
           {product.name}
         </h3>
-        
+
         {firstVariant?.description && (
           <p className="text-sm text-gray-600 line-clamp-2 mb-4 leading-relaxed">
             {firstVariant.description}
@@ -200,7 +216,7 @@ export default function ProductCard({
                 {product.variants.slice(0, 2).map((v, i) => (
                   <span key={v.id}>
                     {v.item.color || v.item.type}
-                    {i < Math.min(variantCount - 1, 1) && ', '}
+                    {i < Math.min(variantCount - 1, 1) && ", "}
                   </span>
                 ))}
                 {variantCount > 2 && ` +${variantCount - 2} lainnya`}
@@ -214,22 +230,24 @@ export default function ProductCard({
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              onEdit?.(); 
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit?.();
             }}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 border-gray-200 hover:border-red-500 hover:bg-red-50 transition-all group/btn"
           >
             <FaEdit className="w-3.5 h-3.5 text-gray-600 group-hover/btn:text-red-600 transition-colors" />
-            <span className="text-sm font-semibold text-gray-700 group-hover/btn:text-red-600 transition-colors">Edit</span>
+            <span className="text-sm font-semibold text-gray-700 group-hover/btn:text-red-600 transition-colors">
+              Edit
+            </span>
           </motion.button>
-          
+
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              onDelete?.(); 
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete?.();
             }}
             className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 border-2 border-red-100 hover:bg-red-100 hover:border-red-200 transition-all"
           >
