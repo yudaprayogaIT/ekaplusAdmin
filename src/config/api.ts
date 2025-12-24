@@ -4,9 +4,11 @@
  * Change the base URL here when switching to production or different server
  */
 export const API_CONFIG = {
-  BASE_URL: "http://192.168.101.214:8000",
+  // BASE_URL: "http://192.168.101.214:8000",
+  BASE_URL: "https://api-ekaplus.ekatunggal.com",
   // BASE_URL: "https://estrella-subgeniculate-dollie.ngrok-free.dev",
-  FILE_BASE_URL: "http://192.168.101.214:8000",
+  // FILE_BASE_URL: "http://192.168.101.214:8000",
+  FILE_BASE_URL: "https://api-ekaplus.ekatunggal.com",
   // FILE_BASE_URL: "https://estrella-subgeniculate-dollie.ngrok-free.dev",
 
   // Endpoints
@@ -32,6 +34,7 @@ export const API_CONFIG = {
     USER: "/api/resource/user",
     EMAIL: "/resource/email",
     WHATSAPP: "/api/resource/whatsapp",
+    WORKFLOW_STATE: "/api/workflow/state",
   },
 } as const;
 

@@ -54,16 +54,16 @@ export default function UnsavedChangesDialog({
               </p>
 
               {/* Actions */}
-              <div className="flex gap-3">
+              <div className="flex gap-10">
                 <button
                   onClick={onCancel}
-                  className="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl font-semibold transition-all"
+                  className="flex-1 px-1 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl font-semibold transition-all"
                 >
                   Kembali
                 </button>
                 <button
                   onClick={onConfirm}
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white rounded-xl font-semibold shadow-lg transition-all"
+                  className="flex-1 px-1 py-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white rounded-xl font-semibold shadow-lg transition-all"
                 >
                   Keluar Tanpa Simpan
                 </button>

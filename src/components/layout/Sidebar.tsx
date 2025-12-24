@@ -27,6 +27,7 @@ import {
   FaCog,
   FaLock,
   FaDatabase,
+  FaCircle,
 } from "react-icons/fa";
 import { MdInventory, MdMessage } from "react-icons/md";
 import { BiSolidPurchaseTag } from "react-icons/bi";
@@ -116,6 +117,13 @@ const ADMIN_MENU: MenuItem[] = [
     label: "Workflows",
     href: "/workflows",
     icon: <FaProjectDiagram className="w-4 h-4" />,
+    // permission: "workflows.view", // DISABLED
+    requireAuth: true,
+  },
+  {
+    label: "Workflow States",
+    href: "/workflow-states",
+    icon: <FaCircle className="w-4 h-4" />,
     // permission: "workflows.view", // DISABLED
     requireAuth: true,
   },

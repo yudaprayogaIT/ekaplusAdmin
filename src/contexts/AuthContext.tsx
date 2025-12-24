@@ -143,7 +143,8 @@ const AuthContext = createContext<AuthContextType | null>(null);
 const AUTH_KEY = "ekaplus_current_user";
 const TOKEN_KEY = "ekaplus_auth_token";
 const USER_DATA_KEY = "ekaplus_user_data";
-const API_BASE_URL = "http://192.168.101.214:8000/api";
+// const API_BASE_URL = "http://192.168.101.214:8000/api";
+const API_BASE_URL = "https://api-ekaplus.ekatunggal.com";
 // const API_BASE_URL = "https://estrella-subgeniculate-dollie.ngrok-free.dev/api";
 
 // Mapping API response fields to internal User type
@@ -311,7 +312,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       // console.log("🔐 Attempting login...");
 
-      const response = await fetch(`${API_BASE_URL}/user/login`, {
+      const response = await fetch(`${API_BASE_URL}/api/user/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
