@@ -5,6 +5,7 @@ import React, { useEffect, useRef, useState } from "react";
 import VariantCard from "./VariantCard";
 import AddVariantMappingModal from "./AddVariantMappingModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import Pagination, { usePagination } from "@/components/ui/Pagination";
 import {
   FaLink,
   FaSearch,
@@ -167,6 +168,8 @@ export default function VariantList() {
           );
         }
 
+        console.log(itemsData);
+
         // Load variants from API
         const variantsData = await fetchVariants(token, itemsData);
 
@@ -251,29 +254,6 @@ export default function VariantList() {
     setMappingModalOpen(false);
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-red-200 border-t-red-500 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-sm text-gray-600 font-medium">
-            Memuat variants...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="py-8 text-center">
-        <div className="inline-flex items-center gap-2 px-4 py-3 bg-red-50 text-red-600 rounded-xl border border-red-100">
-          <span className="text-sm font-medium">Error: {error}</span>
-        </div>
-      </div>
-    );
-  }
-
   // Filter variants
   let filteredVariants = variants;
 
@@ -312,13 +292,47 @@ export default function VariantList() {
     }
   });
 
+  // Apply pagination
+  const {
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    paginatedItems,
+    totalItems,
+    itemsPerPage,
+  } = usePagination(sortedVariants, 10);
+
   // Group by product
   const groupedByProduct = products
+    // .sort((a, b) => a.name.localeCompare(b.name))
     .map((product) => ({
       product,
-      items: sortedVariants.filter((v) => v.productid === product.id),
+      items: paginatedItems.filter((v) => v.productid === product.id),
     }))
     .filter((group) => group.items.length > 0);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-red-200 border-t-red-500 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-sm text-gray-600 font-medium">
+            Memuat variants...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="py-8 text-center">
+        <div className="inline-flex items-center gap-2 px-4 py-3 bg-red-50 text-red-600 rounded-xl border border-red-100">
+          <span className="text-sm font-medium">Error: {error}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -538,7 +552,10 @@ export default function VariantList() {
                       className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 py-2 min-w-[200px] z-20"
                     >
                       {[
-                        { value: "newest" as SortOption, label: "Terbaru" },
+                        {
+                          value: "newest" as SortOption,
+                          label: "Variant Terbaru",
+                        },
                         { value: "oldest" as SortOption, label: "Terlama" },
                         { value: "item-asc" as SortOption, label: "Item A-Z" },
                         { value: "item-desc" as SortOption, label: "Item Z-A" },
@@ -612,7 +629,7 @@ export default function VariantList() {
                 : "space-y-4"
             }
           >
-            {sortedVariants.map((v) => (
+            {paginatedItems.map((v) => (
               <VariantCard
                 key={v.id}
                 variant={v}
@@ -622,42 +639,66 @@ export default function VariantList() {
               />
             ))}
           </div>
+
+          {/* Pagination */}
+          {sortedVariants.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              totalItems={totalItems}
+              itemsPerPage={itemsPerPage}
+            />
+          )}
         </section>
       ) : (
-        <div className="space-y-10">
-          {groupedByProduct.map(({ product, items }) => (
-            <section key={product.id}>
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-800">
-                    {product.name}
-                  </h2>
+        <>
+          <div className="space-y-10">
+            {groupedByProduct.map(({ product, items }) => (
+              <section key={product.id}>
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-800">
+                      {product.name}
+                    </h2>
+                  </div>
+                  <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full font-medium">
+                    {items.length} variants
+                  </span>
                 </div>
-                <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full font-medium">
-                  {items.length} variants
-                </span>
-              </div>
 
-              <div
-                className={
-                  viewMode === "grid"
-                    ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-                    : "space-y-4"
-                }
-              >
-                {items.map((v) => (
-                  <VariantCard
-                    key={v.id}
-                    variant={v}
-                    product={product}
-                    viewMode={viewMode}
-                    onDelete={() => promptDeleteVariant(v)}
-                  />
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
+                <div
+                  className={
+                    viewMode === "grid"
+                      ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+                      : "space-y-4"
+                  }
+                >
+                  {items.map((v) => (
+                    <VariantCard
+                      key={v.id}
+                      variant={v}
+                      product={product}
+                      viewMode={viewMode}
+                      onDelete={() => promptDeleteVariant(v)}
+                    />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+
+          {/* Pagination */}
+          {sortedVariants.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              totalItems={totalItems}
+              itemsPerPage={itemsPerPage}
+            />
+          )}
+        </>
       )}
 
       {/* Modals */}

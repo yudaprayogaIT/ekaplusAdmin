@@ -10,8 +10,8 @@ export const metadata = {
 
 export default function TypesPage() {
   return (
-    // <RequireAuth>
-    <TypeList />
-    // </RequireAuth>
+    <RequireAuth>
+      <TypeList />
+    </RequireAuth>
   );
 }

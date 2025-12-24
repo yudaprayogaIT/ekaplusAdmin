@@ -12,6 +12,8 @@ import {
   API_CONFIG,
 } from "@/config/api";
 import { Category } from "./CategoryList";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
 
 type CategoryType = {
   id: number;
@@ -45,30 +47,66 @@ export default function AddCategoryModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Track initial state for dirty checking
+  const [initialState, setInitialState] = useState({
+    name: "",
+    description: "",
+    title: "",
+    subtitle: "",
+    typeId: 1,
+    iconUuid: "",
+    imageUuid: "",
+  });
+
+  // Check if form is dirty
+  const isDirty =
+    name !== initialState.name ||
+    description !== initialState.description ||
+    title !== initialState.title ||
+    subtitle !== initialState.subtitle ||
+    typeId !== initialState.typeId ||
+    iconUuid !== initialState.iconUuid ||
+    imageUuid !== initialState.imageUuid ||
+    iconFile !== null ||
+    imageFile !== null;
+
+  // Unsaved changes hook
+  const { showConfirm, handleClose, handleConfirmClose, handleCancelClose } =
+    useUnsavedChanges({ isDirty, onClose });
+
   useEffect(() => {
     setError(null);
     if (initial) {
+      const iconUrl = initial.icon ?? "";
+      const iconUuidMatch = iconUrl.match(/\/files\/(.+)$/);
+      const iconUuidExtracted = iconUuidMatch ? iconUuidMatch[1] : iconUrl;
+
+      const imageUrl = initial.image ?? "";
+      const imageUuidMatch = imageUrl.match(/\/files\/(.+)$/);
+      const imageUuidExtracted = imageUuidMatch ? imageUuidMatch[1] : imageUrl;
+
       setName(initial.category_name ?? "");
       setDescription(initial.description ?? "");
       setTitle(initial.title ?? "");
       setSubtitle(initial.subtitle ?? "");
       setTypeId(initial.item_type ?? types[0]?.id ?? 1);
-
-      // Extract UUID from full URL if present for icon
-      const iconUrl = initial.icon ?? "";
-      const iconUuidMatch = iconUrl.match(/\/files\/(.+)$/);
-      const iconUuidExtracted = iconUuidMatch ? iconUuidMatch[1] : iconUrl;
       setIconUuid(iconUuidExtracted);
       setIconPreview(initial.icon || null);
       setIconFile(null);
-
-      // Extract UUID from full URL if present for image
-      const imageUrl = initial.image ?? "";
-      const imageUuidMatch = imageUrl.match(/\/files\/(.+)$/);
-      const imageUuidExtracted = imageUuidMatch ? imageUuidMatch[1] : imageUrl;
       setImageUuid(imageUuidExtracted);
       setImagePreview(initial.image || null);
       setImageFile(null);
+
+      // Set initial state for dirty checking
+      setInitialState({
+        name: initial.category_name ?? "",
+        description: initial.description ?? "",
+        title: initial.title ?? "",
+        subtitle: initial.subtitle ?? "",
+        typeId: initial.item_type ?? types[0]?.id ?? 1,
+        iconUuid: iconUuidExtracted,
+        imageUuid: imageUuidExtracted,
+      });
     } else {
       setName("");
       setDescription("");
@@ -81,6 +119,17 @@ export default function AddCategoryModal({
       setImagePreview(null);
       setIconFile(null);
       setImageFile(null);
+
+      // Set initial state for dirty checking
+      setInitialState({
+        name: "",
+        description: "",
+        title: "",
+        subtitle: "",
+        typeId: types[0]?.id ?? 1,
+        iconUuid: "",
+        imageUuid: "",
+      });
     }
   }, [initial, open, types]);
 
@@ -123,14 +172,14 @@ export default function AddCategoryModal({
       if (e.key === "Escape") {
         e.preventDefault();
         if (!saving) {
-          onClose();
+          handleClose();
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, saving, onClose]);
+  }, [open, saving, handleClose]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -227,7 +276,7 @@ export default function AddCategoryModal({
         >
           <div
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={onClose}
+            onClick={handleClose}
           />
 
           <motion.div
@@ -265,7 +314,7 @@ export default function AddCategoryModal({
                   </p>
                 </div>
                 <button
-                  onClick={onClose}
+                  onClick={handleClose}
                   disabled={saving}
                   className="p-2 hover:bg-white/20 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -496,7 +545,7 @@ export default function AddCategoryModal({
               <div className="flex justify-end gap-3 pt-6 border-t-2 border-gray-100">
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={handleClose}
                   disabled={saving}
                   className="px-6 py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-all font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -521,6 +570,13 @@ export default function AddCategoryModal({
               </div>
             </form>
           </motion.div>
+
+          {/* Unsaved Changes Dialog */}
+          <UnsavedChangesDialog
+            open={showConfirm}
+            onConfirm={handleConfirmClose}
+            onCancel={handleCancelClose}
+          />
         </motion.div>
       )}
     </AnimatePresence>

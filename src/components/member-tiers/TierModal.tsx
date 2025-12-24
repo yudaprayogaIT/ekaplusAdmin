@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
 
 type Tier = {
   id?: number;
@@ -37,9 +39,36 @@ export default function TierModal({
   // show discount as percent in the input
   const [discountPercent, setDiscountPercent] = useState<number>(0);
 
+  // Track initial state for dirty checking
+  const [initialState, setInitialState] = useState({
+    name: "",
+    min_points: 0,
+    min_points_maintain: null as number | null,
+    discount_rate: 0,
+    inactivity_penalty_points: 0,
+    inactivity_period_days: 60,
+    penalty_frequency_days: 7,
+    discountPercent: 0,
+  });
+
+  // Check if form is dirty
+  const isDirty =
+    data.name !== initialState.name ||
+    data.min_points !== initialState.min_points ||
+    data.min_points_maintain !== initialState.min_points_maintain ||
+    data.discount_rate !== initialState.discount_rate ||
+    data.inactivity_penalty_points !== initialState.inactivity_penalty_points ||
+    data.inactivity_period_days !== initialState.inactivity_period_days ||
+    data.penalty_frequency_days !== initialState.penalty_frequency_days ||
+    discountPercent !== initialState.discountPercent;
+
+  // Unsaved changes hook
+  const { showConfirm, handleClose, handleConfirmClose, handleCancelClose } =
+    useUnsavedChanges({ isDirty, onClose });
+
   useEffect(() => {
     if (initial) {
-      setData({
+      const newData = {
         id: initial.id,
         name: initial.name ?? "",
         min_points: initial.min_points ?? 0,
@@ -48,8 +77,23 @@ export default function TierModal({
         inactivity_penalty_points: initial.inactivity_penalty_points ?? 0,
         inactivity_period_days: initial.inactivity_period_days ?? 60,
         penalty_frequency_days: initial.penalty_frequency_days ?? 7,
+      };
+      const newDiscountPercent = (initial.discount_rate ?? 0) * 100;
+
+      setData(newData);
+      setDiscountPercent(newDiscountPercent);
+
+      // Set initial state for dirty checking
+      setInitialState({
+        name: newData.name,
+        min_points: newData.min_points,
+        min_points_maintain: newData.min_points_maintain,
+        discount_rate: newData.discount_rate,
+        inactivity_penalty_points: newData.inactivity_penalty_points,
+        inactivity_period_days: newData.inactivity_period_days,
+        penalty_frequency_days: newData.penalty_frequency_days,
+        discountPercent: newDiscountPercent,
       });
-      setDiscountPercent((initial.discount_rate ?? 0) * 100);
     } else {
       setData({
         name: "",
@@ -61,8 +105,41 @@ export default function TierModal({
         penalty_frequency_days: 7,
       });
       setDiscountPercent(0);
+
+      // Set initial state for dirty checking
+      setInitialState({
+        name: "",
+        min_points: 0,
+        min_points_maintain: null,
+        discount_rate: 0,
+        inactivity_penalty_points: 0,
+        inactivity_period_days: 60,
+        penalty_frequency_days: 7,
+        discountPercent: 0,
+      });
     }
   }, [initial, open]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+S or Cmd+S to save
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        save();
+      }
+      // Escape to cancel
+      if (e.key === "Escape") {
+        e.preventDefault();
+        handleClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, handleClose]);
 
   if (!open) return null;
 
@@ -107,7 +184,7 @@ export default function TierModal({
 
   return (
     <div className="fixed inset-0 z-60 flex items-center justify-center p-6">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40" onClick={handleClose} />
 
       <form onSubmit={save} className="relative z-10 w-full max-w-lg bg-white rounded-xl p-6 shadow">
         <div className="flex items-center justify-between mb-4">
@@ -212,11 +289,18 @@ export default function TierModal({
           </div>
 
           <div className="flex justify-end gap-2 mt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 border rounded">Batal</button>
+            <button type="button" onClick={handleClose} className="px-4 py-2 border rounded">Batal</button>
             <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded">Simpan</button>
           </div>
         </div>
       </form>
+
+      {/* Unsaved Changes Dialog */}
+      <UnsavedChangesDialog
+        open={showConfirm}
+        onConfirm={handleConfirmClose}
+        onCancel={handleCancelClose}
+      />
     </div>
   );
 }

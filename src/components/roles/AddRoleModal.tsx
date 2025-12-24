@@ -5,6 +5,8 @@ import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaTimes, FaShieldAlt, FaKey, FaCheck } from "react-icons/fa";
 import type { Role, Permission, RolePermission } from "./RoleList";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
 
 const SNAP_KEY = "ekaplus_roles_snapshot";
 const PERM_SNAP_KEY = "ekaplus_role_permissions_snapshot";
@@ -40,6 +42,31 @@ export default function AddRoleModal({
 
   const [activeTab, setActiveTab] = useState<'basic' | 'permissions'>('basic');
 
+  // Track initial state for dirty checking
+  const [initialState, setInitialState] = useState({
+    name: "",
+    displayName: "",
+    description: "",
+    level: 10,
+    color: "#3B82F6",
+    status: "active",
+    selectedPermissions: [] as string[],
+  });
+
+  // Check if form is dirty
+  const isDirty =
+    name !== initialState.name ||
+    displayName !== initialState.displayName ||
+    description !== initialState.description ||
+    level !== initialState.level ||
+    color !== initialState.color ||
+    status !== initialState.status ||
+    JSON.stringify(selectedPermissions) !== JSON.stringify(initialState.selectedPermissions);
+
+  // Unsaved changes hook
+  const { showConfirm, handleClose, handleConfirmClose, handleCancelClose } =
+    useUnsavedChanges({ isDirty, onClose });
+
   // Group permissions by module
   const permissionsByModule: Record<string, Permission[]> = {};
   permissions.forEach(perm => {
@@ -53,16 +80,27 @@ export default function AddRoleModal({
 
   useEffect(() => {
     if (initial) {
+      const existingRp = rolePermissions.find(rp => rp.role_id === initial.id);
+      const perms = existingRp?.permissions || [];
+
       setName(initial.name ?? "");
       setDisplayName(initial.display_name ?? "");
       setDescription(initial.description ?? "");
       setLevel(initial.level ?? 10);
       setColor(initial.color ?? "#3B82F6");
       setStatus(initial.status ?? "active");
-      
-      // Get existing permissions
-      const existingRp = rolePermissions.find(rp => rp.role_id === initial.id);
-      setSelectedPermissions(existingRp?.permissions || []);
+      setSelectedPermissions(perms);
+
+      // Set initial state for dirty checking
+      setInitialState({
+        name: initial.name ?? "",
+        displayName: initial.display_name ?? "",
+        description: initial.description ?? "",
+        level: initial.level ?? 10,
+        color: initial.color ?? "#3B82F6",
+        status: initial.status ?? "active",
+        selectedPermissions: perms,
+      });
     } else {
       setName("");
       setDisplayName("");
@@ -71,6 +109,17 @@ export default function AddRoleModal({
       setColor("#3B82F6");
       setStatus("active");
       setSelectedPermissions([]);
+
+      // Set initial state for dirty checking
+      setInitialState({
+        name: "",
+        displayName: "",
+        description: "",
+        level: 10,
+        color: "#3B82F6",
+        status: "active",
+        selectedPermissions: [],
+      });
     }
     setActiveTab('basic');
   }, [initial, open, rolePermissions]);
@@ -82,6 +131,34 @@ export default function AddRoleModal({
       setName(auto);
     }
   }, [displayName, initial]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+S or Cmd+S to save
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        if (!saving) {
+          const form = document.querySelector("form");
+          if (form) {
+            form.requestSubmit();
+          }
+        }
+      }
+      // Escape to cancel
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (!saving) {
+          handleClose();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, saving, handleClose]);
 
   function togglePermission(permName: string) {
     setSelectedPermissions(prev => 
@@ -196,7 +273,7 @@ export default function AddRoleModal({
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
         >
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={handleClose} />
           
           <motion.div
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
@@ -228,7 +305,7 @@ export default function AddRoleModal({
                   </div>
                 </div>
                 <button
-                  onClick={onClose}
+                  onClick={handleClose}
                   className="p-2 hover:bg-white/20 rounded-xl transition-colors"
                 >
                   <FaTimes className="w-6 h-6" />
@@ -499,7 +576,7 @@ export default function AddRoleModal({
               <div className="flex justify-end gap-3 pt-6 mt-6 border-t-2 border-gray-100">
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={handleClose}
                   className="px-6 py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-all font-semibold text-gray-700"
                 >
                   Batal
@@ -521,6 +598,13 @@ export default function AddRoleModal({
               </div>
             </form>
           </motion.div>
+
+          {/* Unsaved Changes Dialog */}
+          <UnsavedChangesDialog
+            open={showConfirm}
+            onConfirm={handleConfirmClose}
+            onCancel={handleCancelClose}
+          />
         </motion.div>
       )}
     </AnimatePresence>

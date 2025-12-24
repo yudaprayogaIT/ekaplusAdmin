@@ -6,6 +6,7 @@ import ItemCard from "./ItemCard";
 import AddItemModal from "./AddItemModal";
 import ItemDetailModal from "./ItemDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import Pagination, { usePagination } from "@/components/ui/Pagination";
 import {
   FaPlus,
   FaFilter,
@@ -327,10 +328,9 @@ export default function ItemList() {
     if (!token) return;
 
     try {
-      const detailUrl = getQueryUrl(
-        `${API_CONFIG.ENDPOINTS.ITEM}/${item.id}`,
-        { fields: ["*"] }
-      );
+      const detailUrl = getQueryUrl(`${API_CONFIG.ENDPOINTS.ITEM}/${item.id}`, {
+        fields: ["*"],
+      });
       const headers = getAuthHeaders(token);
 
       const res = await fetch(detailUrl, {
@@ -344,10 +344,11 @@ export default function ItemList() {
         const detailItem = response.data;
 
         // Map branches dari detail response
-        const mappedBranches = detailItem.branches?.map((b: { branch: number }) => ({
-          id: b.branch,
-          name: `Branch ${b.branch}`, // Nama akan di-replace oleh modal saat load branches
-        })) || [];
+        const mappedBranches =
+          detailItem.branches?.map((b: { branch: number }) => ({
+            id: b.branch,
+            name: `Branch ${b.branch}`, // Nama akan di-replace oleh modal saat load branches
+          })) || [];
 
         const itemWithBranches: Item = {
           ...item,
@@ -378,10 +379,9 @@ export default function ItemList() {
     }
 
     try {
-      const detailUrl = getQueryUrl(
-        `${API_CONFIG.ENDPOINTS.ITEM}/${item.id}`,
-        { fields: ["*"] }
-      );
+      const detailUrl = getQueryUrl(`${API_CONFIG.ENDPOINTS.ITEM}/${item.id}`, {
+        fields: ["*"],
+      });
       const headers = getAuthHeaders(token);
 
       const res = await fetch(detailUrl, {
@@ -395,10 +395,11 @@ export default function ItemList() {
         const detailItem = response.data;
 
         // Map branches dari detail response
-        const mappedBranches = detailItem.branches?.map((b: { branch: number }) => ({
-          id: b.branch,
-          name: `Branch ${b.branch}`, // Nama akan di-replace oleh modal saat load branches
-        })) || [];
+        const mappedBranches =
+          detailItem.branches?.map((b: { branch: number }) => ({
+            id: b.branch,
+            name: `Branch ${b.branch}`, // Nama akan di-replace oleh modal saat load branches
+          })) || [];
 
         const itemWithBranches: Item = {
           ...item,
@@ -452,7 +453,74 @@ export default function ItemList() {
     setConfirmOpen(false);
   }
 
-  // Not authenticated - show login required
+  // Get unique categories and UOMs (MUST be before early returns to comply with Hooks rules)
+  const categories = Array.from(new Set(items.map((item) => item.category)));
+  const uomList = Array.from(new Set(items.map((item) => item.uom)));
+
+  // Filter items
+  let filteredItems = items;
+
+  if (searchQuery.trim()) {
+    filteredItems = filteredItems.filter(
+      (item) =>
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.group.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.description &&
+          item.description.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  }
+
+  if (selectedCategory) {
+    filteredItems = filteredItems.filter(
+      (item) => item.category === selectedCategory
+    );
+  }
+
+  if (selectedUOM) {
+    filteredItems = filteredItems.filter((item) => item.uom === selectedUOM);
+  }
+
+  // Sort items
+  const sortedItems = [...filteredItems].sort((a, b) => {
+    switch (sortBy) {
+      case "name-asc":
+        return a.name.localeCompare(b.name);
+      case "name-desc":
+        return b.name.localeCompare(a.name);
+      case "code-asc":
+        return a.code.localeCompare(b.code);
+      case "code-desc":
+        return b.code.localeCompare(a.code);
+      case "id-asc":
+        return a.id - b.id;
+      case "id-desc":
+        return b.id - a.id;
+      default:
+        return 0;
+    }
+  });
+
+  // Apply pagination
+  const {
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    paginatedItems,
+    totalItems,
+    itemsPerPage,
+  } = usePagination(sortedItems, 10);
+
+  // Group by category
+  const groupedByCategory = categories
+    .sort()
+    .map((category) => ({
+      category,
+      items: paginatedItems.filter((item) => item.category === category),
+    }))
+    .filter((group) => group.items.length > 0);
+
+  // Early returns AFTER all hooks
   if (!isAuthenticated) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -506,62 +574,6 @@ export default function ItemList() {
       </div>
     );
   }
-
-  // Get unique categories and UOMs
-  const categories = Array.from(new Set(items.map((item) => item.category)));
-  const uomList = Array.from(new Set(items.map((item) => item.uom)));
-
-  // Filter items
-  let filteredItems = items;
-
-  if (searchQuery.trim()) {
-    filteredItems = filteredItems.filter(
-      (item) =>
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.group.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (item.description &&
-          item.description.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
-  }
-
-  if (selectedCategory) {
-    filteredItems = filteredItems.filter(
-      (item) => item.category === selectedCategory
-    );
-  }
-
-  if (selectedUOM) {
-    filteredItems = filteredItems.filter((item) => item.uom === selectedUOM);
-  }
-
-  // Sort items
-  const sortedItems = [...filteredItems].sort((a, b) => {
-    switch (sortBy) {
-      case "name-asc":
-        return a.name.localeCompare(b.name);
-      case "name-desc":
-        return b.name.localeCompare(a.name);
-      case "code-asc":
-        return a.code.localeCompare(b.code);
-      case "code-desc":
-        return b.code.localeCompare(a.code);
-      case "id-asc":
-        return a.id - b.id;
-      case "id-desc":
-        return b.id - a.id;
-      default:
-        return 0;
-    }
-  });
-
-  // Group by category
-  const groupedByCategory = categories
-    .map((category) => ({
-      category,
-      items: sortedItems.filter((item) => item.category === category),
-    }))
-    .filter((group) => group.items.length > 0);
 
   return (
     <div>
@@ -803,7 +815,7 @@ export default function ItemList() {
                 : "space-y-4"
             }
           >
-            {sortedItems.map((item) => (
+            {paginatedItems.map((item) => (
               <ItemCard
                 key={item.id}
                 item={item}
@@ -814,42 +826,66 @@ export default function ItemList() {
               />
             ))}
           </div>
+
+          {/* Pagination */}
+          {sortedItems.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              totalItems={totalItems}
+              itemsPerPage={itemsPerPage}
+            />
+          )}
         </section>
       ) : (
         // All categories view (grouped)
-        <div className="space-y-10">
-          {groupedByCategory.map(({ category, items: categoryItems }) => (
-            <section key={category}>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-gray-800">
-                  {category}
-                </h2>
-                <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full font-medium">
-                  {categoryItems.length} items
-                </span>
-              </div>
+        <>
+          <div className="space-y-10">
+            {groupedByCategory.map(({ category, items: categoryItems }) => (
+              <section key={category}>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-semibold text-gray-800">
+                    {category}
+                  </h2>
+                  <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full font-medium">
+                    {categoryItems.length} items
+                  </span>
+                </div>
 
-              <div
-                className={
-                  viewMode === "grid"
-                    ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-                    : "space-y-4"
-                }
-              >
-                {categoryItems.map((item) => (
-                  <ItemCard
-                    key={item.id}
-                    item={item}
-                    viewMode={viewMode}
-                    onEdit={() => handleEdit(item)}
-                    onDelete={() => promptDeleteItem(item)}
-                    onView={() => openDetail(item)}
-                  />
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
+                <div
+                  className={
+                    viewMode === "grid"
+                      ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+                      : "space-y-4"
+                  }
+                >
+                  {categoryItems.map((item) => (
+                    <ItemCard
+                      key={item.id}
+                      item={item}
+                      viewMode={viewMode}
+                      onEdit={() => handleEdit(item)}
+                      onDelete={() => promptDeleteItem(item)}
+                      onView={() => openDetail(item)}
+                    />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+
+          {/* Pagination */}
+          {sortedItems.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              totalItems={totalItems}
+              itemsPerPage={itemsPerPage}
+            />
+          )}
+        </>
       )}
 
       {/* Modals */}

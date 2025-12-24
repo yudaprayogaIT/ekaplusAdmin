@@ -171,3 +171,34 @@ export default function Pagination({
     </div>
   );
 }
+
+// Helper hook for pagination logic
+export function usePagination<T>(items: T[], itemsPerPage: number = 20) {
+  const [currentPage, setCurrentPage] = React.useState(1);
+
+  const totalPages = Math.ceil(items.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedItems = items.slice(startIndex, endIndex);
+
+  // Reset to page 1 if items change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [items.length]);
+
+  // Reset to last valid page if current page is out of bounds
+  React.useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  return {
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    paginatedItems,
+    totalItems: items.length,
+    itemsPerPage,
+  };
+}

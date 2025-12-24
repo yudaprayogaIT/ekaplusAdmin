@@ -6,9 +6,7 @@ import ProductCard from "./ProductCard";
 import AddProductModal from "./AddProductModal";
 import ProductDetailModal from "./ProductDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import Pagination from "@/components/ui/Pagination";
-import LoadMoreButton from "@/components/ui/LoadMoreButton";
-import PerPageSelector from "@/components/ui/PerPageSelector";
+import Pagination, { usePagination } from "@/components/ui/Pagination";
 import {
   FaPlus,
   FaFilter,
@@ -39,7 +37,6 @@ type SortOption =
   | "variants-least"
   | "newest"
   | "oldest";
-type PaginationMode = "pagination" | "loadmore" | "all";
 
 const SNAP_KEY = "ekatalog_products_snapshot";
 
@@ -81,13 +78,6 @@ export default function ProductList() {
   const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
-
-  // Pagination states
-  const [paginationMode, setPaginationMode] =
-    useState<PaginationMode>("pagination");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(24);
-  const [loadedItems, setLoadedItems] = useState(24);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<ProductFormData | null>(
@@ -250,12 +240,6 @@ export default function ProductList() {
     };
   }, []);
 
-  // Reset pagination when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-    setLoadedItems(itemsPerPage);
-  }, [searchQuery, selectedCategory, showHotDealsOnly, sortBy, itemsPerPage]);
-
   function saveSnapshot(arr: Product[]) {
     localStorage.setItem(SNAP_KEY, JSON.stringify(arr));
     window.dispatchEvent(new Event("ekatalog:products_update"));
@@ -346,35 +330,7 @@ export default function ProductList() {
     setConfirmOpen(false);
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-red-200 border-t-red-500 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-sm text-gray-600 font-medium">Memuat produk...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="py-8 text-center">
-        <div className="inline-flex items-center gap-2 px-4 py-3 bg-red-50 text-red-600 rounded-xl border border-red-100">
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              fillRule="evenodd"
-              d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-              clipRule="evenodd"
-            />
-          </svg>
-          <span className="text-sm font-medium">Error: {error}</span>
-        </div>
-      </div>
-    );
-  }
-
-  // Filter products
+  // Filter products (MUST be before early returns to comply with Hooks rules)
   let filteredProducts = products;
 
   if (searchQuery.trim()) {
@@ -418,41 +374,58 @@ export default function ProductList() {
     }
   });
 
-  // Pagination logic
-  const totalItems = sortedProducts.length;
-  const totalPages = Math.ceil(totalItems / itemsPerPage);
-
-  let paginatedProducts = sortedProducts;
-  if (paginationMode === "pagination") {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    paginatedProducts = sortedProducts.slice(startIndex, endIndex);
-  } else if (paginationMode === "loadmore") {
-    paginatedProducts = sortedProducts.slice(0, loadedItems);
-  }
+  // Apply pagination
+  const {
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    paginatedItems: paginatedProducts,
+    totalItems,
+    itemsPerPage,
+  } = usePagination(sortedProducts, 10);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleLoadMore = () => {
-    setLoadedItems((prev) => Math.min(prev + itemsPerPage, totalItems));
-  };
-
-  const handleItemsPerPageChange = (value: number) => {
-    setItemsPerPage(value);
-    setCurrentPage(1);
-    setLoadedItems(value);
-  };
-
   // Group by category
   const groupedByCategory = categories
+    .sort((a, b) => a.name.localeCompare(b.name))
     .map((cat) => ({
       category: cat,
       items: paginatedProducts.filter((p) => p.itemCategory.id === cat.id),
     }))
     .filter((group) => group.items.length > 0);
+
+  // Early returns AFTER all hooks
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-red-200 border-t-red-500 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-sm text-gray-600 font-medium">Memuat produk...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="py-8 text-center">
+        <div className="inline-flex items-center gap-2 px-4 py-3 bg-red-50 text-red-600 rounded-xl border border-red-100">
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+            <path
+              fillRule="evenodd"
+              d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+              clipRule="evenodd"
+            />
+          </svg>
+          <span className="text-sm font-medium">Error: {error}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -515,43 +488,6 @@ export default function ProductList() {
                 }`}
               >
                 <FaList className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Pagination Mode Selector */}
-            <div className="flex gap-2">
-              <button
-                onClick={() => setPaginationMode("pagination")}
-                className={`px-4 py-2.5 rounded-lg text-xs font-medium transition-all ${
-                  paginationMode === "pagination"
-                    ? "bg-blue-500 text-white shadow-lg"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-                title="Pagination (halaman)"
-              >
-                📄 Page
-              </button>
-              <button
-                onClick={() => setPaginationMode("loadmore")}
-                className={`px-4 py-2.5 rounded-lg text-xs font-medium transition-all ${
-                  paginationMode === "loadmore"
-                    ? "bg-blue-500 text-white shadow-lg"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-                title="Load More (infinite scroll)"
-              >
-                ⬇️ Load
-              </button>
-              <button
-                onClick={() => setPaginationMode("all")}
-                className={`px-4 py-2.5 rounded-lg text-xs font-medium transition-all ${
-                  paginationMode === "all"
-                    ? "bg-blue-500 text-white shadow-lg"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-                title="Show All (tampilkan semua)"
-              >
-                ∞ All
               </button>
             </div>
           </div>
@@ -735,15 +671,6 @@ export default function ProductList() {
                 <span>Hot Deals</span>
               </button>
             </div>
-
-            {/* Per Page Selector */}
-            {paginationMode !== "all" && (
-              <PerPageSelector
-                value={itemsPerPage}
-                onChange={handleItemsPerPageChange}
-                options={[12, 24, 48, 96]}
-              />
-            )}
           </div>
         </div>
       </div>
@@ -795,23 +722,14 @@ export default function ProductList() {
             </div>
           </section>
 
-          {paginationMode === "pagination" && totalPages > 1 && (
+          {/* Pagination */}
+          {sortedProducts.length > 0 && (
             <Pagination
               currentPage={currentPage}
               totalPages={totalPages}
               onPageChange={handlePageChange}
               totalItems={totalItems}
               itemsPerPage={itemsPerPage}
-            />
-          )}
-
-          {paginationMode === "loadmore" && (
-            <LoadMoreButton
-              onClick={handleLoadMore}
-              loading={false}
-              hasMore={loadedItems < totalItems}
-              currentCount={loadedItems}
-              totalCount={totalItems}
             />
           )}
         </>
@@ -851,23 +769,14 @@ export default function ProductList() {
             ))}
           </div>
 
-          {paginationMode === "pagination" && totalPages > 1 && (
+          {/* Pagination */}
+          {sortedProducts.length > 0 && (
             <Pagination
               currentPage={currentPage}
               totalPages={totalPages}
               onPageChange={handlePageChange}
               totalItems={totalItems}
               itemsPerPage={itemsPerPage}
-            />
-          )}
-
-          {paginationMode === "loadmore" && (
-            <LoadMoreButton
-              onClick={handleLoadMore}
-              loading={false}
-              hasMore={loadedItems < totalItems}
-              currentCount={loadedItems}
-              totalCount={totalItems}
             />
           )}
         </>

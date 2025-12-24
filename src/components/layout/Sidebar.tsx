@@ -49,8 +49,8 @@ const DASHBOARD_MENU: MenuItem[] = [
 // Main menu - requires auth
 const MAIN_MENU: MenuItem[] = [
   {
-    label: "Favorites",
-    href: "/favorites",
+    label: "Wishlist",
+    href: "/wishlist",
     icon: <FaHeart className="w-5 h-5" />,
     requireAuth: true,
   },

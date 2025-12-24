@@ -28,6 +28,8 @@ import {
   getAuthHeaders,
   getResourceUrl,
 } from "@/config/api";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
 
 // Props interface
 interface AddProductModalProps {
@@ -365,6 +367,26 @@ export default function AddProductModal({
   const [itemSelectorOpen, setItemSelectorOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Track initial state for dirty checking
+  const [initialState, setInitialState] = useState({
+    name: "",
+    categoryId: null as number | null,
+    isHotDeals: false,
+    selectedVariants: [] as Item[],
+  });
+
+  // Check if form is dirty
+  const isDirty =
+    name !== initialState.name ||
+    categoryId !== initialState.categoryId ||
+    isHotDeals !== initialState.isHotDeals ||
+    JSON.stringify(selectedVariants.map((v) => v.id)) !==
+      JSON.stringify(initialState.selectedVariants.map((v) => v.id));
+
+  // Unsaved changes hook
+  const { showConfirm, handleClose, handleConfirmClose, handleCancelClose } =
+    useUnsavedChanges({ isDirty, onClose });
+
   // Reset form when modal opens
   useEffect(() => {
     if (open) {
@@ -373,14 +395,55 @@ export default function AddProductModal({
         setCategoryId(initial.itemCategory.id);
         setIsHotDeals(initial.isHotDeals);
         setSelectedVariants(initial.variants); // Already Item[]
+
+        // Set initial state for dirty checking
+        setInitialState({
+          name: initial.name,
+          categoryId: initial.itemCategory.id,
+          isHotDeals: initial.isHotDeals,
+          selectedVariants: initial.variants,
+        });
       } else {
         setName("");
         setCategoryId(categories[0]?.id || null);
         setIsHotDeals(false);
         setSelectedVariants([]);
+
+        // Set initial state for dirty checking
+        setInitialState({
+          name: "",
+          categoryId: categories[0]?.id || null,
+          isHotDeals: false,
+          selectedVariants: [],
+        });
       }
     }
   }, [open, initial, categories]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+S or Cmd+S to save
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        if (!saving && name.trim() && categoryId) {
+          handleSave();
+        }
+      }
+      // Escape to cancel
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (!saving) {
+          handleClose();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, saving, name, categoryId, handleClose]);
 
   const selectedCategory = categories.find((c) => c.id === categoryId);
 
@@ -468,7 +531,7 @@ export default function AddProductModal({
       >
         <div
           className="absolute inset-0 bg-black/60 backdrop-blur-md"
-          onClick={onClose}
+          onClick={handleClose}
         />
 
         <motion.div
@@ -491,7 +554,7 @@ export default function AddProductModal({
                 </p>
               </div>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="p-2.5 hover:bg-white/20 rounded-xl transition-colors"
               >
                 <FaTimes className="w-6 h-6" />
@@ -656,7 +719,7 @@ export default function AddProductModal({
           {/* Footer */}
           <div className="px-8 py-6 border-t border-gray-100 flex justify-end gap-3">
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="px-6 py-3 border border-gray-300 rounded-xl font-medium text-gray-700 hover:bg-gray-50 transition-colors"
             >
               Batal
@@ -685,6 +748,13 @@ export default function AddProductModal({
           items={availableItems}
           selectedItems={selectedVariants}
           onSelect={setSelectedVariants}
+        />
+
+        {/* Unsaved Changes Dialog */}
+        <UnsavedChangesDialog
+          open={showConfirm}
+          onConfirm={handleConfirmClose}
+          onCancel={handleCancelClose}
         />
       </motion.div>
     </AnimatePresence>

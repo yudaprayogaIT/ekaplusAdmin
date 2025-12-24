@@ -20,6 +20,8 @@ import {
   getAuthHeadersFormData,
   API_CONFIG,
 } from "@/config/api";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
 
 const UOM_OPTIONS = ["PCS", "MTR", "SET", "PSG", "LBR", "UNIT", "BOX"];
 
@@ -58,6 +60,46 @@ export default function AddItemModal({
   const [diameter, setDiameter] = useState("");
   const [selectedBranches, setSelectedBranches] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
+
+  // Track initial state for dirty checking
+  const [initialState, setInitialState] = useState({
+    code: "",
+    name: "",
+    uom: "PCS",
+    group: "",
+    category: "",
+    generatorItem: "",
+    imageUuid: "",
+    description: "",
+    disabled: 0,
+    panjang: "",
+    tinggi: "",
+    lebar: "",
+    diameter: "",
+    selectedBranches: [] as number[],
+  });
+
+  // Check if form is dirty
+  const isDirty =
+    code !== initialState.code ||
+    name !== initialState.name ||
+    uom !== initialState.uom ||
+    group !== initialState.group ||
+    category !== initialState.category ||
+    generatorItem !== initialState.generatorItem ||
+    imageUuid !== initialState.imageUuid ||
+    description !== initialState.description ||
+    disabled !== initialState.disabled ||
+    panjang !== initialState.panjang ||
+    tinggi !== initialState.tinggi ||
+    lebar !== initialState.lebar ||
+    diameter !== initialState.diameter ||
+    JSON.stringify(selectedBranches) !== JSON.stringify(initialState.selectedBranches) ||
+    imageFile !== null;
+
+  // Unsaved changes hook
+  const { showConfirm, handleClose, handleConfirmClose, handleCancelClose } =
+    useUnsavedChanges({ isDirty, onClose });
 
   // Load branches from API
   useEffect(() => {
@@ -101,21 +143,19 @@ export default function AddItemModal({
 
   useEffect(() => {
     if (initial) {
+      const imageUrl = initial.image ?? "";
+      const imageUuidMatch = imageUrl.match(/\/files\/(.+)$/);
+      const imageUuidExtracted = imageUuidMatch ? imageUuidMatch[1] : imageUrl;
+
       setCode(initial.code ?? "");
       setName(initial.name ?? "");
       setUom(initial.uom ?? "PCS");
       setGroup(initial.group ?? "");
       setCategory(initial.category ?? "");
       setGeneratorItem(initial.generator_item ?? "");
-
-      // Extract UUID from full URL if present for image
-      const imageUrl = initial.image ?? "";
-      const imageUuidMatch = imageUrl.match(/\/files\/(.+)$/);
-      const imageUuidExtracted = imageUuidMatch ? imageUuidMatch[1] : imageUrl;
       setImageUuid(imageUuidExtracted);
       setImagePreview(initial.image || null);
       setImageFile(null);
-
       setDescription(initial.description ?? "");
       setDisabled(initial.disabled ?? 0);
       setPanjang(initial.panjang ?? "");
@@ -123,6 +163,24 @@ export default function AddItemModal({
       setLebar(initial.lebar ?? "");
       setDiameter(initial.diameter ?? "");
       setSelectedBranches(initial.branches?.map((b) => b.id) ?? []);
+
+      // Set initial state for dirty checking
+      setInitialState({
+        code: initial.code ?? "",
+        name: initial.name ?? "",
+        uom: initial.uom ?? "PCS",
+        group: initial.group ?? "",
+        category: initial.category ?? "",
+        generatorItem: initial.generator_item ?? "",
+        imageUuid: imageUuidExtracted,
+        description: initial.description ?? "",
+        disabled: initial.disabled ?? 0,
+        panjang: initial.panjang ?? "",
+        tinggi: initial.tinggi ?? "",
+        lebar: initial.lebar ?? "",
+        diameter: initial.diameter ?? "",
+        selectedBranches: initial.branches?.map((b) => b.id) ?? [],
+      });
     } else {
       setCode("");
       setName("");
@@ -140,6 +198,24 @@ export default function AddItemModal({
       setLebar("");
       setDiameter("");
       setSelectedBranches([]);
+
+      // Set initial state for dirty checking
+      setInitialState({
+        code: "",
+        name: "",
+        uom: "PCS",
+        group: "",
+        category: "",
+        generatorItem: "",
+        imageUuid: "",
+        description: "",
+        disabled: 0,
+        panjang: "",
+        tinggi: "",
+        lebar: "",
+        diameter: "",
+        selectedBranches: [],
+      });
     }
   }, [initial, open]);
 
@@ -152,6 +228,34 @@ export default function AddItemModal({
     };
     fr.readAsDataURL(imageFile);
   }, [imageFile]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+S or Cmd+S to save
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        if (!saving) {
+          const form = document.querySelector("form");
+          if (form) {
+            form.requestSubmit();
+          }
+        }
+      }
+      // Escape to cancel
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (!saving) {
+          handleClose();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, saving, handleClose]);
 
   function toggleBranch(branchId: number) {
     setSelectedBranches((prev) =>
@@ -277,7 +381,7 @@ export default function AddItemModal({
         >
           <div
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={onClose}
+            onClick={handleClose}
           />
 
           <motion.div
@@ -304,7 +408,7 @@ export default function AddItemModal({
                   </p>
                 </div>
                 <button
-                  onClick={onClose}
+                  onClick={handleClose}
                   className="p-2 hover:bg-white/20 rounded-xl transition-colors"
                 >
                   <FaTimes className="w-6 h-6" />
@@ -602,7 +706,7 @@ export default function AddItemModal({
               <div className="flex justify-end gap-3 pt-6 border-t-2 border-gray-100">
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={handleClose}
                   className="px-6 py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-all font-semibold text-gray-700"
                 >
                   Batal
@@ -624,6 +728,13 @@ export default function AddItemModal({
               </div>
             </form>
           </motion.div>
+
+          {/* Unsaved Changes Dialog */}
+          <UnsavedChangesDialog
+            open={showConfirm}
+            onConfirm={handleConfirmClose}
+            onCancel={handleCancelClose}
+          />
         </motion.div>
       )}
     </AnimatePresence>

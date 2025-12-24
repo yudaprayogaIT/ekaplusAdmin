@@ -90,3 +90,39 @@ export type ProductRaw = {
   disabled: number;
   isHotDeals: boolean;
 };
+
+// Wishlist API Response dari backend
+export type WishlistApiResponse = {
+  id: number;
+  name: string; // Auto-generated hash
+  item: number; // Item ID (foreign key)
+  user_id: number; // User ID (foreign key)
+  user?: {
+    full_name?: string;
+  };
+  status: string; // "Draft", etc.
+  docstatus: number;
+  created_at: string;
+  updated_at: string;
+  created_by: number;
+  updated_by: number;
+  owner: number;
+};
+
+// Wishlist item for frontend (with hydrated Item)
+export type WishlistItem = {
+  id: number;
+  item: Item; // Full Item object
+  userId: number;
+  userName?: string; // User full name
+  createdAt: string;
+};
+
+// Request types for Wishlist API
+export type CreateWishlistRequest = {
+  item: number; // Item ID
+};
+
+export type DeleteWishlistRequest = {
+  id: number;
+};

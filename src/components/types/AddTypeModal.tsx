@@ -12,6 +12,8 @@ import {
   API_CONFIG,
 } from "@/config/api";
 import { ItemType } from "./Typelist";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
 
 export default function AddTypeModal({
   open,
@@ -32,6 +34,31 @@ export default function AddTypeModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Track initial state for dirty checking
+  const [initialState, setInitialState] = useState({
+    type_name: "",
+    description: "",
+    imageUuid: "",
+  });
+
+  // Check if form has unsaved changes
+  const isDirty =
+    type_name !== initialState.type_name ||
+    description !== initialState.description ||
+    imageFile !== null ||
+    imageUuid !== initialState.imageUuid;
+
+  // Unsaved changes handler
+  const {
+    showConfirm,
+    handleClose,
+    handleConfirmClose,
+    handleCancelClose,
+  } = useUnsavedChanges({
+    isDirty,
+    onClose,
+  });
+
   useEffect(() => {
     setError(null);
     if (initial) {
@@ -44,12 +71,26 @@ export default function AddTypeModal({
       setImageUuid(uuid);
       setImagePreview(initial.image || null);
       setImageFile(null);
+
+      // Set initial state for dirty checking
+      setInitialState({
+        type_name: initial.type_name ?? "",
+        description: initial.description ?? "",
+        imageUuid: uuid,
+      });
     } else {
       setTypeName("");
       setDescription("");
       setImageUuid("");
       setImagePreview(null);
       setImageFile(null);
+
+      // Set initial state for dirty checking
+      setInitialState({
+        type_name: "",
+        description: "",
+        imageUuid: "",
+      });
     }
   }, [initial, open]);
 
@@ -83,14 +124,14 @@ export default function AddTypeModal({
       if (e.key === "Escape") {
         e.preventDefault();
         if (!saving) {
-          onClose();
+          handleClose();
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, saving, onClose]);
+  }, [open, saving, handleClose]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -175,7 +216,7 @@ export default function AddTypeModal({
         >
           <div
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={onClose}
+            onClick={handleClose}
           />
 
           <motion.div
@@ -213,7 +254,7 @@ export default function AddTypeModal({
                   </p>
                 </div>
                 <button
-                  onClick={onClose}
+                  onClick={handleClose}
                   disabled={saving}
                   className="p-2 hover:bg-white/20 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -331,7 +372,7 @@ export default function AddTypeModal({
               <div className="flex justify-end gap-3 pt-6 border-t-2 border-gray-100">
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={handleClose}
                   disabled={saving}
                   className="px-6 py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-all font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -354,6 +395,13 @@ export default function AddTypeModal({
               </div>
             </form>
           </motion.div>
+
+          {/* Unsaved Changes Dialog */}
+          <UnsavedChangesDialog
+            open={showConfirm}
+            onConfirm={handleConfirmClose}
+            onCancel={handleCancelClose}
+          />
         </motion.div>
       )}
     </AnimatePresence>

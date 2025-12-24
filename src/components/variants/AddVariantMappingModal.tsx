@@ -7,6 +7,8 @@ import { FaTimes, FaLink, FaCheck, FaBox } from "react-icons/fa";
 import Image from "next/image";
 import { fetchVariants, createVariant } from "@/services/variantService";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
 
 type Branch = {
   id: number;
@@ -63,6 +65,21 @@ export default function AddVariantMappingModal({
   const [existingVariants, setExistingVariants] = useState<ItemVariant[]>([]);
   const [saving, setSaving] = useState(false);
 
+  // Track initial state for dirty checking
+  const [initialState, setInitialState] = useState({
+    selectedItemId: null as number | null,
+    selectedProductId: null as number | null,
+  });
+
+  // Check if form is dirty
+  const isDirty =
+    selectedItemId !== initialState.selectedItemId ||
+    selectedProductId !== initialState.selectedProductId;
+
+  // Unsaved changes hook
+  const { showConfirm, handleClose, handleConfirmClose, handleCancelClose } =
+    useUnsavedChanges({ isDirty, onClose });
+
   // Load existing variants from API
   useEffect(() => {
     if (open && token) {
@@ -116,8 +133,42 @@ export default function AddVariantMappingModal({
     if (!open) {
       setSelectedItemId(null);
       setSelectedProductId(null);
+      setInitialState({
+        selectedItemId: null,
+        selectedProductId: null,
+      });
+    } else {
+      setInitialState({
+        selectedItemId: null,
+        selectedProductId: null,
+      });
     }
   }, [open]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+S or Cmd+S to save
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        if (!saving && selectedItemId && selectedProductId) {
+          handleSave();
+        }
+      }
+      // Escape to cancel
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (!saving) {
+          handleClose();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, saving, selectedItemId, selectedProductId, handleClose]);
 
   const handleSave = async () => {
     if (!selectedItemId || !selectedProductId || !token) return;
@@ -162,7 +213,7 @@ export default function AddVariantMappingModal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          onClick={onClose}
+          onClick={handleClose}
           className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         />
 
@@ -185,7 +236,7 @@ export default function AddVariantMappingModal({
                 </p>
               </div>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="text-white/80 hover:text-white transition-colors p-2 hover:bg-white/10 rounded-lg"
               >
                 <FaTimes className="w-5 h-5" />
@@ -344,7 +395,7 @@ export default function AddVariantMappingModal({
             <div className="flex gap-3 pt-4">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleClose}
                 disabled={saving}
                 className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -367,6 +418,13 @@ export default function AddVariantMappingModal({
               </button>
             </div>
           </div>
+
+          {/* Unsaved Changes Dialog */}
+          <UnsavedChangesDialog
+            open={showConfirm}
+            onConfirm={handleConfirmClose}
+            onCancel={handleCancelClose}
+          />
         </motion.div>
       </div>
     </AnimatePresence>

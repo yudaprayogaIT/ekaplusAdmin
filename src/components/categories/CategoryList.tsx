@@ -199,6 +199,7 @@ export default function CategoryList() {
           if (!cancelled) {
             // Map and filter out categories without valid types
             const mappedCategories: Category[] = categoriesResponse.data
+
               .filter((item) => {
                 // Check if type exists
                 const typeExists = mappedTypes.some(
@@ -510,11 +511,14 @@ export default function CategoryList() {
 
   // Group by type for "All" view
   const groupedByType = types
+    // .sort((a, b) => a.name.localeCompare(b.name))
     .map((type) => ({
       type,
       items: sortedCategories.filter((c) => c.type.id === type.id),
     }))
     .filter((group) => group.items.length > 0);
+
+  console.log(groupedByType);
 
   return (
     <div>

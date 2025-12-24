@@ -26,6 +26,7 @@ export const API_CONFIG = {
     ITEM: "/api/resource/item",
     PRODUCT: "/api/resource/ekatalog_product",
     PRODUCT_VARIANT: "/api/resource/ekatalog_variant",
+    WISHLIST: "/api/resource/wishlist",
     ROLE: "/api/resource/role",
     PERMISSION: "/resource/permission",
     USER: "/api/resource/user",

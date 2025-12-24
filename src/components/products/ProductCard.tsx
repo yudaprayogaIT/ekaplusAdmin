@@ -31,6 +31,7 @@ export default function ProductCard({
 }: ProductCardProps) {
   const firstVariant = product.variants[0]?.item;
   const variantCount = product.variants.length;
+  // console.log(product.variants);
 
   if (viewMode === "list") {
     return (
@@ -211,13 +212,13 @@ export default function ProductCard({
             <div className="flex items-center gap-2 text-xs text-gray-500">
               <span className="font-medium">Varian:</span>
               <span className="line-clamp-1">
-                {product.variants.slice(0, 2).map((v, i) => (
+                {/* {product.variants.slice(0, 2).map((v, i) => (
                   <span key={v.id}>
                     {v.item.color || v.item.type}
                     {i < Math.min(variantCount - 1, 1) && ", "}
                   </span>
-                ))}
-                {variantCount > 2 && ` +${variantCount - 2} lainnya`}
+                ))} */}
+                {variantCount}
               </span>
             </div>
           </div>

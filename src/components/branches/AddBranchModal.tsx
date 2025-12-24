@@ -10,6 +10,8 @@ import {
   getAuthHeadersFormData,
   API_CONFIG,
 } from "@/config/api";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
 
 type Branch = {
   id?: number;
@@ -59,6 +61,37 @@ export default function AddBranchModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Track initial state for dirty checking
+  const [initialState, setInitialState] = useState({
+    name: "",
+    city: "",
+    address: "",
+    lat: "",
+    lng: "",
+    island: "Jawa",
+    area: "Barat",
+    url: "",
+    token: "",
+    disabled: 0,
+  });
+
+  // Check if form is dirty
+  const isDirty =
+    name !== initialState.name ||
+    city !== initialState.city ||
+    address !== initialState.address ||
+    lat !== initialState.lat ||
+    lng !== initialState.lng ||
+    island !== initialState.island ||
+    area !== initialState.area ||
+    url !== initialState.url ||
+    token !== initialState.token ||
+    disabled !== initialState.disabled;
+
+  // Unsaved changes hook
+  const { showConfirm, handleClose, handleConfirmClose, handleCancelClose } =
+    useUnsavedChanges({ isDirty, onClose });
+
   useEffect(() => {
     setError(null);
     if (initial) {
@@ -72,6 +105,20 @@ export default function AddBranchModal({
       setUrl(initial.url ?? "");
       setToken(initial.token ?? "");
       setDisabled(initial.disabled ?? 0);
+
+      // Set initial state for dirty checking
+      setInitialState({
+        name: initial.name ?? "",
+        city: initial.city ?? "",
+        address: initial.address ?? "",
+        lat: String(initial.lat ?? ""),
+        lng: String(initial.lng ?? ""),
+        island: initial.island ?? "Jawa",
+        area: initial.area ?? "Barat",
+        url: initial.url ?? "",
+        token: initial.token ?? "",
+        disabled: initial.disabled ?? 0,
+      });
     } else {
       setName("");
       setCity("");
@@ -83,6 +130,20 @@ export default function AddBranchModal({
       setUrl("");
       setToken("");
       setDisabled(0);
+
+      // Set initial state for dirty checking
+      setInitialState({
+        name: "",
+        city: "",
+        address: "",
+        lat: "",
+        lng: "",
+        island: "Jawa",
+        area: "Barat",
+        url: "",
+        token: "",
+        disabled: 0,
+      });
     }
   }, [initial, open]);
 
@@ -106,14 +167,14 @@ export default function AddBranchModal({
       if (e.key === "Escape") {
         e.preventDefault();
         if (!saving) {
-          onClose();
+          handleClose();
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, saving, onClose]);
+  }, [open, saving, handleClose]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -195,7 +256,7 @@ export default function AddBranchModal({
         >
           <div
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={onClose}
+            onClick={handleClose}
           />
 
           <motion.div
@@ -233,7 +294,7 @@ export default function AddBranchModal({
                   </p>
                 </div>
                 <button
-                  onClick={onClose}
+                  onClick={handleClose}
                   disabled={saving}
                   className="p-2 hover:bg-white/20 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -424,7 +485,7 @@ export default function AddBranchModal({
               <div className="flex justify-end gap-3 pt-6 border-t-2 border-gray-100">
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={handleClose}
                   className="px-3 py-1 md:px-6 md:py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-all font-semibold text-gray-700"
                 >
                   Batal
@@ -448,6 +509,13 @@ export default function AddBranchModal({
               </div>
             </form>
           </motion.div>
+
+          {/* Unsaved Changes Dialog */}
+          <UnsavedChangesDialog
+            open={showConfirm}
+            onConfirm={handleConfirmClose}
+            onCancel={handleCancelClose}
+          />
         </motion.div>
       )}
     </AnimatePresence>
