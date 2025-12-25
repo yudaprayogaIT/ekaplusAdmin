@@ -24,6 +24,7 @@ import {
   getFileUrl,
 } from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { Product } from "@/types";
 
 type Branch = {
   id: number;
@@ -48,16 +49,16 @@ type ItemVariant = {
   productid: number;
 };
 
-type Product = {
-  id: number;
-  name: string;
-  itemCategory: {
-    id: number;
-    name: string;
-  };
-  disabled: number;
-  isHotDeals: boolean;
-};
+// type Product = {
+//   id: number;
+//   name: string;
+//   itemCategory: {
+//     id: number;
+//     name: string;
+//   };
+//   disabled: number;
+//   isHotDeals: boolean;
+// };
 
 type SortOption = "item-asc" | "item-desc" | "product" | "newest" | "oldest";
 
@@ -69,10 +70,12 @@ export default function VariantList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<number | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [productDropdownOpen, setProductDropdownOpen] = useState(false);
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
 
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
@@ -254,6 +257,13 @@ export default function VariantList() {
     setMappingModalOpen(false);
   }
 
+  // Get unique categories from products
+  const categories = Array.from(
+    new Map(
+      products.map((p) => [p.itemCategory.id, p.itemCategory])
+    ).values()
+  ).sort((a, b) => a.name.localeCompare(b.name));
+
   // Filter variants
   let filteredVariants = variants;
 
@@ -270,6 +280,13 @@ export default function VariantList() {
     filteredVariants = filteredVariants.filter(
       (v) => v.productid === selectedProduct
     );
+  }
+
+  if (selectedCategory) {
+    filteredVariants = filteredVariants.filter((v) => {
+      const product = products.find((p) => p.id === v.productid);
+      return product?.itemCategory.id === selectedCategory;
+    });
   }
 
   // Sort variants
@@ -440,6 +457,7 @@ export default function VariantList() {
               <button
                 onClick={() => {
                   setProductDropdownOpen(!productDropdownOpen);
+                  setCategoryDropdownOpen(false);
                   setSortDropdownOpen(false);
                 }}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -514,12 +532,94 @@ export default function VariantList() {
               </AnimatePresence>
             </div>
 
+            {/* Category Filter Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setCategoryDropdownOpen(!categoryDropdownOpen);
+                  setProductDropdownOpen(false);
+                  setSortDropdownOpen(false);
+                }}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  selectedCategory !== null
+                    ? "bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg shadow-purple-200"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                <FaFilter className="w-3.5 h-3.5" />
+                <span>
+                  {selectedCategory !== null
+                    ? categories.find((c) => c.id === selectedCategory)?.name
+                    : `Semua Categories`}
+                </span>
+                <FaChevronDown
+                  className={`w-3 h-3 transition-transform ${
+                    categoryDropdownOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+
+              <AnimatePresence>
+                {categoryDropdownOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setCategoryDropdownOpen(false)}
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 py-2 min-w-[200px] z-20 max-h-[300px] overflow-y-auto"
+                    >
+                      <button
+                        onClick={() => {
+                          setSelectedCategory(null);
+                          setCategoryDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors ${
+                          selectedCategory === null
+                            ? "text-purple-600 bg-purple-50"
+                            : "text-gray-700"
+                        }`}
+                      >
+                        Semua Categories
+                      </button>
+                      {categories.map((category) => {
+                        const count = variants.filter((v) => {
+                          const product = products.find((p) => p.id === v.productid);
+                          return product?.itemCategory.id === category.id;
+                        }).length;
+                        return (
+                          <button
+                            key={category.id}
+                            onClick={() => {
+                              setSelectedCategory(category.id);
+                              setCategoryDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors ${
+                              selectedCategory === category.id
+                                ? "text-purple-600 bg-purple-50"
+                                : "text-gray-700"
+                            }`}
+                          >
+                            {category.name} ({count})
+                          </button>
+                        );
+                      })}
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+
             {/* Sort By Dropdown */}
             <div className="relative">
               <button
                 onClick={() => {
                   setSortDropdownOpen(!sortDropdownOpen);
                   setProductDropdownOpen(false);
+                  setCategoryDropdownOpen(false);
                 }}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
               >

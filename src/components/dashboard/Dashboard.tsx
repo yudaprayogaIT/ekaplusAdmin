@@ -17,6 +17,13 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 import type { Item, ItemVariant, Product, Category } from "@/types";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  API_CONFIG,
+  getQueryUrl,
+  getAuthHeaders,
+  getFileUrl,
+} from "@/config/api";
 
 // Additional types for dashboard
 type Branch = {
@@ -35,11 +42,7 @@ type DashboardStats = {
   unmappedItems: number;
 };
 
-// Data URLs
-const PRODUCTS_DATA_URL = "/data/products.json";
-const ITEMS_DATA_URL = "/data/items.json";
-const VARIANTS_DATA_URL = "/data/variants.json";
-const CATEGORIES_DATA_URL = "/data/itemCategories.json";
+// Fallback Data URLs (for branches - user will implement later)
 const BRANCHES_DATA_URL = "/data/branches.json";
 
 // Stat Card Component
@@ -542,6 +545,7 @@ function BranchOverview({ branches }: { branches: Branch[] }) {
 
 // Main Dashboard Component
 export default function Dashboard() {
+  const { token } = useAuth();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<DashboardStats>({
     totalProducts: 0,
@@ -558,31 +562,166 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function loadData() {
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
       try {
-        // Load all data in parallel
-        const [productsRes, itemsRes, variantsRes, categoriesRes, branchesRes] =
-          await Promise.all([
-            fetch(PRODUCTS_DATA_URL, { cache: "no-store" }),
-            fetch(ITEMS_DATA_URL, { cache: "no-store" }),
-            fetch(VARIANTS_DATA_URL, { cache: "no-store" }),
-            fetch(CATEGORIES_DATA_URL, { cache: "no-store" }),
-            fetch(BRANCHES_DATA_URL, { cache: "no-store" }),
-          ]);
+        const headers = getAuthHeaders(token);
+
+        // Load Categories from API
+        const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
+          fields: ["*"],
+        });
+        const categoriesRes = await fetch(categoriesUrl, {
+          headers,
+          cache: "no-store",
+        });
+
+        let categoriesData: Category[] = [];
+        if (categoriesRes.ok) {
+          const json = await categoriesRes.json();
+          categoriesData = json.data.map(
+            (cat: {
+              id: number;
+              category_name: string;
+              title?: string;
+              subtitle?: string;
+              icon?: string;
+              image?: string;
+              ekatalog_type?: number;
+            }) => ({
+              id: cat.id,
+              name: cat.category_name,
+              title: cat.title,
+              subtitle: cat.subtitle,
+              icon: getFileUrl(cat.icon),
+              image: getFileUrl(cat.image),
+              type: cat.ekatalog_type,
+            })
+          );
+        }
+
+        // Load Products from API
+        const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, {
+          fields: ["*"],
+        });
+        const productsRes = await fetch(productsUrl, {
+          headers,
+          cache: "no-store",
+        });
 
         let productsData: Product[] = [];
-        let itemsData: Item[] = [];
-        let variantsData: ItemVariant[] = [];
-        let categoriesData: Category[] = [];
-        let branchesData: Branch[] = [];
-
         if (productsRes.ok) {
-          const rawProducts = await productsRes.json();
-          productsData = rawProducts;
+          const json = await productsRes.json();
+          productsData = json.data.map(
+            (p: {
+              id: number;
+              product_name: string;
+              item_category: number;
+              disabled: number;
+              hot_deals: boolean;
+            }) => ({
+              id: p.id,
+              name: p.product_name,
+              itemCategory: {
+                id: p.item_category,
+                name:
+                  categoriesData.find((c) => c.id === p.item_category)?.name ||
+                  "Unknown",
+              },
+              disabled: p.disabled,
+              isHotDeals: Boolean(p.hot_deals),
+            })
+          );
         }
-        if (itemsRes.ok) itemsData = await itemsRes.json();
-        if (variantsRes.ok) variantsData = await variantsRes.json();
-        if (categoriesRes.ok) categoriesData = await categoriesRes.json();
-        if (branchesRes.ok) branchesData = await branchesRes.json();
+
+        // Load Items from API
+        const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
+          fields: ["*"],
+        });
+        const itemsRes = await fetch(itemsUrl, {
+          headers,
+          cache: "no-store",
+        });
+
+        let itemsData: Item[] = [];
+        if (itemsRes.ok) {
+          const json = await itemsRes.json();
+          itemsData = json.data.map(
+            (i: {
+              id: number;
+              item_code: string;
+              item_name: string;
+              item_color?: string;
+              ekatalog_type?: string;
+              uom: string;
+              image?: string;
+              item_desc?: string;
+              item_category?: string;
+              item_group?: string;
+              disabled?: number;
+            }) => ({
+              id: i.id,
+              code: i.item_code,
+              name: i.item_name,
+              color: i.item_color || "",
+              type: i.ekatalog_type || "",
+              uom: i.uom,
+              image: getFileUrl(i.image),
+              description: i.item_desc,
+              category: i.item_category,
+              group: i.item_group,
+              disabled: i.disabled,
+            })
+          );
+        }
+
+        // Load Variants from API
+        const variantsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT_VARIANT, {
+          fields: ["*"],
+        });
+        const variantsRes = await fetch(variantsUrl, {
+          headers,
+          cache: "no-store",
+        });
+
+        let variantsData: ItemVariant[] = [];
+        if (variantsRes.ok) {
+          const json = await variantsRes.json();
+          variantsData = json.data.map(
+            (v: { id: number; item: number; product: number }) => {
+              const item = itemsData.find((i) => i.id === v.item);
+              return {
+                id: v.id,
+                item:
+                  item ||
+                  ({
+                    id: v.item,
+                    name: "Unknown Item",
+                    code: "",
+                    color: "",
+                    type: "",
+                    uom: "",
+                    disabled: 0,
+                  } as Item),
+                productid: v.product,
+              };
+            }
+          );
+        }
+
+        // Load Branches from JSON (fallback - user will implement later)
+        let branchesData: Branch[] = [];
+        try {
+          const branchesRes = await fetch(BRANCHES_DATA_URL, {
+            cache: "no-store",
+          });
+          if (branchesRes.ok) branchesData = await branchesRes.json();
+        } catch {
+          console.log("Branches data not available (will be implemented later)");
+        }
 
         // Merge products with variants
         const productsWithVariants: Product[] = productsData.map((product) => {
@@ -623,7 +762,7 @@ export default function Dashboard() {
     }
 
     loadData();
-  }, []);
+  }, [token]);
 
   if (loading) {
     return (

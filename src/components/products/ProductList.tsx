@@ -382,21 +382,12 @@ export default function ProductList() {
     paginatedItems: paginatedProducts,
     totalItems,
     itemsPerPage,
-  } = usePagination(sortedProducts, 10);
+  } = usePagination(sortedProducts, 20);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
-
-  // Group by category
-  const groupedByCategory = categories
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((cat) => ({
-      category: cat,
-      items: paginatedProducts.filter((p) => p.itemCategory.id === cat.id),
-    }))
-    .filter((group) => group.items.length > 0);
 
   // Early returns AFTER all hooks
   if (loading) {
@@ -690,82 +681,25 @@ export default function ProductList() {
               : "Belum ada produk yang ditambahkan"}
           </p>
         </div>
-      ) : selectedCategory ? (
-        <>
-          <section>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-800">
-                {categories.find((c) => c.id === selectedCategory)?.name}
-              </h2>
-              <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-                {sortedProducts.length} items
-              </span>
-            </div>
-
-            <div
-              className={
-                viewMode === "grid"
-                  ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-                  : "space-y-4"
-              }
-            >
-              {paginatedProducts.map((p) => (
-                <ProductCard
-                  key={p.id}
-                  product={p}
-                  viewMode={viewMode}
-                  onEdit={() => handleEdit(p)}
-                  onDelete={() => promptDeleteProduct(p)}
-                  onView={() => openDetail(p)}
-                />
-              ))}
-            </div>
-          </section>
-
-          {/* Pagination */}
-          {sortedProducts.length > 0 && (
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={handlePageChange}
-              totalItems={totalItems}
-              itemsPerPage={itemsPerPage}
-            />
-          )}
-        </>
       ) : (
+        // All products view (no grouping)
         <>
-          <div className="space-y-10">
-            {groupedByCategory.map(({ category, items }) => (
-              <section key={category.id}>
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-xl font-semibold text-gray-800">
-                    {category.name}
-                  </h2>
-                  <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full font-medium">
-                    {items.length} items
-                  </span>
-                </div>
-
-                <div
-                  className={
-                    viewMode === "grid"
-                      ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-                      : "space-y-4"
-                  }
-                >
-                  {items.map((p) => (
-                    <ProductCard
-                      key={p.id}
-                      product={p}
-                      viewMode={viewMode}
-                      onEdit={() => handleEdit(p)}
-                      onDelete={() => promptDeleteProduct(p)}
-                      onView={() => openDetail(p)}
-                    />
-                  ))}
-                </div>
-              </section>
+          <div
+            className={
+              viewMode === "grid"
+                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+                : "space-y-4"
+            }
+          >
+            {paginatedProducts.map((p) => (
+              <ProductCard
+                key={p.id}
+                product={p}
+                viewMode={viewMode}
+                onEdit={() => handleEdit(p)}
+                onDelete={() => promptDeleteProduct(p)}
+                onView={() => openDetail(p)}
+              />
             ))}
           </div>
 

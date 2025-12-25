@@ -9,6 +9,7 @@ import { fetchVariants, createVariant } from "@/services/variantService";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
+import { Product } from "@/types";
 
 type Branch = {
   id: number;
@@ -33,16 +34,17 @@ type ItemVariant = {
   productid: number;
 };
 
-type Product = {
-  id: number;
-  name: string;
-  itemCategory: {
-    id: number;
-    name: string;
-  };
-  disabled: number;
-  isHotDeals: boolean;
-};
+// type Product = {
+//   id: number;
+//   name: string;
+//   itemCategory: {
+//     id: number;
+//     name: string;
+//     category_name: string;
+//   };
+//   disabled: number;
+//   isHotDeals: boolean;
+// };
 
 export default function AddVariantMappingModal({
   open,
@@ -118,6 +120,7 @@ export default function AddVariantMappingModal({
       return productPrefix === itemPrefix;
     });
   }, [selectedItem, products]);
+  console.log(products);
 
   // Auto-select first matching product
   useEffect(() => {

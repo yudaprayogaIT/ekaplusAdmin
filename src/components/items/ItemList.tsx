@@ -509,16 +509,7 @@ export default function ItemList() {
     paginatedItems,
     totalItems,
     itemsPerPage,
-  } = usePagination(sortedItems, 10);
-
-  // Group by category
-  const groupedByCategory = categories
-    .sort()
-    .map((category) => ({
-      category,
-      items: paginatedItems.filter((item) => item.category === category),
-    }))
-    .filter((group) => group.items.length > 0);
+  } = usePagination(sortedItems, 20);
 
   // Early returns AFTER all hooks
   if (!isAuthenticated) {
@@ -796,18 +787,9 @@ export default function ItemList() {
               : "Belum ada item yang ditambahkan"}
           </p>
         </div>
-      ) : selectedCategory ? (
-        // Single category view
-        <section>
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-gray-800">
-              {selectedCategory}
-            </h2>
-            <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-              {sortedItems.length} items
-            </span>
-          </div>
-
+      ) : (
+        // All items view (no grouping)
+        <>
           <div
             className={
               viewMode === "grid"
@@ -824,54 +806,6 @@ export default function ItemList() {
                 onDelete={() => promptDeleteItem(item)}
                 onView={() => openDetail(item)}
               />
-            ))}
-          </div>
-
-          {/* Pagination */}
-          {sortedItems.length > 0 && (
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-              totalItems={totalItems}
-              itemsPerPage={itemsPerPage}
-            />
-          )}
-        </section>
-      ) : (
-        // All categories view (grouped)
-        <>
-          <div className="space-y-10">
-            {groupedByCategory.map(({ category, items: categoryItems }) => (
-              <section key={category}>
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-xl font-semibold text-gray-800">
-                    {category}
-                  </h2>
-                  <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full font-medium">
-                    {categoryItems.length} items
-                  </span>
-                </div>
-
-                <div
-                  className={
-                    viewMode === "grid"
-                      ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-                      : "space-y-4"
-                  }
-                >
-                  {categoryItems.map((item) => (
-                    <ItemCard
-                      key={item.id}
-                      item={item}
-                      viewMode={viewMode}
-                      onEdit={() => handleEdit(item)}
-                      onDelete={() => promptDeleteItem(item)}
-                      onView={() => openDetail(item)}
-                    />
-                  ))}
-                </div>
-              </section>
             ))}
           </div>
 
