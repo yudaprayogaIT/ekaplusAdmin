@@ -3,11 +3,20 @@
 export type Branch = {
   id: number;
   name: string;
+  address: string;
+  city: string;
 };
 
 export type Category = {
   id: number;
   name: string;
+  // Catatan Aktivitas
+  created_at?: string;
+  created_by?: number;
+  updated_at?: string;
+  updated_by?: number;
+  owner?: number;
+  disabled?: number;
 };
 
 export type Item = {
@@ -47,6 +56,12 @@ export type ItemVariant = {
   item: Item; // Full Item object (di-hydrate dari API)
   productid: number; // From parent_id
   displayOrder: number; // From idx
+  // Catatan Aktivitas
+  created_at?: string;
+  created_by?: number;
+  updated_at?: string;
+  updated_by?: number;
+  owner?: number;
 };
 
 // Request types untuk API (simplified - backend auto-generates the rest)
@@ -70,6 +85,12 @@ export type Product = {
   variants: ItemVariant[];
   disabled: number;
   isHotDeals: boolean;
+  // Catatan Aktivitas
+  created_at?: string;
+  created_by?: number;
+  updated_at?: string;
+  updated_by?: number;
+  owner?: number;
 };
 
 // Product for modal (variants as Item[])
@@ -80,6 +101,12 @@ export type ProductFormData = {
   variants: Item[];
   disabled: number;
   isHotDeals: boolean;
+  // Catatan Aktivitas
+  created_at?: string;
+  created_by?: number;
+  updated_at?: string;
+  updated_by?: number;
+  owner?: number;
 };
 
 // Raw product from JSON (no variants)
@@ -89,6 +116,12 @@ export type ProductRaw = {
   itemCategory: Category;
   disabled: number;
   isHotDeals: boolean;
+  // Catatan Aktivitas
+  created_at?: string;
+  created_by?: number;
+  updated_at?: string;
+  updated_by?: number;
+  owner?: number;
 };
 
 // Wishlist API Response dari backend

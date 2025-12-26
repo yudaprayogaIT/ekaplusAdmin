@@ -48,6 +48,7 @@ export default function ItemCard({
                 src={item.image}
                 alt={item.name}
                 unoptimized
+                loading="eager"
                 onError={() => setImageError(true)}
                 className="object-contain w-full h-full group-hover:scale-110 transition-transform duration-500"
               />
@@ -150,6 +151,7 @@ export default function ItemCard({
               src={item.image}
               alt={item.name}
               unoptimized
+              loading="eager"
               onError={() => setImageError(true)}
               className="object-contain w-full h-full group-hover:scale-110 transition-transform duration-500"
             />

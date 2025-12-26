@@ -9,9 +9,9 @@ import {
   FaTrash,
   FaTag,
   FaBox,
-  FaCalendar,
   FaUser,
-  FaCheckCircle,
+  FaClock,
+  FaHistory,
 } from "react-icons/fa";
 import Image from "next/image";
 import { Category } from "./CategoryList";
@@ -31,19 +31,6 @@ export default function CategoryDetailModal({
   onDelete?: (c: Category) => void;
 }) {
   if (!category) return null;
-
-  const formatDate = (dateStr?: string) => {
-    if (!dateStr) return "-";
-    try {
-      return new Date(dateStr).toLocaleDateString("id-ID", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      });
-    } catch {
-      return "-";
-    }
-  };
 
   return (
     <AnimatePresence>
@@ -171,52 +158,86 @@ export default function CategoryDetailModal({
                 </div>
               )}
 
-              {/* Metadata */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                {/* Status */}
-                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-5 border-2 border-green-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <FaCheckCircle className="w-4 h-4 text-green-600" />
-                    <label className="text-xs font-bold text-green-900 uppercase tracking-wide">
-                      Status
-                    </label>
+              {/* Audit Trail Section */}
+              {(category.created_at || category.updated_at) && (
+                <div className="mb-8">
+                  <div className="flex items-center gap-3 mb-6">
+                    <FaHistory className="w-5 h-5 text-blue-500" />
+                    <h3 className="text-xl font-bold text-gray-900">
+                      Audit Trail
+                    </h3>
                   </div>
-                  <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded-full text-sm font-semibold">
-                    <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                    {category.status || "Active"}
-                  </span>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Created Info */}
+                    {category.created_at && (
+                      <div className="bg-gradient-to-br from-green-50 to-white rounded-2xl p-5 border-2 border-green-100">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-10 h-10 rounded-xl bg-green-500 flex items-center justify-center">
+                            <FaUser className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 font-medium">Created</p>
+                            <p className="text-sm font-bold text-gray-900">
+                              {category.created_by ? category.created_by.name : "Unknown"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <FaClock className="w-4 h-4 text-green-500" />
+                          <p className="text-sm">
+                            {new Date(category.created_at).toLocaleString("id-ID", {
+                              dateStyle: "long",
+                              timeStyle: "short",
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Updated Info */}
+                    {category.updated_at && (
+                      <div className="bg-gradient-to-br from-blue-50 to-white rounded-2xl p-5 border-2 border-blue-100">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center">
+                            <FaEdit className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 font-medium">Last Updated</p>
+                            <p className="text-sm font-bold text-gray-900">
+                              {category.updated_by ? category.updated_by.name : "Unknown"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <FaClock className="w-4 h-4 text-blue-500" />
+                          <p className="text-sm">
+                            {new Date(category.updated_at).toLocaleString("id-ID", {
+                              dateStyle: "long",
+                              timeStyle: "short",
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Owner Info (if different from creator) */}
+                  {category.owner && category.owner.id !== category.created_by?.id && (
+                    <div className="mt-4 bg-gradient-to-r from-purple-50 to-white rounded-xl p-4 border border-purple-100">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-purple-500 flex items-center justify-center">
+                          <FaUser className="w-4 h-4 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-medium">Owner</p>
+                          <p className="text-sm font-bold text-gray-900">{category.owner.name}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                {/* Created Date */}
-                {category.created_at && (
-                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-5 border-2 border-blue-200">
-                    <div className="flex items-center gap-2 mb-2">
-                      <FaCalendar className="w-4 h-4 text-blue-600" />
-                      <label className="text-xs font-bold text-blue-900 uppercase tracking-wide">
-                        Dibuat
-                      </label>
-                    </div>
-                    <p className="text-sm font-semibold text-blue-900">
-                      {formatDate(category.created_at)}
-                    </p>
-                  </div>
-                )}
-
-                {/* Updated By */}
-                {category.updated_by && (
-                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-5 border-2 border-purple-200">
-                    <div className="flex items-center gap-2 mb-2">
-                      <FaUser className="w-4 h-4 text-purple-600" />
-                      <label className="text-xs font-bold text-purple-900 uppercase tracking-wide">
-                        Diupdate Oleh
-                      </label>
-                    </div>
-                    <p className="text-sm font-semibold text-purple-900">
-                      {category.updated_by.name}
-                    </p>
-                  </div>
-                )}
-              </div>
+              )}
 
               {/* Actions */}
               <div className="flex gap-4 pt-6 border-t-2 border-gray-100">

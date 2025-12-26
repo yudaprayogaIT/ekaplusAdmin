@@ -62,7 +62,7 @@ export function getQueryUrl(
 ): string {
   const baseUrl = `${API_CONFIG.BASE_URL}${endpoint}`;
   if (spec) {
-    return `${baseUrl}?spec=${JSON.stringify(spec)}`;
+    return `${baseUrl}?spec=${encodeURIComponent(JSON.stringify(spec))}`;
   }
   return baseUrl;
 }

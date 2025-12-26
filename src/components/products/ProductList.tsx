@@ -1,7 +1,7 @@
 // src/components/products/ProductList.tsx
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import ProductCard from "./ProductCard";
 import AddProductModal from "./AddProductModal";
 import ProductDetailModal from "./ProductDetailModal";
@@ -9,11 +9,11 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Pagination, { usePagination } from "@/components/ui/Pagination";
 import {
   FaPlus,
-  FaFilter,
   FaSearch,
   FaList,
   FaTh,
   FaFire,
+  FaSortAmountUp,
   FaSortAmountDown,
   FaChevronDown,
 } from "react-icons/fa";
@@ -28,15 +28,18 @@ import {
   getFileUrl,
 } from "@/config/api";
 import { fetchVariants } from "@/services/variantService";
+import FilterBuilder from "@/components/filters/FilterBuilder";
+import { useFilters } from "@/hooks/useFilters";
+import { PRODUCT_FILTER_FIELDS } from "@/config/filterFields";
+import { FilterTriple } from "@/types/filter";
 
-type SortOption =
-  | "name-asc"
-  | "name-desc"
-  | "category"
-  | "variants-most"
-  | "variants-least"
-  | "newest"
-  | "oldest";
+type SortField =
+  | "product_name"
+  | "item_category"
+  | "created_at"
+  | "updated_at"
+  | "hot_deals";
+type SortDirection = "asc" | "desc";
 
 const SNAP_KEY = "ekatalog_products_snapshot";
 
@@ -52,6 +55,8 @@ interface ItemApiResponse {
   item_color: string;
   image?: string;
   disabled: number;
+  created_by: string;
+  created_at: string;
 }
 
 interface ProductApiResponse {
@@ -62,6 +67,12 @@ interface ProductApiResponse {
   disabled: number;
   docstatus: number;
   status: string;
+  // Catatan Aktivitas
+  created_at?: string;
+  created_by?: number;
+  updated_at?: string;
+  updated_by?: number;
+  owner?: number;
 }
 
 export default function ProductList() {
@@ -71,13 +82,12 @@ export default function ProductList() {
   const [availableItems, setAvailableItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [sortField, setSortField] = useState<SortField>("product_name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [showHotDealsOnly, setShowHotDealsOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<SortOption>("newest");
-  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
-  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<ProductFormData | null>(
@@ -92,8 +102,17 @@ export default function ProductList() {
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
 
-  // Helper function to load and merge data from API
-  async function loadAllData() {
+  // Helper function to load and merge data from API with filters and sorting
+  async function loadAllData(
+    filterTriples: FilterTriple[] = []
+    // TODO: UNCOMMENT WHEN BACKEND SUPPORTS ORDER_BY
+    // sort_by?: SortField,
+    // sort_order?: SortDirection
+  ): Promise<{
+    categoriesData: Category[];
+    itemsData: Item[];
+    productsWithVariants: Product[];
+  }> {
     if (!token)
       return { categoriesData: [], itemsData: [], productsWithVariants: [] };
 
@@ -140,14 +159,39 @@ export default function ProductList() {
         color: item.item_color,
         image: getFileUrl(item.image),
         disabled: item.disabled,
+        created_by: item.created_by,
       }));
-      console.log(itemsData);
     }
 
-    // Load products from API
-    const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, {
+    // Load products from API with filters and sorting
+    const productSpec: {
+      fields: string[];
+      filters?: FilterTriple[];
+      order_by?: string[];
+    } = {
       fields: ["*"],
-    });
+    };
+
+    if (filterTriples.length > 0) {
+      productSpec.filters = filterTriples;
+    }
+
+    // ============================================================================
+    // TODO: UNCOMMENT KETIKA BACKEND SUDAH FIX ORDER_BY
+    // Backend saat ini belum support order_by dengan benar (2025-12-26)
+    // Sementara menggunakan client-side sorting (lihat line ~440)
+    // ============================================================================
+    // if (sort_by && sort_order) {
+    //   // Goback requires order_by as ARRAY with UPPERCASE direction
+    //   productSpec.order_by = [`${sort_by} ${sort_order.toUpperCase()}`];
+    // }
+    // ============================================================================
+
+    console.log("[ProductList] Filter Triples:", filterTriples);
+    console.log("[ProductList] Product Spec:", productSpec);
+
+    const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, productSpec);
+    console.log("[ProductList] Request URL:", productsUrl);
     const productsRes = await fetch(productsUrl, {
       method: "GET",
       cache: "no-store",
@@ -181,49 +225,122 @@ export default function ProductList() {
           disabled: prod.disabled,
           isHotDeals: Boolean(prod.hot_deals),
           variants: productVariants, // Variants from API
+          // Catatan Aktivitas
+          created_at: prod.created_at,
+          created_by: prod.created_by,
+          updated_at: prod.updated_at,
+          updated_by: prod.updated_by,
+          owner: prod.owner,
         };
       });
+    } else {
+      // Log error details for debugging
+      let errorDetail = `HTTP ${productsRes.status}`;
+      try {
+        const errorBody = await productsRes.json();
+        console.error("[ProductList] API Error Response:", errorBody);
+        errorDetail = errorBody.message || errorBody.error || errorDetail;
+      } catch {
+        console.error(
+          "[ProductList] API Error (no JSON body):",
+          productsRes.status,
+          productsRes.statusText
+        );
+      }
+
+      // For filter/query errors (400/500), just log and return empty array
+      // This allows UI to show "No data found" instead of error message
+      if (productsRes.status === 400 || productsRes.status === 500) {
+        console.warn(
+          "[ProductList] Filter query failed, returning empty results:",
+          errorDetail
+        );
+      }
     }
 
     return { categoriesData, itemsData, productsWithVariants };
   }
 
-  // Initial load
+  // Use filter system
+  const { filters, setFilters } = useFilters({
+    entity: "product",
+  });
+
+  // Function to load data with filters (wrapped in useCallback to fix warning)
+  const loadDataWithFilters = useCallback(
+    async (filterTriples: FilterTriple[] = []) => {
+      setLoading(true);
+      setError(null);
+      try {
+        console.log(
+          "[ProductList] Loading data (client-side sort):",
+          sortField,
+          sortDirection
+        );
+        // TODO: UNCOMMENT WHEN BACKEND SUPPORTS ORDER_BY
+        // const { categoriesData, itemsData, productsWithVariants } =
+        //   await loadAllData(filterTriples, sortField, sortDirection);
+        const { categoriesData, itemsData, productsWithVariants } =
+          await loadAllData(filterTriples);
+
+        setCategories(categoriesData);
+        setAvailableItems(itemsData);
+        setProducts(productsWithVariants);
+        localStorage.setItem(SNAP_KEY, JSON.stringify(productsWithVariants));
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoading(false);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [token, sortField, sortDirection]
+  );
+
+  // Handle filter apply
+  function handleApplyFilters(newFilters: FilterTriple[]) {
+    setFilters(newFilters);
+    // Reload data when filters are applied
+    loadDataWithFilters(newFilters);
+  }
+
+  // Initial load with filters from URL/localStorage
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
-      setLoading(true);
-      try {
-        const { categoriesData, itemsData, productsWithVariants } =
-          await loadAllData();
-
-        if (!cancelled) {
-          setCategories(categoriesData);
-          setAvailableItems(itemsData);
-          setProducts(productsWithVariants);
-          localStorage.setItem(SNAP_KEY, JSON.stringify(productsWithVariants));
-        }
-      } catch (err: unknown) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : String(err));
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
+      if (!cancelled && token) {
+        await loadDataWithFilters(filters);
       }
     }
 
-    load();
+    if (token) {
+      load();
+    }
+
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [token, filters, loadDataWithFilters]);
+
+  // Reload data when sort changes
+  useEffect(() => {
+    if (token) {
+      console.log(
+        "[ProductList] Sort changed, reloading data with:",
+        sortField,
+        sortDirection
+      );
+      loadDataWithFilters(filters);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortField, sortDirection]);
 
   // Listen for updates
   useEffect(() => {
     async function handler() {
       try {
-        const { productsWithVariants } = await loadAllData();
+        const { productsWithVariants } = await loadAllData(filters);
         setProducts(productsWithVariants);
         localStorage.setItem(SNAP_KEY, JSON.stringify(productsWithVariants));
       } catch {
@@ -330,9 +447,10 @@ export default function ProductList() {
     setConfirmOpen(false);
   }
 
-  // Filter products (MUST be before early returns to comply with Hooks rules)
+  // Client-side filtering for quick search and hot deals
   let filteredProducts = products;
 
+  // Quick search filter (client-side for better UX)
   if (searchQuery.trim()) {
     const query = searchQuery.toLowerCase();
     filteredProducts = filteredProducts.filter(
@@ -342,37 +460,50 @@ export default function ProductList() {
     );
   }
 
-  if (selectedCategory) {
-    filteredProducts = filteredProducts.filter(
-      (p) => p.itemCategory.id === selectedCategory
-    );
-  }
-
+  // Hot deals quick filter (client-side toggle)
   if (showHotDealsOnly) {
     filteredProducts = filteredProducts.filter((p) => p.isHotDeals);
   }
 
-  // Sort products
-  const sortedProducts = [...filteredProducts].sort((a, b) => {
-    switch (sortBy) {
-      case "name-asc":
-        return a.name.localeCompare(b.name);
-      case "name-desc":
-        return b.name.localeCompare(a.name);
-      case "category":
-        return a.itemCategory.name.localeCompare(b.itemCategory.name);
-      case "variants-most":
-        return b.variants.length - a.variants.length;
-      case "variants-least":
-        return a.variants.length - b.variants.length;
-      case "newest":
-        return (b.id || 0) - (a.id || 0);
-      case "oldest":
-        return (a.id || 0) - (b.id || 0);
+  // ============================================================================
+  // TODO: HAPUS CLIENT-SIDE SORTING INI KETIKA BACKEND SUDAH FIX ORDER_BY
+  // Sementara menggunakan client-side sorting karena backend belum support (2025-12-26)
+  // ============================================================================
+  // Client-side sorting (temporary until backend supports order_by)
+  filteredProducts = [...filteredProducts].sort((a, b) => {
+    let aVal: string | number;
+    let bVal: string | number;
+
+    switch (sortField) {
+      case "product_name":
+        aVal = a.name.toLowerCase();
+        bVal = b.name.toLowerCase();
+        break;
+      case "item_category":
+        aVal = a.itemCategory?.name?.toLowerCase() || "";
+        bVal = b.itemCategory?.name?.toLowerCase() || "";
+        break;
+      case "created_at":
+        aVal = new Date(a.created_at || 0).getTime();
+        bVal = new Date(b.created_at || 0).getTime();
+        break;
+      case "updated_at":
+        aVal = new Date(a.updated_at || 0).getTime();
+        bVal = new Date(b.updated_at || 0).getTime();
+        break;
+      case "hot_deals":
+        aVal = a.isHotDeals ? 1 : 0;
+        bVal = b.isHotDeals ? 1 : 0;
+        break;
       default:
         return 0;
     }
+
+    if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
+    if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
+    return 0;
   });
+  // ============================================================================
 
   // Apply pagination
   const {
@@ -382,7 +513,7 @@ export default function ProductList() {
     paginatedItems: paginatedProducts,
     totalItems,
     itemsPerPage,
-  } = usePagination(sortedProducts, 20);
+  } = usePagination(filteredProducts, 20);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -442,19 +573,19 @@ export default function ProductList() {
         </motion.button>
       </div>
 
-      {/* Search & Filter */}
+      {/* Search & Filter Controls */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 mb-6">
         <div className="flex flex-col gap-4">
-          {/* Search & View Toggle */}
-          <div className="flex flex-col md:flex-row gap-4">
+          {/* Search Bar Row */}
+          <div className="flex flex-col md:flex-row gap-3">
             <div className="flex-1 relative">
-              <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 z-10" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari produk atau varian..."
-                className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all text-sm"
               />
             </div>
 
@@ -467,6 +598,7 @@ export default function ProductList() {
                     ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
+                title="Grid View"
               >
                 <FaTh className="w-5 h-5" />
               </button>
@@ -477,6 +609,7 @@ export default function ProductList() {
                     ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
+                title="List View"
               >
                 <FaList className="w-5 h-5" />
               </button>
@@ -486,117 +619,83 @@ export default function ProductList() {
           {/* Filters Row */}
           <div className="flex flex-wrap items-center gap-3 justify-between">
             <div className="flex flex-wrap items-center gap-3">
-              {/* Category Dropdown */}
+              {/* Advanced FilterBuilder Component */}
+              <FilterBuilder
+                entity="product"
+                config={PRODUCT_FILTER_FIELDS}
+                onApply={handleApplyFilters}
+                categories={categories}
+              />
+
+              {/* Hot Deals Quick Filter */}
+              <button
+                onClick={() => setShowHotDealsOnly(!showHotDealsOnly)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+                  showHotDealsOnly
+                    ? "bg-gradient-to-r from-yellow-400 to-orange-500 text-white shadow-lg shadow-orange-200"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+                title="Filter Hot Deals Only"
+              >
+                <FaFire className="w-4 h-4" />
+                <span>Hot Deals</span>
+              </button>
+
+              {/* Sort Direction Button */}
+              <button
+                onClick={() => {
+                  const newDirection = sortDirection === "asc" ? "desc" : "asc";
+                  console.log(
+                    "[ProductList] Sort direction changed:",
+                    sortDirection,
+                    "->",
+                    newDirection
+                  );
+                  setSortDirection(newDirection);
+                }}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
+                title={
+                  sortDirection === "asc"
+                    ? "Ascending (A-Z, 1-9, Oldest)"
+                    : "Descending (Z-A, 9-1, Newest)"
+                }
+              >
+                {sortDirection === "asc" ? (
+                  <FaSortAmountUp className="w-3.5 h-3.5" />
+                ) : (
+                  <FaSortAmountDown className="w-3.5 h-3.5" />
+                )}
+                {/* <span>{sortDirection === "asc" ? "A-Z" : "Z-A"}</span> */}
+              </button>
+
+              {/* Sort Field Dropdown */}
               <div className="relative">
                 <button
-                  onClick={() => {
-                    setCategoryDropdownOpen(!categoryDropdownOpen);
-                    setSortDropdownOpen(false);
-                  }}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    selectedCategory !== null
-                      ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  <FaFilter className="w-3.5 h-3.5" />
-                  <span>
-                    {selectedCategory !== null
-                      ? categories.find((c) => c.id === selectedCategory)?.name
-                      : `Semua (${products.length})`}
-                  </span>
-                  <FaChevronDown
-                    className={`w-3 h-3 transition-transform ${
-                      categoryDropdownOpen ? "rotate-180" : ""
-                    }`}
-                  />
-                </button>
-
-                <AnimatePresence>
-                  {categoryDropdownOpen && (
-                    <>
-                      <div
-                        className="fixed inset-0 z-10"
-                        onClick={() => setCategoryDropdownOpen(false)}
-                      />
-                      <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 py-2 min-w-[200px] z-20 max-h-[300px] overflow-y-auto"
-                      >
-                        <button
-                          onClick={() => {
-                            setSelectedCategory(null);
-                            setCategoryDropdownOpen(false);
-                          }}
-                          className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors ${
-                            selectedCategory === null
-                              ? "text-red-600 bg-red-50"
-                              : "text-gray-700"
-                          }`}
-                        >
-                          Semua ({products.length})
-                        </button>
-                        {categories.map((cat) => {
-                          const count = products.filter(
-                            (p) => p.itemCategory.id === cat.id
-                          ).length;
-                          return (
-                            <button
-                              key={cat.id}
-                              onClick={() => {
-                                setSelectedCategory(cat.id);
-                                setCategoryDropdownOpen(false);
-                              }}
-                              className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors ${
-                                selectedCategory === cat.id
-                                  ? "text-red-600 bg-red-50"
-                                  : "text-gray-700"
-                              }`}
-                            >
-                              {cat.name} ({count})
-                            </button>
-                          );
-                        })}
-                      </motion.div>
-                    </>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* Sort By Dropdown */}
-              <div className="relative">
-                <button
-                  onClick={() => {
-                    setSortDropdownOpen(!sortDropdownOpen);
-                    setCategoryDropdownOpen(false);
-                  }}
+                  onClick={() =>
+                    setSortFieldDropdownOpen(!sortFieldDropdownOpen)
+                  }
                   className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
                 >
-                  <FaSortAmountDown className="w-3.5 h-3.5" />
                   <span>
-                    {sortBy === "name-asc" && "A-Z"}
-                    {sortBy === "name-desc" && "Z-A"}
-                    {sortBy === "category" && "Kategori"}
-                    {sortBy === "variants-most" && "Terbanyak Varian"}
-                    {sortBy === "variants-least" && "Tersedikit Varian"}
-                    {sortBy === "newest" && "Terbaru"}
-                    {sortBy === "oldest" && "Terlama"}
+                    {sortField === "product_name" && "Nama Produk"}
+                    {sortField === "item_category" && "Kategori"}
+                    {sortField === "created_at" && "Tanggal Dibuat"}
+                    {sortField === "updated_at" && "Tanggal Diupdate"}
+                    {sortField === "hot_deals" && "Hot Deals"}
                   </span>
                   <FaChevronDown
                     className={`w-3 h-3 transition-transform ${
-                      sortDropdownOpen ? "rotate-180" : ""
+                      sortFieldDropdownOpen ? "rotate-180" : ""
                     }`}
                   />
                 </button>
 
                 <AnimatePresence>
-                  {sortDropdownOpen && (
+                  {sortFieldDropdownOpen && (
                     <>
                       <div
                         className="fixed inset-0 z-10"
-                        onClick={() => setSortDropdownOpen(false)}
+                        onClick={() => setSortFieldDropdownOpen(false)}
                       />
                       <motion.div
                         initial={{ opacity: 0, y: -10 }}
@@ -605,37 +704,41 @@ export default function ProductList() {
                         className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 py-2 min-w-[200px] z-20"
                       >
                         {[
-                          { value: "newest" as SortOption, label: "Terbaru" },
-                          { value: "oldest" as SortOption, label: "Terlama" },
                           {
-                            value: "name-asc" as SortOption,
-                            label: "Nama A-Z",
+                            value: "product_name" as SortField,
+                            label: "Nama Produk",
                           },
                           {
-                            value: "name-desc" as SortOption,
-                            label: "Nama Z-A",
-                          },
-                          {
-                            value: "category" as SortOption,
+                            value: "item_category" as SortField,
                             label: "Kategori",
                           },
                           {
-                            value: "variants-most" as SortOption,
-                            label: "Terbanyak Varian",
+                            value: "created_at" as SortField,
+                            label: "Tanggal Dibuat",
                           },
                           {
-                            value: "variants-least" as SortOption,
-                            label: "Tersedikit Varian",
+                            value: "updated_at" as SortField,
+                            label: "Tanggal Diupdate",
+                          },
+                          {
+                            value: "hot_deals" as SortField,
+                            label: "Hot Deals",
                           },
                         ].map((option) => (
                           <button
                             key={option.value}
                             onClick={() => {
-                              setSortBy(option.value);
-                              setSortDropdownOpen(false);
+                              console.log(
+                                "[ProductList] Sort field changed:",
+                                sortField,
+                                "->",
+                                option.value
+                              );
+                              setSortField(option.value);
+                              setSortFieldDropdownOpen(false);
                             }}
                             className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors ${
-                              sortBy === option.value
+                              sortField === option.value
                                 ? "text-red-600 bg-red-50"
                                 : "text-gray-700"
                             }`}
@@ -648,26 +751,13 @@ export default function ProductList() {
                   )}
                 </AnimatePresence>
               </div>
-
-              {/* Hot Deals Filter */}
-              <button
-                onClick={() => setShowHotDealsOnly(!showHotDealsOnly)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex items-center gap-2 ${
-                  showHotDealsOnly
-                    ? "bg-gradient-to-r from-yellow-400 to-orange-500 text-red-700 shadow-lg"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                <FaFire className="w-4 h-4" />
-                <span>Hot Deals</span>
-              </button>
             </div>
           </div>
         </div>
       </div>
 
       {/* Products Display */}
-      {sortedProducts.length === 0 ? (
+      {filteredProducts.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
           <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <FaSearch className="w-8 h-8 text-gray-400" />
@@ -676,9 +766,7 @@ export default function ProductList() {
             Tidak ada produk
           </h3>
           <p className="text-sm text-gray-500">
-            {searchQuery
-              ? "Coba ubah kata kunci pencarian"
-              : "Belum ada produk yang ditambahkan"}
+            Belum ada produk yang ditambahkan atau coba ubah filter
           </p>
         </div>
       ) : (
@@ -704,7 +792,7 @@ export default function ProductList() {
           </div>
 
           {/* Pagination */}
-          {sortedProducts.length > 0 && (
+          {filteredProducts.length > 0 && (
             <Pagination
               currentPage={currentPage}
               totalPages={totalPages}

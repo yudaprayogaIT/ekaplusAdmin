@@ -44,6 +44,12 @@ function transformVariantResponse(
     item: item,
     productid: apiData.parent_id, // From parent_id
     displayOrder: apiData.idx, // From idx
+    // Audit trail
+    created_at: apiData.created_at,
+    created_by: apiData.created_by,
+    updated_at: apiData.updated_at,
+    updated_by: apiData.updated_by,
+    owner: apiData.owner,
   };
 }
 

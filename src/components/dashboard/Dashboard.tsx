@@ -16,7 +16,7 @@ import {
 } from "react-icons/fa";
 import Link from "next/link";
 import Image from "next/image";
-import type { Item, ItemVariant, Product, Category } from "@/types";
+import type { Item, ItemVariant, Product, Category, Branch } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   API_CONFIG,
@@ -25,12 +25,12 @@ import {
   getFileUrl,
 } from "@/config/api";
 
-// Additional types for dashboard
-type Branch = {
-  id: number;
-  name: string;
-  address?: string;
-};
+// // Additional types for dashboard
+// type Branch = {
+//   id: number;
+//   name: string;
+//   address?: string;
+// };
 
 type DashboardStats = {
   totalProducts: number;
@@ -713,14 +713,60 @@ export default function Dashboard() {
         }
 
         // Load Branches from JSON (fallback - user will implement later)
+        // let branchesData: Branch[] = [];
+        // try {
+        //   const branchesRes = await fetch(BRANCHES_DATA_URL, {
+        //     cache: "no-store",
+        //   });
+        //   if (branchesRes.ok) branchesData = await branchesRes.json();
+        // } catch {
+        //   console.log("Branches data not available (will be implemented later)");
+        // }
+        const branchesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH, {
+          fields: ["*"],
+        });
+        const branchesRes = await fetch(branchesUrl, {
+          headers,
+          cache: "no-store",
+        });
+
         let branchesData: Branch[] = [];
-        try {
-          const branchesRes = await fetch(BRANCHES_DATA_URL, {
-            cache: "no-store",
-          });
-          if (branchesRes.ok) branchesData = await branchesRes.json();
-        } catch {
-          console.log("Branches data not available (will be implemented later)");
+        if (branchesRes.ok) {
+          const json = await branchesRes.json();
+          console.log(json);
+          branchesData = json.data.map(
+            (b: {
+              id: number;
+              branch_name: string;
+              city: string;
+              address: string;
+            }) => ({
+              id: b.id,
+              name: b.branch_name,
+              city: b.city,
+              address: b.address,
+            })
+          );
+          // branchesData = json.data.map(
+          //   (p: {
+          //     id: number;
+          //     product_name: string;
+          //     item_category: number;
+          //     disabled: number;
+          //     hot_deals: boolean;
+          //   }) => ({
+          //     id: p.id,
+          //     name: p.product_name,
+          //     itemCategory: {
+          //       id: p.item_category,
+          //       name:
+          //         categoriesData.find((c) => c.id === p.item_category)?.name ||
+          //         "Unknown",
+          //     },
+          //     disabled: p.disabled,
+          //     isHotDeals: Boolean(p.hot_deals),
+          //   })
+          // );
         }
 
         // Merge products with variants
@@ -789,9 +835,7 @@ export default function Dashboard() {
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
             Dashboard
           </h1>
-          <p className="text-gray-600 mt-1">
-            Selamat datang di Admin EKAPLUS
-          </p>
+          <p className="text-gray-600 mt-1">Selamat datang di Admin EKAPLUS</p>
         </div>
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <FaChartLine className="w-4 h-4" />

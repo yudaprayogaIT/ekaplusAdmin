@@ -52,6 +52,7 @@ export default function ProductCard({
                 src={firstVariant.image}
                 alt={product.name}
                 unoptimized
+                loading="eager"
                 className="object-contain w-full h-full group-hover:scale-110 transition-transform duration-500"
               />
             ) : (
@@ -156,6 +157,7 @@ export default function ProductCard({
               src={firstVariant.image}
               alt={product.name}
               unoptimized
+              loading="eager"
               className="object-contain w-full h-full group-hover:scale-110 transition-transform duration-500"
             />
           </div>

@@ -232,8 +232,12 @@ export default function CategoryList() {
                   docstatus: item.docstatus,
                   status: item.status,
                   disabled: item.disabled,
+                  // Audit trail
                   created_at: item.created_at,
+                  created_by: item.created_by ? { id: item.created_by, name: `User #${item.created_by}` } : undefined,
                   updated_at: item.updated_at,
+                  updated_by: item.updated_by ? { id: item.updated_by, name: `User #${item.updated_by}` } : undefined,
+                  owner: item.owner ? { id: item.owner, name: `User #${item.owner}` } : undefined,
                 };
               });
 

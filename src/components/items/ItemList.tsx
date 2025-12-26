@@ -9,15 +9,16 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Pagination, { usePagination } from "@/components/ui/Pagination";
 import {
   FaPlus,
-  FaFilter,
   FaSearch,
   FaList,
   FaTh,
+  FaSortAmountUp,
   FaSortAmountDown,
+  FaChevronDown,
   FaLock,
   FaBoxOpen,
 } from "react-icons/fa";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getQueryUrl,
@@ -26,6 +27,10 @@ import {
   getFileUrl,
   API_CONFIG,
 } from "@/config/api";
+import FilterBuilder from "@/components/filters/FilterBuilder";
+import { useFilters } from "@/hooks/useFilters";
+import { ITEM_FILTER_FIELDS } from "@/config/filterFields";
+import { FilterTriple } from "@/types/filter";
 
 export type Item = {
   id: number;
@@ -89,13 +94,13 @@ type ItemAPIResponse = {
   meta: Record<string, unknown>;
 };
 
-type SortOption =
-  | "name-asc"
-  | "name-desc"
-  | "code-asc"
-  | "code-desc"
-  | "id-asc"
-  | "id-desc";
+type SortField =
+  | "item_name"
+  | "item_code"
+  | "item_category"
+  | "created_at"
+  | "updated_at";
+type SortDirection = "asc" | "desc";
 
 const SNAP_KEY = "ekatalog_items_snapshot";
 
@@ -105,10 +110,10 @@ export default function ItemList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [selectedUOM, setSelectedUOM] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [sortBy, setSortBy] = useState<SortOption>("id-asc");
+  const [sortField, setSortField] = useState<SortField>("created_at");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<Item | null>(null);
@@ -121,7 +126,130 @@ export default function ItemList() {
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
 
-  // Load items from API
+  // Use filter system
+  const { filters, setFilters } = useFilters({
+    entity: "item",
+  });
+
+  // Helper function to load data with filters and sorting
+  async function loadAllData(
+    filterTriples: FilterTriple[] = []
+    // TODO: UNCOMMENT WHEN BACKEND SUPPORTS ORDER_BY
+    // sort_by?: SortField,
+    // sort_order?: SortDirection
+  ): Promise<Item[]> {
+    if (!token) return [];
+
+    const headers = getAuthHeaders(token);
+
+    const itemSpec: {
+      fields: string[];
+      filters?: FilterTriple[];
+      order_by?: string[];
+    } = {
+      fields: ["*"],
+    };
+
+    if (filterTriples.length > 0) {
+      itemSpec.filters = filterTriples;
+    }
+
+    // ============================================================================
+    // TODO: UNCOMMENT KETIKA BACKEND SUDAH FIX ORDER_BY
+    // Backend saat ini belum support order_by dengan benar (2025-12-26)
+    // Sementara menggunakan client-side sorting (lihat line ~500)
+    // ============================================================================
+    // if (sort_by && sort_order) {
+    //   // Goback requires order_by as ARRAY with UPPERCASE direction
+    //   itemSpec.order_by = [`${sort_by} ${sort_order.toUpperCase()}`];
+    // }
+    // ============================================================================
+
+    console.log("[ItemList] Filter Triples:", filterTriples);
+    console.log("[ItemList] Item Spec:", itemSpec);
+
+    const DATA_URL = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, itemSpec);
+    console.log("[ItemList] Request URL:", DATA_URL);
+
+    const res = await fetch(DATA_URL, {
+      method: "GET",
+      cache: "no-store",
+      headers,
+    });
+
+    if (res.ok) {
+      const response = (await res.json()) as ItemAPIResponse;
+
+      const mappedItems: Item[] = response.data.map((item) => ({
+        id: item.id,
+        code: item.item_code,
+        item_code: item.item_code,
+        name: item.item_name,
+        item_name: item.item_name,
+        uom: item.uom,
+        group: item.item_group,
+        item_group: item.item_group,
+        category: item.item_category,
+        generator_item: item.generator_item,
+        image: getFileUrl(item.image),
+        description: item.item_desc || undefined,
+        item_desc: item.item_desc || undefined,
+        disabled: item.disabled,
+        status: item.status,
+        docstatus: item.docstatus,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+        created_by: item.created_by,
+        updated_by: item.updated_by,
+        owner: item.owner,
+      }));
+
+      // Debug: Log first 5 items to verify sort order
+      console.log("[ItemList] First 5 items from API (to verify sort):");
+      mappedItems.slice(0, 5).forEach((item, idx) => {
+        console.log(
+          `  ${idx + 1}. ${item.item_name} (ID: ${item.id}, Code: ${
+            item.item_code
+          })`
+        );
+      });
+
+      return mappedItems;
+    }
+
+    // Log error details for debugging
+    let errorDetail = `HTTP ${res.status}`;
+    try {
+      const errorBody = await res.json();
+      console.error("[ItemList] API Error Response:", errorBody);
+      errorDetail = errorBody.message || errorBody.error || errorDetail;
+    } catch {
+      console.error(
+        "[ItemList] API Error (no JSON body):",
+        res.status,
+        res.statusText
+      );
+    }
+
+    // For filter/query errors (400/500), return empty array instead of throwing
+    // This allows UI to show "No data found" instead of error message
+    if (res.status === 400 || res.status === 500) {
+      console.warn(
+        "[ItemList] Filter query failed, returning empty results:",
+        errorDetail
+      );
+      return [];
+    }
+
+    throw new Error(`Failed to fetch items (${res.status}): ${errorDetail}`);
+  }
+
+  // Handle filter apply
+  function handleApplyFilters(newFilters: FilterTriple[]) {
+    setFilters(newFilters);
+  }
+
+  // Load items from API with filters and sorting
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -134,63 +262,21 @@ export default function ItemList() {
           return;
         }
 
-        const DATA_URL = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
-          fields: ["*"],
-        });
-        const headers = getAuthHeaders(token);
+        console.log(
+          "[ItemList] Loading data (client-side sort):",
+          sortField,
+          sortDirection
+        );
+        // TODO: UNCOMMENT WHEN BACKEND SUPPORTS ORDER_BY
+        // const mappedItems = await loadAllData(filters, sortField, sortDirection);
+        const mappedItems = await loadAllData(filters);
 
-        const res = await fetch(DATA_URL, {
-          method: "GET",
-          cache: "no-store",
-          headers,
-        });
-
-        if (res.ok) {
-          const response = (await res.json()) as ItemAPIResponse;
-
-          if (!cancelled) {
-            // Map API response to Item type
-            const mappedItems: Item[] = response.data.map((item) => ({
-              id: item.id,
-              code: item.item_code,
-              item_code: item.item_code,
-              name: item.item_name,
-              item_name: item.item_name,
-              uom: item.uom,
-              group: item.item_group,
-              item_group: item.item_group,
-              category: item.item_category,
-              generator_item: item.generator_item,
-              image: getFileUrl(item.image),
-              description: item.item_desc || undefined,
-              item_desc: item.item_desc || undefined,
-              disabled: item.disabled,
-              status: item.status,
-              docstatus: item.docstatus,
-              created_at: item.created_at,
-              updated_at: item.updated_at,
-              created_by: item.created_by,
-              updated_by: item.updated_by,
-              owner: item.owner,
-            }));
-
-            console.log("Loaded items:", mappedItems);
-            setItems(mappedItems);
-            try {
-              localStorage.setItem(SNAP_KEY, JSON.stringify(mappedItems));
-            } catch (e) {
-              console.error("Failed to save snapshot:", e);
-            }
-          }
-        } else {
-          if (!cancelled) {
-            if (res.status === 401) {
-              setError("Session expired. Silakan login kembali.");
-            } else if (res.status === 403) {
-              setError("Akses ditolak. Anda tidak memiliki izin.");
-            } else {
-              setError(`Failed to fetch items (${res.status})`);
-            }
+        if (!cancelled) {
+          setItems(mappedItems);
+          try {
+            localStorage.setItem(SNAP_KEY, JSON.stringify(mappedItems));
+          } catch (e) {
+            console.error("Failed to save snapshot:", e);
           }
         }
       } catch (err: unknown) {
@@ -200,6 +286,10 @@ export default function ItemList() {
             setError(
               "Tidak dapat terhubung ke server. Periksa koneksi Anda atau pastikan backend berjalan."
             );
+          } else if (errorMessage.includes("401")) {
+            setError("Session expired. Silakan login kembali.");
+          } else if (errorMessage.includes("403")) {
+            setError("Akses ditolak. Anda tidak memiliki izin.");
           } else {
             setError(errorMessage);
           }
@@ -212,7 +302,8 @@ export default function ItemList() {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, token]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, token, filters, sortField, sortDirection]);
 
   // Listen for updates - reload from API when triggered
   useEffect(() => {
@@ -220,47 +311,11 @@ export default function ItemList() {
       if (!isAuthenticated || !token) return;
 
       try {
-        const DATA_URL = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
-          fields: ["*"],
-        });
-        const headers = getAuthHeaders(token);
-
-        const res = await fetch(DATA_URL, {
-          method: "GET",
-          cache: "no-store",
-          headers,
-        });
-
-        if (res.ok) {
-          const response = (await res.json()) as ItemAPIResponse;
-
-          const mappedItems: Item[] = response.data.map((item) => ({
-            id: item.id,
-            code: item.item_code,
-            item_code: item.item_code,
-            name: item.item_name,
-            item_name: item.item_name,
-            uom: item.uom,
-            group: item.item_group,
-            item_group: item.item_group,
-            category: item.item_category,
-            generator_item: item.generator_item,
-            image: getFileUrl(item.image),
-            description: item.item_desc || undefined,
-            item_desc: item.item_desc || undefined,
-            disabled: item.disabled,
-            status: item.status,
-            docstatus: item.docstatus,
-            created_at: item.created_at,
-            updated_at: item.updated_at,
-            created_by: item.created_by,
-            updated_by: item.updated_by,
-            owner: item.owner,
-          }));
-
-          setItems(mappedItems);
-          localStorage.setItem(SNAP_KEY, JSON.stringify(mappedItems));
-        }
+        // TODO: UNCOMMENT WHEN BACKEND SUPPORTS ORDER_BY
+        // const mappedItems = await loadAllData(filters, sortField, sortDirection);
+        const mappedItems = await loadAllData(filters);
+        setItems(mappedItems);
+        localStorage.setItem(SNAP_KEY, JSON.stringify(mappedItems));
       } catch (error) {
         console.error("Failed to reload items:", error);
       }
@@ -268,6 +323,7 @@ export default function ItemList() {
 
     window.addEventListener("ekatalog:items_update", handler);
     return () => window.removeEventListener("ekatalog:items_update", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, token]);
 
   function saveSnapshot(arr: Item[]) {
@@ -453,11 +509,11 @@ export default function ItemList() {
     setConfirmOpen(false);
   }
 
-  // Get unique categories and UOMs (MUST be before early returns to comply with Hooks rules)
+  // Get unique categories and UOMs for stats cards (MUST be before early returns to comply with Hooks rules)
   const categories = Array.from(new Set(items.map((item) => item.category)));
   const uomList = Array.from(new Set(items.map((item) => item.uom)));
 
-  // Filter items
+  // Client-side filtering for quick search (for better UX)
   let filteredItems = items;
 
   if (searchQuery.trim()) {
@@ -471,35 +527,45 @@ export default function ItemList() {
     );
   }
 
-  if (selectedCategory) {
-    filteredItems = filteredItems.filter(
-      (item) => item.category === selectedCategory
-    );
-  }
+  // ============================================================================
+  // TODO: HAPUS CLIENT-SIDE SORTING INI KETIKA BACKEND SUDAH FIX ORDER_BY
+  // Sementara menggunakan client-side sorting karena backend belum support (2025-12-26)
+  // ============================================================================
+  // Client-side sorting (temporary until backend supports order_by)
+  filteredItems = [...filteredItems].sort((a, b) => {
+    let aVal: string | number;
+    let bVal: string | number;
 
-  if (selectedUOM) {
-    filteredItems = filteredItems.filter((item) => item.uom === selectedUOM);
-  }
-
-  // Sort items
-  const sortedItems = [...filteredItems].sort((a, b) => {
-    switch (sortBy) {
-      case "name-asc":
-        return a.name.localeCompare(b.name);
-      case "name-desc":
-        return b.name.localeCompare(a.name);
-      case "code-asc":
-        return a.code.localeCompare(b.code);
-      case "code-desc":
-        return b.code.localeCompare(a.code);
-      case "id-asc":
-        return a.id - b.id;
-      case "id-desc":
-        return b.id - a.id;
+    switch (sortField) {
+      case "item_name":
+        aVal = a.item_name.toLowerCase();
+        bVal = b.item_name.toLowerCase();
+        break;
+      case "item_code":
+        aVal = a.item_code.toLowerCase();
+        bVal = b.item_code.toLowerCase();
+        break;
+      case "item_category":
+        aVal = a.category.toLowerCase();
+        bVal = b.category.toLowerCase();
+        break;
+      case "created_at":
+        aVal = new Date(a.created_at || 0).getTime();
+        bVal = new Date(b.created_at || 0).getTime();
+        break;
+      case "updated_at":
+        aVal = new Date(a.updated_at || 0).getTime();
+        bVal = new Date(b.updated_at || 0).getTime();
+        break;
       default:
         return 0;
     }
+
+    if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
+    if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
+    return 0;
   });
+  // ============================================================================
 
   // Apply pagination
   const {
@@ -509,7 +575,7 @@ export default function ItemList() {
     paginatedItems,
     totalItems,
     itemsPerPage,
-  } = usePagination(sortedItems, 20);
+  } = usePagination(filteredItems, 10);
 
   // Early returns AFTER all hooks
   if (!isAuthenticated) {
@@ -625,34 +691,17 @@ export default function ItemList() {
       {/* Search & Filter Bar */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 mb-6">
         <div className="flex flex-col gap-4">
-          {/* Search, Sort & View Toggle */}
-          <div className="flex flex-col md:flex-row gap-4">
+          {/* Search Row */}
+          <div className="flex flex-col md:flex-row gap-3">
             <div className="flex-1 relative">
-              <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 z-10" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari item, kode, atau group..."
-                className="w-full pl-11 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all text-sm"
               />
-            </div>
-
-            {/* Sort Dropdown */}
-            <div className="relative">
-              <FaSortAmountDown className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortOption)}
-                className="pl-11 pr-10 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all font-medium text-gray-700 bg-white appearance-none cursor-pointer min-w-[200px]"
-              >
-                <option value="id-asc">ID: Terlama</option>
-                <option value="id-desc">ID: Terbaru</option>
-                <option value="name-asc">Nama: A-Z</option>
-                <option value="name-desc">Nama: Z-A</option>
-                <option value="code-asc">Kode: A-Z</option>
-                <option value="code-desc">Kode: Z-A</option>
-              </select>
             </div>
 
             {/* View Toggle */}
@@ -664,6 +713,7 @@ export default function ItemList() {
                     ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
+                title="Grid View"
               >
                 <FaTh className="w-5 h-5" />
               </button>
@@ -674,106 +724,140 @@ export default function ItemList() {
                     ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
+                title="List View"
               >
                 <FaList className="w-5 h-5" />
               </button>
             </div>
           </div>
 
-          {/* Filters */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-2">
-            <FaFilter className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          {/* Filters Row */}
+          <div className="flex flex-wrap items-center gap-3 justify-between">
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Advanced FilterBuilder Component */}
+              <FilterBuilder
+                entity="item"
+                config={ITEM_FILTER_FIELDS}
+                onApply={handleApplyFilters}
+              />
 
-            {/* Category Filter */}
-            <button
-              onClick={() => setSelectedCategory(null)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
-                selectedCategory === null
-                  ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Semua Kategori
-            </button>
-            {categories.map((category) => (
-              <button
-                key={category}
-                onClick={() => setSelectedCategory(category)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
-                  selectedCategory === category
-                    ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                {category}
-              </button>
-            ))}
-
-            <div className="w-px h-6 bg-gray-300 mx-2" />
-
-            {/* UOM Filter */}
-            {uomList.map((uom) => (
-              <button
-                key={uom}
-                onClick={() => setSelectedUOM(selectedUOM === uom ? null : uom)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
-                  selectedUOM === uom
-                    ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-200"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                {uom}
-              </button>
-            ))}
-          </div>
-
-          {/* Active Filters Info */}
-          {(searchQuery ||
-            selectedCategory ||
-            selectedUOM ||
-            sortBy !== "id-asc") && (
-            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
-              <span className="text-xs font-medium text-gray-500">
-                Filter aktif:
-              </span>
-              {searchQuery && (
-                <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-                  Pencarian: &quot;{searchQuery}&quot;
-                </span>
-              )}
-              {selectedCategory && (
-                <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                  Kategori: {selectedCategory}
-                </span>
-              )}
-              {selectedUOM && (
-                <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
-                  UOM: {selectedUOM}
-                </span>
-              )}
-              {sortBy !== "id-asc" && (
-                <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">
-                  Sort: {sortBy.split("-").join(" ").toUpperCase()}
-                </span>
-              )}
+              {/* Sort Direction Button */}
               <button
                 onClick={() => {
-                  setSearchQuery("");
-                  setSelectedCategory(null);
-                  setSelectedUOM(null);
-                  setSortBy("id-asc");
+                  const newDirection = sortDirection === "asc" ? "desc" : "asc";
+                  console.log(
+                    "[ItemList] Sort direction changed:",
+                    sortDirection,
+                    "->",
+                    newDirection
+                  );
+                  setSortDirection(newDirection);
                 }}
-                className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium hover:bg-red-200 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
+                title={
+                  sortDirection === "asc"
+                    ? "Ascending (A-Z, 1-9, Oldest)"
+                    : "Descending (Z-A, 9-1, Newest)"
+                }
               >
-                Reset Semua
+                {sortDirection === "asc" ? (
+                  <FaSortAmountUp className="w-3.5 h-3.5" />
+                ) : (
+                  <FaSortAmountDown className="w-3.5 h-3.5" />
+                )}
+                {/* <span>{sortDirection === "asc" ? "A-Z" : "Z-A"}</span> */}
               </button>
+
+              {/* Sort Field Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() =>
+                    setSortFieldDropdownOpen(!sortFieldDropdownOpen)
+                  }
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
+                >
+                  <span>
+                    {sortField === "item_name" && "Nama Item"}
+                    {sortField === "item_code" && "Kode Item"}
+                    {sortField === "item_category" && "Kategori"}
+                    {sortField === "created_at" && "Tanggal Dibuat"}
+                    {sortField === "updated_at" && "Tanggal Diupdate"}
+                  </span>
+                  <FaChevronDown
+                    className={`w-3 h-3 transition-transform ${
+                      sortFieldDropdownOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+
+                <AnimatePresence>
+                  {sortFieldDropdownOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setSortFieldDropdownOpen(false)}
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 py-2 min-w-[200px] z-20"
+                      >
+                        {[
+                          {
+                            value: "item_name" as SortField,
+                            label: "Nama Item",
+                          },
+                          {
+                            value: "item_code" as SortField,
+                            label: "Kode Item",
+                          },
+                          {
+                            value: "item_category" as SortField,
+                            label: "Kategori",
+                          },
+                          {
+                            value: "created_at" as SortField,
+                            label: "Tanggal Dibuat",
+                          },
+                          {
+                            value: "updated_at" as SortField,
+                            label: "Tanggal Diupdate",
+                          },
+                        ].map((option) => (
+                          <button
+                            key={option.value}
+                            onClick={() => {
+                              console.log(
+                                "[ItemList] Sort field changed:",
+                                sortField,
+                                "->",
+                                option.value
+                              );
+                              setSortField(option.value);
+                              setSortFieldDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors ${
+                              sortField === option.value
+                                ? "text-red-600 bg-red-50"
+                                : "text-gray-700"
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
 
       {/* Items Display */}
-      {sortedItems.length === 0 ? (
+      {filteredItems.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
           <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <FaSearch className="w-8 h-8 text-gray-400" />
@@ -810,7 +894,7 @@ export default function ItemList() {
           </div>
 
           {/* Pagination */}
-          {sortedItems.length > 0 && (
+          {filteredItems.length > 0 && (
             <Pagination
               currentPage={currentPage}
               totalPages={totalPages}

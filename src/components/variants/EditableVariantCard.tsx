@@ -102,6 +102,26 @@ export function EditableVariantCard({
                 {variant.item.type}
               </span>
             )}
+
+            {/* Audit Trail Info */}
+            {(variant.created_at || variant.updated_at) && (
+              <div className="mt-2 pt-2 border-t border-gray-100">
+                <div className="flex flex-col gap-0.5 text-xs text-gray-500">
+                  {variant.created_at && (
+                    <span>
+                      Created: {new Date(variant.created_at).toLocaleDateString("id-ID", { dateStyle: "short" })}
+                      {variant.created_by && ` by User #${variant.created_by}`}
+                    </span>
+                  )}
+                  {variant.updated_at && variant.updated_at !== variant.created_at && (
+                    <span>
+                      Updated: {new Date(variant.updated_at).toLocaleDateString("id-ID", { dateStyle: "short" })}
+                      {variant.updated_by && ` by User #${variant.updated_by}`}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

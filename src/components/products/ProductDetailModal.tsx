@@ -12,6 +12,9 @@ import {
   FaLayerGroup,
   FaImage,
   FaBox,
+  FaUser,
+  FaClock,
+  FaHistory,
 } from "react-icons/fa";
 import Image from "next/image";
 import type { Product } from "@/types";
@@ -181,6 +184,105 @@ export default function ProductDetailModal({
                   </div>
                 )}
               </div>
+
+              {/* Catatan Aktivitas Section */}
+              {(product.created_at || product.updated_at) && (
+                <div className="mt-8">
+                  <div className="flex items-center gap-3 mb-6">
+                    <FaHistory className="w-5 h-5 text-blue-500" />
+                    <h3 className="text-xl font-bold text-gray-900">
+                      Catatan Aktivitas
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Created Info */}
+                    {product.created_at && (
+                      <div className="bg-gradient-to-br from-green-50 to-white rounded-2xl p-5 border-2 border-green-100">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-10 h-10 rounded-xl bg-green-500 flex items-center justify-center">
+                            <FaUser className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 font-medium">
+                              Created
+                            </p>
+                            <p className="text-sm font-bold text-gray-900">
+                              {product.created_by
+                                ? `User #${product.created_by}`
+                                : "Unknown"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <FaClock className="w-4 h-4 text-green-500" />
+                          <p className="text-sm">
+                            {new Date(product.created_at).toLocaleString(
+                              "id-ID",
+                              {
+                                dateStyle: "long",
+                                timeStyle: "short",
+                              }
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Updated Info */}
+                    {product.updated_at && (
+                      <div className="bg-gradient-to-br from-blue-50 to-white rounded-2xl p-5 border-2 border-blue-100">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center">
+                            <FaEdit className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 font-medium">
+                              Last Updated
+                            </p>
+                            <p className="text-sm font-bold text-gray-900">
+                              {product.updated_by
+                                ? `User #${product.updated_by}`
+                                : "Unknown"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <FaClock className="w-4 h-4 text-blue-500" />
+                          <p className="text-sm">
+                            {new Date(product.updated_at).toLocaleString(
+                              "id-ID",
+                              {
+                                dateStyle: "long",
+                                timeStyle: "short",
+                              }
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Owner Info (if different from creator) */}
+                  {product.owner && product.owner !== product.created_by && (
+                    <div className="mt-4 bg-gradient-to-r from-purple-50 to-white rounded-xl p-4 border border-purple-100">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-purple-500 flex items-center justify-center">
+                          <FaUser className="w-4 h-4 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-medium">
+                            Owner
+                          </p>
+                          <p className="text-sm font-bold text-gray-900">
+                            User #{product.owner}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Actions */}
               <div className="flex gap-4 pt-8 mt-8 border-t-2 border-gray-100">
