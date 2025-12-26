@@ -133,10 +133,9 @@ export default function ItemList() {
 
   // Helper function to load data with filters and sorting
   async function loadAllData(
-    filterTriples: FilterTriple[] = []
-    // TODO: UNCOMMENT WHEN BACKEND SUPPORTS ORDER_BY
-    // sort_by?: SortField,
-    // sort_order?: SortDirection
+    filterTriples: FilterTriple[] = [],
+    sort_by?: SortField,
+    sort_order?: SortDirection
   ): Promise<Item[]> {
     if (!token) return [];
 
@@ -145,7 +144,7 @@ export default function ItemList() {
     const itemSpec: {
       fields: string[];
       filters?: FilterTriple[];
-      order_by?: string[];
+      order_by?: [string, string][];
     } = {
       fields: ["*"],
     };
@@ -154,16 +153,10 @@ export default function ItemList() {
       itemSpec.filters = filterTriples;
     }
 
-    // ============================================================================
-    // TODO: UNCOMMENT KETIKA BACKEND SUDAH FIX ORDER_BY
-    // Backend saat ini belum support order_by dengan benar (2025-12-26)
-    // Sementara menggunakan client-side sorting (lihat line ~500)
-    // ============================================================================
-    // if (sort_by && sort_order) {
-    //   // Goback requires order_by as ARRAY with UPPERCASE direction
-    //   itemSpec.order_by = [`${sort_by} ${sort_order.toUpperCase()}`];
-    // }
-    // ============================================================================
+    // Add server-side sorting - Goback format: [["field", "direction"]]
+    if (sort_by && sort_order) {
+      itemSpec.order_by = [[sort_by, sort_order]];
+    }
 
     console.log("[ItemList] Filter Triples:", filterTriples);
     console.log("[ItemList] Item Spec:", itemSpec);
@@ -263,13 +256,11 @@ export default function ItemList() {
         }
 
         console.log(
-          "[ItemList] Loading data (client-side sort):",
+          "[ItemList] Loading data with server-side sort:",
           sortField,
           sortDirection
         );
-        // TODO: UNCOMMENT WHEN BACKEND SUPPORTS ORDER_BY
-        // const mappedItems = await loadAllData(filters, sortField, sortDirection);
-        const mappedItems = await loadAllData(filters);
+        const mappedItems = await loadAllData(filters, sortField, sortDirection);
 
         if (!cancelled) {
           setItems(mappedItems);
@@ -527,45 +518,6 @@ export default function ItemList() {
     );
   }
 
-  // ============================================================================
-  // TODO: HAPUS CLIENT-SIDE SORTING INI KETIKA BACKEND SUDAH FIX ORDER_BY
-  // Sementara menggunakan client-side sorting karena backend belum support (2025-12-26)
-  // ============================================================================
-  // Client-side sorting (temporary until backend supports order_by)
-  filteredItems = [...filteredItems].sort((a, b) => {
-    let aVal: string | number;
-    let bVal: string | number;
-
-    switch (sortField) {
-      case "item_name":
-        aVal = a.item_name.toLowerCase();
-        bVal = b.item_name.toLowerCase();
-        break;
-      case "item_code":
-        aVal = a.item_code.toLowerCase();
-        bVal = b.item_code.toLowerCase();
-        break;
-      case "item_category":
-        aVal = a.category.toLowerCase();
-        bVal = b.category.toLowerCase();
-        break;
-      case "created_at":
-        aVal = new Date(a.created_at || 0).getTime();
-        bVal = new Date(b.created_at || 0).getTime();
-        break;
-      case "updated_at":
-        aVal = new Date(a.updated_at || 0).getTime();
-        bVal = new Date(b.updated_at || 0).getTime();
-        break;
-      default:
-        return 0;
-    }
-
-    if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
-    if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
-    return 0;
-  });
-  // ============================================================================
 
   // Apply pagination
   const {

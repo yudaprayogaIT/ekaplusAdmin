@@ -176,6 +176,13 @@ export const VARIANT_FILTER_FIELDS: EntityFilterConfig = {
       relationEntity: "product",
     },
     {
+      field: "item_category",
+      label: "Category",
+      type: "relation",
+      operators: ["=", "!=", "in", "not in"],
+      relationEntity: "category",
+    },
+    {
       field: "idx",
       label: "Display Order",
       type: "number",

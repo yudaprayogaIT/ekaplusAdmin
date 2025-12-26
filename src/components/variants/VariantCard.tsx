@@ -66,6 +66,7 @@ export default function VariantCard({
                 src={variant.item.image}
                 alt={variant.item.name}
                 unoptimized
+                loading="eager"
                 className="object-contain w-full h-full group-hover:scale-110 transition-transform duration-500"
               />
             ) : (
@@ -156,6 +157,7 @@ export default function VariantCard({
               src={variant.item.image}
               alt={variant.item.name}
               unoptimized
+              loading="eager"
               className="object-contain w-full h-full group-hover:scale-110 transition-transform duration-500"
             />
           </div>

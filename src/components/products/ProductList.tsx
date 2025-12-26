@@ -104,10 +104,9 @@ export default function ProductList() {
 
   // Helper function to load and merge data from API with filters and sorting
   async function loadAllData(
-    filterTriples: FilterTriple[] = []
-    // TODO: UNCOMMENT WHEN BACKEND SUPPORTS ORDER_BY
-    // sort_by?: SortField,
-    // sort_order?: SortDirection
+    filterTriples: FilterTriple[] = [],
+    sort_by?: SortField,
+    sort_order?: SortDirection
   ): Promise<{
     categoriesData: Category[];
     itemsData: Item[];
@@ -167,7 +166,7 @@ export default function ProductList() {
     const productSpec: {
       fields: string[];
       filters?: FilterTriple[];
-      order_by?: string[];
+      order_by?: [string, string][];
     } = {
       fields: ["*"],
     };
@@ -176,16 +175,10 @@ export default function ProductList() {
       productSpec.filters = filterTriples;
     }
 
-    // ============================================================================
-    // TODO: UNCOMMENT KETIKA BACKEND SUDAH FIX ORDER_BY
-    // Backend saat ini belum support order_by dengan benar (2025-12-26)
-    // Sementara menggunakan client-side sorting (lihat line ~440)
-    // ============================================================================
-    // if (sort_by && sort_order) {
-    //   // Goback requires order_by as ARRAY with UPPERCASE direction
-    //   productSpec.order_by = [`${sort_by} ${sort_order.toUpperCase()}`];
-    // }
-    // ============================================================================
+    // Server-side sorting with correct array of arrays format
+    if (sort_by && sort_order) {
+      productSpec.order_by = [[sort_by, sort_order]];
+    }
 
     console.log("[ProductList] Filter Triples:", filterTriples);
     console.log("[ProductList] Product Spec:", productSpec);
@@ -273,15 +266,12 @@ export default function ProductList() {
       setError(null);
       try {
         console.log(
-          "[ProductList] Loading data (client-side sort):",
+          "[ProductList] Loading data with server-side sort:",
           sortField,
           sortDirection
         );
-        // TODO: UNCOMMENT WHEN BACKEND SUPPORTS ORDER_BY
-        // const { categoriesData, itemsData, productsWithVariants } =
-        //   await loadAllData(filterTriples, sortField, sortDirection);
         const { categoriesData, itemsData, productsWithVariants } =
-          await loadAllData(filterTriples);
+          await loadAllData(filterTriples, sortField, sortDirection);
 
         setCategories(categoriesData);
         setAvailableItems(itemsData);
@@ -465,45 +455,6 @@ export default function ProductList() {
     filteredProducts = filteredProducts.filter((p) => p.isHotDeals);
   }
 
-  // ============================================================================
-  // TODO: HAPUS CLIENT-SIDE SORTING INI KETIKA BACKEND SUDAH FIX ORDER_BY
-  // Sementara menggunakan client-side sorting karena backend belum support (2025-12-26)
-  // ============================================================================
-  // Client-side sorting (temporary until backend supports order_by)
-  filteredProducts = [...filteredProducts].sort((a, b) => {
-    let aVal: string | number;
-    let bVal: string | number;
-
-    switch (sortField) {
-      case "product_name":
-        aVal = a.name.toLowerCase();
-        bVal = b.name.toLowerCase();
-        break;
-      case "item_category":
-        aVal = a.itemCategory?.name?.toLowerCase() || "";
-        bVal = b.itemCategory?.name?.toLowerCase() || "";
-        break;
-      case "created_at":
-        aVal = new Date(a.created_at || 0).getTime();
-        bVal = new Date(b.created_at || 0).getTime();
-        break;
-      case "updated_at":
-        aVal = new Date(a.updated_at || 0).getTime();
-        bVal = new Date(b.updated_at || 0).getTime();
-        break;
-      case "hot_deals":
-        aVal = a.isHotDeals ? 1 : 0;
-        bVal = b.isHotDeals ? 1 : 0;
-        break;
-      default:
-        return 0;
-    }
-
-    if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
-    if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
-    return 0;
-  });
-  // ============================================================================
 
   // Apply pagination
   const {

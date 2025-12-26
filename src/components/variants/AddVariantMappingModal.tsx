@@ -9,42 +9,7 @@ import { fetchVariants, createVariant } from "@/services/variantService";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
-import { Product } from "@/types";
-
-type Branch = {
-  id: number;
-  name: string;
-};
-
-type Item = {
-  id: number;
-  code: string;
-  name: string;
-  color: string;
-  type: string;
-  uom: string;
-  image?: string;
-  branches?: Branch[];
-  description?: string;
-};
-
-type ItemVariant = {
-  id: number;
-  item: Item;
-  productid: number;
-};
-
-// type Product = {
-//   id: number;
-//   name: string;
-//   itemCategory: {
-//     id: number;
-//     name: string;
-//     category_name: string;
-//   };
-//   disabled: number;
-//   isHotDeals: boolean;
-// };
+import { Product, Item, ItemVariant } from "@/types";
 
 export default function AddVariantMappingModal({
   open,
@@ -285,6 +250,7 @@ export default function AddVariantMappingModal({
                         src={selectedItem.image}
                         alt={selectedItem.name}
                         unoptimized
+                        loading="eager"
                         className="object-contain w-full h-full p-1"
                       />
                     ) : (
