@@ -9,6 +9,7 @@ import React, {
   ReactNode,
   useCallback,
 } from "react";
+import { registerSessionExpiredCallback, unregisterSessionExpiredCallback } from "../config/api";
 
 // Types
 export type User = {
@@ -132,6 +133,7 @@ type AuthContextType = {
   token: string | null;
   login: (identifier: string, password: string) => Promise<LoginResult>;
   logout: () => void;
+  handleSessionExpired: () => void;
   hasPermission: (permission: string) => boolean;
   hasAnyPermission: (permissions: string[]) => boolean;
   hasAllPermissions: (permissions: string[]) => boolean;
@@ -194,6 +196,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<Role[]>([]);
   const [rolePermissions, setRolePermissions] = useState<RolePermission[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
+
+  // Handle session expiration - logout and reload page
+  const handleSessionExpired = useCallback(() => {
+    // console.log("⏰ Session expired, logging out...");
+    setCurrentUser(null);
+    setCurrentRole(null);
+    setPermissions([]);
+    setToken(null);
+    localStorage.removeItem(AUTH_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_DATA_KEY);
+    // Reload the page to redirect to login
+    window.location.reload();
+  }, []);
+
+  // Register session expired callback
+  useEffect(() => {
+    registerSessionExpiredCallback(handleSessionExpired);
+    return () => {
+      unregisterSessionExpiredCallback();
+    };
+  }, [handleSessionExpired]);
 
   // Load roles and permissions data - DISABLED FOR NOW (migrasi ke SQL)
   useEffect(() => {
@@ -486,6 +510,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     token,
     login,
     logout,
+    handleSessionExpired,
     hasPermission,
     hasAnyPermission,
     hasAllPermissions,

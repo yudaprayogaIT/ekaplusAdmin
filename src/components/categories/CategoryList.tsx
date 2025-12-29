@@ -21,9 +21,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   getQueryUrl,
   getResourceUrl,
-  getAuthHeaders,
   getFileUrl,
   API_CONFIG,
+  apiFetch,
 } from "@/config/api";
 
 export type Category = {
@@ -150,17 +150,14 @@ export default function CategoryList() {
           return;
         }
 
-        const headers = getAuthHeaders(token);
-
         // Load types from API first
         const typesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.TYPE, {
           fields: ["*"],
         });
-        const typesRes = await fetch(typesUrl, {
+        const typesRes = await apiFetch(typesUrl, {
           method: "GET",
           cache: "no-store",
-          headers,
-        });
+        }, token);
 
         let mappedTypes: CategoryType[] = [];
         if (typesRes.ok) {
@@ -187,11 +184,10 @@ export default function CategoryList() {
         const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
           fields: ["*"],
         });
-        const categoriesRes = await fetch(categoriesUrl, {
+        const categoriesRes = await apiFetch(categoriesUrl, {
           method: "GET",
           cache: "no-store",
-          headers,
-        });
+        }, token);
 
         if (categoriesRes.ok) {
           const categoriesResponse =
@@ -249,11 +245,7 @@ export default function CategoryList() {
           }
         } else {
           if (!cancelled) {
-            if (categoriesRes.status === 401) {
-              setError("Session expired. Silakan login kembali.");
-            } else {
-              setError(`Failed to fetch categories (${categoriesRes.status})`);
-            }
+            setError(`Failed to fetch categories (${categoriesRes.status})`);
           }
         }
       } catch (err: unknown) {
@@ -278,13 +270,11 @@ export default function CategoryList() {
         const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
           fields: ["*"],
         });
-        const headers = getAuthHeaders(token);
 
-        const res = await fetch(categoriesUrl, {
+        const res = await apiFetch(categoriesUrl, {
           method: "GET",
           cache: "no-store",
-          headers,
-        });
+        }, token);
 
         if (res.ok) {
           const response = (await res.json()) as CategoryAPIResponse;
@@ -351,13 +341,12 @@ export default function CategoryList() {
           throw new Error("Not authenticated");
         }
 
-        const headers = getAuthHeaders(token);
-        const response = await fetch(
+        const response = await apiFetch(
           getResourceUrl(API_CONFIG.ENDPOINTS.CATEGORY, c.id),
           {
             method: "DELETE",
-            headers,
-          }
+          },
+          token
         );
 
         if (!response.ok) {

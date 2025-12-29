@@ -4,22 +4,14 @@
  * Change the base URL here when switching to production or different server
  */
 export const API_CONFIG = {
-  // BASE_URL: "http://192.168.101.214:8000",
   BASE_URL: "https://api-ekaplus.ekatunggal.com",
-  // BASE_URL: "https://estrella-subgeniculate-dollie.ngrok-free.dev",
-  // FILE_BASE_URL: "http://192.168.101.214:8000",
   FILE_BASE_URL: "https://api-ekaplus.ekatunggal.com",
-  // FILE_BASE_URL: "https://estrella-subgeniculate-dollie.ngrok-free.dev",
 
   // Endpoints
   ENDPOINTS: {
     // Authentication
     LOGIN: "/api/auth/login",
     LOGOUT: "/api/auth/logout",
-    ME: "/auth/me",
-
-    // File Upload
-    UPLOAD: "/api/upload",
 
     // Resources
     BRANCH: "/api/resource/branch",
@@ -29,6 +21,7 @@ export const API_CONFIG = {
     PRODUCT: "/api/resource/ekatalog_product",
     PRODUCT_VARIANT: "/api/resource/ekatalog_variant",
     WISHLIST: "/api/resource/wishlist",
+    BANNER: "/api/resource/ekatalog_banner",
     ROLE: "/api/resource/role",
     PERMISSION: "/resource/permission",
     USER: "/api/resource/user",
@@ -102,4 +95,57 @@ export function getFileUrl(filename?: string | null): string | undefined {
 
   // Jika hanya filename, buat full URL
   return `${API_CONFIG.FILE_BASE_URL}/files/${filename}`;
+}
+
+/**
+ * Session expiration callback
+ * This will be set by the AuthProvider
+ */
+let sessionExpiredCallback: (() => void) | null = null;
+
+/**
+ * Register callback to be called when session expires (401 response)
+ */
+export function registerSessionExpiredCallback(callback: () => void) {
+  sessionExpiredCallback = callback;
+}
+
+/**
+ * Unregister session expired callback
+ */
+export function unregisterSessionExpiredCallback() {
+  sessionExpiredCallback = null;
+}
+
+/**
+ * Wrapper around fetch that automatically handles 401 responses
+ * Usage: const response = await apiFetch(url, options, token)
+ */
+export async function apiFetch(
+  url: string,
+  options: RequestInit = {},
+  token?: string | null
+): Promise<Response> {
+  // Add authorization header if token is provided
+  const headers = new Headers(options.headers);
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  // Set default Content-Type to JSON if not FormData
+  if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers,
+  });
+
+  // Handle 401 Unauthorized - Session expired
+  if (response.status === 401 && sessionExpiredCallback) {
+    sessionExpiredCallback();
+  }
+
+  return response;
 }

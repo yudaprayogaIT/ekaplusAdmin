@@ -120,171 +120,180 @@ export default function VariantList() {
       itemsData: Item[];
       variantsData: ItemVariant[];
     }> => {
-    if (!token) {
-      return { categoriesData: [], productsData: [], itemsData: [], variantsData: [] };
-    }
+      if (!token) {
+        return {
+          categoriesData: [],
+          productsData: [],
+          itemsData: [],
+          variantsData: [],
+        };
+      }
 
-    const headers = getAuthHeaders(token);
+      const headers = getAuthHeaders(token);
 
-    // Load categories from API
-    const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
-      fields: ["*"],
-    });
-    const categoriesRes = await fetch(categoriesUrl, { headers });
+      // Load categories from API
+      const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
+        fields: ["*"],
+      });
+      const categoriesRes = await fetch(categoriesUrl, { headers });
 
-    let categoriesData: Category[] = [];
-    if (categoriesRes.ok) {
-      const json = await categoriesRes.json();
-      categoriesData = json.data.map(
-        (cat: { id: number; category_name: string }) => ({
-          id: cat.id,
-          name: cat.category_name,
-        })
+      let categoriesData: Category[] = [];
+      if (categoriesRes.ok) {
+        const json = await categoriesRes.json();
+        categoriesData = json.data.map(
+          (cat: { id: number; category_name: string }) => ({
+            id: cat.id,
+            name: cat.category_name,
+          })
+        );
+        console.log("aaaaaaaa");
+        console.log(categoriesData);
+      }
+
+      // Load products from API
+      const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, {
+        fields: ["*"],
+      });
+      const productsRes = await fetch(productsUrl, { headers });
+
+      let productsData: Product[] = [];
+      if (productsRes.ok) {
+        const json = await productsRes.json();
+        productsData = json.data.map(
+          (p: {
+            id: number;
+            product_name: string;
+            item_category: [];
+            disabled: number;
+            hot_deals: boolean;
+          }) => ({
+            id: p.id,
+            name: p.product_name,
+            itemCategory: {
+              id: p.item_category,
+              name: `Category ${p.item_category}`,
+            },
+            disabled: p.disabled,
+            isHotDeals: Boolean(p.hot_deals),
+          })
+        );
+      }
+
+      // Load items from API
+      const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
+        fields: ["*"],
+      });
+      const itemsRes = await fetch(itemsUrl, { headers });
+
+      let itemsData: Item[] = [];
+      if (itemsRes.ok) {
+        const json = await itemsRes.json();
+        itemsData = json.data.map(
+          (i: {
+            id: number;
+            item_code: string;
+            item_name: string;
+            item_color?: string;
+            ekatalog_type?: string;
+            uom: string;
+            image?: string;
+            item_desc?: string;
+            item_category?: string;
+            item_group?: string;
+            disabled?: number;
+          }) => ({
+            id: i.id,
+            code: i.item_code,
+            name: i.item_name,
+            color: i.item_color || "",
+            type: i.ekatalog_type || "",
+            uom: i.uom,
+            image: getFileUrl(i.image),
+            description: i.item_desc,
+            category: i.item_category,
+            group: i.item_group,
+            disabled: i.disabled,
+          })
+        );
+      }
+
+      // Load variants from API with filters and sorting
+      const variantSpec: {
+        fields: string[];
+        filters?: FilterTriple[];
+        order_by?: [string, string][];
+      } = {
+        fields: ["*"],
+      };
+
+      if (filterTriples.length > 0) {
+        variantSpec.filters = filterTriples;
+      }
+
+      // Server-side sorting with correct array of arrays format
+      if (sort_by && sort_order) {
+        variantSpec.order_by = [[sort_by, sort_order]];
+      }
+
+      console.log("[VariantList] Filter Triples:", filterTriples);
+      console.log("[VariantList] Variant Spec:", variantSpec);
+
+      const variantsUrl = getQueryUrl(
+        API_CONFIG.ENDPOINTS.PRODUCT_VARIANT,
+        variantSpec
       );
-    }
+      console.log("[VariantList] Request URL:", variantsUrl);
 
-    // Load products from API
-    const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, {
-      fields: ["*"],
-    });
-    const productsRes = await fetch(productsUrl, { headers });
+      const variantsRes = await fetch(variantsUrl, { headers });
 
-    let productsData: Product[] = [];
-    if (productsRes.ok) {
-      const json = await productsRes.json();
-      productsData = json.data.map(
-        (p: {
-          id: number;
-          product_name: string;
-          item_category: number;
-          disabled: number;
-          hot_deals: boolean;
-        }) => ({
-          id: p.id,
-          name: p.product_name,
-          itemCategory: {
-            id: p.item_category,
-            name: `Category ${p.item_category}`,
-          },
-          disabled: p.disabled,
-          isHotDeals: Boolean(p.hot_deals),
-        })
-      );
-    }
+      let variantsData: ItemVariant[] = [];
+      if (variantsRes.ok) {
+        const json = await variantsRes.json();
+        variantsData = json.data.map(
+          (v: {
+            id: number;
+            item: number;
+            parent_id: number;
+            idx: number;
+            created_at?: string;
+            updated_at?: string;
+          }) => {
+            const item = itemsData.find((i) => i.id === v.item);
+            if (!item) {
+              console.warn(`Item ${v.item} not found in items list`);
+              return {
+                id: v.id,
+                item: {
+                  id: v.item,
+                  code: `ITEM-${v.item}`,
+                  name: `Item ${v.item} (Not Found)`,
+                  color: "",
+                  type: "",
+                  uom: "",
+                },
+                productid: v.parent_id,
+                displayOrder: v.idx,
+                created_at: v.created_at,
+                updated_at: v.updated_at,
+              };
+            }
 
-    // Load items from API
-    const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
-      fields: ["*"],
-    });
-    const itemsRes = await fetch(itemsUrl, { headers });
-
-    let itemsData: Item[] = [];
-    if (itemsRes.ok) {
-      const json = await itemsRes.json();
-      itemsData = json.data.map(
-        (i: {
-          id: number;
-          item_code: string;
-          item_name: string;
-          item_color?: string;
-          ekatalog_type?: string;
-          uom: string;
-          image?: string;
-          item_desc?: string;
-          item_category?: string;
-          item_group?: string;
-          disabled?: number;
-        }) => ({
-          id: i.id,
-          code: i.item_code,
-          name: i.item_name,
-          color: i.item_color || "",
-          type: i.ekatalog_type || "",
-          uom: i.uom,
-          image: getFileUrl(i.image),
-          description: i.item_desc,
-          category: i.item_category,
-          group: i.item_group,
-          disabled: i.disabled,
-        })
-      );
-    }
-
-    // Load variants from API with filters and sorting
-    const variantSpec: {
-      fields: string[];
-      filters?: FilterTriple[];
-      order_by?: [string, string][];
-    } = {
-      fields: ["*"],
-    };
-
-    if (filterTriples.length > 0) {
-      variantSpec.filters = filterTriples;
-    }
-
-    // Server-side sorting with correct array of arrays format
-    if (sort_by && sort_order) {
-      variantSpec.order_by = [[sort_by, sort_order]];
-    }
-
-    console.log("[VariantList] Filter Triples:", filterTriples);
-    console.log("[VariantList] Variant Spec:", variantSpec);
-
-    const variantsUrl = getQueryUrl(
-      API_CONFIG.ENDPOINTS.PRODUCT_VARIANT,
-      variantSpec
-    );
-    console.log("[VariantList] Request URL:", variantsUrl);
-
-    const variantsRes = await fetch(variantsUrl, { headers });
-
-    let variantsData: ItemVariant[] = [];
-    if (variantsRes.ok) {
-      const json = await variantsRes.json();
-      variantsData = json.data.map(
-        (v: {
-          id: number;
-          item: number;
-          parent_id: number;
-          idx: number;
-          created_at?: string;
-          updated_at?: string;
-        }) => {
-          const item = itemsData.find((i) => i.id === v.item);
-          if (!item) {
-            console.warn(`Item ${v.item} not found in items list`);
             return {
               id: v.id,
-              item: {
-                id: v.item,
-                code: `ITEM-${v.item}`,
-                name: `Item ${v.item} (Not Found)`,
-                color: "",
-                type: "",
-                uom: "",
-              },
+              item: item,
               productid: v.parent_id,
               displayOrder: v.idx,
               created_at: v.created_at,
               updated_at: v.updated_at,
             };
           }
+        );
+      }
 
-          return {
-            id: v.id,
-            item: item,
-            productid: v.parent_id,
-            displayOrder: v.idx,
-            created_at: v.created_at,
-            updated_at: v.updated_at,
-          };
-        }
-      );
-    }
-
-    return { categoriesData, productsData, itemsData, variantsData };
-  }, [token]);
+      return { categoriesData, productsData, itemsData, variantsData };
+    },
+    [token]
+  );
 
   // Load data from API
   useEffect(() => {
@@ -308,11 +317,8 @@ export default function VariantList() {
           sortDirection
         );
 
-        const { categoriesData, productsData, itemsData, variantsData } = await loadAllData(
-          filters,
-          sortField,
-          sortDirection
-        );
+        const { categoriesData, productsData, itemsData, variantsData } =
+          await loadAllData(filters, sortField, sortDirection);
 
         if (!cancelled) {
           setCategories(categoriesData);
@@ -549,16 +555,16 @@ export default function VariantList() {
             </div>
           </div>
 
-          {/* Advanced Filters */}
-          <FilterBuilder
-            entity="variant"
-            config={VARIANT_FILTER_FIELDS}
-            onApply={handleApplyFilters}
-            categories={categories}
-          />
-
           {/* Sort & Filter Controls */}
           <div className="flex flex-wrap items-center gap-3">
+            {/* Advanced Filters */}
+            <FilterBuilder
+              entity="variant"
+              config={VARIANT_FILTER_FIELDS}
+              onApply={handleApplyFilters}
+              categories={categories}
+            />
+
             {/* Sort Direction Button */}
             <button
               onClick={() => {

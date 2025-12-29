@@ -32,6 +32,7 @@ import {
 import { MdInventory, MdMessage } from "react-icons/md";
 import { BiSolidPurchaseTag } from "react-icons/bi";
 import { AiFillProduct } from "react-icons/ai";
+import { GiKnightBanner } from "react-icons/gi";
 
 type MenuItem = {
   label: string;
@@ -53,6 +54,12 @@ const MAIN_MENU: MenuItem[] = [
     label: "Wishlist",
     href: "/wishlist",
     icon: <FaHeart className="w-5 h-5" />,
+    requireAuth: true,
+  },
+  {
+    label: "Banner",
+    href: "/banners",
+    icon: <GiKnightBanner className="w-5 h-5" />,
     requireAuth: true,
   },
   {

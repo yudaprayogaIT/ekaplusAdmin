@@ -182,7 +182,7 @@ export default function WishlistDetailModal({
                       <FaCalendar className="text-red-700 w-4 h-4" />
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Tanggal</p>
+                      <p className="text-xs text-gray-500">Waktu</p>
                       <p className="font-semibold text-gray-800">
                         {formattedDate}
                       </p>
