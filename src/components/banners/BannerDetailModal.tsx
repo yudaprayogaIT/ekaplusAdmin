@@ -79,7 +79,6 @@ export default function BannerDetailModal({
     return configs[banner.type];
   };
 
-
   // Schedule badge configuration
   const getScheduleBadge = () => {
     const configs = {
@@ -109,6 +108,8 @@ export default function BannerDetailModal({
 
   // Format type value for display
   function formatTypeValue(): string {
+    if (!banner) return "-";
+
     switch (banner.type) {
       case "url":
         return banner.type_value || "-";
@@ -170,7 +171,9 @@ export default function BannerDetailModal({
 
               <div className="relative flex items-center justify-between">
                 <div className="flex-1">
-                  <h3 className="text-2xl font-bold mb-2">{banner.banner_name}</h3>
+                  <h3 className="text-2xl font-bold mb-2">
+                    {banner.banner_name}
+                  </h3>
                   <div className="flex items-center gap-2 flex-wrap">
                     {/* Type Badge */}
                     <div
@@ -216,7 +219,9 @@ export default function BannerDetailModal({
             <div className="p-6 space-y-6 max-h-[calc(90vh-200px)] overflow-y-auto">
               {/* Banner Image Preview */}
               <div className="space-y-2">
-                <h4 className="text-sm font-semibold text-gray-700">Banner Preview</h4>
+                <h4 className="text-sm font-semibold text-gray-700">
+                  Banner Preview
+                </h4>
                 <div
                   className="relative w-full bg-gray-100 rounded-xl overflow-hidden"
                   style={{ aspectRatio: "3/1" }}
@@ -291,7 +296,7 @@ export default function BannerDetailModal({
                 {(banner.start_date || banner.end_date) && (
                   <>
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1">
+                      <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1">
                         <FaCalendar className="w-3 h-3" />
                         Tanggal Mulai
                       </label>
@@ -303,7 +308,7 @@ export default function BannerDetailModal({
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1">
+                      <label className=" text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1">
                         <FaCalendar className="w-3 h-3" />
                         Tanggal Selesai
                       </label>

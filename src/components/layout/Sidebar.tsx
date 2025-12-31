@@ -187,6 +187,12 @@ const CUSTOMER_SUBMENU: MenuItem[] = [
     requireAuth: true,
   },
   {
+    label: "Customer Register",
+    href: "/customers/registrations",
+    icon: <FaUserShield className="w-4 h-4" />,
+    requireAuth: true,
+  },
+  {
     label: "Group",
     href: "/memberGroups",
     icon: <FaUsers className="w-4 h-4" />,

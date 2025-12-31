@@ -28,6 +28,7 @@ export const API_CONFIG = {
     EMAIL: "/resource/email",
     WHATSAPP: "/api/resource/whatsapp",
     WORKFLOW_STATE: "/api/workflow/state",
+    CUSTOMER_REGISTER: "/api/resource/ekatalog_customer_register",
   },
 } as const;
 
