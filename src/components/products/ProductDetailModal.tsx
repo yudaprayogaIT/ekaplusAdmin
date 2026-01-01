@@ -209,7 +209,9 @@ export default function ProductDetailModal({
                             </p>
                             <p className="text-sm font-bold text-gray-900">
                               {product.created_by
-                                ? `User #${product.created_by}`
+                                ? typeof product.created_by === "string"
+                                  ? product.created_by
+                                  : `User #${product.created_by}`
                                 : "Unknown"}
                             </p>
                           </div>
@@ -242,7 +244,9 @@ export default function ProductDetailModal({
                             </p>
                             <p className="text-sm font-bold text-gray-900">
                               {product.updated_by
-                                ? `User #${product.updated_by}`
+                                ? typeof product.updated_by === "string"
+                                  ? product.updated_by
+                                  : `User #${product.updated_by}`
                                 : "Unknown"}
                             </p>
                           </div>
@@ -275,7 +279,9 @@ export default function ProductDetailModal({
                             Owner
                           </p>
                           <p className="text-sm font-bold text-gray-900">
-                            User #{product.owner}
+                            {typeof product.owner === "string"
+                              ? product.owner
+                              : `User #${product.owner}`}
                           </p>
                         </div>
                       </div>

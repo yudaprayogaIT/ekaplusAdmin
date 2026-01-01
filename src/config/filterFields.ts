@@ -398,3 +398,117 @@ export const WISHLIST_FILTER_FIELDS: EntityFilterConfig = {
     },
   ],
 };
+
+// Customer Registration filter fields
+export const CUSTOMER_REGISTER_FILTER_FIELDS: EntityFilterConfig = {
+  entity: "ekatalog_customer_register",
+  fields: [
+    {
+      field: "owner.full_name",
+      label: "Owner Name",
+      type: "string",
+      operators: ["=", "!=", "like", "not like"],
+    },
+    {
+      field: "owner.phone",
+      label: "Owner Phone",
+      type: "string",
+      operators: ["=", "!=", "like", "not like"],
+    },
+    {
+      field: "owner.email",
+      label: "Owner Email",
+      type: "string",
+      operators: ["=", "!=", "like", "not like"],
+    },
+    {
+      field: "business_name",
+      label: "Company Name",
+      type: "string",
+      operators: ["=", "!=", "like", "not like"],
+    },
+    {
+      field: "nik",
+      label: "NIK",
+      type: "string",
+      operators: ["=", "!=", "like", "not like"],
+    },
+    {
+      field: "npwp",
+      label: "NPWP",
+      type: "string",
+      operators: ["=", "!=", "like", "not like"],
+    },
+    {
+      field: "type",
+      label: "Business Type",
+      type: "select",
+      operators: ["=", "!=", "in", "not in"],
+      options: [
+        { value: "Badan", label: "Badan" },
+        { value: "Perorangan", label: "Perorangan" },
+      ],
+    },
+    {
+      field: "entity",
+      label: "Entity Type",
+      type: "string",
+      operators: ["=", "!=", "like", "not like"],
+    },
+    {
+      field: "branch_id",
+      label: "Branch",
+      type: "relation",
+      operators: ["=", "!=", "in", "not in"],
+      relationEntity: "branch",
+    },
+    {
+      field: "city",
+      label: "City",
+      type: "string",
+      operators: ["=", "!=", "like", "not like"],
+    },
+    {
+      field: "province",
+      label: "Province",
+      type: "string",
+      operators: ["=", "!=", "like", "not like"],
+    },
+    {
+      field: "status",
+      label: "Status",
+      type: "select",
+      operators: ["=", "!=", "in", "not in"],
+      options: [
+        { value: "Draft", label: "Draft" },
+        { value: "Pending", label: "Pending" },
+        { value: "Approved", label: "Approved" },
+        { value: "Rejected", label: "Rejected" },
+      ],
+    },
+    {
+      field: "docstatus",
+      label: "Document Status",
+      type: "select",
+      operators: ["="],
+      options: [
+        { value: 0, label: "Draft" },
+        { value: 1, label: "Submitted" },
+        { value: 2, label: "Cancelled" },
+      ],
+    },
+    // Audit Trail filters
+    {
+      field: "created_at",
+      label: "Created Date",
+      type: "date",
+      operators: ["=", ">", ">=", "<", "<=", "between"],
+    },
+    {
+      field: "updated_at",
+      label: "Updated Date",
+      type: "date",
+      operators: ["=", ">", ">=", "<", "<=", "between"],
+    },
+  ],
+};

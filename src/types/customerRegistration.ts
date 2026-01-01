@@ -7,8 +7,8 @@ export interface CustomerRegistration {
     full_name: string;
     phone: string;
     email: string;
-    birth_place: string;
-    birth_date: string; // DD/MM/YYYY
+    date_of_birth: string;
+    place_of_birth: string;
   };
 
   // 2. Informasi Perusahaan
@@ -19,18 +19,15 @@ export interface CustomerRegistration {
     npwp?: string;
     branch_id: number;
     branch_name: string;
+    branch_city: string
   };
 
   // 3. Alamat Perusahaan
   address: {
     full_address: string;
-    province_id: number;
     province_name: string;
-    city_id: number;
     city_name: string;
-    district_id: number;
     district_name: string;
-    village_id: number;
     village_name: string;
     rt: string;
     rw: string;
@@ -61,7 +58,9 @@ export interface CustomerRegistration {
   status: 'pending' | 'approved' | 'rejected' | 'draft';
   submission_date: string;
   created_at: string;
+  created_by?: string; // User full name
   updated_at: string;
+  updated_by?: string; // User full name
 }
 
 // For filters

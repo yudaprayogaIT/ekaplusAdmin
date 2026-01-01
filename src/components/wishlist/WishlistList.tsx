@@ -3,21 +3,19 @@
 
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  FaHeart,
-  FaSearch,
-  FaList,
-  FaTh,
-  FaPlus,
-  FaBox,
-} from "react-icons/fa";
+import { FaHeart, FaSearch, FaList, FaTh, FaPlus } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   fetchWishlist,
   removeFromWishlist,
   addToWishlist,
 } from "@/services/wishlistService";
-import { API_CONFIG, getQueryUrl, getAuthHeaders, getFileUrl } from "@/config/api";
+import {
+  API_CONFIG,
+  getQueryUrl,
+  getAuthHeaders,
+  getFileUrl,
+} from "@/config/api";
 import type { WishlistItem, Item } from "@/types";
 import WishlistCard from "./WishlistCard";
 import WishlistDetailModal from "./WishlistDetailModal";
@@ -38,11 +36,15 @@ export default function WishlistList() {
 
   // Detail modal
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [selectedWishlist, setSelectedWishlist] = useState<WishlistItem | null>(null);
+  const [selectedWishlist, setSelectedWishlist] = useState<WishlistItem | null>(
+    null
+  );
 
   // Confirm dialog
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<(() => Promise<void>) | null>(null);
+  const [confirmAction, setConfirmAction] = useState<
+    (() => Promise<void>) | null
+  >(null);
 
   // Load data from API
   useEffect(() => {
@@ -70,31 +72,33 @@ export default function WishlistList() {
         let itemsData: Item[] = [];
         if (itemsRes.ok) {
           const json = await itemsRes.json();
-          itemsData = json.data.map((i: {
-            id: number;
-            item_code: string;
-            item_name: string;
-            item_color?: string;
-            ekatalog_type?: string;
-            uom: string;
-            image?: string;
-            item_desc?: string;
-            item_category?: string;
-            item_group?: string;
-            disabled?: number;
-          }) => ({
-            id: i.id,
-            code: i.item_code,
-            name: i.item_name,
-            color: i.item_color || "",
-            type: i.ekatalog_type || "",
-            uom: i.uom,
-            image: getFileUrl(i.image),
-            description: i.item_desc,
-            category: i.item_category,
-            group: i.item_group,
-            disabled: i.disabled,
-          }));
+          itemsData = json.data.map(
+            (i: {
+              id: number;
+              item_code: string;
+              item_name: string;
+              item_color?: string;
+              ekatalog_type?: string;
+              uom: string;
+              image?: string;
+              item_desc?: string;
+              item_category?: string;
+              item_group?: string;
+              disabled?: number;
+            }) => ({
+              id: i.id,
+              code: i.item_code,
+              name: i.item_name,
+              color: i.item_color || "",
+              type: i.ekatalog_type || "",
+              uom: i.uom,
+              image: getFileUrl(i.image),
+              description: i.item_desc,
+              category: i.item_category,
+              group: i.item_group,
+              disabled: i.disabled,
+            })
+          );
         }
 
         // Load wishlist from API

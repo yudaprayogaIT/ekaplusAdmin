@@ -6,7 +6,16 @@ import { DocumentViewer } from "./DocumentViewer";
 import { HiXMark } from "react-icons/hi2";
 import { IoDocumentTextOutline } from "react-icons/io5";
 import { HiOutlinePhotograph } from "react-icons/hi";
-import { FaBuilding, FaUser, FaMapMarkerAlt, FaPhone, FaEnvelope } from "react-icons/fa";
+import {
+  FaBuilding,
+  FaUser,
+  FaMapMarkerAlt,
+  FaPhone,
+  FaEnvelope,
+  FaClock,
+  FaEdit,
+} from "react-icons/fa";
+import Image from "next/image";
 
 interface RegistrationDetailModalProps {
   isOpen: boolean;
@@ -37,6 +46,36 @@ export function RegistrationDetailModal({
     setDocumentViewer({ isOpen: true, url, filename, title });
   };
 
+  // Format phone number to be more readable
+  const formatPhoneNumber = (phone: string) => {
+    if (!phone || phone === "-") return "-";
+    // Remove any non-digit characters
+    const cleaned = phone.replace(/\D/g, "");
+    // If starts with 62, replace with 0
+    if (cleaned.startsWith("62")) {
+      return "0" + cleaned.substring(2);
+    }
+    return cleaned;
+  };
+
+  // Format date to be more readable (DD MMMM YYYY)
+  const formatDate = (dateString: string) => {
+    if (!dateString || dateString === "-") return "-";
+    try {
+      // Handle ISO format (2000-01-01T00:00:00Z)
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return dateString;
+
+      return date.toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
   const getStatusBadgeClass = (status: string) => {
     switch (status.toLowerCase()) {
       case "pending":
@@ -56,7 +95,7 @@ export function RegistrationDetailModal({
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
-  console.log('Modal opened with registration:', registration);
+  console.log("Modal opened with registration:", registration);
 
   return (
     <>
@@ -64,7 +103,7 @@ export function RegistrationDetailModal({
         <div className="flex min-h-screen items-end justify-center px-4 pt-4 pb-20 text-center sm:block sm:p-0">
           {/* Background overlay */}
           <div
-            className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+            className="fixed inset-0 bg-[#000000b3] transition-opacity"
             onClick={onClose}
           ></div>
 
@@ -136,7 +175,7 @@ export function RegistrationDetailModal({
                       <div className="flex items-center gap-2">
                         <FaPhone className="w-3 h-3 text-gray-400" />
                         <p className="text-sm text-gray-900 font-medium">
-                          {registration.owner.phone}
+                          {formatPhoneNumber(registration.owner.phone)}
                         </p>
                       </div>
                     </div>
@@ -156,7 +195,7 @@ export function RegistrationDetailModal({
                         Tempat Lahir
                       </label>
                       <p className="text-sm text-gray-900 font-medium">
-                        {registration.owner.birth_place}
+                        {registration.owner.place_of_birth}
                       </p>
                     </div>
                     <div>
@@ -164,7 +203,7 @@ export function RegistrationDetailModal({
                         Tanggal Lahir
                       </label>
                       <p className="text-sm text-gray-900 font-medium">
-                        {registration.owner.birth_date}
+                        {formatDate(registration.owner.date_of_birth)}
                       </p>
                     </div>
                   </div>
@@ -222,7 +261,8 @@ export function RegistrationDetailModal({
                       <div className="flex items-center gap-2">
                         <FaMapMarkerAlt className="w-3 h-3 text-gray-400" />
                         <span className="inline-flex items-center px-3 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
-                          {registration.company.branch_name}
+                          {registration.company.branch_name} (
+                          {registration.company.branch_city})
                         </span>
                       </div>
                     </div>
@@ -253,18 +293,10 @@ export function RegistrationDetailModal({
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div>
                         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Provinsi
+                          Kelurahan/Desa
                         </label>
                         <p className="text-sm text-gray-900 font-medium">
-                          {registration.address.province_name}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Kota/Kabupaten
-                        </label>
-                        <p className="text-sm text-gray-900 font-medium">
-                          {registration.address.city_name}
+                          {registration.address.village_name}
                         </p>
                       </div>
                       <div>
@@ -277,10 +309,19 @@ export function RegistrationDetailModal({
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Kelurahan/Desa
+                          Kota/Kabupaten
                         </label>
                         <p className="text-sm text-gray-900 font-medium">
-                          {registration.address.village_name}
+                          {registration.address.city_name}
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                          Provinsi
+                        </label>
+                        <p className="text-sm text-gray-900 font-medium">
+                          {registration.address.province_name}
                         </p>
                       </div>
                     </div>
@@ -368,9 +409,7 @@ export function RegistrationDetailModal({
                   <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
                     <HiOutlinePhotograph className="w-4 h-4 text-indigo-600" />
                   </div>
-                  <h3 className="text-lg font-bold text-gray-900">
-                    Dokumen
-                  </h3>
+                  <h3 className="text-lg font-bold text-gray-900">Dokumen</h3>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* KTP Photo */}
@@ -380,9 +419,11 @@ export function RegistrationDetailModal({
                         Foto KTP
                       </label>
                       <div className="relative h-40 bg-gray-100 rounded-xl overflow-hidden">
-                        <img
+                        <Image
                           src={registration.documents.ktp_photo.url}
                           alt="KTP"
+                          width={500}
+                          height={500}
                           className="w-full h-full object-cover"
                         />
                       </div>
@@ -417,9 +458,11 @@ export function RegistrationDetailModal({
                         Foto NPWP
                       </label>
                       <div className="relative h-40 bg-gray-100 rounded-xl overflow-hidden">
-                        <img
+                        <Image
                           src={registration.documents.npwp_photo.url}
                           alt="NPWP"
+                          width={500}
+                          height={500}
                           className="w-full h-full object-cover"
                         />
                       </div>
@@ -448,6 +491,84 @@ export function RegistrationDetailModal({
                   )}
                 </div>
               </section>
+
+              {/* 6. Catatan Aktivitas */}
+              {(registration.created_at || registration.updated_at) && (
+                <section className="mb-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                      <FaClock className="w-4 h-4 text-gray-600" />
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900">
+                      Catatan Aktivitas
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Created Info */}
+                    {registration.created_at && (
+                      <div className="bg-gradient-to-br from-green-50 to-white rounded-2xl p-5 border-2 border-green-100">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-10 h-10 rounded-xl bg-green-500 flex items-center justify-center">
+                            <FaUser className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 font-medium">
+                              Created
+                            </p>
+                            <p className="text-sm font-bold text-gray-900">
+                              {registration.created_by || "System"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <FaClock className="w-4 h-4 text-green-500" />
+                          <p className="text-sm">
+                            {new Date(registration.created_at).toLocaleString(
+                              "id-ID",
+                              {
+                                dateStyle: "long",
+                                timeStyle: "short",
+                              }
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Updated Info */}
+                    {registration.updated_at && (
+                      <div className="bg-gradient-to-br from-blue-50 to-white rounded-2xl p-5 border-2 border-blue-100">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center">
+                            <FaEdit className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 font-medium">
+                              Last Updated
+                            </p>
+                            <p className="text-sm font-bold text-gray-900">
+                              {registration.updated_by || "System"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <FaClock className="w-4 h-4 text-blue-500" />
+                          <p className="text-sm">
+                            {new Date(registration.updated_at).toLocaleString(
+                              "id-ID",
+                              {
+                                dateStyle: "long",
+                                timeStyle: "short",
+                              }
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
             </div>
 
             {/* Footer */}

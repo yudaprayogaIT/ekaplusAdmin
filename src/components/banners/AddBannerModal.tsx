@@ -10,7 +10,6 @@ import {
   getResourceUrl,
   getAuthHeadersFormData,
   getQueryUrl,
-  getFileUrl,
   API_CONFIG,
   apiFetch,
 } from "@/config/api";
@@ -155,11 +154,13 @@ export default function AddBannerModal({
           if (res.ok) {
             const data = await res.json();
             setProducts(
-              data.data.map((p: { id: number; name: string; product_name: string }) => ({
-                id: p.id,
-                name: p.name,
-                product_name: p.product_name,
-              }))
+              data.data.map(
+                (p: { id: number; name: string; product_name: string }) => ({
+                  id: p.id,
+                  name: p.name,
+                  product_name: p.product_name,
+                })
+              )
             );
           }
         } catch (err) {
@@ -181,15 +182,21 @@ export default function AddBannerModal({
           const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
             fields: ["id", "name", "category_name"],
           });
-          const res = await apiFetch(categoriesUrl, { method: "GET" }, authToken);
+          const res = await apiFetch(
+            categoriesUrl,
+            { method: "GET" },
+            authToken
+          );
           if (res.ok) {
             const data = await res.json();
             setCategories(
-              data.data.map((c: { id: number; name: string; category_name: string }) => ({
-                id: c.id,
-                name: c.name,
-                category_name: c.category_name,
-              }))
+              data.data.map(
+                (c: { id: number; name: string; category_name: string }) => ({
+                  id: c.id,
+                  name: c.name,
+                  category_name: c.category_name,
+                })
+              )
             );
           }
         } catch (err) {
@@ -630,7 +637,9 @@ export default function AddBannerModal({
                         const file = e.target.files?.[0];
                         if (file) {
                           if (file.size > 5 * 1024 * 1024) {
-                            setError("Ukuran gambar terlalu besar. Maksimal 5MB");
+                            setError(
+                              "Ukuran gambar terlalu besar. Maksimal 5MB"
+                            );
                             return;
                           }
                           setImageFile(file);
@@ -641,7 +650,10 @@ export default function AddBannerModal({
                   </label>
 
                   {imagePreview && (
-                    <div className="relative w-full bg-gray-50 rounded-xl overflow-hidden border-2 border-gray-200" style={{ aspectRatio: "3/1" }}>
+                    <div
+                      className="relative w-full bg-gray-50 rounded-xl overflow-hidden border-2 border-gray-200"
+                      style={{ aspectRatio: "3/1" }}
+                    >
                       <div className="absolute top-2 right-2 z-10">
                         <div className="bg-green-500 text-white p-2 rounded-full shadow-lg">
                           <FaCheckCircle className="w-4 h-4" />
@@ -674,10 +686,14 @@ export default function AddBannerModal({
                     type="number"
                     min="1"
                     value={displayOrder}
-                    onChange={(e) => setDisplayOrder(parseInt(e.target.value) || 1)}
+                    onChange={(e) =>
+                      setDisplayOrder(parseInt(e.target.value) || 1)
+                    }
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Urutan tampil banner</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Urutan tampil banner
+                  </p>
                 </div>
 
                 <div>
@@ -686,13 +702,17 @@ export default function AddBannerModal({
                   </label>
                   <select
                     value={disabled}
-                    onChange={(e) => setDisabled(parseInt(e.target.value) as 0 | 1)}
+                    onChange={(e) =>
+                      setDisabled(parseInt(e.target.value) as 0 | 1)
+                    }
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
                   >
                     <option value="0">Enabled</option>
                     <option value="1">Disabled</option>
                   </select>
-                  <p className="text-xs text-gray-500 mt-1">Banner enabled atau disabled</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Banner enabled atau disabled
+                  </p>
                 </div>
               </div>
 
@@ -751,7 +771,9 @@ export default function AddBannerModal({
                       <span>Menyimpan...</span>
                     </>
                   ) : (
-                    <span>{initial ? "Simpan Perubahan" : "Tambah Banner"}</span>
+                    <span>
+                      {initial ? "Simpan Perubahan" : "Tambah Banner"}
+                    </span>
                   )}
                 </button>
               </div>

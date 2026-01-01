@@ -6,7 +6,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   FaTimes,
   FaPlus,
-  FaTrash,
   FaBox,
   FaFire,
   FaImage,
@@ -22,12 +21,7 @@ import type { Item, Category, ProductFormData } from "@/types";
 import { DraggableVariantList } from "./DraggableVariantList";
 import { VariantSuggestions } from "./VariantSuggestions";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  API_CONFIG,
-  getQueryUrl,
-  getAuthHeaders,
-  getResourceUrl,
-} from "@/config/api";
+import { API_CONFIG, getAuthHeaders, getResourceUrl } from "@/config/api";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
 

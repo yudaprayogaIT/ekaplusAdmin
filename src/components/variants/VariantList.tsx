@@ -14,7 +14,6 @@ import {
   FaSortAmountUp,
   FaSortAmountDown,
   FaChevronDown,
-  FaFilter,
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import { fetchVariants, deleteVariant } from "@/services/variantService";

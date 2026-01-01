@@ -69,10 +69,10 @@ interface ProductApiResponse {
   status: string;
   // Catatan Aktivitas
   created_at?: string;
-  created_by?: number;
+  created_by?: number | { id: number; full_name: string };
   updated_at?: string;
-  updated_by?: number;
-  owner?: number;
+  updated_by?: number | { id: number; full_name: string };
+  owner?: number | { id: number; full_name: string };
 }
 
 export default function ProductList() {
@@ -168,7 +168,12 @@ export default function ProductList() {
       filters?: FilterTriple[];
       order_by?: [string, string][];
     } = {
-      fields: ["*"],
+      fields: [
+        "*",
+        "created_by.full_name",
+        "updated_by.full_name",
+        "owner.full_name",
+      ],
     };
 
     if (filterTriples.length > 0) {
@@ -218,12 +223,21 @@ export default function ProductList() {
           disabled: prod.disabled,
           isHotDeals: Boolean(prod.hot_deals),
           variants: productVariants, // Variants from API
-          // Catatan Aktivitas
+          // Catatan Aktivitas - extract name from nested object if available
           created_at: prod.created_at,
-          created_by: prod.created_by,
+          created_by:
+            typeof prod.created_by === "object" && prod.created_by?.full_name
+              ? prod.created_by.full_name
+              : prod.created_by,
           updated_at: prod.updated_at,
-          updated_by: prod.updated_by,
-          owner: prod.owner,
+          updated_by:
+            typeof prod.updated_by === "object" && prod.updated_by?.full_name
+              ? prod.updated_by.full_name
+              : prod.updated_by,
+          owner:
+            typeof prod.owner === "object" && prod.owner?.full_name
+              ? prod.owner.full_name
+              : prod.owner,
         };
       });
     } else {
@@ -454,7 +468,6 @@ export default function ProductList() {
   if (showHotDealsOnly) {
     filteredProducts = filteredProducts.filter((p) => p.isHotDeals);
   }
-
 
   // Apply pagination
   const {

@@ -25,13 +25,6 @@ import {
   getFileUrl,
 } from "@/config/api";
 
-// // Additional types for dashboard
-// type Branch = {
-//   id: number;
-//   name: string;
-//   address?: string;
-// };
-
 type DashboardStats = {
   totalProducts: number;
   totalItems: number;
@@ -41,9 +34,6 @@ type DashboardStats = {
   hotDealsCount: number;
   unmappedItems: number;
 };
-
-// Fallback Data URLs (for branches - user will implement later)
-const BRANCHES_DATA_URL = "/data/branches.json";
 
 // Stat Card Component
 function StatCard({
@@ -434,6 +424,8 @@ function HotDealsSection({ products }: { products: Product[] }) {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {hotDeals.map((product, idx) => {
             const firstVariant = product.variants?.[0]?.item;
+            const countVariant = product.variants.length;
+            console.log(countVariant);
             return (
               <motion.div
                 key={product.id}
@@ -459,7 +451,7 @@ function HotDealsSection({ products }: { products: Product[] }) {
                   {product.name}
                 </h4>
                 <p className="text-xs text-white/70 mt-1">
-                  {product.variants?.length || 0} varian
+                  {product.variants.length || 0} varian
                 </p>
               </motion.div>
             );

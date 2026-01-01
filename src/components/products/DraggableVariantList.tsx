@@ -20,6 +20,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { FaGripVertical, FaTimes } from "react-icons/fa";
 import type { Item } from "@/types";
+import Image from "next/image";
 
 // Draggable item component
 function DraggableVariantItem({
@@ -67,9 +68,11 @@ function DraggableVariantItem({
       </div>
 
       {/* Image */}
-      <img
+      <Image
         src={item.image || "/placeholder.png"}
         alt={item.name}
+        width={500}
+        height={500}
         className="w-12 h-12 rounded-lg object-cover"
       />
 

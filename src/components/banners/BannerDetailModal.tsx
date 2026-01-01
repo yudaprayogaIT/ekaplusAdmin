@@ -324,7 +324,7 @@ export default function BannerDetailModal({
                 {/* Click Count */}
                 {banner.click_count !== undefined && (
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1">
+                    <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1">
                       <FaEye className="w-3 h-3" />
                       Total Clicks
                     </label>

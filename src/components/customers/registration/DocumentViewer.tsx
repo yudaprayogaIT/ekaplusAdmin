@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import React from "react";
 import { HiArrowDownTray, HiXMark } from "react-icons/hi2";
 
@@ -31,7 +32,7 @@ export function DocumentViewer({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#000000b3] p-4"
       onClick={onClose}
     >
       <div
@@ -40,7 +41,9 @@ export function DocumentViewer({
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-red-500 to-red-600">
-          <h3 className="text-white font-semibold text-lg">{title || filename}</h3>
+          <h3 className="text-white font-semibold text-lg">
+            {title || filename}
+          </h3>
           <div className="flex items-center gap-2">
             <button
               onClick={handleDownload}
@@ -61,10 +64,12 @@ export function DocumentViewer({
 
         {/* Image */}
         <div className="flex-1 flex items-center justify-center p-6 overflow-auto bg-gray-50">
-          <img
+          <Image
             src={imageUrl}
             alt={filename}
             className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
+            width={500}
+            height={500}
           />
         </div>
 

@@ -1,7 +1,6 @@
 // src/components/categories/CategoryDetailModal.tsx
 "use client";
 
-import React, { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   FaTimes,
@@ -177,19 +176,26 @@ export default function CategoryDetailModal({
                             <FaUser className="w-5 h-5 text-white" />
                           </div>
                           <div>
-                            <p className="text-xs text-gray-500 font-medium">Created</p>
+                            <p className="text-xs text-gray-500 font-medium">
+                              Created
+                            </p>
                             <p className="text-sm font-bold text-gray-900">
-                              {category.created_by ? category.created_by.name : "Unknown"}
+                              {category.created_by
+                                ? category.created_by.name
+                                : "Unknown"}
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 text-gray-600">
                           <FaClock className="w-4 h-4 text-green-500" />
                           <p className="text-sm">
-                            {new Date(category.created_at).toLocaleString("id-ID", {
-                              dateStyle: "long",
-                              timeStyle: "short",
-                            })}
+                            {new Date(category.created_at).toLocaleString(
+                              "id-ID",
+                              {
+                                dateStyle: "long",
+                                timeStyle: "short",
+                              }
+                            )}
                           </p>
                         </div>
                       </div>
@@ -203,19 +209,26 @@ export default function CategoryDetailModal({
                             <FaEdit className="w-5 h-5 text-white" />
                           </div>
                           <div>
-                            <p className="text-xs text-gray-500 font-medium">Last Updated</p>
+                            <p className="text-xs text-gray-500 font-medium">
+                              Last Updated
+                            </p>
                             <p className="text-sm font-bold text-gray-900">
-                              {category.updated_by ? category.updated_by.name : "Unknown"}
+                              {category.updated_by
+                                ? category.updated_by.name
+                                : "Unknown"}
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 text-gray-600">
                           <FaClock className="w-4 h-4 text-blue-500" />
                           <p className="text-sm">
-                            {new Date(category.updated_at).toLocaleString("id-ID", {
-                              dateStyle: "long",
-                              timeStyle: "short",
-                            })}
+                            {new Date(category.updated_at).toLocaleString(
+                              "id-ID",
+                              {
+                                dateStyle: "long",
+                                timeStyle: "short",
+                              }
+                            )}
                           </p>
                         </div>
                       </div>
@@ -223,19 +236,24 @@ export default function CategoryDetailModal({
                   </div>
 
                   {/* Owner Info (if different from creator) */}
-                  {category.owner && category.owner.id !== category.created_by?.id && (
-                    <div className="mt-4 bg-gradient-to-r from-purple-50 to-white rounded-xl p-4 border border-purple-100">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-purple-500 flex items-center justify-center">
-                          <FaUser className="w-4 h-4 text-white" />
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500 font-medium">Owner</p>
-                          <p className="text-sm font-bold text-gray-900">{category.owner.name}</p>
+                  {category.owner &&
+                    category.owner.id !== category.created_by?.id && (
+                      <div className="mt-4 bg-gradient-to-r from-purple-50 to-white rounded-xl p-4 border border-purple-100">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-purple-500 flex items-center justify-center">
+                            <FaUser className="w-4 h-4 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 font-medium">
+                              Owner
+                            </p>
+                            <p className="text-sm font-bold text-gray-900">
+                              {category.owner.name}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
                 </div>
               )}
 
