@@ -3,6 +3,8 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { RegistrationCard } from "./RegistrationCard";
 import { RegistrationDetailModal } from "./RegistrationDetailModal";
+import { ApproveRegistrationModal } from "./ApproveRegistrationModal";
+import { RejectRegistrationModal } from "./RejectRegistrationModal";
 import type { CustomerRegistration } from "@/types/customerRegistration";
 import {
   FaSearch,
@@ -113,6 +115,12 @@ export function CustomerRegistrationList() {
   const [sortField, setSortField] = useState<SortField>("created_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
+
+  // Approve/Reject modals state
+  const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [selectedForAction, setSelectedForAction] =
+    useState<CustomerRegistration | null>(null);
 
   // Use filter system
   const { filters, setFilters } = useFilters({
@@ -394,6 +402,31 @@ export function CustomerRegistrationList() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  // Approve/Reject action handlers
+  const handleApprove = (registration: CustomerRegistration) => {
+    setSelectedForAction(registration);
+    setIsDetailModalOpen(false); // Close detail modal
+    setIsApproveModalOpen(true);
+  };
+
+  const handleReject = (registration: CustomerRegistration) => {
+    setSelectedForAction(registration);
+    setIsDetailModalOpen(false); // Close detail modal
+    setIsRejectModalOpen(true);
+  };
+
+  const handleApproveSuccess = () => {
+    setIsApproveModalOpen(false);
+    setSelectedForAction(null);
+    // Data will auto-reload via event listener
+  };
+
+  const handleRejectSuccess = () => {
+    setIsRejectModalOpen(false);
+    setSelectedForAction(null);
+    // Data will auto-reload via event listener
+  };
+
   // Loading state
   if (loading) {
     return (
@@ -670,6 +703,24 @@ export function CustomerRegistrationList() {
         isOpen={isDetailModalOpen}
         onClose={() => setIsDetailModalOpen(false)}
         registration={selectedRegistration}
+        onApprove={handleApprove}
+        onReject={handleReject}
+      />
+
+      {/* Approve Modal */}
+      <ApproveRegistrationModal
+        isOpen={isApproveModalOpen}
+        onClose={() => setIsApproveModalOpen(false)}
+        registration={selectedForAction}
+        onSuccess={handleApproveSuccess}
+      />
+
+      {/* Reject Modal */}
+      <RejectRegistrationModal
+        isOpen={isRejectModalOpen}
+        onClose={() => setIsRejectModalOpen(false)}
+        registration={selectedForAction}
+        onSuccess={handleRejectSuccess}
       />
     </div>
   );

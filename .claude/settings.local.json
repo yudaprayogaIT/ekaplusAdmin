@@ -10,7 +10,8 @@
       "Bash(npx tsc:*)",
       "Bash(findstr:*)",
       "Bash(npm run dev:*)",
-      "Bash(del \"d:\\\\ETM\\\\ETM\\\\PROJECT\\\\ekaplusAdmin\\\\src\\\\hooks\\\\useCustomerRegistration.ts\")"
+      "Bash(del \"d:\\\\ETM\\\\ETM\\\\PROJECT\\\\ekaplusAdmin\\\\src\\\\hooks\\\\useCustomerRegistration.ts\")",
+      "Bash(find:*)"
     ]
   }
 }

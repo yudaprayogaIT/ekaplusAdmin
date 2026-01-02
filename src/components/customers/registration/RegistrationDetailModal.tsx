@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import type { CustomerRegistration } from "@/types/customerRegistration";
 import { DocumentViewer } from "./DocumentViewer";
+import { motion } from "framer-motion";
 import { HiXMark } from "react-icons/hi2";
 import { IoDocumentTextOutline } from "react-icons/io5";
 import { HiOutlinePhotograph } from "react-icons/hi";
@@ -14,6 +15,8 @@ import {
   FaEnvelope,
   FaClock,
   FaEdit,
+  FaCheckCircle,
+  FaTimesCircle,
 } from "react-icons/fa";
 import Image from "next/image";
 
@@ -21,12 +24,16 @@ interface RegistrationDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   registration: CustomerRegistration | null;
+  onApprove?: (registration: CustomerRegistration) => void;
+  onReject?: (registration: CustomerRegistration) => void;
 }
 
 export function RegistrationDetailModal({
   isOpen,
   onClose,
   registration,
+  onApprove,
+  onReject,
 }: RegistrationDetailModalProps) {
   const [documentViewer, setDocumentViewer] = useState<{
     isOpen: boolean;
@@ -572,13 +579,60 @@ export function RegistrationDetailModal({
             </div>
 
             {/* Footer */}
-            <div className="bg-white px-6 py-4 border-t border-gray-200 flex justify-end">
+            <div className="bg-white px-6 py-4 border-t border-gray-200 flex justify-between items-center gap-3">
               <button
                 onClick={onClose}
                 className="px-5 py-2.5 bg-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-300 transition-all"
               >
                 Close
               </button>
+
+              {/* Show action buttons for pending or draft status */}
+              {(registration.status === "pending" ||
+                registration.status === "draft") && (
+                <div className="flex gap-3">
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => onReject?.(registration)}
+                    className="px-5 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white font-medium rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
+                  >
+                    <FaTimesCircle className="w-4 h-4" />
+                    <span>Reject</span>
+                  </motion.button>
+
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => onApprove?.(registration)}
+                    className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white font-medium rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
+                  >
+                    <FaCheckCircle className="w-4 h-4" />
+                    <span>Approve</span>
+                  </motion.button>
+                </div>
+              )}
+
+              {/* Show approval info for approved registrations */}
+              {registration.status === "approved" && registration.gp_name && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-xl">
+                  <FaCheckCircle className="w-4 h-4 text-green-600" />
+                  <span className="text-sm text-green-700 font-medium">
+                    Approved - GP: {registration.gp_name}
+                  </span>
+                </div>
+              )}
+
+              {/* Show rejection info for rejected registrations */}
+              {registration.status === "rejected" &&
+                registration.rejection_reason && (
+                  <div className="flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-200 rounded-xl">
+                    <FaTimesCircle className="w-4 h-4 text-red-600" />
+                    <span className="text-sm text-red-700 font-medium">
+                      Rejected - {registration.rejection_reason}
+                    </span>
+                  </div>
+                )}
             </div>
           </div>
         </div>

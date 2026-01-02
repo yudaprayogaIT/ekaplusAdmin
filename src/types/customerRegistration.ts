@@ -61,6 +61,22 @@ export interface CustomerRegistration {
   created_by?: string; // User full name
   updated_at: string;
   updated_by?: string; // User full name
+
+  // Approval metadata (populated when status = 'approved')
+  gp_id?: number;
+  gp_name?: string;
+  gc_id?: number;
+  gc_name?: string;
+  bc_id?: number;
+  bc_name?: string;
+  approved_at?: string;
+  approved_by?: string;
+
+  // Rejection metadata (populated when status = 'rejected')
+  rejection_reason?: string;
+  rejection_notes?: string;
+  rejected_at?: string;
+  rejected_by?: string;
 }
 
 // For filters
@@ -77,3 +93,17 @@ export interface RegistrationStats {
   approved: number;
   rejected: number;
 }
+
+// Rejection Reasons
+export interface RejectionReason {
+  code: string;
+  label: string;
+}
+
+export const REJECTION_REASONS: RejectionReason[] = [
+  { code: 'incomplete_data', label: 'Data tidak lengkap' },
+  { code: 'invalid_document', label: 'Dokumen tidak valid' },
+  { code: 'fake_customer', label: 'Customer siluman/iseng' },
+  { code: 'duplicate_gp', label: 'GP name sudah ada' },
+  { code: 'other', label: 'Lainnya' },
+];

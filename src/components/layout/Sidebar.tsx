@@ -29,10 +29,13 @@ import {
   FaDatabase,
   FaCircle,
 } from "react-icons/fa";
-import { MdInventory, MdMessage } from "react-icons/md";
-import { BiSolidPurchaseTag } from "react-icons/bi";
+import { MdMessage } from "react-icons/md";
+import { BiSolidPurchaseTag, BiSolidUserDetail } from "react-icons/bi";
 import { AiFillProduct } from "react-icons/ai";
 import { GiKnightBanner } from "react-icons/gi";
+import { FaUserGroup } from "react-icons/fa6";
+import { PiUserListLight } from "react-icons/pi";
+import { GrDocumentUser } from "react-icons/gr";
 
 type MenuItem = {
   label: string;
@@ -74,12 +77,12 @@ const MAIN_MENU: MenuItem[] = [
     icon: <FaClipboardList className="w-5 h-5" />,
     requireAuth: true,
   },
-  {
-    label: "Product Stock",
-    href: "/stock",
-    icon: <MdInventory className="w-5 h-5" />,
-    requireAuth: true,
-  },
+  // {
+  //   label: "Product Stock",
+  //   href: "/stock",
+  //   icon: <MdInventory className="w-5 h-5" />,
+  //   requireAuth: true,
+  // },
 ];
 
 const SECONDARY_MENU: MenuItem[] = [
@@ -181,20 +184,32 @@ const CATALOG_SUBMENU: MenuItem[] = [
 
 const CUSTOMER_SUBMENU: MenuItem[] = [
   {
-    label: "Member",
-    href: "/members",
-    icon: <FaUserShield className="w-4 h-4" />,
-    requireAuth: true,
-  },
-  {
     label: "Customer Register",
     href: "/customers/registrations",
+    icon: <BiSolidUserDetail className="w-4 h-4" />,
+    requireAuth: true,
+  },
+  {
+    label: "Global Party",
+    href: "/customers/global_party",
+    icon: <FaUsers className="w-4 h-4" />,
+    requireAuth: true,
+  },
+  {
+    label: "Global Customer",
+    href: "/customers/global_customer",
+    icon: <FaUserGroup className="w-4 h-4" />,
+    requireAuth: true,
+  },
+  {
+    label: "Branch Customer",
+    href: "/customers/branch_customer",
     icon: <FaUserShield className="w-4 h-4" />,
     requireAuth: true,
   },
   {
-    label: "Group",
-    href: "/memberGroups",
+    label: "Members",
+    href: "/members",
     icon: <FaUsers className="w-4 h-4" />,
     requireAuth: true,
   },

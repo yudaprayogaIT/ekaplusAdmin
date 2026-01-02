@@ -512,3 +512,174 @@ export const CUSTOMER_REGISTER_FILTER_FIELDS: EntityFilterConfig = {
     },
   ],
 };
+
+// Global Party (GP) filter fields
+export const GLOBAL_PARTY_FILTER_FIELDS: EntityFilterConfig = {
+  entity: "ekatalog_global_party",
+  fields: [
+    {
+      field: "name",
+      label: "GP Name",
+      type: "string",
+      operators: ["=", "!=", "like", "not like"],
+    },
+    {
+      field: "disabled",
+      label: "Status",
+      type: "select",
+      operators: ["="],
+      options: [
+        { value: 0, label: "Enabled" },
+        { value: 1, label: "Disabled" },
+      ],
+    },
+    // Audit Trail filters
+    {
+      field: "created_by",
+      label: "Created By (User ID)",
+      type: "number",
+      operators: ["=", "!=", "in", "not in"],
+    },
+    {
+      field: "created_at",
+      label: "Created Date",
+      type: "date",
+      operators: ["=", ">", ">=", "<", "<=", "between"],
+    },
+    {
+      field: "updated_by",
+      label: "Updated By (User ID)",
+      type: "number",
+      operators: ["=", "!=", "in", "not in"],
+    },
+    {
+      field: "updated_at",
+      label: "Updated Date",
+      type: "date",
+      operators: ["=", ">", ">=", "<", "<=", "between"],
+    },
+  ],
+};
+
+// Global Customer (GC) filter fields
+export const GLOBAL_CUSTOMER_FILTER_FIELDS: EntityFilterConfig = {
+  entity: "ekatalog_global_customer",
+  fields: [
+    {
+      field: "name",
+      label: "GC Name",
+      type: "string",
+      operators: ["=", "!=", "like", "not like"],
+    },
+    {
+      field: "gp_id",
+      label: "Global Party",
+      type: "relation",
+      operators: ["=", "!=", "in", "not in"],
+      relationEntity: "ekatalog_global_party",
+    },
+    {
+      field: "disabled",
+      label: "Status",
+      type: "select",
+      operators: ["="],
+      options: [
+        { value: 0, label: "Enabled" },
+        { value: 1, label: "Disabled" },
+      ],
+    },
+    // Audit Trail filters
+    {
+      field: "created_by",
+      label: "Created By (User ID)",
+      type: "number",
+      operators: ["=", "!=", "in", "not in"],
+    },
+    {
+      field: "created_at",
+      label: "Created Date",
+      type: "date",
+      operators: ["=", ">", ">=", "<", "<=", "between"],
+    },
+    {
+      field: "updated_by",
+      label: "Updated By (User ID)",
+      type: "number",
+      operators: ["=", "!=", "in", "not in"],
+    },
+    {
+      field: "updated_at",
+      label: "Updated Date",
+      type: "date",
+      operators: ["=", ">", ">=", "<", "<=", "between"],
+    },
+  ],
+};
+
+// Branch Customer (BC) filter fields
+export const BRANCH_CUSTOMER_FILTER_FIELDS: EntityFilterConfig = {
+  entity: "ekatalog_branch_customer",
+  fields: [
+    {
+      field: "name",
+      label: "BC Name",
+      type: "string",
+      operators: ["=", "!=", "like", "not like"],
+    },
+    {
+      field: "gc_id",
+      label: "Global Customer",
+      type: "relation",
+      operators: ["=", "!=", "in", "not in"],
+      relationEntity: "ekatalog_global_customer",
+    },
+    {
+      field: "branch_id",
+      label: "Branch",
+      type: "relation",
+      operators: ["=", "!=", "in", "not in"],
+      relationEntity: "branch",
+    },
+    {
+      field: "branch_city",
+      label: "Branch City",
+      type: "string",
+      operators: ["=", "!=", "like", "not like"],
+    },
+    {
+      field: "disabled",
+      label: "Status",
+      type: "select",
+      operators: ["="],
+      options: [
+        { value: 0, label: "Enabled" },
+        { value: 1, label: "Disabled" },
+      ],
+    },
+    // Audit Trail filters
+    {
+      field: "created_by",
+      label: "Created By (User ID)",
+      type: "number",
+      operators: ["=", "!=", "in", "not in"],
+    },
+    {
+      field: "created_at",
+      label: "Created Date",
+      type: "date",
+      operators: ["=", ">", ">=", "<", "<=", "between"],
+    },
+    {
+      field: "updated_by",
+      label: "Updated By (User ID)",
+      type: "number",
+      operators: ["=", "!=", "in", "not in"],
+    },
+    {
+      field: "updated_at",
+      label: "Updated Date",
+      type: "date",
+      operators: ["=", ">", ">=", "<", "<=", "between"],
+    },
+  ],
+};

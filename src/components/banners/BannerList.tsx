@@ -27,7 +27,13 @@ import {
 } from "@/config/api";
 import type { Banner, BannerAPIResponse, ScheduleStatus } from "@/types/banner";
 
-type SortOption = "display_order-asc" | "display_order-desc" | "name-asc" | "name-desc" | "id-asc" | "id-desc";
+type SortOption =
+  | "display_order-asc"
+  | "display_order-desc"
+  | "name-asc"
+  | "name-desc"
+  | "id-asc"
+  | "id-desc";
 
 const SNAP_KEY = "ekatalog_banners_snapshot";
 
@@ -52,7 +58,9 @@ export default function BannerList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortBy, setSortBy] = useState<SortOption>("display_order-asc");
-  const [filterSchedule, setFilterSchedule] = useState<ScheduleStatus | "all">("all");
+  const [filterSchedule, setFilterSchedule] = useState<ScheduleStatus | "all">(
+    "all"
+  );
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<Banner | null>(null);
@@ -92,27 +100,30 @@ export default function BannerList() {
         );
 
         if (bannersRes.ok) {
-          const bannersResponse = (await bannersRes.json()) as BannerAPIResponse;
+          const bannersResponse =
+            (await bannersRes.json()) as BannerAPIResponse;
           if (!cancelled) {
-            const mappedBanners: Banner[] = bannersResponse.data.map((item) => ({
-              id: item.id,
-              name: item.name,
-              banner_name: item.banner_name,
-              image: getFileUrl(item.image),
-              type: item.type as Banner["type"],
-              type_value: item.type_value,
-              disabled: item.disabled as 0 | 1,
-              display_order: item.display_order ?? 0,
-              start_date: item.start_date,
-              end_date: item.end_date,
-              click_count: item.click_count,
-              docstatus: item.docstatus,
-              created_at: item.created_at,
-              updated_at: item.updated_at,
-              created_by: item.created_by,
-              updated_by: item.updated_by,
-              owner: item.owner,
-            }));
+            const mappedBanners: Banner[] = bannersResponse.data.map(
+              (item) => ({
+                id: item.id,
+                name: item.name,
+                banner_name: item.banner_name,
+                image: getFileUrl(item.image),
+                type: item.type as Banner["type"],
+                type_value: item.type_value,
+                disabled: item.disabled as 0 | 1,
+                display_order: item.display_order ?? 0,
+                start_date: item.start_date,
+                end_date: item.end_date,
+                click_count: item.click_count,
+                docstatus: item.docstatus,
+                created_at: item.created_at,
+                updated_at: item.updated_at,
+                created_by: item.created_by,
+                updated_by: item.updated_by,
+                owner: item.owner,
+              })
+            );
 
             console.log("Loaded banners:", mappedBanners);
             setBanners(mappedBanners);
@@ -185,8 +196,7 @@ export default function BannerList() {
     }
 
     window.addEventListener("ekatalog:banners_update", handler);
-    return () =>
-      window.removeEventListener("ekatalog:banners_update", handler);
+    return () => window.removeEventListener("ekatalog:banners_update", handler);
   }, [isAuthenticated, token]);
 
   function saveSnapshot(arr: Banner[]) {
@@ -279,8 +289,7 @@ export default function BannerList() {
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.message ||
-              `Failed to delete banner (${response.status})`
+            errorData.message || `Failed to delete banner (${response.status})`
           );
         }
 
@@ -371,9 +380,7 @@ export default function BannerList() {
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-red-200 border-t-red-500 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-sm text-gray-600 font-medium">
-            Memuat banners...
-          </p>
+          <p className="text-sm text-gray-600 font-medium">Memuat banners...</p>
         </div>
       </div>
     );
@@ -435,9 +442,15 @@ export default function BannerList() {
   const totalBanners = banners.length;
   const enabledCount = banners.filter((b) => b.disabled === 0).length;
   const disabledCount = banners.filter((b) => b.disabled === 1).length;
-  const activeCount = banners.filter((b) => getScheduleStatus(b) === "active").length;
-  const scheduledCount = banners.filter((b) => getScheduleStatus(b) === "scheduled").length;
-  const expiredCount = banners.filter((b) => getScheduleStatus(b) === "expired").length;
+  const activeCount = banners.filter(
+    (b) => getScheduleStatus(b) === "active"
+  ).length;
+  const scheduledCount = banners.filter(
+    (b) => getScheduleStatus(b) === "scheduled"
+  ).length;
+  const expiredCount = banners.filter(
+    (b) => getScheduleStatus(b) === "expired"
+  ).length;
 
   return (
     <div>
@@ -448,7 +461,7 @@ export default function BannerList() {
             Banners
           </h1>
           <p className="text-sm md:text-base text-gray-600">
-            Kelola banner promosi untuk customer app
+            Kelola banner promosi untuk Aplikasi Eka+
           </p>
         </div>
 
@@ -469,15 +482,11 @@ export default function BannerList() {
           <div className="text-sm text-blue-700 font-medium mb-1">
             Total Banners
           </div>
-          <div className="text-3xl font-bold text-blue-900">
-            {totalBanners}
-          </div>
+          <div className="text-3xl font-bold text-blue-900">{totalBanners}</div>
         </div>
 
         <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-5 border-2 border-green-200">
-          <div className="text-sm text-green-700 font-medium mb-1">
-            Enabled
-          </div>
+          <div className="text-sm text-green-700 font-medium mb-1">Enabled</div>
           <div className="text-3xl font-bold text-green-900">
             {enabledCount}
           </div>
@@ -498,9 +507,7 @@ export default function BannerList() {
         </div>
 
         <div className="bg-gradient-to-br from-sky-50 to-sky-100 rounded-xl p-5 border-2 border-sky-200">
-          <div className="text-sm text-sky-700 font-medium mb-1">
-            Scheduled
-          </div>
+          <div className="text-sm text-sky-700 font-medium mb-1">Scheduled</div>
           <div className="text-3xl font-bold text-sky-900">
             {scheduledCount}
           </div>

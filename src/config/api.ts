@@ -29,6 +29,19 @@ export const API_CONFIG = {
     WHATSAPP: "/api/resource/whatsapp",
     WORKFLOW_STATE: "/api/workflow/state",
     CUSTOMER_REGISTER: "/api/resource/ekatalog_customer_register",
+
+    // Customer Management - GP/GC/BC
+    GLOBAL_PARTY: "/api/resource/ekatalog_global_party",
+    GLOBAL_CUSTOMER: "/api/resource/ekatalog_global_customer",
+    BRANCH_CUSTOMER: "/api/resource/ekatalog_branch_customer",
+
+    // Customer Registration Actions (for temporary static implementation)
+    CUSTOMER_REGISTER_APPROVE: "/api/method/customer_registration.approve",
+    CUSTOMER_REGISTER_REJECT: "/api/method/customer_registration.reject",
+    CUSTOMER_REGISTER_CHECK_GP: "/api/method/customer_registration.check_gp",
+
+    // GP/GC/BC Update Actions
+    GP_UPDATE_NAME: "/api/method/global_party.update_name",
   },
 } as const;
 
