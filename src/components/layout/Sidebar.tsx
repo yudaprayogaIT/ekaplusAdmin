@@ -29,13 +29,11 @@ import {
   FaDatabase,
   FaCircle,
 } from "react-icons/fa";
-import { MdMessage } from "react-icons/md";
+import { MdMapsHomeWork, MdMessage } from "react-icons/md";
 import { BiSolidPurchaseTag, BiSolidUserDetail } from "react-icons/bi";
 import { AiFillProduct } from "react-icons/ai";
 import { GiKnightBanner } from "react-icons/gi";
 import { FaUserGroup } from "react-icons/fa6";
-import { PiUserListLight } from "react-icons/pi";
-import { GrDocumentUser } from "react-icons/gr";
 
 type MenuItem = {
   label: string;
@@ -210,7 +208,7 @@ const CUSTOMER_SUBMENU: MenuItem[] = [
   {
     label: "Members",
     href: "/members",
-    icon: <FaUsers className="w-4 h-4" />,
+    icon: <MdMapsHomeWork className="w-4 h-4" />,
     requireAuth: true,
   },
   {

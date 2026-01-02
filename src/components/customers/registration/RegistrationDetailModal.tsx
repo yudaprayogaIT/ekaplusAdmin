@@ -172,7 +172,7 @@ export function RegistrationDetailModal({
                         Nama Lengkap
                       </label>
                       <p className="text-sm text-gray-900 font-medium">
-                        {registration.owner.full_name}
+                        {registration.user.full_name}
                       </p>
                     </div>
                     <div>
@@ -182,7 +182,7 @@ export function RegistrationDetailModal({
                       <div className="flex items-center gap-2">
                         <FaPhone className="w-3 h-3 text-gray-400" />
                         <p className="text-sm text-gray-900 font-medium">
-                          {formatPhoneNumber(registration.owner.phone)}
+                          {formatPhoneNumber(registration.user.phone)}
                         </p>
                       </div>
                     </div>
@@ -193,7 +193,7 @@ export function RegistrationDetailModal({
                       <div className="flex items-center gap-2">
                         <FaEnvelope className="w-3 h-3 text-gray-400" />
                         <p className="text-sm text-gray-900 font-medium">
-                          {registration.owner.email}
+                          {registration.user.email}
                         </p>
                       </div>
                     </div>
@@ -202,7 +202,7 @@ export function RegistrationDetailModal({
                         Tempat Lahir
                       </label>
                       <p className="text-sm text-gray-900 font-medium">
-                        {registration.owner.place_of_birth}
+                        {registration.user.place_of_birth}
                       </p>
                     </div>
                     <div>
@@ -210,7 +210,7 @@ export function RegistrationDetailModal({
                         Tanggal Lahir
                       </label>
                       <p className="text-sm text-gray-900 font-medium">
-                        {formatDate(registration.owner.date_of_birth)}
+                        {formatDate(registration.user.date_of_birth)}
                       </p>
                     </div>
                   </div>

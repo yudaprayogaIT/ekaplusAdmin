@@ -36,10 +36,10 @@ export function RegistrationCard({
   const formatSubmissionDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
-      return date.toLocaleDateString('id-ID', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric'
+      return date.toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
       });
     } catch {
       return dateString;
@@ -68,7 +68,11 @@ export function RegistrationCard({
               {registration.company.name}
             </h3>
           </div>
-          <div className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 ${getStatusBadgeClass(registration.status)} flex-shrink-0`}>
+          <div
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 ${getStatusBadgeClass(
+              registration.status
+            )} flex-shrink-0`}
+          >
             {getStatusLabel(registration.status)}
           </div>
         </div>
@@ -80,7 +84,7 @@ export function RegistrationCard({
         <div className="flex items-center gap-2">
           <FaUser className="w-4 h-4 text-gray-400 flex-shrink-0" />
           <span className="text-sm text-gray-700 font-medium truncate">
-            {registration.owner.full_name}
+            {registration.user.full_name}
           </span>
         </div>
 
@@ -88,14 +92,18 @@ export function RegistrationCard({
         <div className="flex items-center gap-2">
           <FaMapMarkerAlt className="w-4 h-4 text-gray-400 flex-shrink-0" />
           <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
-            {registration.company.branch_name}
+            {registration.company.branch_name} (
+            {registration.company.branch_city})
           </span>
         </div>
 
         {/* Submission Date */}
         <div className="pt-2 border-t border-gray-100">
           <p className="text-xs text-gray-500">
-            Submitted: <span className="font-medium text-gray-700">{formatSubmissionDate(registration.submission_date)}</span>
+            Submitted:{" "}
+            <span className="font-medium text-gray-700">
+              {formatSubmissionDate(registration.submission_date)}
+            </span>
           </p>
         </div>
 

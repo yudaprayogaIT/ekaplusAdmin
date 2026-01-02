@@ -85,7 +85,7 @@ export default function GCList() {
     paginatedItems: paginatedGCs,
     totalItems,
     itemsPerPage,
-  } = usePagination(filteredAndSortedGCs, 10);
+  } = usePagination(filteredAndSortedGCs, 20);
 
   const handleViewDetails = (gc: GlobalCustomer) => {
     setSelectedGC(gc);
@@ -126,7 +126,9 @@ export default function GCList() {
             <FaCheckCircle className="w-4 h-4 text-green-700" />
             <div className="text-sm text-green-700 font-medium">Active</div>
           </div>
-          <div className="text-3xl font-bold text-green-900">{stats.active}</div>
+          <div className="text-3xl font-bold text-green-900">
+            {stats.active}
+          </div>
         </div>
 
         <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-5 border-2 border-red-200">
@@ -134,7 +136,9 @@ export default function GCList() {
             <FaBan className="w-4 h-4 text-red-700" />
             <div className="text-sm text-red-700 font-medium">Disabled</div>
           </div>
-          <div className="text-3xl font-bold text-red-900">{stats.disabled}</div>
+          <div className="text-3xl font-bold text-red-900">
+            {stats.disabled}
+          </div>
         </div>
       </div>
 
@@ -208,8 +212,14 @@ export default function GCList() {
                     {[
                       { value: "name" as SortField, label: "Name" },
                       { value: "gp_name" as SortField, label: "GP Name" },
-                      { value: "created_at" as SortField, label: "Created Date" },
-                      { value: "updated_at" as SortField, label: "Updated Date" },
+                      {
+                        value: "created_at" as SortField,
+                        label: "Created Date",
+                      },
+                      {
+                        value: "updated_at" as SortField,
+                        label: "Updated Date",
+                      },
                     ].map((option) => (
                       <button
                         key={option.value}

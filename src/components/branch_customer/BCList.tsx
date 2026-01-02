@@ -88,7 +88,7 @@ export default function BCList() {
     paginatedItems: paginatedBCs,
     totalItems,
     itemsPerPage,
-  } = usePagination(filteredAndSortedBCs, 10);
+  } = usePagination(filteredAndSortedBCs, 20);
 
   const handleViewDetails = (bc: BranchCustomer) => {
     setSelectedBC(bc);
@@ -121,7 +121,9 @@ export default function BCList() {
             <FaBuilding className="w-4 h-4 text-orange-700" />
             <div className="text-sm text-orange-700 font-medium">Total BC</div>
           </div>
-          <div className="text-3xl font-bold text-orange-900">{stats.total}</div>
+          <div className="text-3xl font-bold text-orange-900">
+            {stats.total}
+          </div>
         </div>
 
         <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-5 border-2 border-green-200">
@@ -129,7 +131,9 @@ export default function BCList() {
             <FaCheckCircle className="w-4 h-4 text-green-700" />
             <div className="text-sm text-green-700 font-medium">Active</div>
           </div>
-          <div className="text-3xl font-bold text-green-900">{stats.active}</div>
+          <div className="text-3xl font-bold text-green-900">
+            {stats.active}
+          </div>
         </div>
 
         <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-5 border-2 border-red-200">
@@ -137,7 +141,9 @@ export default function BCList() {
             <FaBan className="w-4 h-4 text-red-700" />
             <div className="text-sm text-red-700 font-medium">Disabled</div>
           </div>
-          <div className="text-3xl font-bold text-red-900">{stats.disabled}</div>
+          <div className="text-3xl font-bold text-red-900">
+            {stats.disabled}
+          </div>
         </div>
       </div>
 
@@ -210,9 +216,18 @@ export default function BCList() {
                   >
                     {[
                       { value: "name" as SortField, label: "Name" },
-                      { value: "branch_city" as SortField, label: "Branch City" },
-                      { value: "created_at" as SortField, label: "Created Date" },
-                      { value: "updated_at" as SortField, label: "Updated Date" },
+                      {
+                        value: "branch_city" as SortField,
+                        label: "Branch City",
+                      },
+                      {
+                        value: "created_at" as SortField,
+                        label: "Created Date",
+                      },
+                      {
+                        value: "updated_at" as SortField,
+                        label: "Updated Date",
+                      },
                     ].map((option) => (
                       <button
                         key={option.value}

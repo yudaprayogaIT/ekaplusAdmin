@@ -27,7 +27,6 @@ import {
   getResourceUrl,
   getFileUrl,
 } from "@/config/api";
-import { fetchVariants } from "@/services/variantService";
 import FilterBuilder from "@/components/filters/FilterBuilder";
 import { useFilters } from "@/hooks/useFilters";
 import { PRODUCT_FILTER_FIELDS } from "@/config/filterFields";
@@ -120,6 +119,7 @@ export default function ProductList() {
     // Load categories from API
     const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
       fields: ["*"],
+      limit: 10000000,
     });
     const categoriesRes = await fetch(categoriesUrl, {
       method: "GET",
@@ -138,7 +138,10 @@ export default function ProductList() {
     }
 
     // Load items from API
-    const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, { fields: ["*"] });
+    const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
+      fields: ["*"],
+      limit: 10000000,
+    });
     const itemsRes = await fetch(itemsUrl, {
       method: "GET",
       cache: "no-store",
@@ -163,10 +166,17 @@ export default function ProductList() {
     }
 
     // Load products from API with filters and sorting
+    // Use childs to fetch variants directly with products
     const productSpec: {
       fields: string[];
       filters?: FilterTriple[];
       order_by?: [string, string][];
+      limit?: number;
+      childs?: Array<{
+        alias: string;
+        table: string;
+        fields: string[];
+      }>;
     } = {
       fields: [
         "*",
@@ -174,6 +184,14 @@ export default function ProductList() {
         "updated_by.full_name",
         "owner.full_name",
       ],
+      childs: [
+        {
+          alias: "variants",
+          table: "ekatalog_variant",
+          fields: ["item", "item.id", "item.item_code", "item.item_name", "item.image"],
+        },
+      ],
+      limit: 10000000,
     };
 
     if (filterTriples.length > 0) {
@@ -199,10 +217,16 @@ export default function ProductList() {
     if (productsRes.ok) {
       const response = await productsRes.json();
 
-      // Load variants from API
-      const variantsData = await fetchVariants(token!, itemsData);
+      console.log("=== PRODUCT LIST - VARIANT LOADING DEBUG ===");
+      console.log("Total products loaded:", response.data.length);
 
-      productsWithVariants = response.data.map((prod: ProductApiResponse) => {
+      // Debug first product
+      if (response.data.length > 0) {
+        console.log("First product raw:", response.data[0]);
+        console.log("First product variants:", response.data[0].variants);
+      }
+
+      productsWithVariants = response.data.map((prod: ProductApiResponse & { variants?: Array<{ item: { id: number; item_code: string; item_name: string; image?: string } }> }) => {
         // Find the category object for this product
         const category = categoriesData.find(
           (c) => c.id === prod.item_category
@@ -211,10 +235,35 @@ export default function ProductList() {
           name: `Category ${prod.item_category}`,
         };
 
-        // Filter variants for this product
-        const productVariants = variantsData.filter(
-          (v) => v.productid === prod.id
-        );
+        // Transform variants from API response
+        const productVariants = (prod.variants || []).map((v) => {
+          // Find full item data from itemsData
+          const fullItem = itemsData.find((item) => item.id === v.item.id);
+
+          return {
+            id: v.item.id, // Use item ID as variant ID for now
+            item: fullItem || {
+              id: v.item.id,
+              code: v.item.item_code,
+              name: v.item.item_name,
+              color: "",
+              type: "",
+              uom: "",
+              image: v.item.image ? getFileUrl(v.item.image) : undefined,
+            },
+            productid: prod.id,
+            displayOrder: 0,
+          };
+        });
+
+        // Debug: Log first product with details
+        if (prod.id === response.data[0]?.id) {
+          console.log("=== FIRST PRODUCT DETAILS ===");
+          console.log("Product ID:", prod.id);
+          console.log("Product Name:", prod.product_name);
+          console.log("Raw variants from API:", prod.variants);
+          console.log("Transformed variants:", productVariants);
+        }
 
         return {
           id: prod.id,
@@ -222,7 +271,7 @@ export default function ProductList() {
           itemCategory: category,
           disabled: prod.disabled,
           isHotDeals: Boolean(prod.hot_deals),
-          variants: productVariants, // Variants from API
+          variants: productVariants, // Variants from childs API
           // Catatan Aktivitas - extract name from nested object if available
           created_at: prod.created_at,
           created_by:
@@ -239,6 +288,11 @@ export default function ProductList() {
               ? prod.owner.full_name
               : prod.owner,
         };
+      });
+
+      console.log("=== FINAL PRODUCTS WITH VARIANTS ===");
+      productsWithVariants.forEach((p) => {
+        console.log(`Product ID ${p.id}: "${p.name}" - ${p.variants.length} variants`);
       });
     } else {
       // Log error details for debugging
@@ -343,12 +397,16 @@ export default function ProductList() {
   // Listen for updates
   useEffect(() => {
     async function handler() {
+      console.log("[ProductList] 🔄 Event triggered: products_update or variants_update");
+      console.log("[ProductList] Reloading data with filters:", filters);
+      console.log("[ProductList] Reloading data with sort:", sortField, sortDirection);
       try {
-        const { productsWithVariants } = await loadAllData(filters);
+        const { productsWithVariants } = await loadAllData(filters, sortField, sortDirection);
+        console.log("[ProductList] ✅ Reload complete. Total products:", productsWithVariants.length);
         setProducts(productsWithVariants);
         localStorage.setItem(SNAP_KEY, JSON.stringify(productsWithVariants));
-      } catch {
-        // Ignore errors on update
+      } catch (error) {
+        console.error("[ProductList] ❌ Reload failed:", error);
       }
     }
 
@@ -359,7 +417,7 @@ export default function ProductList() {
       window.removeEventListener("ekatalog:products_update", handler);
       window.removeEventListener("ekatalog:variants_update", handler);
     };
-  }, []);
+  }, [filters, sortField, sortDirection]);
 
   function saveSnapshot(arr: Product[]) {
     localStorage.setItem(SNAP_KEY, JSON.stringify(arr));

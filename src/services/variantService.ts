@@ -20,6 +20,11 @@ function transformVariantResponse(
   apiData: ItemVariantApiResponse,
   items: Item[]
 ): ItemVariant {
+  // Debug: Log if parent_id is missing
+  if (!apiData.parent_id) {
+    console.warn(`⚠️ Variant ${apiData.id} has no parent_id!`, apiData);
+  }
+
   const item = items.find((i) => i.id === apiData.item);
   if (!item) {
     console.warn(`Item ${apiData.item} not found in items list`);
@@ -34,16 +39,16 @@ function transformVariantResponse(
         type: "",
         uom: "",
       },
-      productid: apiData.parent_id,
-      displayOrder: apiData.idx,
+      productid: apiData.parent_id || 0,
+      displayOrder: apiData.idx || 0,
     };
   }
 
   return {
     id: apiData.id,
     item: item,
-    productid: apiData.parent_id, // From parent_id
-    displayOrder: apiData.idx, // From idx
+    productid: apiData.parent_id || 0, // From parent_id (fallback to 0 if missing)
+    displayOrder: apiData.idx || 0, // From idx (fallback to 0 if missing)
     // Audit trail
     created_at: apiData.created_at,
     created_by: apiData.created_by,
@@ -66,7 +71,20 @@ export async function fetchVariants(
   }
 
   const url = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT_VARIANT, {
-    fields: ["*"],
+    fields: [
+      "id",
+      "name",
+      "item",
+      "idx",
+      "parent_id",
+      "parent_type",
+      "parent_field",
+      "created_at",
+      "created_by",
+      "updated_at",
+      "updated_by",
+      "owner",
+    ],
   });
 
   console.log("fetchVariants: Fetching from", url);
@@ -93,9 +111,27 @@ export async function fetchVariants(
     throw new Error("Invalid API response format");
   }
 
-  return json.data.map((v: ItemVariantApiResponse) =>
+  // Debug: Log first variant to check structure
+  if (json.data.length > 0) {
+    console.log("=== FETCH VARIANTS - FIRST VARIANT RAW ===");
+    console.log("First variant raw data:", json.data[0]);
+    console.log("Has parent_id:", json.data[0].parent_id);
+    console.log("Has item:", json.data[0].item);
+  }
+
+  const transformedVariants = json.data.map((v: ItemVariantApiResponse) =>
     transformVariantResponse(v, items)
   );
+
+  // Debug: Log first transformed variant
+  if (transformedVariants.length > 0) {
+    console.log("=== FETCH VARIANTS - FIRST TRANSFORMED ===");
+    console.log("First transformed variant:", transformedVariants[0]);
+    console.log("productid:", transformedVariants[0].productid);
+    console.log("item:", transformedVariants[0].item);
+  }
+
+  return transformedVariants;
 }
 
 /**
@@ -107,8 +143,21 @@ export async function fetchVariantsByProduct(
   items: Item[]
 ): Promise<ItemVariant[]> {
   const url = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT_VARIANT, {
-    fields: ["*"],
-    filters: [["product", "=", productId]],
+    fields: [
+      "id",
+      "name",
+      "item",
+      "idx",
+      "parent_id",
+      "parent_type",
+      "parent_field",
+      "created_at",
+      "created_by",
+      "updated_at",
+      "updated_by",
+      "owner",
+    ],
+    filters: [["parent_id", "=", productId]],
   });
 
   const response = await fetch(url, {

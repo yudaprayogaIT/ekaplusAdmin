@@ -1,11 +1,19 @@
 // src/components/variants/VariantList.tsx
 "use client";
 
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
 import VariantCard from "./VariantCard";
 import AddVariantMappingModal from "./AddVariantMappingModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Pagination, { usePagination } from "@/components/ui/Pagination";
+import ItemGroupSection from "./ItemGroupSection";
+import BulkProductCreationModal from "./BulkProductCreationModal";
 import {
   FaLink,
   FaSearch,
@@ -14,6 +22,9 @@ import {
   FaSortAmountUp,
   FaSortAmountDown,
   FaChevronDown,
+  FaPlus,
+  FaTimes,
+  FaCheckSquare,
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import { fetchVariants, deleteVariant } from "@/services/variantService";
@@ -29,6 +40,7 @@ import FilterBuilder from "@/components/filters/FilterBuilder";
 import { useFilters } from "@/hooks/useFilters";
 import { VARIANT_FILTER_FIELDS } from "@/config/filterFields";
 import { FilterTriple } from "@/types/filter";
+import { groupItemsByPattern } from "@/utils/itemGrouping";
 
 // type Branch = {
 //   id: number;
@@ -96,6 +108,13 @@ export default function VariantList() {
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
 
+  // Bulk grouping state
+  const [viewType, setViewType] = useState<"mapped" | "unmapped">("mapped");
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<number>>(
+    new Set()
+  );
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+
   // Use filter system
   const { filters, setFilters } = useFilters({
     entity: "variant",
@@ -133,6 +152,7 @@ export default function VariantList() {
       // Load categories from API
       const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
         fields: ["*"],
+        limit: 1000000000000,
       });
       const categoriesRes = await fetch(categoriesUrl, { headers });
 
@@ -145,13 +165,14 @@ export default function VariantList() {
             name: cat.category_name,
           })
         );
-        console.log("aaaaaaaa");
+        console.log("");
         console.log(categoriesData);
       }
 
       // Load products from API
       const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, {
         fields: ["*"],
+        limit: 1000000000000,
       });
       const productsRes = await fetch(productsUrl, { headers });
 
@@ -181,6 +202,7 @@ export default function VariantList() {
       // Load items from API
       const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
         fields: ["*"],
+        limit: 1000000000000,
       });
       const itemsRes = await fetch(itemsUrl, { headers });
 
@@ -221,8 +243,10 @@ export default function VariantList() {
         fields: string[];
         filters?: FilterTriple[];
         order_by?: [string, string][];
+        limit?: number;
       } = {
         fields: ["*"],
+        limit: 1000000000000,
       };
 
       if (filterTriples.length > 0) {
@@ -339,21 +363,33 @@ export default function VariantList() {
     };
   }, [token, filters, sortField, sortDirection, loadAllData]);
 
-  // Listen for variant updates and refresh from API
+  // Listen for variant updates and refresh ALL data from API
   useEffect(() => {
     async function handler() {
       if (!token) return;
       try {
-        const variantsData = await fetchVariants(token, items);
+        console.log(
+          "[VariantList] Refreshing all data after variant update..."
+        );
+
+        // Reload ALL data to ensure consistency
+        const { categoriesData, productsData, itemsData, variantsData } =
+          await loadAllData(filters, sortField, sortDirection);
+
+        setCategories(categoriesData);
+        setProducts(productsData);
+        setItems(itemsData);
         setVariants(variantsData);
+
+        console.log("[VariantList] Data refreshed successfully");
       } catch (err) {
-        console.error("Failed to refresh variants:", err);
+        console.error("Failed to refresh data:", err);
       }
     }
     window.addEventListener("ekatalog:variants_update", handler);
     return () =>
       window.removeEventListener("ekatalog:variants_update", handler);
-  }, [items, token]);
+  }, [token, filters, sortField, sortDirection, loadAllData]);
 
   // Helper to refresh variants from API
   async function refreshVariants() {
@@ -401,6 +437,63 @@ export default function VariantList() {
     setMappingModalOpen(false);
   }
 
+  // Compute unmapped items (items without variants)
+  const unmappedItems = useMemo(() => {
+    return items.filter((item) => {
+      return !variants.some((v) => v.item.id === item.id);
+    });
+  }, [items, variants]);
+
+  // Group unmapped items by pattern
+  const groupedUnmappedItems = useMemo(() => {
+    return groupItemsByPattern(unmappedItems);
+  }, [unmappedItems]);
+
+  // Multi-select handlers
+  const toggleItem = (itemId: number) => {
+    setSelectedItemIds((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(itemId)) {
+        newSet.delete(itemId);
+      } else {
+        newSet.add(itemId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllInGroup = (groupItems: Item[]) => {
+    setSelectedItemIds((prev) => {
+      const newSet = new Set(prev);
+      const allSelected = groupItems.every((item) => newSet.has(item.id));
+
+      if (allSelected) {
+        // Deselect all in group
+        groupItems.forEach((item) => newSet.delete(item.id));
+      } else {
+        // Select all in group
+        groupItems.forEach((item) => newSet.add(item.id));
+      }
+
+      return newSet;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedItemIds(new Set());
+  };
+
+  const handleBulkProductCreate = () => {
+    if (selectedItemIds.size === 0) return;
+    setBulkModalOpen(true);
+  };
+
+  const handleBulkProductSuccess = () => {
+    // Clear selection and stay in unmapped view to continue mapping
+    clearSelection();
+    // Note: Data will auto-refresh via "ekatalog:variants_update" event
+  };
+
   // Filter variants (client-side quick search only)
   let filteredVariants = variants;
 
@@ -421,7 +514,7 @@ export default function VariantList() {
     paginatedItems,
     totalItems,
     itemsPerPage,
-  } = usePagination(filteredVariants, 10);
+  } = usePagination(filteredVariants, 20);
 
   // Group by product
   const groupedByProduct = products
@@ -464,19 +557,53 @@ export default function VariantList() {
             Variant Mappings
           </h1>
           <p className="text-sm md:text-base text-gray-600">
-            Kelola mapping antara items dan products
+            {viewType === "mapped"
+              ? "Kelola mapping antara items dan products"
+              : "Group unmapped items into products"}
           </p>
         </div>
 
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => setMappingModalOpen(true)}
-          className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl shadow-lg shadow-blue-200 hover:shadow-xl transition-all font-medium"
-        >
-          <FaLink className="w-4 h-4" />
-          <span>Smart Mapping</span>
-        </motion.button>
+        <div className="flex gap-3">
+          {/* View Toggle */}
+          <div className="flex bg-gray-100 rounded-xl p-1">
+            <button
+              onClick={() => {
+                setViewType("mapped");
+                clearSelection();
+              }}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                viewType === "mapped"
+                  ? "bg-white text-blue-600 shadow-sm"
+                  : "text-gray-600 hover:text-gray-800"
+              }`}
+            >
+              Mapped
+            </button>
+            <button
+              onClick={() => setViewType("unmapped")}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                viewType === "unmapped"
+                  ? "bg-white text-blue-600 shadow-sm"
+                  : "text-gray-600 hover:text-gray-800"
+              }`}
+            >
+              Unmapped ({unmappedItems.length})
+            </button>
+          </div>
+
+          {/* Smart Mapping Button (only in mapped view) */}
+          {viewType === "mapped" && (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setMappingModalOpen(true)}
+              className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl shadow-lg shadow-blue-200 hover:shadow-xl transition-all font-medium"
+            >
+              <FaLink className="w-4 h-4" />
+              <span>Smart Mapping</span>
+            </motion.button>
+          )}
+        </div>
       </div>
 
       {/* Stats */}
@@ -668,81 +795,164 @@ export default function VariantList() {
         </div>
       </div>
 
-      {/* Variants Display */}
-      {filteredVariants.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
-          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <FaSearch className="w-8 h-8 text-gray-400" />
+      {/* Content Display - Conditional based on viewType */}
+      {viewType === "mapped" ? (
+        /* Mapped Variants View */
+        filteredVariants.length === 0 ? (
+          <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
+            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <FaSearch className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">
+              Tidak ada variant mapping
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">
+              {searchQuery
+                ? "Coba ubah kata kunci pencarian"
+                : "Belum ada variant yang di-mapping"}
+            </p>
+            {!searchQuery && (
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setMappingModalOpen(true)}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl shadow-lg font-medium"
+              >
+                <FaLink className="w-4 h-4" />
+                <span>Mulai Smart Mapping</span>
+              </motion.button>
+            )}
           </div>
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">
-            Tidak ada variant mapping
-          </h3>
-          <p className="text-sm text-gray-500 mb-4">
-            {searchQuery
-              ? "Coba ubah kata kunci pencarian"
-              : "Belum ada variant yang di-mapping"}
-          </p>
-          {!searchQuery && (
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setMappingModalOpen(true)}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl shadow-lg font-medium"
-            >
-              <FaLink className="w-4 h-4" />
-              <span>Mulai Smart Mapping</span>
-            </motion.button>
-          )}
-        </div>
-      ) : (
-        <>
-          <div className="space-y-10">
-            {groupedByProduct.map(({ product, items }) => (
-              <section key={product.id}>
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="text-xl font-semibold text-gray-800">
-                      {product.name}
-                    </h2>
+        ) : (
+          <>
+            <div className="space-y-10">
+              {groupedByProduct.map(({ product, items }) => (
+                <section key={product.id}>
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h2 className="text-xl font-semibold text-gray-800">
+                        {product.name}
+                      </h2>
+                    </div>
+                    <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full font-medium">
+                      {items.length} variants
+                    </span>
                   </div>
-                  <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full font-medium">
-                    {items.length} variants
-                  </span>
-                </div>
 
-                <div
-                  className={
-                    viewMode === "grid"
-                      ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-                      : "space-y-4"
-                  }
-                >
-                  {items.map((v) => (
-                    <VariantCard
-                      key={v.id}
-                      variant={v}
-                      product={product}
-                      viewMode={viewMode}
-                      onDelete={() => promptDeleteVariant(v)}
-                    />
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
+                  <div
+                    className={
+                      viewMode === "grid"
+                        ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+                        : "space-y-4"
+                    }
+                  >
+                    {items.map((v) => (
+                      <VariantCard
+                        key={v.id}
+                        variant={v}
+                        product={product}
+                        viewMode={viewMode}
+                        onDelete={() => promptDeleteVariant(v)}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
 
-          {/* Pagination */}
-          {filteredVariants.length > 0 && (
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-              totalItems={totalItems}
-              itemsPerPage={itemsPerPage}
-            />
+            {/* Pagination */}
+            {filteredVariants.length > 0 && (
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                totalItems={totalItems}
+                itemsPerPage={itemsPerPage}
+              />
+            )}
+          </>
+        )
+      ) : (
+        /* Unmapped Items View */
+        <>
+          {unmappedItems.length === 0 ? (
+            <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
+              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <FaCheckSquare className="w-8 h-8 text-green-500" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                All items are mapped!
+              </h3>
+              <p className="text-sm text-gray-500 mb-4">
+                Every item has been assigned to a product
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {Array.from(groupedUnmappedItems.entries()).map(
+                ([pattern, items]) => (
+                  <ItemGroupSection
+                    key={pattern}
+                    groupKey={pattern}
+                    items={items}
+                    selectedItemIds={selectedItemIds}
+                    onToggleItem={toggleItem}
+                    onSelectAllInGroup={() => selectAllInGroup(items)}
+                    viewMode={viewMode}
+                  />
+                )
+              )}
+            </div>
           )}
         </>
       )}
+
+      {/* Floating Action Toolbar - shows when items selected in unmapped view */}
+      <AnimatePresence>
+        {viewType === "unmapped" && selectedItemIds.size > 0 && (
+          <motion.div
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-40"
+          >
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-2xl shadow-2xl px-8 py-4 flex items-center gap-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                  <span className="font-bold text-lg">
+                    {selectedItemIds.size}
+                  </span>
+                </div>
+                <span className="font-semibold">
+                  {selectedItemIds.size === 1 ? "item" : "items"} selected
+                </span>
+              </div>
+
+              <div className="flex gap-3">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={clearSelection}
+                  className="px-5 py-2.5 bg-white/20 hover:bg-white/30 rounded-xl font-semibold transition-all flex items-center gap-2"
+                >
+                  <FaTimes className="w-4 h-4" />
+                  Clear
+                </motion.button>
+
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleBulkProductCreate}
+                  className="px-6 py-2.5 bg-white text-blue-600 hover:bg-blue-50 rounded-xl font-bold transition-all flex items-center gap-2 shadow-lg"
+                >
+                  <FaPlus className="w-4 h-4" />
+                  Create Product
+                </motion.button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Modals */}
       <AddVariantMappingModal
@@ -751,6 +961,15 @@ export default function VariantList() {
         items={items}
         products={products}
         onSave={handleMappingSave}
+      />
+
+      <BulkProductCreationModal
+        open={bulkModalOpen}
+        onClose={() => setBulkModalOpen(false)}
+        selectedItems={items.filter((item) => selectedItemIds.has(item.id))}
+        categories={categories}
+        products={products}
+        onSuccess={handleBulkProductSuccess}
       />
 
       <ConfirmDialog

@@ -68,22 +68,22 @@ export default function AddVariantMappingModal({
   // Get selected item details
   const selectedItem = unmappedItems.find((i) => i.id === selectedItemId);
 
-  // Extract first 2 words from item name
-  const getItemPrefix = (itemName: string): string => {
-    const words = itemName.trim().split(/\s+/);
-    return words.slice(0, 2).join(" ").toUpperCase();
-  };
-
   // Smart filter products based on selected item
+  // Check if item name starts with product name (more flexible matching)
   const filteredProducts = useMemo(() => {
     if (!selectedItem) return products;
 
-    const itemPrefix = getItemPrefix(selectedItem.name);
+    const itemNameUpper = selectedItem.name.toUpperCase();
 
-    return products.filter((product) => {
-      const productPrefix = getItemPrefix(product.name);
-      return productPrefix === itemPrefix;
+    // Filter products where item name starts with product name
+    const matchingProducts = products.filter((product) => {
+      const productNameUpper = product.name.toUpperCase();
+      return itemNameUpper.startsWith(productNameUpper);
     });
+
+    // If we found matches, return them
+    // Otherwise, return all products (fallback)
+    return matchingProducts.length > 0 ? matchingProducts : products;
   }, [selectedItem, products]);
   console.log(products);
 

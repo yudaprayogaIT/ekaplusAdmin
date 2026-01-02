@@ -94,7 +94,8 @@ export default function AddItemModal({
     tinggi !== initialState.tinggi ||
     lebar !== initialState.lebar ||
     diameter !== initialState.diameter ||
-    JSON.stringify(selectedBranches) !== JSON.stringify(initialState.selectedBranches) ||
+    JSON.stringify(selectedBranches) !==
+      JSON.stringify(initialState.selectedBranches) ||
     imageFile !== null;
 
   // Unsaved changes hook
@@ -129,6 +130,12 @@ export default function AddItemModal({
               branch_name: b.branch_name,
             })
           );
+          console.log("=== LOADED BRANCHES FROM API ===");
+          console.log("Branches:", mappedBranches);
+          console.log(
+            "Branch IDs:",
+            mappedBranches.map((b) => b.id)
+          );
           setBranches(mappedBranches);
         }
       } catch (error) {
@@ -162,7 +169,13 @@ export default function AddItemModal({
       setTinggi(initial.tinggi ?? "");
       setLebar(initial.lebar ?? "");
       setDiameter(initial.diameter ?? "");
-      setSelectedBranches(initial.branches?.map((b) => b.id) ?? []);
+
+      // Debug: Log branch data
+      console.log("=== EDIT ITEM MODAL - BRANCH DEBUG ===");
+      console.log("initial.branches:", initial.branches);
+      const branchIds = initial.branches?.map((b) => b.id) ?? [];
+      console.log("Extracted branch IDs:", branchIds);
+      setSelectedBranches(branchIds);
 
       // Set initial state for dirty checking
       setInitialState({
@@ -646,26 +659,39 @@ export default function AddItemModal({
                       </p>
                     </div>
                   ) : (
-                    branches.map((branch) => (
-                      <label
-                        key={branch.id}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all ${
-                          selectedBranches.includes(branch.id)
-                            ? "bg-green-100 border-2 border-green-500"
-                            : "bg-white border-2 border-gray-200 hover:border-gray-300"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedBranches.includes(branch.id)}
-                          onChange={() => toggleBranch(branch.id)}
-                          className="w-4 h-4 text-red-600 rounded focus:ring-red-500"
-                        />
-                        <span className="text-xs font-medium text-gray-700">
-                          {branch.name}
-                        </span>
-                      </label>
-                    ))
+                    branches.map((branch) => {
+                      const isChecked = selectedBranches.includes(branch.id);
+                      // Debug first branch only to avoid spam
+                      if (branch.id === branches[0]?.id) {
+                        console.log(
+                          `Rendering branch ${branch.id} (${branch.name}):`,
+                          "isChecked:",
+                          isChecked,
+                          "selectedBranches:",
+                          selectedBranches
+                        );
+                      }
+                      return (
+                        <label
+                          key={branch.id}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all ${
+                            isChecked
+                              ? "bg-green-100 border-2 border-green-500"
+                              : "bg-white border-2 border-gray-200 hover:border-gray-300"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleBranch(branch.id)}
+                            className="w-4 h-4 text-red-600 rounded focus:ring-red-500"
+                          />
+                          <span className="text-xs font-medium text-gray-700">
+                            {branch.name}
+                          </span>
+                        </label>
+                      );
+                    })
                   )}
                 </div>
                 <p className="text-xs text-gray-500 mt-2">

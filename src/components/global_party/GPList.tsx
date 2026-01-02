@@ -38,9 +38,7 @@ export default function GPList() {
     // Search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter((gp) =>
-        gp.name.toLowerCase().includes(query)
-      );
+      filtered = filtered.filter((gp) => gp.name.toLowerCase().includes(query));
     }
 
     // Sort
@@ -83,7 +81,7 @@ export default function GPList() {
     paginatedItems: paginatedGPs,
     totalItems,
     itemsPerPage,
-  } = usePagination(filteredAndSortedGPs, 10);
+  } = usePagination(filteredAndSortedGPs, 20);
 
   const handleViewDetails = (gp: GlobalParty) => {
     setSelectedGP(gp);
@@ -124,7 +122,9 @@ export default function GPList() {
             <FaCheckCircle className="w-4 h-4 text-green-700" />
             <div className="text-sm text-green-700 font-medium">Active</div>
           </div>
-          <div className="text-3xl font-bold text-green-900">{stats.active}</div>
+          <div className="text-3xl font-bold text-green-900">
+            {stats.active}
+          </div>
         </div>
 
         <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-5 border-2 border-red-200">
@@ -132,7 +132,9 @@ export default function GPList() {
             <FaBan className="w-4 h-4 text-red-700" />
             <div className="text-sm text-red-700 font-medium">Disabled</div>
           </div>
-          <div className="text-3xl font-bold text-red-900">{stats.disabled}</div>
+          <div className="text-3xl font-bold text-red-900">
+            {stats.disabled}
+          </div>
         </div>
       </div>
 
@@ -204,8 +206,14 @@ export default function GPList() {
                   >
                     {[
                       { value: "name" as SortField, label: "Name" },
-                      { value: "created_at" as SortField, label: "Created Date" },
-                      { value: "updated_at" as SortField, label: "Updated Date" },
+                      {
+                        value: "created_at" as SortField,
+                        label: "Created Date",
+                      },
+                      {
+                        value: "updated_at" as SortField,
+                        label: "Updated Date",
+                      },
                     ].map((option) => (
                       <button
                         key={option.value}

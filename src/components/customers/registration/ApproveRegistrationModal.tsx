@@ -121,15 +121,13 @@ export function ApproveRegistrationModal({
         gc_name: gcName,
         bc_name: bcName,
         // Owner data (will be copied to GP/GC/BC)
-        owner_name: registration.owner.full_name,
-        owner_phone: registration.owner.phone,
-        owner_email: registration.owner.email,
+        owner_name: registration.user.full_name,
+        owner_phone: registration.user.phone,
+        owner_email: registration.user.email,
       });
 
       // Trigger update events for all affected entities
-      window.dispatchEvent(
-        new Event("ekatalog:customer_registrations_update")
-      );
+      window.dispatchEvent(new Event("ekatalog:customer_registrations_update"));
       window.dispatchEvent(new Event("ekatalog:gp_update"));
       window.dispatchEvent(new Event("ekatalog:gc_update"));
       window.dispatchEvent(new Event("ekatalog:bc_update"));
@@ -137,16 +135,16 @@ export function ApproveRegistrationModal({
       // Show success message
       alert(
         `Registrasi "${registration.company.name}" berhasil diapprove!\n\n` +
-          `GP: ${gpName} ${createNewGP ? "(Dibuat Baru)" : "(Link ke Existing)"}\n` +
+          `GP: ${gpName} ${
+            createNewGP ? "(Dibuat Baru)" : "(Link ke Existing)"
+          }\n` +
           `GC: ${gcName}\n` +
           `BC: ${bcName}`
       );
 
       onSuccess();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Gagal approve registrasi"
-      );
+      setError(err instanceof Error ? err.message : "Gagal approve registrasi");
     } finally {
       setIsSubmitting(false);
     }
@@ -279,8 +277,8 @@ export function ApproveRegistrationModal({
                             GP Sudah Ada di Database
                           </p>
                           <p className="text-sm text-yellow-700 mt-1">
-                            GP dengan nama "{gpName}" sudah terdaftar (ID: #
-                            {existingGPId}). Pilih tindakan:
+                            GP dengan nama &quot;{gpName}&quot; sudah terdaftar
+                            (ID: #{existingGPId}). Pilih tindakan:
                           </p>
 
                           {/* Radio Options */}
@@ -332,8 +330,8 @@ export function ApproveRegistrationModal({
                           GP Belum Ada - Akan Dibuat Baru
                         </p>
                         <p className="text-sm text-green-700 mt-1">
-                          GP dengan nama "{gpName}" belum terdaftar. Sistem akan
-                          membuat GP baru secara otomatis.
+                          GP dengan nama &quot;{gpName}&quot; belum terdaftar.
+                          Sistem akan membuat GP baru secara otomatis.
                         </p>
                       </div>
                     </div>

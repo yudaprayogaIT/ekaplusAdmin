@@ -145,8 +145,10 @@ export default function ItemList() {
       fields: string[];
       filters?: FilterTriple[];
       order_by?: [string, string][];
+      limit?: number;
     } = {
       fields: ["*"],
+      limit: 1000000000000,
     };
 
     if (filterTriples.length > 0) {
@@ -197,15 +199,35 @@ export default function ItemList() {
         owner: item.owner,
       }));
 
-      // Debug: Log first 5 items to verify sort order
-      console.log("[ItemList] First 5 items from API (to verify sort):");
-      mappedItems.slice(0, 5).forEach((item, idx) => {
-        console.log(
-          `  ${idx + 1}. ${item.item_name} (ID: ${item.id}, Code: ${
-            item.item_code
-          })`
-        );
-      });
+      // // 🔍 DEBUGGING: Log detailed item information
+      // console.log("===========================================");
+      // console.log("[ItemList] ✅ Total mapped items:", mappedItems.length);
+      // console.log(
+      //   "[ItemList] 📋 All Item IDs:",
+      //   mappedItems.map((i) => i.id).join(", ")
+      // );
+      // console.log("[ItemList] 🔝 FIRST ITEM:", mappedItems[0]);
+      // console.log(
+      //   "[ItemList] 🔚 LAST ITEM:",
+      //   mappedItems[mappedItems.length - 1]
+      // );
+      // console.log("[ItemList] 📝 First 5 items:");
+      // mappedItems.slice(0, 5).forEach((item, idx) => {
+      //   console.log(
+      //     `  ${idx + 1}. ${item.item_name} (ID: ${item.id}, Code: ${
+      //       item.item_code
+      //     })`
+      //   );
+      // });
+      // console.log("[ItemList] 📝 Last 5 items:");
+      // mappedItems.slice(-5).forEach((item, idx) => {
+      //   console.log(
+      //     `  ${mappedItems.length - 4 + idx}. ${item.item_name} (ID: ${
+      //       item.id
+      //     }, Code: ${item.item_code})`
+      //   );
+      // });
+      // console.log("===========================================");
 
       return mappedItems;
     }
@@ -260,7 +282,11 @@ export default function ItemList() {
           sortField,
           sortDirection
         );
-        const mappedItems = await loadAllData(filters, sortField, sortDirection);
+        const mappedItems = await loadAllData(
+          filters,
+          sortField,
+          sortDirection
+        );
 
         if (!cancelled) {
           setItems(mappedItems);
@@ -371,31 +397,50 @@ export default function ItemList() {
   }
 
   async function handleEdit(item: Item) {
-    // Fetch detail item untuk mendapat branches lengkap
+    // Fetch detail item dengan branches menggunakan childs
     if (!token) return;
 
     try {
-      const detailUrl = getQueryUrl(`${API_CONFIG.ENDPOINTS.ITEM}/${item.id}`, {
-        fields: ["*"],
-      });
       const headers = getAuthHeaders(token);
 
-      const res = await fetch(detailUrl, {
+      // Fetch item detail dengan childs untuk branches
+      const itemDetailUrl = getQueryUrl(
+        `${API_CONFIG.ENDPOINTS.ITEM}/${item.id}`,
+        {
+          fields: ["*"],
+          childs: [
+            {
+              alias: "branches",
+              table: "item_branches",
+              fields: ["branch", "branch.id", "branch.branch_name"],
+            },
+          ],
+        }
+      );
+
+      const itemRes = await fetch(itemDetailUrl, {
         method: "GET",
         cache: "no-store",
         headers,
       });
 
-      if (res.ok) {
-        const response = await res.json();
-        const detailItem = response.data;
+      if (itemRes.ok) {
+        const itemResponse = await itemRes.json();
+        const detailItem = itemResponse.data;
 
-        // Map branches dari detail response
-        const mappedBranches =
-          detailItem.branches?.map((b: { branch: number }) => ({
-            id: b.branch,
-            name: `Branch ${b.branch}`, // Nama akan di-replace oleh modal saat load branches
-          })) || [];
+        // Map branches dari response
+        let mappedBranches: { id: number; name: string }[] = [];
+
+        if (detailItem.branches && Array.isArray(detailItem.branches)) {
+          mappedBranches = detailItem.branches.map(
+            (b: { branch: { id?: number; branch_name: string } }) => ({
+              id: b.branch.id || 0,
+              name: b.branch.branch_name,
+            })
+          );
+
+          console.log("Mapped branches with names:", mappedBranches);
+        }
 
         const itemWithBranches: Item = {
           ...item,
@@ -405,6 +450,8 @@ export default function ItemList() {
           tinggi: detailItem.tinggi,
           diameter: detailItem.diameter,
         };
+
+        console.log("Item with branches:", itemWithBranches);
 
         setModalInitial(itemWithBranches);
         setModalOpen(true);
@@ -418,7 +465,7 @@ export default function ItemList() {
   }
 
   async function openDetail(item: Item) {
-    // Fetch detail item untuk mendapat branches lengkap
+    // Fetch detail item dengan branches menggunakan childs
     if (!token) {
       setDetailItem(item);
       setDetailOpen(true);
@@ -426,27 +473,46 @@ export default function ItemList() {
     }
 
     try {
-      const detailUrl = getQueryUrl(`${API_CONFIG.ENDPOINTS.ITEM}/${item.id}`, {
-        fields: ["*"],
-      });
       const headers = getAuthHeaders(token);
 
-      const res = await fetch(detailUrl, {
+      // Fetch item detail dengan childs untuk branches
+      const itemDetailUrl = getQueryUrl(
+        `${API_CONFIG.ENDPOINTS.ITEM}/${item.id}`,
+        {
+          fields: ["*"],
+          childs: [
+            {
+              alias: "branches",
+              table: "item_branches",
+              fields: ["branch", "branch.id", "branch.branch_name"],
+            },
+          ],
+        }
+      );
+
+      const itemRes = await fetch(itemDetailUrl, {
         method: "GET",
         cache: "no-store",
         headers,
       });
 
-      if (res.ok) {
-        const response = await res.json();
-        const detailItem = response.data;
+      if (itemRes.ok) {
+        const itemResponse = await itemRes.json();
+        const detailItem = itemResponse.data;
 
-        // Map branches dari detail response
-        const mappedBranches =
-          detailItem.branches?.map((b: { branch: number }) => ({
-            id: b.branch,
-            name: `Branch ${b.branch}`, // Nama akan di-replace oleh modal saat load branches
-          })) || [];
+        // Map branches dari response
+        let mappedBranches: { id: number; name: string }[] = [];
+
+        if (detailItem.branches && Array.isArray(detailItem.branches)) {
+          mappedBranches = detailItem.branches.map(
+            (b: { branch: { id?: number; branch_name: string } }) => ({
+              id: b.branch.id || 0,
+              name: b.branch.branch_name,
+            })
+          );
+
+          console.log("Mapped branches with names:", mappedBranches);
+        }
 
         const itemWithBranches: Item = {
           ...item,
@@ -456,6 +522,8 @@ export default function ItemList() {
           tinggi: detailItem.tinggi,
           diameter: detailItem.diameter,
         };
+
+        console.log("Item with branches for detail view:", itemWithBranches);
 
         setDetailItem(itemWithBranches);
         setDetailOpen(true);
@@ -518,7 +586,6 @@ export default function ItemList() {
     );
   }
 
-
   // Apply pagination
   const {
     currentPage,
@@ -527,7 +594,7 @@ export default function ItemList() {
     paginatedItems,
     totalItems,
     itemsPerPage,
-  } = usePagination(filteredItems, 10);
+  } = usePagination(filteredItems, 20);
 
   // Early returns AFTER all hooks
   if (!isAuthenticated) {
@@ -697,12 +764,6 @@ export default function ItemList() {
               <button
                 onClick={() => {
                   const newDirection = sortDirection === "asc" ? "desc" : "asc";
-                  console.log(
-                    "[ItemList] Sort direction changed:",
-                    sortDirection,
-                    "->",
-                    newDirection
-                  );
                   setSortDirection(newDirection);
                 }}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"

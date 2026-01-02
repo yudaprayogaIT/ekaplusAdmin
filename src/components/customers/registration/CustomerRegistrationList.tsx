@@ -135,7 +135,7 @@ export function CustomerRegistrationList() {
       id: apiData.id.toString(),
 
       // Owner info - extract from nested objects
-      owner: {
+      user: {
         user_id: apiData.user_id,
         full_name:
           apiData.owner?.full_name ||
@@ -353,7 +353,7 @@ export function CustomerRegistrationList() {
       filtered = filtered.filter(
         (reg) =>
           reg.company.name.toLowerCase().includes(query) ||
-          reg.owner.full_name.toLowerCase().includes(query) ||
+          reg.user.full_name.toLowerCase().includes(query) ||
           reg.company.nik.includes(query) ||
           reg.company.branch_name.toLowerCase().includes(query)
       );
@@ -382,7 +382,7 @@ export function CustomerRegistrationList() {
     paginatedItems: paginatedRegistrations,
     totalItems,
     itemsPerPage,
-  } = usePagination(filteredRegistrations, 10);
+  } = usePagination(filteredRegistrations, 20);
 
   const handleViewDetails = (registration: CustomerRegistration) => {
     setSelectedRegistration(registration);

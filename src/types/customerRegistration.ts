@@ -2,7 +2,7 @@ export interface CustomerRegistration {
   id: string;
 
   // 1. Identitas Pemilik/Pimpinan (dari user account)
-  owner: {
+  user: {
     user_id: number;
     full_name: string;
     phone: string;
@@ -58,9 +58,9 @@ export interface CustomerRegistration {
   status: 'pending' | 'approved' | 'rejected' | 'draft';
   submission_date: string;
   created_at: string;
-  created_by?: string; // User full name
+  created_by?: string;
   updated_at: string;
-  updated_by?: string; // User full name
+  updated_by?: string;
 
   // Approval metadata (populated when status = 'approved')
   gp_id?: number;

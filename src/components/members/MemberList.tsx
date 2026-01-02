@@ -18,7 +18,11 @@ import { mockBranchCustomers } from "@/data/mockBranchCustomers";
 import { GPDetailModal } from "@/components/global_party/GPDetailModal";
 import { GCDetailModal } from "@/components/global_customer/GCDetailModal";
 import { BCDetailModal } from "@/components/branch_customer/BCDetailModal";
-import type { GlobalParty, GlobalCustomer, BranchCustomer } from "@/types/customer";
+import type {
+  GlobalParty,
+  GlobalCustomer,
+  BranchCustomer,
+} from "@/types/customer";
 
 type MemberType = "all" | "gp" | "gc" | "bc";
 
@@ -174,7 +178,8 @@ export function MemberList() {
           Members Management
         </h1>
         <p className="text-gray-600 mt-2">
-          Kelola semua member (Global Party, Global Customer, Branch Customer) dalam satu tampilan
+          Kelola semua member (Global Party, Global Customer, Branch Customer)
+          dalam satu tampilan
         </p>
       </div>
 
@@ -222,7 +227,9 @@ export function MemberList() {
           onClick={() => setActiveTab("bc")}
         >
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-orange-100">Branch Customer</p>
+            <p className="text-sm font-medium text-orange-100">
+              Branch Customer
+            </p>
             <FaStore className="w-5 h-5 text-orange-200" />
           </div>
           <p className="text-4xl font-bold">{stats.bc}</p>
@@ -291,7 +298,8 @@ export function MemberList() {
       <div>
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm text-gray-600">
-            Menampilkan <span className="font-bold">{filteredMembers.length}</span> member
+            Menampilkan{" "}
+            <span className="font-bold">{filteredMembers.length}</span> member
           </p>
         </div>
 
@@ -308,14 +316,20 @@ export function MemberList() {
                 >
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 ${config.bgColor} rounded-lg flex items-center justify-center`}>
+                      <div
+                        className={`w-10 h-10 ${config.bgColor} rounded-lg flex items-center justify-center`}
+                      >
                         <FaBuilding className="w-5 h-5 text-white" />
                       </div>
                       <div>
-                        <span className={`text-xs font-bold ${config.textColor} uppercase`}>
+                        <span
+                          className={`text-xs font-bold ${config.textColor} uppercase`}
+                        >
                           {config.fullLabel}
                         </span>
-                        <p className="text-xs text-gray-500">ID: #{member.id}</p>
+                        <p className="text-xs text-gray-500">
+                          ID: #{member.id}
+                        </p>
                       </div>
                     </div>
                     <FaChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-600" />
@@ -326,10 +340,14 @@ export function MemberList() {
                   </h3>
 
                   {/* Owner Info */}
-                  {(member.owner_name || member.owner_phone || member.owner_email) && (
-                    <div className={`${config.bgLight} rounded-xl p-3 space-y-2`}>
+                  {(member.owner_name ||
+                    member.owner_phone ||
+                    member.owner_email) && (
+                    <div
+                      className={`${config.bgLight} rounded-xl p-3 space-y-2`}
+                    >
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                        Owner Information
+                        User Information
                       </p>
 
                       {member.owner_name && (
@@ -344,7 +362,9 @@ export function MemberList() {
                       {member.owner_phone && (
                         <div className="flex items-center gap-2">
                           <FaPhone className="w-3 h-3 text-gray-400" />
-                          <p className="text-sm text-gray-700">{member.owner_phone}</p>
+                          <p className="text-sm text-gray-700">
+                            {member.owner_phone}
+                          </p>
                         </div>
                       )}
 
@@ -360,11 +380,15 @@ export function MemberList() {
                   )}
 
                   {/* No Owner Info */}
-                  {!member.owner_name && !member.owner_phone && !member.owner_email && (
-                    <div className="bg-gray-50 rounded-xl p-3">
-                      <p className="text-xs text-gray-500 italic">Informasi owner belum tersedia</p>
-                    </div>
-                  )}
+                  {!member.owner_name &&
+                    !member.owner_phone &&
+                    !member.owner_email && (
+                      <div className="bg-gray-50 rounded-xl p-3">
+                        <p className="text-xs text-gray-500 italic">
+                          Informasi owner belum tersedia
+                        </p>
+                      </div>
+                    )}
                 </motion.button>
               );
             })}
@@ -372,7 +396,9 @@ export function MemberList() {
         ) : (
           <div className="bg-white rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center">
             <FaSearch className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-lg font-semibold text-gray-600 mb-2">Tidak ada member ditemukan</p>
+            <p className="text-lg font-semibold text-gray-600 mb-2">
+              Tidak ada member ditemukan
+            </p>
             <p className="text-sm text-gray-500">
               Coba ubah filter atau kata kunci pencarian
             </p>
