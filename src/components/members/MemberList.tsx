@@ -15,157 +15,118 @@ import {
 import { mockGlobalParties } from "@/data/mockGlobalParties";
 import { mockGlobalCustomers } from "@/data/mockGlobalCustomers";
 import { mockBranchCustomers } from "@/data/mockBranchCustomers";
-import { GPDetailModal } from "@/components/global_party/GPDetailModal";
-import { GCDetailModal } from "@/components/global_customer/GCDetailModal";
-import { BCDetailModal } from "@/components/branch_customer/BCDetailModal";
+import { MemberDetailModal } from "./MemberDetailModal";
 import type {
   GlobalParty,
   GlobalCustomer,
   BranchCustomer,
 } from "@/types/customer";
 
-type MemberType = "all" | "gp" | "gc" | "bc";
-
-interface UnifiedMember {
-  type: "gp" | "gc" | "bc";
-  id: number;
-  name: string;
-  owner_name?: string;
+interface UserMember {
+  owner_name: string;
   owner_phone?: string;
   owner_email?: string;
-  entity: GlobalParty | GlobalCustomer | BranchCustomer;
+  companies: {
+    gps: GlobalParty[];
+    gcs: GlobalCustomer[];
+    bcs: BranchCustomer[];
+  };
+  totalCompanies: number;
 }
 
 export function MemberList() {
-  const [activeTab, setActiveTab] = useState<MemberType>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedUser, setSelectedUser] = useState<UserMember | null>(null);
 
-  // Detail modal state
-  const [selectedGP, setSelectedGP] = useState<GlobalParty | null>(null);
-  const [selectedGC, setSelectedGC] = useState<GlobalCustomer | null>(null);
-  const [selectedBC, setSelectedBC] = useState<BranchCustomer | null>(null);
+  // Group entities by owner (user)
+  const userMembers = useMemo<UserMember[]>(() => {
+    const userMap = new Map<string, UserMember>();
 
-  // Combine all members into unified array
-  const allMembers = useMemo<UnifiedMember[]>(() => {
-    const members: UnifiedMember[] = [];
+    // Process all entities and group by owner_name
+    [...mockGlobalParties, ...mockGlobalCustomers, ...mockBranchCustomers].forEach((entity) => {
+      if (!entity.owner_name) return;
 
-    // Add GPs
-    mockGlobalParties.forEach((gp) => {
-      members.push({
-        type: "gp",
-        id: gp.id,
-        name: gp.name,
-        owner_name: gp.owner_name,
-        owner_phone: gp.owner_phone,
-        owner_email: gp.owner_email,
-        entity: gp,
-      });
+      const key = entity.owner_name.toLowerCase();
+
+      if (!userMap.has(key)) {
+        userMap.set(key, {
+          owner_name: entity.owner_name,
+          owner_phone: entity.owner_phone,
+          owner_email: entity.owner_email,
+          companies: {
+            gps: [],
+            gcs: [],
+            bcs: [],
+          },
+          totalCompanies: 0,
+        });
+      }
+
+      const user = userMap.get(key)!;
+
+      // Add to appropriate category
+      if ("gc_id" in entity && "branch_id" in entity) {
+        // BranchCustomer (has gc_id and branch_id)
+        user.companies.bcs.push(entity as BranchCustomer);
+      } else if ("gp_id" in entity) {
+        // GlobalCustomer (has gp_id, but not gc_id)
+        user.companies.gcs.push(entity as GlobalCustomer);
+      } else {
+        // GlobalParty (no gp_id, gc_id, or branch_id)
+        user.companies.gps.push(entity as GlobalParty);
+      }
+
+      // Update contact info if more complete
+      if (entity.owner_phone && !user.owner_phone) {
+        user.owner_phone = entity.owner_phone;
+      }
+      if (entity.owner_email && !user.owner_email) {
+        user.owner_email = entity.owner_email;
+      }
     });
 
-    // Add GCs
-    mockGlobalCustomers.forEach((gc) => {
-      members.push({
-        type: "gc",
-        id: gc.id,
-        name: gc.name,
-        owner_name: gc.owner_name,
-        owner_phone: gc.owner_phone,
-        owner_email: gc.owner_email,
-        entity: gc,
-      });
+    // Calculate total companies for each user
+    userMap.forEach((user) => {
+      user.totalCompanies =
+        user.companies.gps.length +
+        user.companies.gcs.length +
+        user.companies.bcs.length;
     });
 
-    // Add BCs
-    mockBranchCustomers.forEach((bc) => {
-      members.push({
-        type: "bc",
-        id: bc.id,
-        name: bc.name,
-        owner_name: bc.owner_name,
-        owner_phone: bc.owner_phone,
-        owner_email: bc.owner_email,
-        entity: bc,
-      });
-    });
-
-    return members;
+    return Array.from(userMap.values()).sort((a, b) =>
+      a.owner_name.localeCompare(b.owner_name)
+    );
   }, []);
 
-  // Filter members by tab
-  const filteredByTab = useMemo(() => {
-    if (activeTab === "all") return allMembers;
-    return allMembers.filter((m) => m.type === activeTab);
-  }, [allMembers, activeTab]);
-
   // Filter by search query
-  const filteredMembers = useMemo(() => {
-    if (!searchQuery.trim()) return filteredByTab;
+  const filteredUsers = useMemo(() => {
+    if (!searchQuery.trim()) return userMembers;
 
     const query = searchQuery.toLowerCase();
-    return filteredByTab.filter((member) => {
+    return userMembers.filter((user) => {
       return (
-        member.name.toLowerCase().includes(query) ||
-        member.owner_name?.toLowerCase().includes(query) ||
-        member.owner_phone?.toLowerCase().includes(query) ||
-        member.owner_email?.toLowerCase().includes(query)
+        user.owner_name.toLowerCase().includes(query) ||
+        user.owner_phone?.toLowerCase().includes(query) ||
+        user.owner_email?.toLowerCase().includes(query)
       );
     });
-  }, [filteredByTab, searchQuery]);
+  }, [userMembers, searchQuery]);
 
   // Statistics
   const stats = useMemo(() => {
+    const totalGPs = userMembers.reduce((sum, u) => sum + u.companies.gps.length, 0);
+    const totalGCs = userMembers.reduce((sum, u) => sum + u.companies.gcs.length, 0);
+    const totalBCs = userMembers.reduce((sum, u) => sum + u.companies.bcs.length, 0);
+
     return {
-      total: allMembers.length,
-      gp: mockGlobalParties.length,
-      gc: mockGlobalCustomers.length,
-      bc: mockBranchCustomers.length,
+      totalUsers: userMembers.length,
+      totalCompanies: totalGPs + totalGCs + totalBCs,
+      avgCompaniesPerUser:
+        userMembers.length > 0
+          ? ((totalGPs + totalGCs + totalBCs) / userMembers.length).toFixed(1)
+          : "0",
     };
-  }, [allMembers.length]);
-
-  const handleMemberClick = (member: UnifiedMember) => {
-    if (member.type === "gp") {
-      setSelectedGP(member.entity as GlobalParty);
-    } else if (member.type === "gc") {
-      setSelectedGC(member.entity as GlobalCustomer);
-    } else if (member.type === "bc") {
-      setSelectedBC(member.entity as BranchCustomer);
-    }
-  };
-
-  const getTypeConfig = (type: "gp" | "gc" | "bc") => {
-    switch (type) {
-      case "gp":
-        return {
-          label: "GP",
-          fullLabel: "Global Party",
-          bgColor: "bg-purple-500",
-          bgLight: "bg-purple-50",
-          borderColor: "border-purple-200",
-          hoverBorder: "hover:border-purple-400",
-          textColor: "text-purple-700",
-        };
-      case "gc":
-        return {
-          label: "GC",
-          fullLabel: "Global Customer",
-          bgColor: "bg-blue-500",
-          bgLight: "bg-blue-50",
-          borderColor: "border-blue-200",
-          hoverBorder: "hover:border-blue-400",
-          textColor: "text-blue-700",
-        };
-      case "bc":
-        return {
-          label: "BC",
-          fullLabel: "Branch Customer",
-          bgColor: "bg-orange-500",
-          bgLight: "bg-orange-50",
-          borderColor: "border-orange-200",
-          hoverBorder: "hover:border-orange-400",
-          textColor: "text-orange-700",
-        };
-    }
-  };
+  }, [userMembers]);
 
   return (
     <div className="p-6 space-y-6">
@@ -178,106 +139,47 @@ export function MemberList() {
           Members Management
         </h1>
         <p className="text-gray-600 mt-2">
-          Kelola semua member (Global Party, Global Customer, Branch Customer)
-          dalam satu tampilan
+          Kelola semua member (user/owner) dan lihat perusahaan yang mereka miliki
         </p>
       </div>
 
       {/* Statistics Cards */}
-      {/* <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <motion.div
           whileHover={{ scale: 1.02 }}
-          className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-6 text-white cursor-pointer"
-          onClick={() => setActiveTab("all")}
+          className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-6 text-white"
         >
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-purple-100">Total Members</p>
+            <p className="text-sm font-medium text-purple-100">Total Users</p>
             <FaUsers className="w-5 h-5 text-purple-200" />
           </div>
-          <p className="text-4xl font-bold">{stats.total}</p>
+          <p className="text-4xl font-bold">{stats.totalUsers}</p>
+          <p className="text-xs text-purple-100 mt-1">Unique owners</p>
         </motion.div>
 
         <motion.div
           whileHover={{ scale: 1.02 }}
-          className="bg-gradient-to-br from-purple-400 to-purple-500 rounded-2xl p-6 text-white cursor-pointer"
-          onClick={() => setActiveTab("gp")}
+          className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-6 text-white"
         >
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-purple-100">Global Party</p>
-            <FaBuilding className="w-5 h-5 text-purple-200" />
-          </div>
-          <p className="text-4xl font-bold">{stats.gp}</p>
-        </motion.div>
-
-        <motion.div
-          whileHover={{ scale: 1.02 }}
-          className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-6 text-white cursor-pointer"
-          onClick={() => setActiveTab("gc")}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-blue-100">Global Customer</p>
+            <p className="text-sm font-medium text-blue-100">Total Companies</p>
             <FaBuilding className="w-5 h-5 text-blue-200" />
           </div>
-          <p className="text-4xl font-bold">{stats.gc}</p>
+          <p className="text-4xl font-bold">{stats.totalCompanies}</p>
+          <p className="text-xs text-blue-100 mt-1">GP + GC + BC</p>
         </motion.div>
 
         <motion.div
           whileHover={{ scale: 1.02 }}
-          className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl p-6 text-white cursor-pointer"
-          onClick={() => setActiveTab("bc")}
+          className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl p-6 text-white"
         >
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-orange-100">
-              Branch Customer
-            </p>
+            <p className="text-sm font-medium text-orange-100">Average</p>
             <FaStore className="w-5 h-5 text-orange-200" />
           </div>
-          <p className="text-4xl font-bold">{stats.bc}</p>
+          <p className="text-4xl font-bold">{stats.avgCompaniesPerUser}</p>
+          <p className="text-xs text-orange-100 mt-1">Companies per user</p>
         </motion.div>
-      </div> */}
-
-      {/* Tab Navigation */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-2 flex gap-2">
-        <button
-          onClick={() => setActiveTab("all")}
-          className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${
-            activeTab === "all"
-              ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-md"
-              : "text-gray-600 hover:bg-gray-100"
-          }`}
-        >
-          Semua ({stats.total})
-        </button>
-        <button
-          onClick={() => setActiveTab("gp")}
-          className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${
-            activeTab === "gp"
-              ? "bg-purple-500 text-white shadow-md"
-              : "text-gray-600 hover:bg-gray-100"
-          }`}
-        >
-          GP ({stats.gp})
-        </button>
-        <button
-          onClick={() => setActiveTab("gc")}
-          className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${
-            activeTab === "gc"
-              ? "bg-blue-500 text-white shadow-md"
-              : "text-gray-600 hover:bg-gray-100"
-          }`}
-        >
-          GC ({stats.gc})
-        </button>
-        <button
-          onClick={() => setActiveTab("bc")}
-          className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${
-            activeTab === "bc"
-              ? "bg-orange-500 text-white shadow-md"
-              : "text-gray-600 hover:bg-gray-100"
-          }`}
-        >
-          BC ({stats.bc})
-        </button>
       </div>
 
       {/* Search Bar */}
@@ -288,169 +190,115 @@ export function MemberList() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cari berdasarkan nama, owner, phone, atau email..."
+            placeholder="Cari berdasarkan nama, phone, atau email..."
             className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
           />
         </div>
       </div>
 
-      {/* Member Cards Grid */}
+      {/* User Cards Grid */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm text-gray-600">
-            Menampilkan{" "}
-            <span className="font-bold">{filteredMembers.length}</span> member
+            Menampilkan <span className="font-bold">{filteredUsers.length}</span> user
           </p>
         </div>
 
-        {filteredMembers.length > 0 ? (
+        {filteredUsers.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredMembers.map((member) => {
-              const config = getTypeConfig(member.type);
-              return (
-                <motion.button
-                  key={`${member.type}-${member.id}`}
-                  whileHover={{ scale: 1.02 }}
-                  onClick={() => handleMemberClick(member)}
-                  className={`bg-white rounded-2xl shadow-sm border-2 ${config.borderColor} ${config.hoverBorder} p-5 text-left transition-all hover:shadow-md group`}
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-10 h-10 ${config.bgColor} rounded-lg flex items-center justify-center`}
-                      >
-                        <FaBuilding className="w-5 h-5 text-white" />
-                      </div>
-                      <div>
-                        <span
-                          className={`text-xs font-bold ${config.textColor} uppercase`}
-                        >
-                          {config.fullLabel}
-                        </span>
-                        <p className="text-xs text-gray-500">
-                          ID: #{member.id}
-                        </p>
-                      </div>
+            {filteredUsers.map((user, index) => (
+              <motion.button
+                key={`${user.owner_name}-${index}`}
+                whileHover={{ scale: 1.02 }}
+                onClick={() => setSelectedUser(user)}
+                className="bg-white rounded-2xl shadow-sm border-2 border-purple-200 hover:border-purple-400 p-5 text-left transition-all hover:shadow-md group"
+              >
+                {/* User Avatar & Name */}
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center">
+                      <FaUser className="w-6 h-6 text-white" />
                     </div>
-                    <FaChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-600" />
-                  </div>
-
-                  <h3 className="text-lg font-bold text-gray-900 mb-3 line-clamp-1">
-                    {member.name}
-                  </h3>
-
-                  {/* Owner Info */}
-                  {(member.owner_name ||
-                    member.owner_phone ||
-                    member.owner_email) && (
-                    <div
-                      className={`${config.bgLight} rounded-xl p-3 space-y-2`}
-                    >
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                        User Information
+                    <div className="flex-1">
+                      <h3 className="text-lg font-bold text-gray-900 line-clamp-1">
+                        {user.owner_name}
+                      </h3>
+                      <p className="text-xs text-gray-500">
+                        {user.totalCompanies} perusahaan
                       </p>
+                    </div>
+                  </div>
+                  <FaChevronRight className="w-4 h-4 text-gray-400 group-hover:text-purple-600" />
+                </div>
 
-                      {member.owner_name && (
-                        <div className="flex items-center gap-2">
-                          <FaUser className="w-3 h-3 text-gray-400" />
-                          <p className="text-sm text-gray-700 font-medium line-clamp-1">
-                            {member.owner_name}
-                          </p>
-                        </div>
-                      )}
+                {/* Contact Info */}
+                <div className="bg-purple-50 rounded-xl p-3 space-y-2">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                    Contact Information
+                  </p>
 
-                      {member.owner_phone && (
-                        <div className="flex items-center gap-2">
-                          <FaPhone className="w-3 h-3 text-gray-400" />
-                          <p className="text-sm text-gray-700">
-                            {member.owner_phone}
-                          </p>
-                        </div>
-                      )}
-
-                      {member.owner_email && (
-                        <div className="flex items-center gap-2">
-                          <FaEnvelope className="w-3 h-3 text-gray-400" />
-                          <p className="text-sm text-gray-700 line-clamp-1">
-                            {member.owner_email}
-                          </p>
-                        </div>
-                      )}
+                  {user.owner_phone && (
+                    <div className="flex items-center gap-2">
+                      <FaPhone className="w-3 h-3 text-purple-400" />
+                      <p className="text-sm text-gray-700">{user.owner_phone}</p>
                     </div>
                   )}
 
-                  {/* No Owner Info */}
-                  {!member.owner_name &&
-                    !member.owner_phone &&
-                    !member.owner_email && (
-                      <div className="bg-gray-50 rounded-xl p-3">
-                        <p className="text-xs text-gray-500 italic">
-                          Informasi owner belum tersedia
-                        </p>
-                      </div>
-                    )}
-                </motion.button>
-              );
-            })}
+                  {user.owner_email && (
+                    <div className="flex items-center gap-2">
+                      <FaEnvelope className="w-3 h-3 text-purple-400" />
+                      <p className="text-sm text-gray-700 line-clamp-1">
+                        {user.owner_email}
+                      </p>
+                    </div>
+                  )}
+
+                  {!user.owner_phone && !user.owner_email && (
+                    <p className="text-xs text-gray-500 italic">
+                      Informasi kontak belum tersedia
+                    </p>
+                  )}
+                </div>
+
+                {/* Companies Summary */}
+                <div className="mt-3 flex items-center gap-2 flex-wrap">
+                  {user.companies.gps.length > 0 && (
+                    <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-semibold rounded-full">
+                      {user.companies.gps.length} GP
+                    </span>
+                  )}
+                  {user.companies.gcs.length > 0 && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
+                      {user.companies.gcs.length} GC
+                    </span>
+                  )}
+                  {user.companies.bcs.length > 0 && (
+                    <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs font-semibold rounded-full">
+                      {user.companies.bcs.length} BC
+                    </span>
+                  )}
+                </div>
+              </motion.button>
+            ))}
           </div>
         ) : (
           <div className="bg-white rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center">
             <FaSearch className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <p className="text-lg font-semibold text-gray-600 mb-2">
-              Tidak ada member ditemukan
+              Tidak ada user ditemukan
             </p>
             <p className="text-sm text-gray-500">
-              Coba ubah filter atau kata kunci pencarian
+              Coba ubah kata kunci pencarian
             </p>
           </div>
         )}
       </div>
 
-      {/* Detail Modals */}
-      <GPDetailModal
-        isOpen={selectedGP !== null}
-        onClose={() => setSelectedGP(null)}
-        gp={selectedGP}
-        onGPUpdate={(updated) => {
-          // Refresh data - in real app would refetch
-          setSelectedGP(updated);
-        }}
-        onViewGC={(gc) => {
-          setSelectedGP(null);
-          setSelectedGC(gc);
-        }}
-        onViewBC={(bc) => {
-          setSelectedGP(null);
-          setSelectedBC(bc);
-        }}
-      />
-
-      <GCDetailModal
-        isOpen={selectedGC !== null}
-        onClose={() => setSelectedGC(null)}
-        gc={selectedGC}
-        onViewGP={(gp) => {
-          setSelectedGC(null);
-          setSelectedGP(gp);
-        }}
-        onViewBC={(bc) => {
-          setSelectedGC(null);
-          setSelectedBC(bc);
-        }}
-      />
-
-      <BCDetailModal
-        isOpen={selectedBC !== null}
-        onClose={() => setSelectedBC(null)}
-        bc={selectedBC}
-        onViewGP={(gp) => {
-          setSelectedBC(null);
-          setSelectedGP(gp);
-        }}
-        onViewGC={(gc) => {
-          setSelectedBC(null);
-          setSelectedGC(gc);
-        }}
+      {/* User Detail Modal */}
+      <MemberDetailModal
+        isOpen={selectedUser !== null}
+        onClose={() => setSelectedUser(null)}
+        user={selectedUser}
       />
     </div>
   );
