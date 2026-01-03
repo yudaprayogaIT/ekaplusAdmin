@@ -3,7 +3,9 @@
 import React, { useState, useMemo } from "react";
 import { GCCard } from "./GCCard";
 import { GCDetailModal } from "./GCDetailModal";
-import type { GlobalCustomer } from "@/types/customer";
+import { GPDetailModal } from "@/components/global_party/GPDetailModal";
+import { BCDetailModal } from "@/components/branch_customer/BCDetailModal";
+import type { GlobalCustomer, GlobalParty, BranchCustomer } from "@/types/customer";
 import { mockGlobalCustomers } from "@/data/mockGlobalCustomers";
 import {
   FaSearch,
@@ -22,8 +24,9 @@ type SortDirection = "asc" | "desc";
 
 export default function GCList() {
   const [gcs] = useState<GlobalCustomer[]>(mockGlobalCustomers);
+  const [selectedGP, setSelectedGP] = useState<GlobalParty | null>(null);
   const [selectedGC, setSelectedGC] = useState<GlobalCustomer | null>(null);
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [selectedBC, setSelectedBC] = useState<BranchCustomer | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Sort state
@@ -89,7 +92,6 @@ export default function GCList() {
 
   const handleViewDetails = (gc: GlobalCustomer) => {
     setSelectedGC(gc);
-    setIsDetailModalOpen(true);
   };
 
   const handlePageChange = (page: number) => {
@@ -287,11 +289,50 @@ export default function GCList() {
         </>
       )}
 
-      {/* Detail Modal */}
+      {/* Detail Modals */}
+      <GPDetailModal
+        isOpen={selectedGP !== null}
+        onClose={() => setSelectedGP(null)}
+        gp={selectedGP}
+        onGPUpdate={(updated) => {
+          setSelectedGP(updated);
+        }}
+        onViewGC={(gc) => {
+          setSelectedGP(null);
+          setSelectedGC(gc);
+        }}
+        onViewBC={(bc) => {
+          setSelectedGP(null);
+          setSelectedBC(bc);
+        }}
+      />
+
       <GCDetailModal
-        isOpen={isDetailModalOpen}
-        onClose={() => setIsDetailModalOpen(false)}
+        isOpen={selectedGC !== null}
+        onClose={() => setSelectedGC(null)}
         gc={selectedGC}
+        onViewGP={(gp) => {
+          setSelectedGC(null);
+          setSelectedGP(gp);
+        }}
+        onViewBC={(bc) => {
+          setSelectedGC(null);
+          setSelectedBC(bc);
+        }}
+      />
+
+      <BCDetailModal
+        isOpen={selectedBC !== null}
+        onClose={() => setSelectedBC(null)}
+        bc={selectedBC}
+        onViewGP={(gp) => {
+          setSelectedBC(null);
+          setSelectedGP(gp);
+        }}
+        onViewGC={(gc) => {
+          setSelectedBC(null);
+          setSelectedGC(gc);
+        }}
       />
     </div>
   );

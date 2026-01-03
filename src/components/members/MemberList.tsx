@@ -184,7 +184,7 @@ export function MemberList() {
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <motion.div
           whileHover={{ scale: 1.02 }}
           className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-6 text-white cursor-pointer"
@@ -234,7 +234,7 @@ export function MemberList() {
           </div>
           <p className="text-4xl font-bold">{stats.bc}</p>
         </motion.div>
-      </div>
+      </div> */}
 
       {/* Tab Navigation */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-2 flex gap-2">

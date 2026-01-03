@@ -565,6 +565,7 @@ export default function Dashboard() {
         // Load Categories from API
         const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
           fields: ["*"],
+          limit: 100000000,
         });
         const categoriesRes = await fetch(categoriesUrl, {
           headers,
@@ -598,6 +599,7 @@ export default function Dashboard() {
         // Load Products from API
         const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, {
           fields: ["*"],
+          limit: 100000000,
         });
         const productsRes = await fetch(productsUrl, {
           headers,
@@ -632,6 +634,7 @@ export default function Dashboard() {
         // Load Items from API
         const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
           fields: ["*"],
+          limit: 100000000,
         });
         const itemsRes = await fetch(itemsUrl, {
           headers,
@@ -673,6 +676,7 @@ export default function Dashboard() {
         // Load Variants from API
         const variantsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT_VARIANT, {
           fields: ["*"],
+          limit: 100000000,
         });
         const variantsRes = await fetch(variantsUrl, {
           headers,
@@ -716,6 +720,7 @@ export default function Dashboard() {
         // }
         const branchesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH, {
           fields: ["*"],
+          limit: 100000000,
         });
         const branchesRes = await fetch(branchesUrl, {
           headers,
