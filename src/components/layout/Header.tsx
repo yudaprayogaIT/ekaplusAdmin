@@ -3,9 +3,11 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { FaBars, FaSearch } from "react-icons/fa";
+import { FaBars } from "react-icons/fa";
 import { RiMenuFoldLine, RiMenuUnfoldLine } from "react-icons/ri";
 import UserMenu from "@/components/auth/UserMenu";
+import MenuSearch from "./MenuSearch";
+import { getAllMenuItems } from "./Sidebar";
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -14,6 +16,8 @@ interface HeaderProps {
 }
 
 export default function Header({ onToggleSidebar, isMobile, sidebarCollapsed = false }: HeaderProps) {
+  const allMenuItems = getAllMenuItems();
+
   return (
     <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-gray-100">
       <div className="flex items-center justify-between px-4 py-3">
@@ -37,13 +41,8 @@ export default function Header({ onToggleSidebar, isMobile, sidebarCollapsed = f
           </motion.button>
 
           {/* Search Bar */}
-          <div className="hidden md:flex items-center gap-2 px-4 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus-within:border-red-300 focus-within:ring-2 focus-within:ring-red-100 transition-all w-64 lg:w-80">
-            <FaSearch className="w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Cari menu, fitur..."
-              className="flex-1 bg-transparent border-none outline-none text-sm text-gray-700 placeholder-gray-400"
-            />
+          <div className="hidden md:block">
+            <MenuSearch allMenuItems={allMenuItems} />
           </div>
         </div>
 

@@ -64,6 +64,7 @@ export default function WishlistList() {
         // Load items from API
         const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
           fields: ["*"],
+          limit: 1000000000000,
         });
         const itemsRes = await fetch(itemsUrl, {
           headers: getAuthHeaders(token),

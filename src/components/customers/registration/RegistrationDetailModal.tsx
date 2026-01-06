@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import type { CustomerRegistration } from "@/types/customerRegistration";
 import { DocumentViewer } from "./DocumentViewer";
+import { EditRegistrationModal } from "./EditRegistrationModal";
 import { motion } from "framer-motion";
 import { HiXMark } from "react-icons/hi2";
 import { IoDocumentTextOutline } from "react-icons/io5";
@@ -26,6 +27,7 @@ interface RegistrationDetailModalProps {
   registration: CustomerRegistration | null;
   onApprove?: (registration: CustomerRegistration) => void;
   onReject?: (registration: CustomerRegistration) => void;
+  onEdit?: () => void;
 }
 
 export function RegistrationDetailModal({
@@ -34,6 +36,7 @@ export function RegistrationDetailModal({
   registration,
   onApprove,
   onReject,
+  onEdit,
 }: RegistrationDetailModalProps) {
   const [documentViewer, setDocumentViewer] = useState<{
     isOpen: boolean;
@@ -46,6 +49,8 @@ export function RegistrationDetailModal({
     filename: "",
     title: "",
   });
+
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   if (!isOpen || !registration) return null;
 
@@ -594,6 +599,16 @@ export function RegistrationDetailModal({
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
+                    onClick={() => setIsEditModalOpen(true)}
+                    className="px-5 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-medium rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
+                  >
+                    <FaEdit className="w-4 h-4" />
+                    <span>Edit</span>
+                  </motion.button>
+
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                     onClick={() => onReject?.(registration)}
                     className="px-5 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white font-medium rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
                   >
@@ -645,6 +660,17 @@ export function RegistrationDetailModal({
         imageUrl={documentViewer.url}
         filename={documentViewer.filename}
         title={documentViewer.title}
+      />
+
+      {/* Edit Registration Modal */}
+      <EditRegistrationModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        registration={registration}
+        onSuccess={() => {
+          setIsEditModalOpen(false);
+          onEdit?.();
+        }}
       />
     </>
   );

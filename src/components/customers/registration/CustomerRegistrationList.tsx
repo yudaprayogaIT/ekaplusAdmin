@@ -236,6 +236,7 @@ export function CustomerRegistrationList() {
           fields: string[];
           filters?: FilterTriple[];
           order_by?: [string, string][];
+          limit?: number;
         } = {
           fields: [
             "*",
@@ -251,6 +252,7 @@ export function CustomerRegistrationList() {
             "created_by.full_name",
             "updated_by.full_name",
           ],
+          limit: 10000000,
         };
 
         // Add filters if provided

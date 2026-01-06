@@ -39,9 +39,13 @@ export const API_CONFIG = {
     CUSTOMER_REGISTER_APPROVE: "/api/method/customer_registration.approve",
     CUSTOMER_REGISTER_REJECT: "/api/method/customer_registration.reject",
     CUSTOMER_REGISTER_CHECK_GP: "/api/method/customer_registration.check_gp",
+    CUSTOMER_REGISTER_UPDATE: "/api/method/customer_registration.update",
 
     // GP/GC/BC Update Actions
     GP_UPDATE_NAME: "/api/method/global_party.update_name",
+
+    // File Management
+    FILES: "/api/files",
   },
 } as const;
 

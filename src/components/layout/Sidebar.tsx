@@ -28,6 +28,7 @@ import {
   FaLock,
   FaDatabase,
   FaCircle,
+  FaFolder,
 } from "react-icons/fa";
 import { MdMapsHomeWork, MdMessage } from "react-icons/md";
 import { BiSolidPurchaseTag, BiSolidUserDetail } from "react-icons/bi";
@@ -35,10 +36,11 @@ import { AiFillProduct } from "react-icons/ai";
 import { GiKnightBanner } from "react-icons/gi";
 import { FaUserGroup } from "react-icons/fa6";
 
-type MenuItem = {
+export type MenuItem = {
   label: string;
   href: string;
   icon: React.ReactNode | string;
+  category?: string;
   permission?: string;
   permissions?: string[];
   requireAuth?: boolean;
@@ -46,7 +48,12 @@ type MenuItem = {
 
 // Dashboard - always visible
 const DASHBOARD_MENU: MenuItem[] = [
-  { label: "Dashboard", href: "/", icon: <FaHome className="w-5 h-5" /> },
+  {
+    label: "Dashboard",
+    href: "/",
+    icon: <FaHome className="w-5 h-5" />,
+    category: "Main"
+  },
 ];
 
 // Main menu - requires auth
@@ -55,45 +62,52 @@ const MAIN_MENU: MenuItem[] = [
     label: "Wishlist",
     href: "/wishlist",
     icon: <FaHeart className="w-5 h-5" />,
+    category: "Main",
     requireAuth: true,
   },
   {
     label: "Banner",
     href: "/banners",
     icon: <GiKnightBanner className="w-5 h-5" />,
+    category: "Main",
     requireAuth: true,
   },
   {
     label: "Inbox",
     href: "/inbox",
     icon: <MdMessage className="w-5 h-5" />,
+    category: "Main",
     requireAuth: true,
   },
   {
     label: "Order Lists",
     href: "/orders",
     icon: <FaClipboardList className="w-5 h-5" />,
+    category: "Main",
     requireAuth: true,
   },
-  // {
-  //   label: "Product Stock",
-  //   href: "/stock",
-  //   icon: <MdInventory className="w-5 h-5" />,
-  //   requireAuth: true,
-  // },
 ];
 
 const SECONDARY_MENU: MenuItem[] = [
   {
+    label: "File Management",
+    href: "/files",
+    icon: <FaFolder className="w-5 h-5" />,
+    category: "Tools",
+    requireAuth: true,
+  },
+  {
     label: "Whatsapp",
     href: "/whatsapp",
     icon: <FaWhatsapp className="w-5 h-5" />,
+    category: "Tools",
     requireAuth: true,
   },
   {
     label: "To-Do",
     href: "/todo",
     icon: <FaClipboardList className="w-5 h-5" />,
+    category: "Tools",
     requireAuth: true,
   },
 ];
@@ -104,6 +118,7 @@ const ADMIN_MENU: MenuItem[] = [
     label: "Email",
     href: "/emails",
     icon: <FaEnvelope className="w-4 h-4" />,
+    category: "System",
     // permission: "emails.view", // DISABLED
     requireAuth: true,
   },
@@ -111,6 +126,7 @@ const ADMIN_MENU: MenuItem[] = [
     label: "Roles & Permissions",
     href: "/roles",
     icon: <FaShieldAlt className="w-4 h-4" />,
+    category: "System",
     // permission: "roles.view", // DISABLED
     requireAuth: true,
   },
@@ -118,6 +134,7 @@ const ADMIN_MENU: MenuItem[] = [
     label: "Users",
     href: "/users",
     icon: <FaUser className="w-5 h-5" />,
+    category: "System",
     // permissions: ["users.view", "users.view_branch"], // DISABLED
     requireAuth: true,
   },
@@ -125,6 +142,7 @@ const ADMIN_MENU: MenuItem[] = [
     label: "Workflows",
     href: "/workflows",
     icon: <FaProjectDiagram className="w-4 h-4" />,
+    category: "System",
     // permission: "workflows.view", // DISABLED
     requireAuth: true,
   },
@@ -132,6 +150,7 @@ const ADMIN_MENU: MenuItem[] = [
     label: "Workflow States",
     href: "/workflow-states",
     icon: <FaCircle className="w-4 h-4" />,
+    category: "System",
     // permission: "workflows.view", // DISABLED
     requireAuth: true,
   },
@@ -142,6 +161,7 @@ const MASTER_MENU: MenuItem[] = [
     label: "Branches",
     href: "/branches",
     icon: <FaBuilding className="w-4 h-4" />,
+    category: "Master Data",
     // permission: "branches.view",
     requireAuth: true,
   },
@@ -149,6 +169,7 @@ const MASTER_MENU: MenuItem[] = [
     label: "Items",
     href: "/items",
     icon: <BiSolidPurchaseTag className="w-4 h-4" />,
+    category: "Master Data",
     requireAuth: true,
   },
 ];
@@ -158,24 +179,28 @@ const CATALOG_SUBMENU: MenuItem[] = [
     label: "Type",
     href: "/types",
     icon: <BiSolidPurchaseTag className="w-4 h-4" />,
+    category: "Catalog",
     requireAuth: true,
   },
   {
     label: "Categories",
     href: "/categories",
     icon: <FaTags className="w-4 h-4" />,
+    category: "Catalog",
     requireAuth: true,
   },
   {
     label: "Products",
     href: "/products",
     icon: <FaShoppingBag className="w-4 h-4" />,
+    category: "Catalog",
     requireAuth: true,
   },
   {
     label: "Variants",
     href: "/variants",
     icon: <AiFillProduct className="w-4 h-4" />,
+    category: "Catalog",
     requireAuth: true,
   },
 ];
@@ -185,39 +210,58 @@ const CUSTOMER_SUBMENU: MenuItem[] = [
     label: "Customer Register",
     href: "/customers/registrations",
     icon: <BiSolidUserDetail className="w-4 h-4" />,
+    category: "Customer",
     requireAuth: true,
   },
   {
     label: "Global Party",
     href: "/customers/global_party",
     icon: <FaUsers className="w-4 h-4" />,
+    category: "Customer",
     requireAuth: true,
   },
   {
     label: "Global Customer",
     href: "/customers/global_customer",
     icon: <FaUserGroup className="w-4 h-4" />,
+    category: "Customer",
     requireAuth: true,
   },
   {
     label: "Branch Customer",
     href: "/customers/branch_customer",
     icon: <FaUserShield className="w-4 h-4" />,
+    category: "Customer",
     requireAuth: true,
   },
   {
     label: "Members",
     href: "/members",
     icon: <MdMapsHomeWork className="w-4 h-4" />,
+    category: "Customer",
     requireAuth: true,
   },
   {
     label: "Tiers",
     href: "/member-tiers",
     icon: <FaStar className="w-4 h-4" />,
+    category: "Customer",
     requireAuth: true,
   },
 ];
+
+// Export function to get all menu items for search functionality
+export function getAllMenuItems(): MenuItem[] {
+  return [
+    ...DASHBOARD_MENU,
+    ...MAIN_MENU,
+    ...MASTER_MENU,
+    ...CATALOG_SUBMENU,
+    ...CUSTOMER_SUBMENU,
+    ...SECONDARY_MENU,
+    ...ADMIN_MENU,
+  ];
+}
 
 // Export hook untuk digunakan di AdminLayout
 export function useSidebarCollapse() {
