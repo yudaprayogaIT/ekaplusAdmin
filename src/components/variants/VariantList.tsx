@@ -11,7 +11,7 @@ import React, {
 import VariantCard from "./VariantCard";
 import AddVariantMappingModal from "./AddVariantMappingModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import Pagination, { usePagination } from "@/components/ui/Pagination";
+import Pagination from "@/components/ui/Pagination";
 import ItemGroupSection from "./ItemGroupSection";
 import BulkProductCreationModal from "./BulkProductCreationModal";
 import {
@@ -101,6 +101,12 @@ export default function VariantList() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
 
+  // Server-side pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const itemsPerPage = 20;
+
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -110,10 +116,15 @@ export default function VariantList() {
 
   // Bulk grouping state
   const [viewType, setViewType] = useState<"mapped" | "unmapped">("mapped");
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<number>>(
     new Set()
   );
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
+
+  // Lazy load unmapped items only when needed
+  const [unmappedItemsLoaded, setUnmappedItemsLoaded] = useState(false);
+  const [unmappedItemsLoading, setUnmappedItemsLoading] = useState(false);
 
   // Use filter system
   const { filters, setFilters } = useFilters({
@@ -131,12 +142,15 @@ export default function VariantList() {
     async (
       filterTriples: FilterTriple[] = [],
       sort_by?: SortField,
-      sort_order?: SortDirection
+      sort_order?: SortDirection,
+      page: number = 1
     ): Promise<{
       categoriesData: Category[];
       productsData: Product[];
       itemsData: Item[];
       variantsData: ItemVariant[];
+      totalItems: number;
+      totalPages: number;
     }> => {
       if (!token) {
         return {
@@ -144,6 +158,8 @@ export default function VariantList() {
           productsData: [],
           itemsData: [],
           variantsData: [],
+          totalItems: 0,
+          totalPages: 0,
         };
       }
 
@@ -199,7 +215,7 @@ export default function VariantList() {
         );
       }
 
-      // Load items from API
+      // Load items from API (needed for variant hydration)
       const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
         fields: ["*"],
         limit: 1000000000000,
@@ -243,10 +259,12 @@ export default function VariantList() {
         fields: string[];
         filters?: FilterTriple[];
         order_by?: [string, string][];
-        limit?: number;
+        limit: number;
+        page: number;
       } = {
         fields: ["*"],
-        limit: 1000000000000,
+        limit: 20,
+        page: page,
       };
 
       if (filterTriples.length > 0) {
@@ -270,8 +288,51 @@ export default function VariantList() {
       const variantsRes = await fetch(variantsUrl, { headers });
 
       let variantsData: ItemVariant[] = [];
+      let totalItems = 0;
+      let totalPages = 0;
+
       if (variantsRes.ok) {
         const json = await variantsRes.json();
+
+        console.log("[VariantList] Full API Response:", json);
+
+        // Parse pagination metadata - check multiple possible field names
+        totalItems = json.total || json.count || json.total_count || 0;
+
+        if (totalItems > 0) {
+          // API returned total count
+          totalPages = Math.ceil(totalItems / 20);
+          console.log("[VariantList] Using API total count");
+        } else if (json.data.length > 0) {
+          // API didn't return total count, use optimistic pagination
+          console.warn("[VariantList] API did not return total count, using optimistic pagination");
+
+          if (json.data.length < 20) {
+            // Less than page size means this is the last page
+            totalPages = page;
+            totalItems = (page - 1) * 20 + json.data.length;
+            console.log("[VariantList] Last page detected (less than 20 items)");
+          } else {
+            // Full page (exactly 20 items), assume there might be more pages
+            totalPages = page + 1; // Show "next" button
+            totalItems = (page + 1) * 20; // Approximate total to show pagination
+            console.log("[VariantList] Full page detected, showing next page button");
+          }
+        } else {
+          totalPages = 1;
+          totalItems = 0;
+          console.log("[VariantList] No data");
+        }
+
+        console.log("[VariantList] Pagination metadata:", {
+          totalItems,
+          totalPages,
+          currentPage: page,
+          dataLength: json.data.length,
+          responseKeys: Object.keys(json),
+          usingOptimisticPagination: !json.total
+        });
+
         variantsData = json.data.map(
           (v: {
             id: number;
@@ -313,7 +374,7 @@ export default function VariantList() {
         );
       }
 
-      return { categoriesData, productsData, itemsData, variantsData };
+      return { categoriesData, productsData, itemsData, variantsData, totalItems, totalPages };
     },
     [token]
   );
@@ -335,19 +396,25 @@ export default function VariantList() {
         }
 
         console.log(
-          "[VariantList] Loading data with server-side sort:",
+          "[VariantList] Loading data with server-side sort and pagination:",
           sortField,
-          sortDirection
+          sortDirection,
+          "page:",
+          currentPage
         );
 
-        const { categoriesData, productsData, itemsData, variantsData } =
-          await loadAllData(filters, sortField, sortDirection);
+        const { categoriesData, productsData, itemsData, variantsData, totalItems, totalPages } =
+          await loadAllData(filters, sortField, sortDirection, currentPage);
 
         if (!cancelled) {
           setCategories(categoriesData);
           setProducts(productsData);
           setItems(itemsData);
           setVariants(variantsData);
+          setTotalItems(totalItems);
+          setTotalPages(totalPages);
+          // Reset unmapped cache when data changes
+          setUnmappedItemsLoaded(false);
         }
       } catch (err: unknown) {
         if (!cancelled)
@@ -361,7 +428,7 @@ export default function VariantList() {
     return () => {
       cancelled = true;
     };
-  }, [token, filters, sortField, sortDirection, loadAllData]);
+  }, [token, filters, sortField, sortDirection, currentPage, loadAllData]);
 
   // Listen for variant updates and refresh ALL data from API
   useEffect(() => {
@@ -373,13 +440,18 @@ export default function VariantList() {
         );
 
         // Reload ALL data to ensure consistency
-        const { categoriesData, productsData, itemsData, variantsData } =
-          await loadAllData(filters, sortField, sortDirection);
+        const { categoriesData, productsData, itemsData, variantsData, totalItems, totalPages } =
+          await loadAllData(filters, sortField, sortDirection, currentPage);
 
         setCategories(categoriesData);
         setProducts(productsData);
         setItems(itemsData);
         setVariants(variantsData);
+        setTotalItems(totalItems);
+        setTotalPages(totalPages);
+
+        // Invalidate unmapped cache
+        setUnmappedItemsLoaded(false);
 
         console.log("[VariantList] Data refreshed successfully");
       } catch (err) {
@@ -389,7 +461,7 @@ export default function VariantList() {
     window.addEventListener("ekatalog:variants_update", handler);
     return () =>
       window.removeEventListener("ekatalog:variants_update", handler);
-  }, [token, filters, sortField, sortDirection, loadAllData]);
+  }, [token, filters, sortField, sortDirection, currentPage, loadAllData]);
 
   // Helper to refresh variants from API
   async function refreshVariants() {
@@ -437,17 +509,52 @@ export default function VariantList() {
     setMappingModalOpen(false);
   }
 
-  // Compute unmapped items (items without variants)
-  const unmappedItems = useMemo(() => {
-    return items.filter((item) => {
-      return !variants.some((v) => v.item.id === item.id);
-    });
+  // Quick count of unmapped items (for display in button)
+  // This is O(n) but faster than full grouping
+  const unmappedItemsCount = useMemo(() => {
+    const variantItemIds = new Set(variants.map((v) => v.item.id));
+    return items.filter((item) => !variantItemIds.has(item.id)).length;
   }, [items, variants]);
 
-  // Group unmapped items by pattern
-  const groupedUnmappedItems = useMemo(() => {
-    return groupItemsByPattern(unmappedItems);
-  }, [unmappedItems]);
+  // Lazy-loaded unmapped items and groups
+  const [unmappedItemsCache, setUnmappedItemsCache] = useState<Item[]>([]);
+  const [groupedUnmappedItemsCache, setGroupedUnmappedItemsCache] = useState<Map<string, Item[]>>(new Map());
+
+  // Load unmapped items on-demand when switching to unmapped view
+  useEffect(() => {
+    if (viewType === "unmapped" && !unmappedItemsLoaded && !unmappedItemsLoading && !isTransitioning) {
+      console.log("[VariantList] Lazy loading unmapped items...");
+      setUnmappedItemsLoading(true);
+
+      // Use setTimeout to defer heavy computation and not block UI
+      setTimeout(() => {
+        const startTime = performance.now();
+
+        // Compute unmapped items
+        const variantItemIds = new Set(variants.map((v) => v.item.id));
+        const unmapped = items.filter((item) => !variantItemIds.has(item.id));
+
+        const midTime = performance.now();
+        console.log("[VariantList] Found", unmapped.length, "unmapped items in", Math.round(midTime - startTime), "ms");
+
+        // Group unmapped items
+        const grouped = groupItemsByPattern(unmapped);
+
+        const endTime = performance.now();
+        console.log("[VariantList] Created", grouped.size, "groups in", Math.round(endTime - midTime), "ms");
+        console.log("[VariantList] Total unmapped processing time:", Math.round(endTime - startTime), "ms");
+
+        setUnmappedItemsCache(unmapped);
+        setGroupedUnmappedItemsCache(grouped);
+        setUnmappedItemsLoaded(true);
+        setUnmappedItemsLoading(false);
+      }, 100);
+    }
+  }, [viewType, unmappedItemsLoaded, unmappedItemsLoading, isTransitioning, items, variants]);
+
+  // Use cached values
+  const unmappedItems = unmappedItemsCache;
+  const groupedUnmappedItems = groupedUnmappedItemsCache;
 
   // Multi-select handlers
   const toggleItem = (itemId: number) => {
@@ -491,10 +598,37 @@ export default function VariantList() {
   const handleBulkProductSuccess = () => {
     // Clear selection and stay in unmapped view to continue mapping
     clearSelection();
+    // Invalidate unmapped cache since variants changed
+    setUnmappedItemsLoaded(false);
     // Note: Data will auto-refresh via "ekatalog:variants_update" event
   };
 
+  // Handle view type change with transition
+  const handleViewTypeChange = (newViewType: "mapped" | "unmapped") => {
+    if (newViewType === viewType) return;
+
+    setIsTransitioning(true);
+    clearSelection();
+
+    // Use requestAnimationFrame for smoother UI update
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        console.log("[VariantList] Switching to", newViewType, "view...");
+        setViewType(newViewType);
+
+        // Allow React to render before removing transition
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            console.log("[VariantList] Transition complete");
+            setIsTransitioning(false);
+          }, 200);
+        });
+      }, 100);
+    });
+  };
+
   // Filter variants (client-side quick search only)
+  // Note: With server-side pagination, client-side search is limited to current page only
   let filteredVariants = variants;
 
   if (searchQuery.trim()) {
@@ -506,24 +640,35 @@ export default function VariantList() {
     );
   }
 
-  // Apply pagination
-  const {
-    currentPage,
-    setCurrentPage,
-    totalPages,
-    paginatedItems,
-    totalItems,
-    itemsPerPage,
-  } = usePagination(filteredVariants, 20);
+  // Group by product - only compute when in mapped view
+  const groupedByProduct = useMemo(() => {
+    // Skip computation during transition or when in unmapped view
+    if (isTransitioning || viewType === "unmapped") return [];
 
-  // Group by product
-  const groupedByProduct = products
-    // .sort((a, b) => a.name.localeCompare(b.name))
-    .map((product) => ({
-      product,
-      items: paginatedItems.filter((v) => v.productid === product.id),
-    }))
-    .filter((group) => group.items.length > 0);
+    console.log("[VariantList] Grouping variants by product...");
+    const startTime = performance.now();
+
+    // Optimize: Group variants by productid first
+    const variantsByProduct = new Map<number, ItemVariant[]>();
+    filteredVariants.forEach((variant) => {
+      if (!variantsByProduct.has(variant.productid)) {
+        variantsByProduct.set(variant.productid, []);
+      }
+      variantsByProduct.get(variant.productid)!.push(variant);
+    });
+
+    // Then map to products
+    const result = products
+      .map((product) => ({
+        product,
+        items: variantsByProduct.get(product.id) || [],
+      }))
+      .filter((group) => group.items.length > 0);
+
+    const endTime = performance.now();
+    console.log("[VariantList] Created", result.length, "product groups in", Math.round(endTime - startTime), "ms");
+    return result;
+  }, [products, filteredVariants, viewType, isTransitioning]);
 
   if (loading) {
     return (
@@ -567,11 +712,9 @@ export default function VariantList() {
           {/* View Toggle */}
           <div className="flex bg-gray-100 rounded-xl p-1">
             <button
-              onClick={() => {
-                setViewType("mapped");
-                clearSelection();
-              }}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+              onClick={() => handleViewTypeChange("mapped")}
+              disabled={isTransitioning}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all disabled:opacity-50 ${
                 viewType === "mapped"
                   ? "bg-white text-blue-600 shadow-sm"
                   : "text-gray-600 hover:text-gray-800"
@@ -580,14 +723,15 @@ export default function VariantList() {
               Mapped
             </button>
             <button
-              onClick={() => setViewType("unmapped")}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+              onClick={() => handleViewTypeChange("unmapped")}
+              disabled={isTransitioning}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all disabled:opacity-50 ${
                 viewType === "unmapped"
                   ? "bg-white text-blue-600 shadow-sm"
                   : "text-gray-600 hover:text-gray-800"
               }`}
             >
-              Unmapped ({unmappedItems.length})
+              Unmapped ({unmappedItemsCount})
             </button>
           </div>
 
@@ -635,7 +779,7 @@ export default function VariantList() {
             Unmapped
           </div>
           <div className="text-3xl font-bold text-orange-900">
-            {items.length - variants.length}
+            {unmappedItemsCount}
           </div>
         </div>
       </div>
@@ -795,6 +939,16 @@ export default function VariantList() {
         </div>
       </div>
 
+      {/* Transition Loading Overlay */}
+      {isTransitioning && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+            <p className="text-sm font-medium text-gray-700">Loading view...</p>
+          </div>
+        </div>
+      )}
+
       {/* Content Display - Conditional based on viewType */}
       {viewType === "mapped" ? (
         /* Mapped Variants View */
@@ -861,7 +1015,7 @@ export default function VariantList() {
             </div>
 
             {/* Pagination */}
-            {filteredVariants.length > 0 && (
+            {totalItems > 0 && (
               <Pagination
                 currentPage={currentPage}
                 totalPages={totalPages}
@@ -875,7 +1029,19 @@ export default function VariantList() {
       ) : (
         /* Unmapped Items View */
         <>
-          {unmappedItems.length === 0 ? (
+          {unmappedItemsLoading ? (
+            <div className="flex items-center justify-center py-20 bg-white rounded-xl shadow-sm border border-gray-100">
+              <div className="text-center">
+                <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="text-sm text-gray-600 font-medium">
+                  Loading unmapped items...
+                </p>
+                <p className="text-xs text-gray-500 mt-2">
+                  Processing {unmappedItemsCount} items
+                </p>
+              </div>
+            </div>
+          ) : unmappedItems.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
               <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <FaCheckSquare className="w-8 h-8 text-green-500" />

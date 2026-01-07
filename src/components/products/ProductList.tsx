@@ -6,7 +6,7 @@ import ProductCard from "./ProductCard";
 import AddProductModal from "./AddProductModal";
 import ProductDetailModal from "./ProductDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import Pagination, { usePagination } from "@/components/ui/Pagination";
+import Pagination from "@/components/ui/Pagination";
 import {
   FaPlus,
   FaSearch,
@@ -88,6 +88,12 @@ export default function ProductList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showHotDealsOnly, setShowHotDealsOnly] = useState(false);
 
+  // Server-side pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const itemsPerPage = 20;
+
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<ProductFormData | null>(
     null
@@ -105,14 +111,17 @@ export default function ProductList() {
   async function loadAllData(
     filterTriples: FilterTriple[] = [],
     sort_by?: SortField,
-    sort_order?: SortDirection
+    sort_order?: SortDirection,
+    page: number = 1
   ): Promise<{
     categoriesData: Category[];
     itemsData: Item[];
     productsWithVariants: Product[];
+    totalItems: number;
+    totalPages: number;
   }> {
     if (!token)
-      return { categoriesData: [], itemsData: [], productsWithVariants: [] };
+      return { categoriesData: [], itemsData: [], productsWithVariants: [], totalItems: 0, totalPages: 0 };
 
     const headers = getAuthHeaders(token);
 
@@ -171,7 +180,8 @@ export default function ProductList() {
       fields: string[];
       filters?: FilterTriple[];
       order_by?: [string, string][];
-      limit?: number;
+      limit: number;
+      page: number;
       childs?: Array<{
         alias: string;
         table: string;
@@ -191,7 +201,8 @@ export default function ProductList() {
           fields: ["item", "item.id", "item.item_code", "item.item_name", "item.image"],
         },
       ],
-      limit: 10000000,
+      limit: 20,
+      page: page,
     };
 
     if (filterTriples.length > 0) {
@@ -214,8 +225,50 @@ export default function ProductList() {
       headers,
     });
     let productsWithVariants: Product[] = [];
+    let totalItems = 0;
+    let totalPages = 0;
+
     if (productsRes.ok) {
       const response = await productsRes.json();
+
+      console.log("[ProductList] Full API Response:", response);
+
+      // Parse pagination metadata - check multiple possible field names
+      totalItems = response.total || response.count || response.total_count || 0;
+
+      if (totalItems > 0) {
+        // API returned total count
+        totalPages = Math.ceil(totalItems / 20);
+        console.log("[ProductList] Using API total count");
+      } else if (response.data.length > 0) {
+        // API didn't return total count, use optimistic pagination
+        console.warn("[ProductList] API did not return total count, using optimistic pagination");
+
+        if (response.data.length < 20) {
+          // Less than page size means this is the last page
+          totalPages = page;
+          totalItems = (page - 1) * 20 + response.data.length;
+          console.log("[ProductList] Last page detected (less than 20 items)");
+        } else {
+          // Full page (exactly 20 items), assume there might be more pages
+          totalPages = page + 1; // Show "next" button
+          totalItems = (page + 1) * 20; // Approximate total to show pagination
+          console.log("[ProductList] Full page detected, showing next page button");
+        }
+      } else {
+        totalPages = 1;
+        totalItems = 0;
+        console.log("[ProductList] No data");
+      }
+
+      console.log("[ProductList] Pagination metadata:", {
+        totalItems,
+        totalPages,
+        currentPage: page,
+        dataLength: response.data.length,
+        responseKeys: Object.keys(response),
+        usingOptimisticPagination: !response.total
+      });
 
       console.log("=== PRODUCT LIST - VARIANT LOADING DEBUG ===");
       console.log("Total products loaded:", response.data.length);
@@ -319,7 +372,7 @@ export default function ProductList() {
       }
     }
 
-    return { categoriesData, itemsData, productsWithVariants };
+    return { categoriesData, itemsData, productsWithVariants, totalItems, totalPages };
   }
 
   // Use filter system
@@ -329,21 +382,25 @@ export default function ProductList() {
 
   // Function to load data with filters (wrapped in useCallback to fix warning)
   const loadDataWithFilters = useCallback(
-    async (filterTriples: FilterTriple[] = []) => {
+    async (filterTriples: FilterTriple[] = [], page: number = 1) => {
       setLoading(true);
       setError(null);
       try {
         console.log(
-          "[ProductList] Loading data with server-side sort:",
+          "[ProductList] Loading data with server-side sort and pagination:",
           sortField,
-          sortDirection
+          sortDirection,
+          "page:",
+          page
         );
-        const { categoriesData, itemsData, productsWithVariants } =
-          await loadAllData(filterTriples, sortField, sortDirection);
+        const { categoriesData, itemsData, productsWithVariants, totalItems, totalPages } =
+          await loadAllData(filterTriples, sortField, sortDirection, page);
 
         setCategories(categoriesData);
         setAvailableItems(itemsData);
         setProducts(productsWithVariants);
+        setTotalItems(totalItems);
+        setTotalPages(totalPages);
         localStorage.setItem(SNAP_KEY, JSON.stringify(productsWithVariants));
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
@@ -358,8 +415,9 @@ export default function ProductList() {
   // Handle filter apply
   function handleApplyFilters(newFilters: FilterTriple[]) {
     setFilters(newFilters);
+    setCurrentPage(1); // Reset to first page when filters change
     // Reload data when filters are applied
-    loadDataWithFilters(newFilters);
+    loadDataWithFilters(newFilters, 1);
   }
 
   // Initial load with filters from URL/localStorage
@@ -368,7 +426,7 @@ export default function ProductList() {
 
     async function load() {
       if (!cancelled && token) {
-        await loadDataWithFilters(filters);
+        await loadDataWithFilters(filters, currentPage);
       }
     }
 
@@ -379,7 +437,7 @@ export default function ProductList() {
     return () => {
       cancelled = true;
     };
-  }, [token, filters, loadDataWithFilters]);
+  }, [token, filters, currentPage, loadDataWithFilters]);
 
   // Reload data when sort changes
   useEffect(() => {
@@ -389,7 +447,8 @@ export default function ProductList() {
         sortField,
         sortDirection
       );
-      loadDataWithFilters(filters);
+      setCurrentPage(1); // Reset to first page when sort changes
+      loadDataWithFilters(filters, 1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortField, sortDirection]);
@@ -400,10 +459,13 @@ export default function ProductList() {
       console.log("[ProductList] 🔄 Event triggered: products_update or variants_update");
       console.log("[ProductList] Reloading data with filters:", filters);
       console.log("[ProductList] Reloading data with sort:", sortField, sortDirection);
+      console.log("[ProductList] Reloading data with page:", currentPage);
       try {
-        const { productsWithVariants } = await loadAllData(filters, sortField, sortDirection);
+        const { productsWithVariants, totalItems, totalPages } = await loadAllData(filters, sortField, sortDirection, currentPage);
         console.log("[ProductList] ✅ Reload complete. Total products:", productsWithVariants.length);
         setProducts(productsWithVariants);
+        setTotalItems(totalItems);
+        setTotalPages(totalPages);
         localStorage.setItem(SNAP_KEY, JSON.stringify(productsWithVariants));
       } catch (error) {
         console.error("[ProductList] ❌ Reload failed:", error);
@@ -417,7 +479,7 @@ export default function ProductList() {
       window.removeEventListener("ekatalog:products_update", handler);
       window.removeEventListener("ekatalog:variants_update", handler);
     };
-  }, [filters, sortField, sortDirection]);
+  }, [filters, sortField, sortDirection, currentPage]);
 
   function saveSnapshot(arr: Product[]) {
     localStorage.setItem(SNAP_KEY, JSON.stringify(arr));
@@ -510,32 +572,23 @@ export default function ProductList() {
   }
 
   // Client-side filtering for quick search and hot deals
-  let filteredProducts = products;
+  // Note: With server-side pagination, client-side filters are limited to current page only
+  let displayedProducts = products;
 
-  // Quick search filter (client-side for better UX)
+  // Quick search filter (client-side for better UX, limited to current page)
   if (searchQuery.trim()) {
     const query = searchQuery.toLowerCase();
-    filteredProducts = filteredProducts.filter(
+    displayedProducts = displayedProducts.filter(
       (p) =>
         p.name.toLowerCase().includes(query) ||
         p.variants.some((v) => v.item.name.toLowerCase().includes(query))
     );
   }
 
-  // Hot deals quick filter (client-side toggle)
+  // Hot deals quick filter (client-side toggle, limited to current page)
   if (showHotDealsOnly) {
-    filteredProducts = filteredProducts.filter((p) => p.isHotDeals);
+    displayedProducts = displayedProducts.filter((p) => p.isHotDeals);
   }
-
-  // Apply pagination
-  const {
-    currentPage,
-    setCurrentPage,
-    totalPages,
-    paginatedItems: paginatedProducts,
-    totalItems,
-    itemsPerPage,
-  } = usePagination(filteredProducts, 20);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -779,7 +832,7 @@ export default function ProductList() {
       </div>
 
       {/* Products Display */}
-      {filteredProducts.length === 0 ? (
+      {displayedProducts.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
           <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <FaSearch className="w-8 h-8 text-gray-400" />
@@ -801,7 +854,7 @@ export default function ProductList() {
                 : "space-y-4"
             }
           >
-            {paginatedProducts.map((p) => (
+            {displayedProducts.map((p) => (
               <ProductCard
                 key={p.id}
                 product={p}
@@ -814,7 +867,7 @@ export default function ProductList() {
           </div>
 
           {/* Pagination */}
-          {filteredProducts.length > 0 && (
+          {totalItems > 0 && (
             <Pagination
               currentPage={currentPage}
               totalPages={totalPages}

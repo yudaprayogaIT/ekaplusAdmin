@@ -6,7 +6,7 @@ import ItemCard from "./ItemCard";
 import AddItemModal from "./AddItemModal";
 import ItemDetailModal from "./ItemDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import Pagination, { usePagination } from "@/components/ui/Pagination";
+import Pagination from "@/components/ui/Pagination";
 import {
   FaPlus,
   FaSearch,
@@ -92,6 +92,9 @@ type ItemAPIResponse = {
     owner: number;
   }>;
   meta: Record<string, unknown>;
+  total?: number;
+  count?: number;
+  total_count?: number;
 };
 
 type SortField =
@@ -115,6 +118,12 @@ export default function ItemList() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
 
+  // Server-side pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const itemsPerPage = 20;
+
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<Item | null>(null);
 
@@ -135,9 +144,10 @@ export default function ItemList() {
   async function loadAllData(
     filterTriples: FilterTriple[] = [],
     sort_by?: SortField,
-    sort_order?: SortDirection
-  ): Promise<Item[]> {
-    if (!token) return [];
+    sort_order?: SortDirection,
+    page: number = 1
+  ): Promise<{ items: Item[]; totalItems: number; totalPages: number }> {
+    if (!token) return { items: [], totalItems: 0, totalPages: 0 };
 
     const headers = getAuthHeaders(token);
 
@@ -145,10 +155,12 @@ export default function ItemList() {
       fields: string[];
       filters?: FilterTriple[];
       order_by?: [string, string][];
-      limit?: number;
+      limit: number;
+      page: number;
     } = {
       fields: ["*"],
-      limit: 1000000000000,
+      limit: 20,
+      page: page,
     };
 
     if (filterTriples.length > 0) {
@@ -174,6 +186,46 @@ export default function ItemList() {
 
     if (res.ok) {
       const response = (await res.json()) as ItemAPIResponse;
+
+      console.log("[ItemList] Full API Response:", response);
+
+      // Parse pagination metadata - check multiple possible field names
+      let totalItems = response.total || response.count || response.total_count || 0;
+      let totalPages = 0;
+
+      if (totalItems > 0) {
+        // API returned total count
+        totalPages = Math.ceil(totalItems / 20);
+        console.log("[ItemList] Using API total count");
+      } else if (response.data.length > 0) {
+        // API didn't return total count, use optimistic pagination
+        console.warn("[ItemList] API did not return total count, using optimistic pagination");
+
+        if (response.data.length < 20) {
+          // Less than page size means this is the last page
+          totalPages = page;
+          totalItems = (page - 1) * 20 + response.data.length;
+          console.log("[ItemList] Last page detected (less than 20 items)");
+        } else {
+          // Full page (exactly 20 items), assume there might be more pages
+          totalPages = page + 1; // Show "next" button
+          totalItems = (page + 1) * 20; // Approximate total to show pagination
+          console.log("[ItemList] Full page detected, showing next page button");
+        }
+      } else {
+        totalPages = 1;
+        totalItems = 0;
+        console.log("[ItemList] No data");
+      }
+
+      console.log("[ItemList] Pagination metadata:", {
+        totalItems,
+        totalPages,
+        currentPage: page,
+        dataLength: response.data.length,
+        responseKeys: Object.keys(response),
+        usingOptimisticPagination: !response.total
+      });
 
       const mappedItems: Item[] = response.data.map((item) => ({
         id: item.id,
@@ -229,7 +281,7 @@ export default function ItemList() {
       // });
       // console.log("===========================================");
 
-      return mappedItems;
+      return { items: mappedItems, totalItems, totalPages };
     }
 
     // Log error details for debugging
@@ -246,14 +298,14 @@ export default function ItemList() {
       );
     }
 
-    // For filter/query errors (400/500), return empty array instead of throwing
+    // For filter/query errors (400/500), return empty object instead of throwing
     // This allows UI to show "No data found" instead of error message
     if (res.status === 400 || res.status === 500) {
       console.warn(
         "[ItemList] Filter query failed, returning empty results:",
         errorDetail
       );
-      return [];
+      return { items: [], totalItems: 0, totalPages: 0 };
     }
 
     throw new Error(`Failed to fetch items (${res.status}): ${errorDetail}`);
@@ -262,6 +314,7 @@ export default function ItemList() {
   // Handle filter apply
   function handleApplyFilters(newFilters: FilterTriple[]) {
     setFilters(newFilters);
+    setCurrentPage(1); // Reset to first page when filters change
   }
 
   // Load items from API with filters and sorting
@@ -278,18 +331,23 @@ export default function ItemList() {
         }
 
         console.log(
-          "[ItemList] Loading data with server-side sort:",
+          "[ItemList] Loading data with server-side sort and pagination:",
           sortField,
-          sortDirection
+          sortDirection,
+          "page:",
+          currentPage
         );
-        const mappedItems = await loadAllData(
+        const { items: mappedItems, totalItems, totalPages } = await loadAllData(
           filters,
           sortField,
-          sortDirection
+          sortDirection,
+          currentPage
         );
 
         if (!cancelled) {
           setItems(mappedItems);
+          setTotalItems(totalItems);
+          setTotalPages(totalPages);
           try {
             localStorage.setItem(SNAP_KEY, JSON.stringify(mappedItems));
           } catch (e) {
@@ -320,7 +378,7 @@ export default function ItemList() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, token, filters, sortField, sortDirection]);
+  }, [isAuthenticated, token, filters, sortField, sortDirection, currentPage]);
 
   // Listen for updates - reload from API when triggered
   useEffect(() => {
@@ -328,10 +386,10 @@ export default function ItemList() {
       if (!isAuthenticated || !token) return;
 
       try {
-        // TODO: UNCOMMENT WHEN BACKEND SUPPORTS ORDER_BY
-        // const mappedItems = await loadAllData(filters, sortField, sortDirection);
-        const mappedItems = await loadAllData(filters);
+        const { items: mappedItems, totalItems, totalPages } = await loadAllData(filters, sortField, sortDirection, currentPage);
         setItems(mappedItems);
+        setTotalItems(totalItems);
+        setTotalPages(totalPages);
         localStorage.setItem(SNAP_KEY, JSON.stringify(mappedItems));
       } catch (error) {
         console.error("Failed to reload items:", error);
@@ -341,7 +399,7 @@ export default function ItemList() {
     window.addEventListener("ekatalog:items_update", handler);
     return () => window.removeEventListener("ekatalog:items_update", handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, token]);
+  }, [isAuthenticated, token, filters, sortField, sortDirection, currentPage]);
 
   function saveSnapshot(arr: Item[]) {
     try {
@@ -573,10 +631,11 @@ export default function ItemList() {
   const uomList = Array.from(new Set(items.map((item) => item.uom)));
 
   // Client-side filtering for quick search (for better UX)
-  let filteredItems = items;
+  // Note: With server-side pagination, client-side filters are limited to current page only
+  let displayedItems = items;
 
   if (searchQuery.trim()) {
-    filteredItems = filteredItems.filter(
+    displayedItems = displayedItems.filter(
       (item) =>
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -586,15 +645,10 @@ export default function ItemList() {
     );
   }
 
-  // Apply pagination
-  const {
-    currentPage,
-    setCurrentPage,
-    totalPages,
-    paginatedItems,
-    totalItems,
-    itemsPerPage,
-  } = usePagination(filteredItems, 20);
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   // Early returns AFTER all hooks
   if (!isAuthenticated) {
@@ -870,7 +924,7 @@ export default function ItemList() {
       </div>
 
       {/* Items Display */}
-      {filteredItems.length === 0 ? (
+      {displayedItems.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
           <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <FaSearch className="w-8 h-8 text-gray-400" />
@@ -894,7 +948,7 @@ export default function ItemList() {
                 : "space-y-4"
             }
           >
-            {paginatedItems.map((item) => (
+            {displayedItems.map((item) => (
               <ItemCard
                 key={item.id}
                 item={item}
@@ -907,14 +961,22 @@ export default function ItemList() {
           </div>
 
           {/* Pagination */}
-          {filteredItems.length > 0 && (
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-              totalItems={totalItems}
-              itemsPerPage={itemsPerPage}
-            />
+          {totalItems > 0 && (
+            <>
+              {console.log("[ItemList] Rendering Pagination with:", {
+                currentPage,
+                totalPages,
+                totalItems,
+                itemsPerPage
+              })}
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+                totalItems={totalItems}
+                itemsPerPage={itemsPerPage}
+              />
+            </>
           )}
         </>
       )}
