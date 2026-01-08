@@ -9,6 +9,7 @@ import {
   FaCheckCircle,
   FaBarcode,
   FaTag,
+  FaLink,
 } from "react-icons/fa";
 import Image from "next/image";
 import { Item } from "./ItemList";
@@ -22,6 +23,7 @@ import {
 } from "@/config/api";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
+import MapItemsToProductModal from "./MapItemsToProductModal";
 
 const UOM_OPTIONS = ["PCS", "MTR", "SET", "PSG", "LBR", "UNIT", "BOX"];
 
@@ -60,6 +62,7 @@ export default function AddItemModal({
   const [diameter, setDiameter] = useState("");
   const [selectedBranches, setSelectedBranches] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
+  const [showMapModal, setShowMapModal] = useState(false);
 
   // Track initial state for dirty checking
   const [initialState, setInitialState] = useState({
@@ -729,28 +732,43 @@ export default function AddItemModal({
               </div>
 
               {/* Actions */}
-              <div className="flex justify-end gap-3 pt-6 border-t-2 border-gray-100">
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  className="px-6 py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-all font-semibold text-gray-700"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-8 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:shadow-xl hover:shadow-red-200 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {saving ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Menyimpan...</span>
-                    </>
-                  ) : (
-                    <span>{initial ? "Simpan Perubahan" : "Tambah Item"}</span>
-                  )}
-                </button>
+              <div className="flex justify-between items-center gap-3 pt-6 border-t-2 border-gray-100">
+                {/* Map ke Product - only show in edit mode */}
+                {initial && (
+                  <button
+                    type="button"
+                    onClick={() => setShowMapModal(true)}
+                    className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:shadow-xl hover:shadow-blue-200 transition-all font-semibold flex items-center gap-2"
+                  >
+                    <FaLink className="w-4 h-4" />
+                    <span>Map ke Product</span>
+                  </button>
+                )}
+
+                {/* Right side buttons */}
+                <div className="flex gap-3 ml-auto">
+                  <button
+                    type="button"
+                    onClick={handleClose}
+                    className="px-6 py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-all font-semibold text-gray-700"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="px-8 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:shadow-xl hover:shadow-red-200 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {saving ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>Menyimpan...</span>
+                      </>
+                    ) : (
+                      <span>{initial ? "Simpan Perubahan" : "Tambah Item"}</span>
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
           </motion.div>
@@ -761,6 +779,20 @@ export default function AddItemModal({
             onConfirm={handleConfirmClose}
             onCancel={handleCancelClose}
           />
+
+          {/* Map Items to Product Modal */}
+          {initial && (
+            <MapItemsToProductModal
+              open={showMapModal}
+              onClose={() => setShowMapModal(false)}
+              selectedItems={[initial]}
+              onSuccess={() => {
+                console.log("Item successfully mapped to product");
+                // Trigger reload items
+                window.dispatchEvent(new Event("ekatalog:items_update"));
+              }}
+            />
+          )}
         </motion.div>
       )}
     </AnimatePresence>

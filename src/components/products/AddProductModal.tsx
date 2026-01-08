@@ -64,10 +64,10 @@ function ItemSelectorModal({
     }
   }, [open, selectedItems]);
 
-  // Extract first 2 words dari item name untuk smart prefix matching
+  // Extract first 3 words dari item name untuk smart prefix matching
   const getItemPrefix = (itemName: string): string => {
     const words = itemName.trim().split(/\s+/);
-    return words.slice(0, 2).join(" ").toUpperCase();
+    return words.slice(0, 3).join(" ").toUpperCase();
   };
 
   // Select semua items dengan prefix yang sama
@@ -585,7 +585,7 @@ export default function AddProductModal({
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all bg-white"
                 >
                   <option value="">Pilih kategori...</option>
-                  {categories.map((cat) => (
+                  {[...categories].sort((a, b) => a.name.localeCompare(b.name)).map((cat) => (
                     <option key={cat.id} value={cat.id}>
                       {cat.name}
                     </option>

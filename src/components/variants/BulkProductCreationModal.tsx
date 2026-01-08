@@ -15,11 +15,21 @@ import {
   FaLink,
 } from "react-icons/fa";
 import Image from "next/image";
-import type { Item, Category, Product } from "@/types";
+import type { Item as BaseItem, Category, Product } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, getAuthHeaders, getResourceUrl } from "@/config/api";
 import { suggestProductName } from "@/utils/itemGrouping";
 import { createVariant } from "@/services/variantService";
+
+// Accept any item type that has the required fields
+type Item = BaseItem | {
+  id: number;
+  code: string;
+  name: string;
+  image?: string;
+  group?: string;
+  [key: string]: unknown;
+};
 
 interface BulkProductCreationModalProps {
   open: boolean;
@@ -51,7 +61,7 @@ export default function BulkProductCreationModal({
 
   // Find matching products based on suggested name
   const suggestedName = useMemo(
-    () => suggestProductName(selectedItems),
+    () => suggestProductName(selectedItems as BaseItem[]),
     [selectedItems]
   );
 
@@ -144,7 +154,7 @@ export default function BulkProductCreationModal({
               item: item.id,
               parent_id: selectedProductId!,
             },
-            items
+            items as BaseItem[]
           )
         );
 

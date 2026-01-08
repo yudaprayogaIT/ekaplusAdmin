@@ -11,6 +11,9 @@ import {
   FaBarcode,
   FaTag,
   FaMapMarkerAlt,
+  FaCheckCircle,
+  FaExclamationTriangle,
+  FaLink,
 } from "react-icons/fa";
 import { Item } from "./ItemList";
 
@@ -20,14 +23,19 @@ export default function ItemCard({
   onEdit,
   onDelete,
   onView,
+  selected,
+  onToggleSelect,
 }: {
   item: Item;
   viewMode?: "grid" | "list";
   onEdit?: () => void;
   onDelete?: () => void;
   onView?: () => void;
+  selected?: boolean;
+  onToggleSelect?: () => void;
 }) {
   const [imageError, setImageError] = useState(false);
+  const isUnmapped = !item.variantCount || item.variantCount === 0;
 
   if (viewMode === "list") {
     return (
@@ -35,10 +43,34 @@ export default function ItemCard({
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         whileHover={{ x: 4 }}
-        onClick={() => onView?.()}
-        className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 cursor-pointer transition-all group hover:shadow-lg"
+        onClick={() => {
+          if (onToggleSelect) {
+            onToggleSelect();
+          } else {
+            onView?.();
+          }
+        }}
+        className={`bg-white rounded-2xl shadow-sm border-2 p-6 cursor-pointer transition-all group hover:shadow-lg ${
+          selected ? "border-blue-500 bg-blue-50" : "border-gray-100"
+        }`}
       >
         <div className="flex items-start gap-6">
+          {/* Selection Checkbox */}
+          {onToggleSelect && (
+            <div className="flex-shrink-0">
+              <motion.div
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
+                className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center cursor-pointer transition-all ${
+                  selected
+                    ? "bg-blue-500 border-blue-500"
+                    : "border-gray-300 hover:border-blue-400"
+                }`}
+              >
+                {selected && <FaCheckCircle className="w-4 h-4 text-white" />}
+              </motion.div>
+            </div>
+          )}
           {/* Image Preview */}
           <div className="hidden md:flex w-24 h-24 bg-gradient-to-br from-gray-50 via-white to-gray-50 rounded-xl overflow-hidden flex-shrink-0 items-center justify-center p-3 border-2 border-gray-100">
             {item.image && !imageError ? (
@@ -75,6 +107,22 @@ export default function ItemCard({
                   <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold">
                     {item.uom}
                   </span>
+                  {item.disabled === 1 && (
+                    <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full text-xs font-semibold">
+                      Disabled
+                    </span>
+                  )}
+                  {isUnmapped ? (
+                    <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-semibold flex items-center gap-1">
+                      <FaExclamationTriangle className="w-2.5 h-2.5" />
+                      Belum Dimapping
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-semibold flex items-center gap-1">
+                      <FaLink className="w-2.5 h-2.5" />
+                      {item.variantCount} Produk
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 mb-2">
                   <FaTag className="w-3 h-3 text-gray-400" />
@@ -138,11 +186,35 @@ export default function ItemCard({
         y: -6,
         boxShadow: "0 20px 40px -10px rgba(239, 68, 68, 0.15)",
       }}
-      onClick={() => onView?.()}
-      className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden cursor-pointer transition-all group"
+      onClick={() => {
+        if (onToggleSelect) {
+          onToggleSelect();
+        } else {
+          onView?.();
+        }
+      }}
+      className={`bg-white rounded-2xl shadow-sm border-2 overflow-hidden cursor-pointer transition-all group ${
+        selected ? "border-blue-500 ring-2 ring-blue-200" : "border-gray-100"
+      }`}
     >
       {/* Image Container */}
       <div className="relative h-48 bg-gradient-to-br from-gray-50 via-white to-gray-50 overflow-hidden">
+        {/* Selection Checkbox */}
+        {onToggleSelect && (
+          <div className="absolute top-3 left-3 z-10">
+            <motion.div
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
+              className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center cursor-pointer backdrop-blur-sm transition-all ${
+                selected
+                  ? "bg-blue-500 border-blue-500"
+                  : "bg-white/80 border-gray-300 hover:border-blue-400"
+              }`}
+            >
+              {selected && <FaCheckCircle className="w-5 h-5 text-white" />}
+            </motion.div>
+          </div>
+        )}
         {item.image && !imageError ? (
           <div className="relative w-full h-full p-4">
             <Image
@@ -172,6 +244,11 @@ export default function ItemCard({
           <span className="px-3 py-1 bg-purple-500/90 backdrop-blur-sm rounded-full shadow-sm text-xs font-semibold text-white">
             {item.uom}
           </span>
+          {item.disabled === 1 && (
+            <span className="px-3 py-1 bg-gray-500/90 backdrop-blur-sm rounded-full shadow-sm text-xs font-semibold text-white">
+              Disabled
+            </span>
+          )}
         </div>
 
         {/* Hover Overlay */}
@@ -194,13 +271,24 @@ export default function ItemCard({
           <span className="truncate">{item.group}</span>
         </div>
 
-        {/* Branch Count */}
-        {/* <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
-          <FaMapMarkerAlt className="w-3 h-3 text-red-500" />
-          <span className="text-xs text-gray-600">
-            {item.branches.length} cabang
-          </span>
-        </div> */}
+        {/* Mapping Status */}
+        <div className="mb-4 pb-3 border-b border-gray-100">
+          {isUnmapped ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-lg">
+              <FaExclamationTriangle className="w-3 h-3 text-orange-600 flex-shrink-0" />
+              <span className="text-xs font-semibold text-orange-700">
+                Belum Dimapping
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
+              <FaLink className="w-3 h-3 text-green-600 flex-shrink-0" />
+              <span className="text-xs font-semibold text-green-700">
+                Terdaftar di {item.variantCount} Produk
+              </span>
+            </div>
+          )}
+        </div>
 
         {/* Actions */}
         <div className="flex gap-2">

@@ -5,6 +5,7 @@ import React, { useEffect, useRef, useState } from "react";
 import ItemCard from "./ItemCard";
 import AddItemModal from "./AddItemModal";
 import ItemDetailModal from "./ItemDetailModal";
+import BulkProductCreationModal from "@/components/variants/BulkProductCreationModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Pagination from "@/components/ui/Pagination";
 import {
@@ -17,6 +18,10 @@ import {
   FaChevronDown,
   FaLock,
   FaBoxOpen,
+  FaTimes,
+  FaCheckSquare,
+  FaFilter,
+  FaExclamationTriangle,
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -31,6 +36,7 @@ import FilterBuilder from "@/components/filters/FilterBuilder";
 import { useFilters } from "@/hooks/useFilters";
 import { ITEM_FILTER_FIELDS } from "@/config/filterFields";
 import { FilterTriple } from "@/types/filter";
+import { Product, Category } from "@/types";
 
 export type Item = {
   id: number;
@@ -41,7 +47,7 @@ export type Item = {
   uom: string;
   group: string;
   item_group: string;
-  category: string; // item_category from API
+  category: string;
   generator_item: string;
   image?: string;
   description?: string;
@@ -54,6 +60,12 @@ export type Item = {
   created_by?: number;
   updated_by?: number;
   owner?: number;
+  // Additional fields
+  color?: string;
+  type?: string;
+  // Variant mapping info
+  variants?: any[];
+  variantCount?: number;
   // Dimension fields
   panjang?: string;
   lebar?: string;
@@ -90,6 +102,11 @@ type ItemAPIResponse = {
     created_by: number;
     updated_by: number;
     owner: number;
+    variants?: Array<{
+      id: number;
+      parent_id: number;
+      item: number;
+    }>;
   }>;
   meta: Record<string, unknown>;
   total?: number;
@@ -117,6 +134,7 @@ export default function ItemList() {
   const [sortField, setSortField] = useState<SortField>("created_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
+  const [showOnlyUnmapped, setShowOnlyUnmapped] = useState(false);
 
   // Server-side pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -134,6 +152,17 @@ export default function ItemList() {
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
+
+  // Multi-select state for mapping to products
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<number>>(
+    new Set()
+  );
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+
+  // Products and categories for BulkProductCreationModal
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categoriesData, setCategoriesData] = useState<Category[]>([]);
 
   // Use filter system
   const { filters, setFilters } = useFilters({
@@ -157,10 +186,20 @@ export default function ItemList() {
       order_by?: [string, string][];
       limit: number;
       page: number;
+      childs?: any[];
     } = {
       fields: ["*"],
       limit: 20,
       page: page,
+      childs: [
+        {
+          alias: "variants",
+          table: "ekatalog_variant",
+          fields: ["id", "parent_id", "item"],
+          parent_key: "item",
+          parent_value: "id",
+        },
+      ],
     };
 
     if (filterTriples.length > 0) {
@@ -249,6 +288,8 @@ export default function ItemList() {
         created_by: item.created_by,
         updated_by: item.updated_by,
         owner: item.owner,
+        variants: item.variants || [],
+        variantCount: item.variants ? item.variants.length : 0,
       }));
 
       // // 🔍 DEBUGGING: Log detailed item information
@@ -626,6 +667,113 @@ export default function ItemList() {
     setConfirmOpen(false);
   }
 
+  // Multi-select handlers
+  const toggleItem = (itemId: number) => {
+    setSelectedItemIds((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(itemId)) {
+        newSet.delete(itemId);
+      } else {
+        newSet.add(itemId);
+      }
+      return newSet;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedItemIds(new Set());
+    setSelectionMode(false);
+  };
+
+  const handleBulkProductCreate = () => {
+    if (selectedItemIds.size === 0) return;
+    setBulkModalOpen(true);
+  };
+
+  const handleBulkProductSuccess = () => {
+    // Clear selection after successful product creation
+    clearSelection();
+    // Trigger items update to refresh variant counts
+    window.dispatchEvent(new Event("ekatalog:items_update"));
+  };
+
+  // Load products and categories for modals
+  const loadProductsAndCategories = React.useCallback(async () => {
+    if (!token) return;
+
+    const headers = getAuthHeaders(token);
+
+    try {
+      // Load categories
+      const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
+        fields: ["*"],
+        limit: 1000000000000,
+      });
+      const categoriesRes = await fetch(categoriesUrl, { headers });
+
+      if (categoriesRes.ok) {
+        const json = await categoriesRes.json();
+        const categoriesData = json.data.map(
+          (cat: { id: number; category_name: string }) => ({
+            id: cat.id,
+            name: cat.category_name,
+          })
+        );
+        setCategoriesData(categoriesData);
+      }
+
+      // Load products
+      const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, {
+        fields: ["*"],
+        limit: 1000000000000,
+      });
+      const productsRes = await fetch(productsUrl, { headers });
+
+      if (productsRes.ok) {
+        const json = await productsRes.json();
+        const productsData = json.data.map(
+          (p: {
+            id: number;
+            product_name: string;
+            item_category: [];
+            disabled: number;
+            hot_deals: boolean;
+          }) => ({
+            id: p.id,
+            name: p.product_name,
+            itemCategory: {
+              id: p.item_category,
+              name: `Category ${p.item_category}`,
+            },
+            disabled: p.disabled,
+            isHotDeals: Boolean(p.hot_deals),
+          })
+        );
+        setProducts(productsData);
+      }
+    } catch (error) {
+      console.error("Failed to load products and categories:", error);
+    }
+  }, [token]);
+
+  React.useEffect(() => {
+    loadProductsAndCategories();
+  }, [loadProductsAndCategories]);
+
+  // Listen for product updates
+  React.useEffect(() => {
+    const handleProductsUpdate = () => {
+      console.log("[ItemList] Products updated, refreshing products list...");
+      loadProductsAndCategories();
+    };
+
+    window.addEventListener("ekatalog:products_update", handleProductsUpdate);
+
+    return () => {
+      window.removeEventListener("ekatalog:products_update", handleProductsUpdate);
+    };
+  }, [loadProductsAndCategories]);
+
   // Get unique categories and UOMs for stats cards (MUST be before early returns to comply with Hooks rules)
   const categories = Array.from(new Set(items.map((item) => item.category)));
   const uomList = Array.from(new Set(items.map((item) => item.uom)));
@@ -642,6 +790,13 @@ export default function ItemList() {
         item.group.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (item.description &&
           item.description.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  }
+
+  // Filter for unmapped items
+  if (showOnlyUnmapped) {
+    displayedItems = displayedItems.filter(
+      (item) => !item.variantCount || item.variantCount === 0
     );
   }
 
@@ -714,19 +869,42 @@ export default function ItemList() {
             Items
           </h1>
           <p className="text-sm md:text-base text-gray-600">
-            Kelola item produk di seluruh cabang
+            Kelola item produk dan mapping ke products
           </p>
         </div>
 
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={handleAdd}
-          className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl shadow-lg shadow-red-200 hover:shadow-xl transition-all font-medium"
-        >
-          <FaPlus className="w-4 h-4" />
-          <span>Tambah Item</span>
-        </motion.button>
+        <div className="flex gap-3">
+          {/* Selection Mode Toggle */}
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => {
+              setSelectionMode(!selectionMode);
+              if (selectionMode) {
+                clearSelection();
+              }
+            }}
+            className={`flex items-center justify-center gap-2 px-5 py-3 rounded-xl shadow-lg transition-all font-medium ${
+              selectionMode
+                ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-blue-200"
+                : "bg-white text-gray-700 border-2 border-gray-200 hover:border-blue-300"
+            }`}
+          >
+            <FaCheckSquare className="w-4 h-4" />
+            <span>{selectionMode ? "Cancel" : "Select Items"}</span>
+          </motion.button>
+
+          {/* Add Item Button */}
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={handleAdd}
+            className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl shadow-lg shadow-red-200 hover:shadow-xl transition-all font-medium"
+          >
+            <FaPlus className="w-4 h-4" />
+            <span>Tambah Item</span>
+          </motion.button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -813,6 +991,22 @@ export default function ItemList() {
                 config={ITEM_FILTER_FIELDS}
                 onApply={handleApplyFilters}
               />
+
+              {/* Unmapped Items Filter */}
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setShowOnlyUnmapped(!showOnlyUnmapped)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  showOnlyUnmapped
+                    ? "bg-orange-500 text-white shadow-lg"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+                title="Tampilkan hanya item yang belum dimapping"
+              >
+                <FaExclamationTriangle className="w-3.5 h-3.5" />
+                <span>Belum Dimapping</span>
+              </motion.button>
 
               {/* Sort Direction Button */}
               <button
@@ -956,6 +1150,8 @@ export default function ItemList() {
                 onEdit={() => handleEdit(item)}
                 onDelete={() => promptDeleteItem(item)}
                 onView={() => openDetail(item)}
+                selected={selectedItemIds.has(item.id)}
+                onToggleSelect={selectionMode ? () => toggleItem(item.id) : undefined}
               />
             ))}
           </div>
@@ -981,6 +1177,53 @@ export default function ItemList() {
         </>
       )}
 
+      {/* Floating Action Toolbar - shows when items selected */}
+      <AnimatePresence>
+        {selectionMode && selectedItemIds.size > 0 && (
+          <motion.div
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-40"
+          >
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-2xl shadow-2xl px-8 py-4 flex items-center gap-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                  <span className="font-bold text-lg">
+                    {selectedItemIds.size}
+                  </span>
+                </div>
+                <span className="font-semibold">
+                  {selectedItemIds.size === 1 ? "item" : "items"} selected
+                </span>
+              </div>
+
+              <div className="flex gap-3">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={clearSelection}
+                  className="px-5 py-2.5 bg-white/20 hover:bg-white/30 rounded-xl font-semibold transition-all flex items-center gap-2"
+                >
+                  <FaTimes className="w-4 h-4" />
+                  Clear
+                </motion.button>
+
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleBulkProductCreate}
+                  className="px-6 py-2.5 bg-white text-blue-600 hover:bg-blue-50 rounded-xl font-bold transition-all flex items-center gap-2 shadow-lg"
+                >
+                  <FaPlus className="w-4 h-4" />
+                  Create Product
+                </motion.button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Modals */}
       <AddItemModal
         open={modalOpen}
@@ -994,6 +1237,15 @@ export default function ItemList() {
         item={detailItem}
         onEdit={onDetailEdit}
         onDelete={onDetailDelete}
+      />
+
+      <BulkProductCreationModal
+        open={bulkModalOpen}
+        onClose={() => setBulkModalOpen(false)}
+        selectedItems={items.filter((item) => selectedItemIds.has(item.id))}
+        categories={categoriesData}
+        products={products}
+        onSuccess={handleBulkProductSuccess}
       />
 
       <ConfirmDialog

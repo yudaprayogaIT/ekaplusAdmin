@@ -12,6 +12,7 @@ import {
   FaCube,
   FaCheckCircle,
   FaMapMarkerAlt,
+  FaBox,
 } from "react-icons/fa";
 import Image from "next/image";
 import { Item } from "./ItemList";
@@ -21,6 +22,13 @@ import { useAuth } from "@/contexts/AuthContext";
 type Branch = {
   id: number;
   name: string;
+};
+
+type Variant = {
+  id: number;
+  idx: number;
+  parent_id: number;
+  product_name?: string;
 };
 
 export default function ItemDetailModal({
@@ -40,6 +48,8 @@ export default function ItemDetailModal({
   const [imageError, setImageError] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loadingBranches, setLoadingBranches] = useState(false);
+  const [variants, setVariants] = useState<Variant[]>([]);
+  const [loadingVariants, setLoadingVariants] = useState(false);
 
   // Load all branches untuk display nama yang benar
   useEffect(() => {
@@ -82,6 +92,104 @@ export default function ItemDetailModal({
     }
 
     loadBranches();
+  }, [open, token, item]);
+
+  // Load variants (products this item belongs to)
+  useEffect(() => {
+    if (!open || !token || !item) return;
+
+    async function loadVariants() {
+      if (!token || !item) return;
+      setLoadingVariants(true);
+      try {
+        // Use the API structure with childs to fetch variants
+        const spec = {
+          fields: ["*"],
+          filters: [["id", "=", item.id]],
+          childs: [
+            {
+              alias: "variants",
+              table: "ekatalog_variant",
+              fields: ["*"],
+              parent_key: "item",
+              parent_value: "id",
+            },
+          ],
+        };
+
+        const itemUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, spec);
+        const headers = getAuthHeaders(token);
+
+        const res = await fetch(itemUrl, {
+          method: "GET",
+          cache: "no-store",
+          headers,
+        });
+
+        if (res.ok) {
+          const response = await res.json();
+          if (response.data && response.data.length > 0) {
+            const itemData = response.data[0];
+            const variantsData: Variant[] = itemData.variants || [];
+
+            // Fetch product names for each variant
+            if (variantsData.length > 0) {
+              const productIds = Array.from(
+                new Set(variantsData.map((v: Variant) => v.parent_id))
+              );
+
+              // Load products to get their names
+              const productsSpec = {
+                fields: ["id", "product_name"],
+                filters: [["id", "in", productIds]],
+              };
+              const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, productsSpec);
+              const productsRes = await fetch(productsUrl, { headers });
+
+              if (productsRes.ok) {
+                const productsJson = await productsRes.json();
+                const productsMap = new Map<number, string>(
+                  productsJson.data.map((p: { id: number; product_name: string }) => [
+                    p.id,
+                    p.product_name,
+                  ])
+                );
+
+                // Merge product names into variants
+                const enrichedVariants: Variant[] = variantsData.map((v: Variant): Variant => {
+                  const productName = productsMap.get(v.parent_id);
+                  return {
+                    id: v.id,
+                    idx: v.idx,
+                    parent_id: v.parent_id,
+                    product_name: productName || `Product ${v.parent_id}`,
+                  };
+                });
+
+                setVariants(enrichedVariants);
+              } else {
+                // Set variants without product names
+                const basicVariants: Variant[] = variantsData.map((v: Variant): Variant => ({
+                  id: v.id,
+                  idx: v.idx,
+                  parent_id: v.parent_id,
+                  product_name: `Product ${v.parent_id}`,
+                }));
+                setVariants(basicVariants);
+              }
+            } else {
+              setVariants([]);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load variants:", error);
+      } finally {
+        setLoadingVariants(false);
+      }
+    }
+
+    loadVariants();
   }, [open, token, item]);
 
   if (!item) return null;
@@ -310,6 +418,48 @@ export default function ItemDetailModal({
                   )}
                 </div>
               )}
+
+              {/* Products (Variants) - Products this item belongs to */}
+              <div className="mb-8">
+                <div className="flex items-center gap-3 mb-4">
+                  <FaBox className="w-5 h-5 text-blue-600" />
+                  <label className="text-lg font-bold text-gray-800">
+                    Terdaftar di Produk
+                  </label>
+                </div>
+                {loadingVariants ? (
+                  <div className="text-center py-8">
+                    <div className="w-8 h-8 border-2 border-blue-200 border-t-blue-500 rounded-full animate-spin mx-auto mb-2"></div>
+                    <p className="text-xs text-gray-500">Memuat produk...</p>
+                  </div>
+                ) : variants.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {variants.map((variant) => (
+                      <div
+                        key={variant.id}
+                        className="flex items-center gap-2 px-4 py-3 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl border-2 border-blue-200"
+                      >
+                        <FaBox className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium text-blue-900 block truncate">
+                            {variant.product_name || `Product #${variant.parent_id}`}
+                          </span>
+                          <span className="text-xs text-blue-700">
+                            Urutan: {variant.idx}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                    <FaBox className="w-12 h-12 text-gray-300 mx-auto mb-2" />
+                    <p className="text-sm text-gray-500">
+                      Item ini belum terdaftar di produk manapun
+                    </p>
+                  </div>
+                )}
+              </div>
 
               {/* Actions */}
               <div className="flex gap-4 pt-6 border-t-2 border-gray-100">

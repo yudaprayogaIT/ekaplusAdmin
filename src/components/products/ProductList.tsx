@@ -79,6 +79,7 @@ export default function ProductList() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [availableItems, setAvailableItems] = useState<Item[]>([]);
+  const [staticDataLoaded, setStaticDataLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -107,72 +108,21 @@ export default function ProductList() {
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
 
-  // Helper function to load and merge data from API with filters and sorting
-  async function loadAllData(
+  // Helper function to load products only (for pagination/sorting)
+  async function loadProducts(
     filterTriples: FilterTriple[] = [],
     sort_by?: SortField,
     sort_order?: SortDirection,
     page: number = 1
   ): Promise<{
-    categoriesData: Category[];
-    itemsData: Item[];
     productsWithVariants: Product[];
     totalItems: number;
     totalPages: number;
   }> {
     if (!token)
-      return { categoriesData: [], itemsData: [], productsWithVariants: [], totalItems: 0, totalPages: 0 };
+      return { productsWithVariants: [], totalItems: 0, totalPages: 0 };
 
     const headers = getAuthHeaders(token);
-
-    // Load categories from API
-    const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
-      fields: ["*"],
-      limit: 10000000,
-    });
-    const categoriesRes = await fetch(categoriesUrl, {
-      method: "GET",
-      cache: "no-store",
-      headers,
-    });
-    let categoriesData: Category[] = [];
-    if (categoriesRes.ok) {
-      const response = await categoriesRes.json();
-      categoriesData = response.data.map(
-        (cat: { id: number; category_name: string }) => ({
-          id: cat.id,
-          name: cat.category_name,
-        })
-      );
-    }
-
-    // Load items from API
-    const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
-      fields: ["*"],
-      limit: 10000000,
-    });
-    const itemsRes = await fetch(itemsUrl, {
-      method: "GET",
-      cache: "no-store",
-      headers,
-    });
-    let itemsData: Item[] = [];
-    if (itemsRes.ok) {
-      const response = await itemsRes.json();
-      itemsData = response.data.map((item: ItemApiResponse) => ({
-        id: item.id,
-        code: item.item_code,
-        name: item.item_name,
-        description: item.item_desc || "",
-        category: item.item_category,
-        group: item.item_group,
-        type: item.ekatalog_type,
-        color: item.item_color,
-        image: getFileUrl(item.image),
-        disabled: item.disabled,
-        created_by: item.created_by,
-      }));
-    }
 
     // Load products from API with filters and sorting
     // Use childs to fetch variants directly with products
@@ -190,6 +140,8 @@ export default function ProductList() {
     } = {
       fields: [
         "*",
+        "item_category.id",
+        "item_category.category_name",
         "created_by.full_name",
         "updated_by.full_name",
         "owner.full_name",
@@ -279,19 +231,41 @@ export default function ProductList() {
         console.log("First product variants:", response.data[0].variants);
       }
 
-      productsWithVariants = response.data.map((prod: ProductApiResponse & { variants?: Array<{ item: { id: number; item_code: string; item_name: string; image?: string } }> }) => {
-        // Find the category object for this product
-        const category = categoriesData.find(
-          (c) => c.id === prod.item_category
-        ) || {
-          id: prod.item_category,
-          name: `Category ${prod.item_category}`,
-        };
+      productsWithVariants = response.data.map((prod: ProductApiResponse & {
+        variants?: Array<{ item: { id: number; item_code: string; item_name: string; image?: string } }>;
+        item_category: number | { id?: number; category_name?: string };
+        item_category_id?: number;
+      }) => {
+        // Use nested category data from API if available, otherwise fallback to lookup
+        let finalCategory: { id: number; name: string };
+
+        if (typeof prod.item_category === "object" && prod.item_category?.category_name) {
+          // Category name fetched directly from API (nested object)
+          finalCategory = {
+            id: prod.item_category.id || prod.item_category_id || 0,
+            name: prod.item_category.category_name,
+          };
+          console.log(`[ProductList] Using nested category from API: ${finalCategory.name} (ID: ${finalCategory.id})`);
+        } else {
+          // Fallback: lookup from categories array
+          const categoryId = typeof prod.item_category === "number" ? prod.item_category : prod.item_category_id;
+          console.log(`[ProductList] Looking for category ID ${categoryId} in ${categories.length} categories`);
+          const category = categories.find((c) => c.id === categoryId);
+
+          if (!category) {
+            console.warn(`[ProductList] Category ${categoryId} not found! Using fallback. Available categories:`, categories.map(c => ({ id: c.id, name: c.name })));
+          }
+
+          finalCategory = category || {
+            id: categoryId || 0,
+            name: `Category ${categoryId}`,
+          };
+        }
 
         // Transform variants from API response
         const productVariants = (prod.variants || []).map((v) => {
-          // Find full item data from itemsData
-          const fullItem = itemsData.find((item) => item.id === v.item.id);
+          // Find full item data from availableItems state
+          const fullItem = availableItems.find((item) => item.id === v.item.id);
 
           return {
             id: v.item.id, // Use item ID as variant ID for now
@@ -321,7 +295,7 @@ export default function ProductList() {
         return {
           id: prod.id,
           name: prod.product_name,
-          itemCategory: category,
+          itemCategory: finalCategory,
           disabled: prod.disabled,
           isHotDeals: Boolean(prod.hot_deals),
           variants: productVariants, // Variants from childs API
@@ -372,7 +346,7 @@ export default function ProductList() {
       }
     }
 
-    return { categoriesData, itemsData, productsWithVariants, totalItems, totalPages };
+    return { productsWithVariants, totalItems, totalPages };
   }
 
   // Use filter system
@@ -393,11 +367,9 @@ export default function ProductList() {
           "page:",
           page
         );
-        const { categoriesData, itemsData, productsWithVariants, totalItems, totalPages } =
-          await loadAllData(filterTriples, sortField, sortDirection, page);
+        const { productsWithVariants, totalItems, totalPages } =
+          await loadProducts(filterTriples, sortField, sortDirection, page);
 
-        setCategories(categoriesData);
-        setAvailableItems(itemsData);
         setProducts(productsWithVariants);
         setTotalItems(totalItems);
         setTotalPages(totalPages);
@@ -420,12 +392,86 @@ export default function ProductList() {
     loadDataWithFilters(newFilters, 1);
   }
 
-  // Initial load with filters from URL/localStorage
+  // Load static data (categories and items) once on mount
   useEffect(() => {
+    if (!token) return;
+
+    async function loadStatic() {
+      console.log("[ProductList] Loading static data (categories & items)...");
+      // Inline load to avoid dependency issues
+      const headers = getAuthHeaders(token);
+
+      // Load categories
+      const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
+        fields: ["*"],
+        limit: 1000,
+      });
+      const categoriesRes = await fetch(categoriesUrl, { method: "GET", cache: "no-store", headers });
+      if (categoriesRes.ok) {
+        const response = await categoriesRes.json();
+        const categoriesData = response.data.map((cat: { id: number; category_name: string }) => ({
+          id: cat.id,
+          name: cat.category_name,
+        }));
+        setCategories(categoriesData);
+        console.log("[ProductList] Categories loaded:", categoriesData.length);
+      }
+
+      // Load items
+      const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
+        fields: ["*"],
+        filters: [["disabled", "=", 0]],
+        limit: 10000,
+      });
+      const itemsRes = await fetch(itemsUrl, { method: "GET", cache: "no-store", headers });
+      if (itemsRes.ok) {
+        const response = await itemsRes.json();
+        const itemsData = response.data.map((item: ItemApiResponse) => ({
+          id: item.id,
+          code: item.item_code,
+          name: item.item_name,
+          description: item.item_desc || "",
+          category: item.item_category,
+          group: item.item_group,
+          type: item.ekatalog_type,
+          color: item.item_color,
+          image: getFileUrl(item.image),
+          disabled: item.disabled,
+          created_by: item.created_by,
+        }));
+        setAvailableItems(itemsData);
+        console.log("[ProductList] Items loaded:", itemsData.length);
+      }
+
+      // Mark static data as loaded
+      setStaticDataLoaded(true);
+      console.log("[ProductList] Static data loading complete");
+    }
+
+    loadStatic();
+
+    // Reload items when they're updated
+    const handleItemsUpdate = () => {
+      console.log("[ProductList] Items updated, reloading static data...");
+      loadStatic();
+    };
+
+    window.addEventListener("ekatalog:items_update", handleItemsUpdate);
+    return () => {
+      window.removeEventListener("ekatalog:items_update", handleItemsUpdate);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  // Initial load with filters from URL/localStorage (only after static data is loaded)
+  useEffect(() => {
+    if (!staticDataLoaded || !token) return;
+
     let cancelled = false;
 
     async function load() {
-      if (!cancelled && token) {
+      if (!cancelled) {
+        console.log("[ProductList] Static data ready, loading products...");
         await loadDataWithFilters(filters, currentPage);
       }
     }
@@ -437,11 +483,12 @@ export default function ProductList() {
     return () => {
       cancelled = true;
     };
-  }, [token, filters, currentPage, loadDataWithFilters]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staticDataLoaded, token, filters, currentPage]);
 
-  // Reload data when sort changes
+  // Reload data when sort changes (only after static data is loaded)
   useEffect(() => {
-    if (token) {
+    if (staticDataLoaded && token) {
       console.log(
         "[ProductList] Sort changed, reloading data with:",
         sortField,
@@ -451,17 +498,19 @@ export default function ProductList() {
       loadDataWithFilters(filters, 1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortField, sortDirection]);
+  }, [staticDataLoaded, sortField, sortDirection]);
 
-  // Listen for updates
+  // Listen for updates (only after static data is loaded)
   useEffect(() => {
+    if (!staticDataLoaded) return;
+
     async function handler() {
       console.log("[ProductList] 🔄 Event triggered: products_update or variants_update");
       console.log("[ProductList] Reloading data with filters:", filters);
       console.log("[ProductList] Reloading data with sort:", sortField, sortDirection);
       console.log("[ProductList] Reloading data with page:", currentPage);
       try {
-        const { productsWithVariants, totalItems, totalPages } = await loadAllData(filters, sortField, sortDirection, currentPage);
+        const { productsWithVariants, totalItems, totalPages } = await loadProducts(filters, sortField, sortDirection, currentPage);
         console.log("[ProductList] ✅ Reload complete. Total products:", productsWithVariants.length);
         setProducts(productsWithVariants);
         setTotalItems(totalItems);
@@ -479,7 +528,8 @@ export default function ProductList() {
       window.removeEventListener("ekatalog:products_update", handler);
       window.removeEventListener("ekatalog:variants_update", handler);
     };
-  }, [filters, sortField, sortDirection, currentPage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staticDataLoaded, filters, sortField, sortDirection, currentPage]);
 
   function saveSnapshot(arr: Product[]) {
     localStorage.setItem(SNAP_KEY, JSON.stringify(arr));

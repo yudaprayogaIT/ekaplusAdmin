@@ -1,13 +1,15 @@
 // src/components/products/VariantSuggestions.tsx (Enhanced Version)
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaLightbulb,
   FaPlus,
   FaChevronDown,
   FaChevronUp,
+  FaSearch,
+  FaFilter,
 } from "react-icons/fa";
 import Image from "next/image";
 import type { Item } from "@/types";
@@ -24,24 +26,48 @@ export function VariantSuggestions({
   onSelect: (items: Item[]) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterCategory, setFilterCategory] = useState<string>("");
 
-  // Extract prefix dari product name (first 2 words)
+  // Extract prefix dari product name (first 3 words)
   const getPrefix = (name: string) => {
-    return name.trim().split(/\s+/).slice(0, 2).join(" ").toUpperCase();
+    return name.trim().split(/\s+/).slice(0, 3).join(" ").toUpperCase();
   };
 
   const productPrefix = getPrefix(productName);
 
   // Find suggested items based on prefix matching
-  const suggestions = items.filter((item) => {
-    const itemPrefix = getPrefix(item.name);
-    const alreadyAdded = currentVariants.some((v) => v.id === item.id);
-    return itemPrefix === productPrefix && !alreadyAdded;
-  });
+  const suggestions = useMemo(() => {
+    return items.filter((item) => {
+      const itemPrefix = getPrefix(item.name);
+      const alreadyAdded = currentVariants.some((v) => v.id === item.id);
+      return itemPrefix === productPrefix && !alreadyAdded;
+    });
+  }, [items, productPrefix, currentVariants]);
+
+  // Get unique categories from suggestions
+  const uniqueCategories = useMemo(() => {
+    return [...new Set(suggestions.map((item) => item.category).filter(Boolean))];
+  }, [suggestions]);
+
+  // Filter suggestions by search and category
+  const filteredSuggestions = useMemo(() => {
+    return suggestions.filter((item) => {
+      const matchesSearch =
+        searchQuery === "" ||
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.code.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesCategory =
+        filterCategory === "" || item.category === filterCategory;
+
+      return matchesSearch && matchesCategory;
+    });
+  }, [suggestions, searchQuery, filterCategory]);
 
   if (suggestions.length === 0 || !productName.trim()) return null;
 
-  const displayItems = expanded ? suggestions : suggestions.slice(0, 3);
+  const displayItems = expanded ? filteredSuggestions : filteredSuggestions.slice(0, 8);
 
   return (
     <motion.div
@@ -60,13 +86,52 @@ export function VariantSuggestions({
           </p>
         </div>
         <button
-          onClick={() => onSelect(suggestions)}
+          onClick={() => onSelect(filteredSuggestions)}
           className="px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg text-sm font-medium hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg shadow-blue-200 flex items-center gap-2"
         >
           <FaPlus className="w-3 h-3" />
-          Add all {suggestions.length}
+          Add all {filteredSuggestions.length}
         </button>
       </div>
+
+      {/* Search and Filter */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+        {/* Search */}
+        <div className="relative">
+          <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400 w-4 h-4" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Cari nama atau kode item..."
+            className="w-full pl-10 pr-4 py-2 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
+          />
+        </div>
+
+        {/* Category Filter */}
+        <div className="relative">
+          <FaFilter className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400 w-4 h-4" />
+          <select
+            value={filterCategory}
+            onChange={(e) => setFilterCategory(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm appearance-none bg-white"
+          >
+            <option value="">Semua Kategori</option>
+            {uniqueCategories.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Result Count */}
+      {(searchQuery || filterCategory) && (
+        <div className="mb-3 text-xs text-blue-600">
+          Menampilkan {filteredSuggestions.length} dari {suggestions.length} items
+        </div>
+      )}
 
       {/* Items Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-3">
@@ -121,7 +186,7 @@ export function VariantSuggestions({
       </div>
 
       {/* Expand/Collapse Button */}
-      {suggestions.length > 3 && (
+      {filteredSuggestions.length > 8 && (
         <button
           onClick={() => setExpanded(!expanded)}
           className="w-full py-2 text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center justify-center gap-2 hover:bg-blue-100 rounded-lg transition-colors"
@@ -134,7 +199,7 @@ export function VariantSuggestions({
           ) : (
             <>
               <FaChevronDown className="w-3 h-3" />
-              Show {suggestions.length - 3} more items
+              Show {filteredSuggestions.length - 8} more items
             </>
           )}
         </button>

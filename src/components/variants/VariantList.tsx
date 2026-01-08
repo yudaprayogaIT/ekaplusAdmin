@@ -9,22 +9,15 @@ import React, {
   useMemo,
 } from "react";
 import VariantCard from "./VariantCard";
-import AddVariantMappingModal from "./AddVariantMappingModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Pagination from "@/components/ui/Pagination";
-import ItemGroupSection from "./ItemGroupSection";
-import BulkProductCreationModal from "./BulkProductCreationModal";
 import {
-  FaLink,
   FaSearch,
   FaList,
   FaTh,
   FaSortAmountUp,
   FaSortAmountDown,
   FaChevronDown,
-  FaPlus,
-  FaTimes,
-  FaCheckSquare,
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import { fetchVariants, deleteVariant } from "@/services/variantService";
@@ -93,6 +86,7 @@ export default function VariantList() {
   const [products, setProducts] = useState<Product[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [staticDataLoaded, setStaticDataLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -107,24 +101,10 @@ export default function VariantList() {
   const [totalItems, setTotalItems] = useState(0);
   const itemsPerPage = 20;
 
-  const [mappingModalOpen, setMappingModalOpen] = useState(false);
-
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
-
-  // Bulk grouping state
-  const [viewType, setViewType] = useState<"mapped" | "unmapped">("mapped");
-  const [isTransitioning, setIsTransitioning] = useState(false);
-  const [selectedItemIds, setSelectedItemIds] = useState<Set<number>>(
-    new Set()
-  );
-  const [bulkModalOpen, setBulkModalOpen] = useState(false);
-
-  // Lazy load unmapped items only when needed
-  const [unmappedItemsLoaded, setUnmappedItemsLoaded] = useState(false);
-  const [unmappedItemsLoading, setUnmappedItemsLoading] = useState(false);
 
   // Use filter system
   const { filters, setFilters } = useFilters({
@@ -134,29 +114,24 @@ export default function VariantList() {
   // Handle filter apply
   function handleApplyFilters(newFilters: FilterTriple[]) {
     setFilters(newFilters);
+    setCurrentPage(1); // Reset to first page when filters change
     console.log("[VariantList] Filters applied:", newFilters);
   }
 
-  // Helper function to load all data with filters and sorting
-  const loadAllData = useCallback(
+  // Helper function to load variants only (for pagination/sorting)
+  const loadVariants = useCallback(
     async (
       filterTriples: FilterTriple[] = [],
       sort_by?: SortField,
       sort_order?: SortDirection,
       page: number = 1
     ): Promise<{
-      categoriesData: Category[];
-      productsData: Product[];
-      itemsData: Item[];
       variantsData: ItemVariant[];
       totalItems: number;
       totalPages: number;
     }> => {
       if (!token) {
         return {
-          categoriesData: [],
-          productsData: [],
-          itemsData: [],
           variantsData: [],
           totalItems: 0,
           totalPages: 0,
@@ -164,95 +139,6 @@ export default function VariantList() {
       }
 
       const headers = getAuthHeaders(token);
-
-      // Load categories from API
-      const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
-        fields: ["*"],
-        limit: 1000000000000,
-      });
-      const categoriesRes = await fetch(categoriesUrl, { headers });
-
-      let categoriesData: Category[] = [];
-      if (categoriesRes.ok) {
-        const json = await categoriesRes.json();
-        categoriesData = json.data.map(
-          (cat: { id: number; category_name: string }) => ({
-            id: cat.id,
-            name: cat.category_name,
-          })
-        );
-        console.log("");
-        console.log(categoriesData);
-      }
-
-      // Load products from API
-      const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, {
-        fields: ["*"],
-        limit: 1000000000000,
-      });
-      const productsRes = await fetch(productsUrl, { headers });
-
-      let productsData: Product[] = [];
-      if (productsRes.ok) {
-        const json = await productsRes.json();
-        productsData = json.data.map(
-          (p: {
-            id: number;
-            product_name: string;
-            item_category: [];
-            disabled: number;
-            hot_deals: boolean;
-          }) => ({
-            id: p.id,
-            name: p.product_name,
-            itemCategory: {
-              id: p.item_category,
-              name: `Category ${p.item_category}`,
-            },
-            disabled: p.disabled,
-            isHotDeals: Boolean(p.hot_deals),
-          })
-        );
-      }
-
-      // Load items from API (needed for variant hydration)
-      const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
-        fields: ["*"],
-        limit: 1000000000000,
-      });
-      const itemsRes = await fetch(itemsUrl, { headers });
-
-      let itemsData: Item[] = [];
-      if (itemsRes.ok) {
-        const json = await itemsRes.json();
-        itemsData = json.data.map(
-          (i: {
-            id: number;
-            item_code: string;
-            item_name: string;
-            item_color?: string;
-            ekatalog_type?: string;
-            uom: string;
-            image?: string;
-            item_desc?: string;
-            item_category?: string;
-            item_group?: string;
-            disabled?: number;
-          }) => ({
-            id: i.id,
-            code: i.item_code,
-            name: i.item_name,
-            color: i.item_color || "",
-            type: i.ekatalog_type || "",
-            uom: i.uom,
-            image: getFileUrl(i.image),
-            description: i.item_desc,
-            category: i.item_category,
-            group: i.item_group,
-            disabled: i.disabled,
-          })
-        );
-      }
 
       // Load variants from API with filters and sorting
       const variantSpec: {
@@ -342,7 +228,7 @@ export default function VariantList() {
             created_at?: string;
             updated_at?: string;
           }) => {
-            const item = itemsData.find((i) => i.id === v.item);
+            const item = items.find((i) => i.id === v.item);
             if (!item) {
               console.warn(`Item ${v.item} not found in items list`);
               return {
@@ -374,13 +260,163 @@ export default function VariantList() {
         );
       }
 
-      return { categoriesData, productsData, itemsData, variantsData, totalItems, totalPages };
+      return { variantsData, totalItems, totalPages };
     },
-    [token]
+    [token, items]
   );
 
-  // Load data from API
+  // Load static data (categories, products, items) once on mount
   useEffect(() => {
+    if (!token) return;
+
+    async function loadStatic() {
+      console.log("[VariantList] Loading static data (categories, products, items)...");
+      const headers = getAuthHeaders(token);
+
+      try {
+        // Load categories
+        const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
+          fields: ["*"],
+          limit: 1000,
+        });
+        const categoriesRes = await fetch(categoriesUrl, { headers });
+        if (categoriesRes.ok) {
+          const json = await categoriesRes.json();
+          const categoriesData = json.data.map(
+            (cat: { id: number; category_name: string }) => ({
+              id: cat.id,
+              name: cat.category_name,
+            })
+          );
+          setCategories(categoriesData);
+          console.log("[VariantList] Categories loaded:", categoriesData.length);
+        }
+
+        // Load products (only active products)
+        const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, {
+          fields: ["*", "item_category.id", "item_category.category_name"],
+          filters: [["disabled", "=", 0]],
+          limit: 5000,
+        });
+        const productsRes = await fetch(productsUrl, { headers });
+        if (productsRes.ok) {
+          const json = await productsRes.json();
+          const productsData = json.data.map(
+            (p: {
+              id: number;
+              product_name: string;
+              item_category: number | { id?: number; category_name?: string };
+              item_category_id?: number;
+              disabled: number;
+              hot_deals: boolean;
+            }) => {
+              // Use nested category if available
+              let itemCategory;
+              if (typeof p.item_category === "object" && p.item_category?.category_name) {
+                itemCategory = {
+                  id: p.item_category.id || p.item_category_id || 0,
+                  name: p.item_category.category_name,
+                };
+              } else {
+                const catId = typeof p.item_category === "number" ? p.item_category : p.item_category_id;
+                itemCategory = {
+                  id: catId || 0,
+                  name: `Category ${catId}`,
+                };
+              }
+
+              return {
+                id: p.id,
+                name: p.product_name,
+                itemCategory,
+                disabled: p.disabled,
+                isHotDeals: Boolean(p.hot_deals),
+              };
+            }
+          );
+          setProducts(productsData);
+          console.log("[VariantList] Products loaded:", productsData.length);
+        }
+
+        // Load items (only active items)
+        const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
+          fields: ["*"],
+          filters: [["disabled", "=", 0]],
+          limit: 10000,
+        });
+        const itemsRes = await fetch(itemsUrl, { headers });
+        if (itemsRes.ok) {
+          const json = await itemsRes.json();
+          const itemsData = json.data.map(
+            (i: {
+              id: number;
+              item_code: string;
+              item_name: string;
+              item_color?: string;
+              ekatalog_type?: string;
+              uom: string;
+              image?: string;
+              item_desc?: string;
+              item_category?: string;
+              item_group?: string;
+              disabled?: number;
+            }) => ({
+              id: i.id,
+              code: i.item_code,
+              name: i.item_name,
+              color: i.item_color || "",
+              type: i.ekatalog_type || "",
+              uom: i.uom,
+              image: getFileUrl(i.image),
+              description: i.item_desc,
+              category: i.item_category,
+              group: i.item_group,
+              disabled: i.disabled,
+            })
+          );
+          setItems(itemsData);
+          console.log("[VariantList] Items loaded:", itemsData.length);
+        }
+
+        setStaticDataLoaded(true);
+        console.log("[VariantList] Static data loading complete");
+      } catch (error) {
+        console.error("[VariantList] Failed to load static data:", error);
+      }
+    }
+
+    loadStatic();
+
+    // Reload items when they're updated
+    const handleItemsUpdate = () => {
+      console.log("[VariantList] Items updated, reloading static data...");
+      loadStatic();
+    };
+
+    window.addEventListener("ekatalog:items_update", handleItemsUpdate);
+    return () => {
+      window.removeEventListener("ekatalog:items_update", handleItemsUpdate);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  // Reset to first page when sort changes
+  useEffect(() => {
+    if (staticDataLoaded) {
+      console.log(
+        "[VariantList] Sort changed, resetting to first page:",
+        sortField,
+        sortDirection
+      );
+      setCurrentPage(1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staticDataLoaded, sortField, sortDirection]);
+
+  // Load variants with filters and pagination (only after static data is loaded)
+  useEffect(() => {
+    if (!staticDataLoaded || !token) return;
+
     let cancelled = false;
 
     async function load() {
@@ -388,33 +424,21 @@ export default function VariantList() {
       setError(null);
 
       try {
-        if (!token) {
-          console.error("No auth token found - redirecting to login");
-          setError("Session expired. Please login again.");
-          setLoading(false);
-          return;
-        }
-
         console.log(
-          "[VariantList] Loading data with server-side sort and pagination:",
+          "[VariantList] Loading variants with server-side sort and pagination:",
           sortField,
           sortDirection,
           "page:",
           currentPage
         );
 
-        const { categoriesData, productsData, itemsData, variantsData, totalItems, totalPages } =
-          await loadAllData(filters, sortField, sortDirection, currentPage);
+        const { variantsData, totalItems, totalPages } =
+          await loadVariants(filters, sortField, sortDirection, currentPage);
 
         if (!cancelled) {
-          setCategories(categoriesData);
-          setProducts(productsData);
-          setItems(itemsData);
           setVariants(variantsData);
           setTotalItems(totalItems);
           setTotalPages(totalPages);
-          // Reset unmapped cache when data changes
-          setUnmappedItemsLoaded(false);
         }
       } catch (err: unknown) {
         if (!cancelled)
@@ -428,40 +452,38 @@ export default function VariantList() {
     return () => {
       cancelled = true;
     };
-  }, [token, filters, sortField, sortDirection, currentPage, loadAllData]);
+  }, [staticDataLoaded, token, filters, sortField, sortDirection, currentPage, loadVariants]);
 
-  // Listen for variant updates and refresh ALL data from API
+  // Listen for variant updates and refresh variants only
   useEffect(() => {
+    if (!staticDataLoaded) return;
+
     async function handler() {
       if (!token) return;
       try {
-        console.log(
-          "[VariantList] Refreshing all data after variant update..."
-        );
+        console.log("[VariantList] Refreshing variants after update...");
 
-        // Reload ALL data to ensure consistency
-        const { categoriesData, productsData, itemsData, variantsData, totalItems, totalPages } =
-          await loadAllData(filters, sortField, sortDirection, currentPage);
+        // Reload variants only
+        const { variantsData, totalItems, totalPages } =
+          await loadVariants(filters, sortField, sortDirection, currentPage);
 
-        setCategories(categoriesData);
-        setProducts(productsData);
-        setItems(itemsData);
         setVariants(variantsData);
         setTotalItems(totalItems);
         setTotalPages(totalPages);
 
-        // Invalidate unmapped cache
-        setUnmappedItemsLoaded(false);
-
-        console.log("[VariantList] Data refreshed successfully");
+        console.log("[VariantList] Variants refreshed successfully");
       } catch (err) {
-        console.error("Failed to refresh data:", err);
+        console.error("Failed to refresh variants:", err);
       }
     }
     window.addEventListener("ekatalog:variants_update", handler);
-    return () =>
+    window.addEventListener("ekatalog:products_update", handler);
+
+    return () => {
       window.removeEventListener("ekatalog:variants_update", handler);
-  }, [token, filters, sortField, sortDirection, currentPage, loadAllData]);
+      window.removeEventListener("ekatalog:products_update", handler);
+    };
+  }, [staticDataLoaded, token, filters, sortField, sortDirection, currentPage, loadVariants]);
 
   // Helper to refresh variants from API
   async function refreshVariants() {
@@ -505,126 +527,10 @@ export default function VariantList() {
     setConfirmOpen(false);
   }
 
-  function handleMappingSave() {
-    setMappingModalOpen(false);
-  }
-
-  // Quick count of unmapped items (for display in button)
-  // This is O(n) but faster than full grouping
-  const unmappedItemsCount = useMemo(() => {
-    const variantItemIds = new Set(variants.map((v) => v.item.id));
-    return items.filter((item) => !variantItemIds.has(item.id)).length;
-  }, [items, variants]);
-
-  // Lazy-loaded unmapped items and groups
-  const [unmappedItemsCache, setUnmappedItemsCache] = useState<Item[]>([]);
-  const [groupedUnmappedItemsCache, setGroupedUnmappedItemsCache] = useState<Map<string, Item[]>>(new Map());
-
-  // Load unmapped items on-demand when switching to unmapped view
-  useEffect(() => {
-    if (viewType === "unmapped" && !unmappedItemsLoaded && !unmappedItemsLoading && !isTransitioning) {
-      console.log("[VariantList] Lazy loading unmapped items...");
-      setUnmappedItemsLoading(true);
-
-      // Use setTimeout to defer heavy computation and not block UI
-      setTimeout(() => {
-        const startTime = performance.now();
-
-        // Compute unmapped items
-        const variantItemIds = new Set(variants.map((v) => v.item.id));
-        const unmapped = items.filter((item) => !variantItemIds.has(item.id));
-
-        const midTime = performance.now();
-        console.log("[VariantList] Found", unmapped.length, "unmapped items in", Math.round(midTime - startTime), "ms");
-
-        // Group unmapped items
-        const grouped = groupItemsByPattern(unmapped);
-
-        const endTime = performance.now();
-        console.log("[VariantList] Created", grouped.size, "groups in", Math.round(endTime - midTime), "ms");
-        console.log("[VariantList] Total unmapped processing time:", Math.round(endTime - startTime), "ms");
-
-        setUnmappedItemsCache(unmapped);
-        setGroupedUnmappedItemsCache(grouped);
-        setUnmappedItemsLoaded(true);
-        setUnmappedItemsLoading(false);
-      }, 100);
-    }
-  }, [viewType, unmappedItemsLoaded, unmappedItemsLoading, isTransitioning, items, variants]);
-
-  // Use cached values
-  const unmappedItems = unmappedItemsCache;
-  const groupedUnmappedItems = groupedUnmappedItemsCache;
-
-  // Multi-select handlers
-  const toggleItem = (itemId: number) => {
-    setSelectedItemIds((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(itemId)) {
-        newSet.delete(itemId);
-      } else {
-        newSet.add(itemId);
-      }
-      return newSet;
-    });
-  };
-
-  const selectAllInGroup = (groupItems: Item[]) => {
-    setSelectedItemIds((prev) => {
-      const newSet = new Set(prev);
-      const allSelected = groupItems.every((item) => newSet.has(item.id));
-
-      if (allSelected) {
-        // Deselect all in group
-        groupItems.forEach((item) => newSet.delete(item.id));
-      } else {
-        // Select all in group
-        groupItems.forEach((item) => newSet.add(item.id));
-      }
-
-      return newSet;
-    });
-  };
-
-  const clearSelection = () => {
-    setSelectedItemIds(new Set());
-  };
-
-  const handleBulkProductCreate = () => {
-    if (selectedItemIds.size === 0) return;
-    setBulkModalOpen(true);
-  };
-
-  const handleBulkProductSuccess = () => {
-    // Clear selection and stay in unmapped view to continue mapping
-    clearSelection();
-    // Invalidate unmapped cache since variants changed
-    setUnmappedItemsLoaded(false);
-    // Note: Data will auto-refresh via "ekatalog:variants_update" event
-  };
-
-  // Handle view type change with transition
-  const handleViewTypeChange = (newViewType: "mapped" | "unmapped") => {
-    if (newViewType === viewType) return;
-
-    setIsTransitioning(true);
-    clearSelection();
-
-    // Use requestAnimationFrame for smoother UI update
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        console.log("[VariantList] Switching to", newViewType, "view...");
-        setViewType(newViewType);
-
-        // Allow React to render before removing transition
-        requestAnimationFrame(() => {
-          setTimeout(() => {
-            console.log("[VariantList] Transition complete");
-            setIsTransitioning(false);
-          }, 200);
-        });
-      }, 100);
-    });
+  // Handle page change with scroll to top
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   // Filter variants (client-side quick search only)
@@ -640,11 +546,8 @@ export default function VariantList() {
     );
   }
 
-  // Group by product - only compute when in mapped view
+  // Group by product
   const groupedByProduct = useMemo(() => {
-    // Skip computation during transition or when in unmapped view
-    if (isTransitioning || viewType === "unmapped") return [];
-
     console.log("[VariantList] Grouping variants by product...");
     const startTime = performance.now();
 
@@ -668,7 +571,7 @@ export default function VariantList() {
     const endTime = performance.now();
     console.log("[VariantList] Created", result.length, "product groups in", Math.round(endTime - startTime), "ms");
     return result;
-  }, [products, filteredVariants, viewType, isTransitioning]);
+  }, [products, filteredVariants]);
 
   if (loading) {
     return (
@@ -702,51 +605,8 @@ export default function VariantList() {
             Variant Mappings
           </h1>
           <p className="text-sm md:text-base text-gray-600">
-            {viewType === "mapped"
-              ? "Kelola mapping antara items dan products"
-              : "Group unmapped items into products"}
+            Lihat mapping antara items dan products
           </p>
-        </div>
-
-        <div className="flex gap-3">
-          {/* View Toggle */}
-          <div className="flex bg-gray-100 rounded-xl p-1">
-            <button
-              onClick={() => handleViewTypeChange("mapped")}
-              disabled={isTransitioning}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all disabled:opacity-50 ${
-                viewType === "mapped"
-                  ? "bg-white text-blue-600 shadow-sm"
-                  : "text-gray-600 hover:text-gray-800"
-              }`}
-            >
-              Mapped
-            </button>
-            <button
-              onClick={() => handleViewTypeChange("unmapped")}
-              disabled={isTransitioning}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all disabled:opacity-50 ${
-                viewType === "unmapped"
-                  ? "bg-white text-blue-600 shadow-sm"
-                  : "text-gray-600 hover:text-gray-800"
-              }`}
-            >
-              Unmapped ({unmappedItemsCount})
-            </button>
-          </div>
-
-          {/* Smart Mapping Button (only in mapped view) */}
-          {viewType === "mapped" && (
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setMappingModalOpen(true)}
-              className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl shadow-lg shadow-blue-200 hover:shadow-xl transition-all font-medium"
-            >
-              <FaLink className="w-4 h-4" />
-              <span>Smart Mapping</span>
-            </motion.button>
-          )}
         </div>
       </div>
 
@@ -776,10 +636,10 @@ export default function VariantList() {
         </div>
         <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-5 border-2 border-orange-200">
           <div className="text-sm text-orange-700 font-medium mb-1">
-            Unmapped
+            Categories
           </div>
           <div className="text-3xl font-bold text-orange-900">
-            {unmappedItemsCount}
+            {categories.length}
           </div>
         </div>
       </div>
@@ -939,205 +799,72 @@ export default function VariantList() {
         </div>
       </div>
 
-      {/* Transition Loading Overlay */}
-      {isTransitioning && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 flex flex-col items-center gap-4">
-            <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-            <p className="text-sm font-medium text-gray-700">Loading view...</p>
+      {/* Content Display */}
+      {filteredVariants.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <FaSearch className="w-8 h-8 text-gray-400" />
           </div>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">
+            Tidak ada variant mapping
+          </h3>
+          <p className="text-sm text-gray-500 mb-4">
+            {searchQuery
+              ? "Coba ubah kata kunci pencarian"
+              : "Belum ada variant yang di-mapping"}
+          </p>
         </div>
-      )}
-
-      {/* Content Display - Conditional based on viewType */}
-      {viewType === "mapped" ? (
-        /* Mapped Variants View */
-        filteredVariants.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
-            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <FaSearch className="w-8 h-8 text-gray-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">
-              Tidak ada variant mapping
-            </h3>
-            <p className="text-sm text-gray-500 mb-4">
-              {searchQuery
-                ? "Coba ubah kata kunci pencarian"
-                : "Belum ada variant yang di-mapping"}
-            </p>
-            {!searchQuery && (
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setMappingModalOpen(true)}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl shadow-lg font-medium"
-              >
-                <FaLink className="w-4 h-4" />
-                <span>Mulai Smart Mapping</span>
-              </motion.button>
-            )}
-          </div>
-        ) : (
-          <>
-            <div className="space-y-10">
-              {groupedByProduct.map(({ product, items }) => (
-                <section key={product.id}>
-                  <div className="flex items-center justify-between mb-6">
-                    <div>
-                      <h2 className="text-xl font-semibold text-gray-800">
-                        {product.name}
-                      </h2>
-                    </div>
-                    <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full font-medium">
-                      {items.length} variants
-                    </span>
-                  </div>
-
-                  <div
-                    className={
-                      viewMode === "grid"
-                        ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-                        : "space-y-4"
-                    }
-                  >
-                    {items.map((v) => (
-                      <VariantCard
-                        key={v.id}
-                        variant={v}
-                        product={product}
-                        viewMode={viewMode}
-                        onDelete={() => promptDeleteVariant(v)}
-                      />
-                    ))}
-                  </div>
-                </section>
-              ))}
-            </div>
-
-            {/* Pagination */}
-            {totalItems > 0 && (
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={setCurrentPage}
-                totalItems={totalItems}
-                itemsPerPage={itemsPerPage}
-              />
-            )}
-          </>
-        )
       ) : (
-        /* Unmapped Items View */
         <>
-          {unmappedItemsLoading ? (
-            <div className="flex items-center justify-center py-20 bg-white rounded-xl shadow-sm border border-gray-100">
-              <div className="text-center">
-                <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin mx-auto mb-4"></div>
-                <p className="text-sm text-gray-600 font-medium">
-                  Loading unmapped items...
-                </p>
-                <p className="text-xs text-gray-500 mt-2">
-                  Processing {unmappedItemsCount} items
-                </p>
-              </div>
-            </div>
-          ) : unmappedItems.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
-              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <FaCheckSquare className="w-8 h-8 text-green-500" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                All items are mapped!
-              </h3>
-              <p className="text-sm text-gray-500 mb-4">
-                Every item has been assigned to a product
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {Array.from(groupedUnmappedItems.entries()).map(
-                ([pattern, items]) => (
-                  <ItemGroupSection
-                    key={pattern}
-                    groupKey={pattern}
-                    items={items}
-                    selectedItemIds={selectedItemIds}
-                    onToggleItem={toggleItem}
-                    onSelectAllInGroup={() => selectAllInGroup(items)}
-                    viewMode={viewMode}
-                  />
-                )
-              )}
-            </div>
+          <div className="space-y-10">
+            {groupedByProduct.map(({ product, items }) => (
+              <section key={product.id}>
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-800">
+                      {product.name}
+                    </h2>
+                  </div>
+                  <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full font-medium">
+                    {items.length} variants
+                  </span>
+                </div>
+
+                <div
+                  className={
+                    viewMode === "grid"
+                      ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+                      : "space-y-4"
+                  }
+                >
+                  {items.map((v) => (
+                    <VariantCard
+                      key={v.id}
+                      variant={v}
+                      product={product}
+                      viewMode={viewMode}
+                      onDelete={() => promptDeleteVariant(v)}
+                    />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+
+          {/* Pagination */}
+          {totalItems > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+              totalItems={totalItems}
+              itemsPerPage={itemsPerPage}
+            />
           )}
         </>
       )}
 
-      {/* Floating Action Toolbar - shows when items selected in unmapped view */}
-      <AnimatePresence>
-        {viewType === "unmapped" && selectedItemIds.size > 0 && (
-          <motion.div
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 100, opacity: 0 }}
-            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-40"
-          >
-            <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-2xl shadow-2xl px-8 py-4 flex items-center gap-6">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                  <span className="font-bold text-lg">
-                    {selectedItemIds.size}
-                  </span>
-                </div>
-                <span className="font-semibold">
-                  {selectedItemIds.size === 1 ? "item" : "items"} selected
-                </span>
-              </div>
-
-              <div className="flex gap-3">
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={clearSelection}
-                  className="px-5 py-2.5 bg-white/20 hover:bg-white/30 rounded-xl font-semibold transition-all flex items-center gap-2"
-                >
-                  <FaTimes className="w-4 h-4" />
-                  Clear
-                </motion.button>
-
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={handleBulkProductCreate}
-                  className="px-6 py-2.5 bg-white text-blue-600 hover:bg-blue-50 rounded-xl font-bold transition-all flex items-center gap-2 shadow-lg"
-                >
-                  <FaPlus className="w-4 h-4" />
-                  Create Product
-                </motion.button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Modals */}
-      <AddVariantMappingModal
-        open={mappingModalOpen}
-        onClose={() => setMappingModalOpen(false)}
-        items={items}
-        products={products}
-        onSave={handleMappingSave}
-      />
-
-      <BulkProductCreationModal
-        open={bulkModalOpen}
-        onClose={() => setBulkModalOpen(false)}
-        selectedItems={items.filter((item) => selectedItemIds.has(item.id))}
-        categories={categories}
-        products={products}
-        onSuccess={handleBulkProductSuccess}
-      />
-
       <ConfirmDialog
         open={confirmOpen}
         title={confirmTitle}

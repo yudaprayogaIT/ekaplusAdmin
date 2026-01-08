@@ -9,7 +9,10 @@ import React, {
   ReactNode,
   useCallback,
 } from "react";
-import { registerSessionExpiredCallback, unregisterSessionExpiredCallback } from "../config/api";
+import {
+  registerSessionExpiredCallback,
+  unregisterSessionExpiredCallback,
+} from "../config/api";
 
 // Types
 export type User = {
@@ -114,7 +117,7 @@ type ApiLoginResponse = {
   code: string;
   message: string;
   data?: {
-    token?: string;
+    access_token?: string;
     user?: ApiUser;
   };
 };
@@ -145,9 +148,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 const AUTH_KEY = "ekaplus_current_user";
 const TOKEN_KEY = "ekaplus_auth_token";
 const USER_DATA_KEY = "ekaplus_user_data";
-// const API_BASE_URL = "http://192.168.101.214:8000/api";
 const API_BASE_URL = "https://api-ekaplus.ekatunggal.com";
-// const API_BASE_URL = "https://estrella-subgeniculate-dollie.ngrok-free.dev/api";
 
 // Mapping API response fields to internal User type
 function mapApiUserToUser(apiUser: ApiUser): User {
@@ -373,8 +374,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Extract token and user from data object
-      const authToken = responseData.data.token;
+      const authToken = responseData.data.access_token;
       const apiUserData = responseData.data.user;
+      console.log(responseData);
 
       if (!authToken) {
         console.log("❌ Token not found in response");
