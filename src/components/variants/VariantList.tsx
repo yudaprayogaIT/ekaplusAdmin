@@ -8,6 +8,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import VariantCard from "./VariantCard";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Pagination from "@/components/ui/Pagination";
@@ -34,6 +35,7 @@ import { useFilters } from "@/hooks/useFilters";
 import { VARIANT_FILTER_FIELDS } from "@/config/filterFields";
 import { FilterTriple } from "@/types/filter";
 import { groupItemsByPattern } from "@/utils/itemGrouping";
+import { buildSearchParams, parseSearchParams } from "@/utils/urlSync";
 
 // type Branch = {
 //   id: number;
@@ -81,7 +83,13 @@ type SortField =
 type SortDirection = "asc" | "desc";
 
 export default function VariantList() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { token } = useAuth();
+
+  // Parse initial state from URL
+  const urlState = parseSearchParams(searchParams);
+
   const [variants, setVariants] = useState<ItemVariant[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [items, setItems] = useState<Item[]>([]);
@@ -89,14 +97,18 @@ export default function VariantList() {
   const [staticDataLoaded, setStaticDataLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(urlState.searchQuery);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [sortField, setSortField] = useState<SortField>("created_at");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [sortField, setSortField] = useState<SortField>(
+    (urlState.sortField as SortField) || "created_at"
+  );
+  const [sortDirection, setSortDirection] = useState<SortDirection>(
+    urlState.sortDirection || "desc"
+  );
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
 
   // Server-side pagination state
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(urlState.page);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const itemsPerPage = 20;
@@ -106,10 +118,28 @@ export default function VariantList() {
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
 
-  // Use filter system
+  // Track if this is initial mount to prevent resetting page on first load
+  const isInitialMount = useRef(true);
+
+  // Use filter system with initial filters from URL
   const { filters, setFilters } = useFilters({
     entity: "variant",
+    initialFilters: urlState.filters,
   });
+
+  // Sync state to URL whenever filter, sort, page, or search changes
+  useEffect(() => {
+    const params = buildSearchParams({
+      filters,
+      sortField,
+      sortDirection,
+      page: currentPage,
+      searchQuery,
+    });
+
+    const newUrl = params.toString() ? `?${params.toString()}` : "";
+    router.replace(newUrl, { scroll: false });
+  }, [filters, sortField, sortDirection, currentPage, searchQuery, router]);
 
   // Handle filter apply
   function handleApplyFilters(newFilters: FilterTriple[]) {
@@ -399,9 +429,9 @@ export default function VariantList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  // Reset to first page when sort changes
+  // Reset to first page when sort changes (but not on initial mount)
   useEffect(() => {
-    if (staticDataLoaded) {
+    if (staticDataLoaded && !isInitialMount.current) {
       console.log(
         "[VariantList] Sort changed, resetting to first page:",
         sortField,
@@ -438,6 +468,11 @@ export default function VariantList() {
           setVariants(variantsData);
           setTotalItems(totalItems);
           setTotalPages(totalPages);
+
+          // Mark initial mount as complete after first successful load
+          if (isInitialMount.current) {
+            isInitialMount.current = false;
+          }
         }
       } catch (err: unknown) {
         if (!cancelled)

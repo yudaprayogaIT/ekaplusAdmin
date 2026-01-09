@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import ItemCard from "./ItemCard";
 import AddItemModal from "./AddItemModal";
 import ItemDetailModal from "./ItemDetailModal";
@@ -37,6 +38,7 @@ import { useFilters } from "@/hooks/useFilters";
 import { ITEM_FILTER_FIELDS } from "@/config/filterFields";
 import { FilterTriple } from "@/types/filter";
 import { Product, Category } from "@/types";
+import { buildSearchParams, parseSearchParams } from "@/utils/urlSync";
 
 export type Item = {
   id: number;
@@ -64,7 +66,11 @@ export type Item = {
   color?: string;
   type?: string;
   // Variant mapping info
-  variants?: any[];
+  variants?: Array<{
+    id: number;
+    parent_id: number;
+    item: number;
+  }>;
   variantCount?: number;
   // Dimension fields
   panjang?: string;
@@ -125,19 +131,31 @@ type SortDirection = "asc" | "desc";
 const SNAP_KEY = "ekatalog_items_snapshot";
 
 export default function ItemList() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { token, isAuthenticated } = useAuth();
+
+  // Parse initial state from URL
+  const urlState = parseSearchParams(searchParams);
+
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(urlState.searchQuery);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [sortField, setSortField] = useState<SortField>("created_at");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [sortField, setSortField] = useState<SortField>(
+    (urlState.sortField as SortField) || "created_at"
+  );
+  const [sortDirection, setSortDirection] = useState<SortDirection>(
+    urlState.sortDirection || "desc"
+  );
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
-  const [showOnlyUnmapped, setShowOnlyUnmapped] = useState(false);
+  const [showOnlyUnmapped, setShowOnlyUnmapped] = useState(
+    urlState.showOnlyUnmapped
+  );
 
   // Server-side pagination state
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(urlState.page);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const itemsPerPage = 20;
@@ -164,9 +182,10 @@ export default function ItemList() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categoriesData, setCategoriesData] = useState<Category[]>([]);
 
-  // Use filter system
+  // Use filter system with initial filters from URL
   const { filters, setFilters } = useFilters({
     entity: "item",
+    initialFilters: urlState.filters,
   });
 
   // Helper function to load data with filters and sorting
@@ -180,13 +199,21 @@ export default function ItemList() {
 
     const headers = getAuthHeaders(token);
 
+    interface ChildQuerySpec {
+      alias: string;
+      table: string;
+      fields: string[];
+      parent_key: string;
+      parent_value: string;
+    }
+
     const itemSpec: {
       fields: string[];
       filters?: FilterTriple[];
       order_by?: [string, string][];
       limit: number;
       page: number;
-      childs?: any[];
+      childs?: ChildQuerySpec[];
     } = {
       fields: ["*"],
       limit: 20,
@@ -229,7 +256,8 @@ export default function ItemList() {
       console.log("[ItemList] Full API Response:", response);
 
       // Parse pagination metadata - check multiple possible field names
-      let totalItems = response.total || response.count || response.total_count || 0;
+      let totalItems =
+        response.total || response.count || response.total_count || 0;
       let totalPages = 0;
 
       if (totalItems > 0) {
@@ -238,7 +266,9 @@ export default function ItemList() {
         console.log("[ItemList] Using API total count");
       } else if (response.data.length > 0) {
         // API didn't return total count, use optimistic pagination
-        console.warn("[ItemList] API did not return total count, using optimistic pagination");
+        console.warn(
+          "[ItemList] API did not return total count, using optimistic pagination"
+        );
 
         if (response.data.length < 20) {
           // Less than page size means this is the last page
@@ -249,7 +279,9 @@ export default function ItemList() {
           // Full page (exactly 20 items), assume there might be more pages
           totalPages = page + 1; // Show "next" button
           totalItems = (page + 1) * 20; // Approximate total to show pagination
-          console.log("[ItemList] Full page detected, showing next page button");
+          console.log(
+            "[ItemList] Full page detected, showing next page button"
+          );
         }
       } else {
         totalPages = 1;
@@ -263,7 +295,7 @@ export default function ItemList() {
         currentPage: page,
         dataLength: response.data.length,
         responseKeys: Object.keys(response),
-        usingOptimisticPagination: !response.total
+        usingOptimisticPagination: !response.total,
       });
 
       const mappedItems: Item[] = response.data.map((item) => ({
@@ -291,36 +323,6 @@ export default function ItemList() {
         variants: item.variants || [],
         variantCount: item.variants ? item.variants.length : 0,
       }));
-
-      // // 🔍 DEBUGGING: Log detailed item information
-      // console.log("===========================================");
-      // console.log("[ItemList] ✅ Total mapped items:", mappedItems.length);
-      // console.log(
-      //   "[ItemList] 📋 All Item IDs:",
-      //   mappedItems.map((i) => i.id).join(", ")
-      // );
-      // console.log("[ItemList] 🔝 FIRST ITEM:", mappedItems[0]);
-      // console.log(
-      //   "[ItemList] 🔚 LAST ITEM:",
-      //   mappedItems[mappedItems.length - 1]
-      // );
-      // console.log("[ItemList] 📝 First 5 items:");
-      // mappedItems.slice(0, 5).forEach((item, idx) => {
-      //   console.log(
-      //     `  ${idx + 1}. ${item.item_name} (ID: ${item.id}, Code: ${
-      //       item.item_code
-      //     })`
-      //   );
-      // });
-      // console.log("[ItemList] 📝 Last 5 items:");
-      // mappedItems.slice(-5).forEach((item, idx) => {
-      //   console.log(
-      //     `  ${mappedItems.length - 4 + idx}. ${item.item_name} (ID: ${
-      //       item.id
-      //     }, Code: ${item.item_code})`
-      //   );
-      // });
-      // console.log("===========================================");
 
       return { items: mappedItems, totalItems, totalPages };
     }
@@ -352,6 +354,29 @@ export default function ItemList() {
     throw new Error(`Failed to fetch items (${res.status}): ${errorDetail}`);
   }
 
+  // Sync state to URL whenever filter, sort, page, or search changes
+  useEffect(() => {
+    const params = buildSearchParams({
+      filters,
+      sortField,
+      sortDirection,
+      page: currentPage,
+      searchQuery,
+      showOnlyUnmapped,
+    });
+
+    const newUrl = params.toString() ? `?${params.toString()}` : "";
+    router.replace(newUrl, { scroll: false });
+  }, [
+    filters,
+    sortField,
+    sortDirection,
+    currentPage,
+    searchQuery,
+    showOnlyUnmapped,
+    router,
+  ]);
+
   // Handle filter apply
   function handleApplyFilters(newFilters: FilterTriple[]) {
     setFilters(newFilters);
@@ -378,12 +403,11 @@ export default function ItemList() {
           "page:",
           currentPage
         );
-        const { items: mappedItems, totalItems, totalPages } = await loadAllData(
-          filters,
-          sortField,
-          sortDirection,
-          currentPage
-        );
+        const {
+          items: mappedItems,
+          totalItems,
+          totalPages,
+        } = await loadAllData(filters, sortField, sortDirection, currentPage);
 
         if (!cancelled) {
           setItems(mappedItems);
@@ -427,7 +451,11 @@ export default function ItemList() {
       if (!isAuthenticated || !token) return;
 
       try {
-        const { items: mappedItems, totalItems, totalPages } = await loadAllData(filters, sortField, sortDirection, currentPage);
+        const {
+          items: mappedItems,
+          totalItems,
+          totalPages,
+        } = await loadAllData(filters, sortField, sortDirection, currentPage);
         setItems(mappedItems);
         setTotalItems(totalItems);
         setTotalPages(totalPages);
@@ -770,7 +798,10 @@ export default function ItemList() {
     window.addEventListener("ekatalog:products_update", handleProductsUpdate);
 
     return () => {
-      window.removeEventListener("ekatalog:products_update", handleProductsUpdate);
+      window.removeEventListener(
+        "ekatalog:products_update",
+        handleProductsUpdate
+      );
     };
   }, [loadProductsAndCategories]);
 
@@ -1151,7 +1182,9 @@ export default function ItemList() {
                 onDelete={() => promptDeleteItem(item)}
                 onView={() => openDetail(item)}
                 selected={selectedItemIds.has(item.id)}
-                onToggleSelect={selectionMode ? () => toggleItem(item.id) : undefined}
+                onToggleSelect={
+                  selectionMode ? () => toggleItem(item.id) : undefined
+                }
               />
             ))}
           </div>
@@ -1163,7 +1196,7 @@ export default function ItemList() {
                 currentPage,
                 totalPages,
                 totalItems,
-                itemsPerPage
+                itemsPerPage,
               })}
               <Pagination
                 currentPage={currentPage}

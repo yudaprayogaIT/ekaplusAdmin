@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import ProductCard from "./ProductCard";
 import AddProductModal from "./AddProductModal";
 import ProductDetailModal from "./ProductDetailModal";
@@ -32,6 +33,7 @@ import FilterBuilder from "@/components/filters/FilterBuilder";
 import { useFilters } from "@/hooks/useFilters";
 import { PRODUCT_FILTER_FIELDS } from "@/config/filterFields";
 import { FilterTriple } from "@/types/filter";
+import { buildSearchParams, parseSearchParams } from "@/utils/urlSync";
 
 type SortField =
   | "product_name"
@@ -76,7 +78,13 @@ interface ProductApiResponse {
 }
 
 export default function ProductList() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { token } = useAuth();
+
+  // Parse initial state from URL
+  const urlState = parseSearchParams(searchParams);
+
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [availableItems, setAvailableItems] = useState<Item[]>([]);
@@ -84,14 +92,18 @@ export default function ProductList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ code?: number; message: string } | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [sortField, setSortField] = useState<SortField>("product_name");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [sortField, setSortField] = useState<SortField>(
+    (urlState.sortField as SortField) || "product_name"
+  );
+  const [sortDirection, setSortDirection] = useState<SortDirection>(
+    urlState.sortDirection || "asc"
+  );
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showHotDealsOnly, setShowHotDealsOnly] = useState(false);
+  const [searchQuery, setSearchQuery] = useState(urlState.searchQuery);
+  const [showHotDealsOnly, setShowHotDealsOnly] = useState(urlState.showHotDealsOnly);
 
   // Server-side pagination state
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(urlState.page);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const itemsPerPage = 20;
@@ -108,6 +120,9 @@ export default function ProductList() {
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
+
+  // Track if this is initial mount to prevent resetting page on first load
+  const isInitialMount = useRef(true);
 
   // Helper function to load products only (for pagination/sorting)
   async function loadProducts(
@@ -350,10 +365,26 @@ export default function ProductList() {
     return { productsWithVariants, totalItems, totalPages };
   }
 
-  // Use filter system
+  // Use filter system with initial filters from URL
   const { filters, setFilters } = useFilters({
     entity: "product",
+    initialFilters: urlState.filters,
   });
+
+  // Sync state to URL whenever filter, sort, page, or search changes
+  useEffect(() => {
+    const params = buildSearchParams({
+      filters,
+      sortField,
+      sortDirection,
+      page: currentPage,
+      searchQuery,
+      showHotDealsOnly,
+    });
+
+    const newUrl = params.toString() ? `?${params.toString()}` : "";
+    router.replace(newUrl, { scroll: false });
+  }, [filters, sortField, sortDirection, currentPage, searchQuery, showHotDealsOnly, router]);
 
   // Function to load data with filters (wrapped in useCallback to fix warning)
   const loadDataWithFilters = useCallback(
@@ -375,6 +406,11 @@ export default function ProductList() {
         setTotalItems(totalItems);
         setTotalPages(totalPages);
         localStorage.setItem(SNAP_KEY, JSON.stringify(productsWithVariants));
+
+        // Mark initial mount as complete after first successful load
+        if (isInitialMount.current) {
+          isInitialMount.current = false;
+        }
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         setError({ message: errorMessage });
@@ -488,9 +524,9 @@ export default function ProductList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [staticDataLoaded, token, filters, currentPage]);
 
-  // Reload data when sort changes (only after static data is loaded)
+  // Reload data when sort changes (only after static data is loaded, but not on initial mount)
   useEffect(() => {
-    if (staticDataLoaded && token) {
+    if (staticDataLoaded && token && !isInitialMount.current) {
       console.log(
         "[ProductList] Sort changed, reloading data with:",
         sortField,
