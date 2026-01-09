@@ -6,6 +6,7 @@ import BranchCard from "./BranchCard";
 import AddBranchModal from "./AddBranchModal";
 import BranchDetailModal from "./BranchDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import ErrorMessage from "@/components/ui/ErrorMessage";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getQueryUrl,
@@ -86,7 +87,7 @@ export default function BranchList() {
   } = useAuth();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ code?: number; message: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
   const [selectedIsland, setSelectedIsland] = useState<string | null>(null);
@@ -108,87 +109,84 @@ export default function BranchList() {
   // const canViewBranches = hasPermission('branches.view');
   const canManageBranches = hasPermission("branches.manage");
 
-  // Load branches - only if authenticated and has token
-  useEffect(() => {
+  // Extract data loading logic into reusable function
+  const loadBranches = async () => {
     if (!isAuthenticated || !token) {
       setLoading(false);
       return;
     }
 
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      try {
-        const DATA_URL = getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH, {
-          fields: ["*"],
-        });
-        const headers = getAuthHeaders(token!);
+    try {
+      const DATA_URL = getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH, {
+        fields: ["*"],
+      });
+      const headers = getAuthHeaders(token);
 
-        const res = await fetch(DATA_URL, {
-          method: "GET",
-          cache: "no-store",
-          headers,
-        });
+      const res = await fetch(DATA_URL, {
+        method: "GET",
+        cache: "no-store",
+        headers,
+      });
 
-        if (res.ok) {
-          const response = (await res.json()) as BranchAPIResponse;
+      if (res.ok) {
+        const response = (await res.json()) as BranchAPIResponse;
 
-          if (!cancelled) {
-            // Map API response to Branch type
-            const mappedBranches: Branch[] = response.data.map((item) => ({
-              id: item.id,
-              name: item.branch_name, // Map branch_name to name
-              city: item.city,
-              address: item.address,
-              lat: parseFloat(item.lat) || 0, // Convert string to number
-              lng: parseFloat(item.lng) || 0, // Convert string to number
-              island: item.island,
-              area: item.area,
-              url: item.url,
-              token: item.token,
-              disabled: item.disabled,
-            }));
+        // Map API response to Branch type
+        const mappedBranches: Branch[] = response.data.map((item) => ({
+          id: item.id,
+          name: item.branch_name, // Map branch_name to name
+          city: item.city,
+          address: item.address,
+          lat: parseFloat(item.lat) || 0, // Convert string to number
+          lng: parseFloat(item.lng) || 0, // Convert string to number
+          island: item.island,
+          area: item.area,
+          url: item.url,
+          token: item.token,
+          disabled: item.disabled,
+        }));
 
-            console.log("Loaded branches:", mappedBranches);
-            setBranches(mappedBranches);
-            try {
-              localStorage.setItem(SNAP_KEY, JSON.stringify(mappedBranches));
-            } catch (e) {
-              console.error("Failed to save snapshot:", e);
-            }
-          }
+        console.log("Loaded branches:", mappedBranches);
+        setBranches(mappedBranches);
+        try {
+          localStorage.setItem(SNAP_KEY, JSON.stringify(mappedBranches));
+        } catch (e) {
+          console.error("Failed to save snapshot:", e);
+        }
+      } else {
+        const errorCode = res.status;
+        let errorMessage = "";
+
+        if (res.status === 401) {
+          errorMessage = "Session expired. Silakan login kembali.";
+        } else if (res.status === 403) {
+          errorMessage = "Akses ditolak. Anda tidak memiliki izin.";
         } else {
-          if (!cancelled) {
-            if (res.status === 401) {
-              setError("Session expired. Silakan login kembali.");
-            } else if (res.status === 403) {
-              setError("Akses ditolak. Anda tidak memiliki izin.");
-            } else {
-              setError(`Failed to fetch branches (${res.status})`);
-            }
-          }
+          errorMessage = `Gagal memuat data branches.`;
         }
-      } catch (err: unknown) {
-        if (!cancelled) {
-          const errorMessage = err instanceof Error ? err.message : String(err);
-          if (errorMessage.includes("Failed to fetch")) {
-            setError(
-              "Tidak dapat terhubung ke server. Periksa koneksi Anda atau pastikan backend berjalan."
-            );
-          } else {
-            setError(errorMessage);
-          }
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
+
+        setError({ code: errorCode, message: errorMessage });
       }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      if (errorMessage.includes("Failed to fetch")) {
+        setError({
+          message: "Tidak dapat terhubung ke server. Periksa koneksi Anda atau pastikan backend berjalan."
+        });
+      } else {
+        setError({ message: errorMessage });
+      }
+    } finally {
+      setLoading(false);
     }
-    load();
-    return () => {
-      cancelled = true;
-    };
+  };
+
+  // Load branches on mount - only if authenticated and has token
+  useEffect(() => {
+    loadBranches();
   }, [isAuthenticated, token]);
 
   // Listen for updates - reload from API when triggered
@@ -398,19 +396,12 @@ export default function BranchList() {
 
   if (error) {
     return (
-      <div className="py-8 text-center">
-        <div className="inline-flex flex-col items-center gap-3 px-6 py-4 bg-red-50 text-red-600 rounded-xl border border-red-100 max-w-md">
-          <span className="text-sm font-medium">{error}</span>
-          {error.includes("terhubung") && (
-            <button
-              onClick={() => window.location.reload()}
-              className="mt-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-medium"
-            >
-              Coba Lagi
-            </button>
-          )}
-        </div>
-      </div>
+      <ErrorMessage
+        errorCode={error.code}
+        message={error.message}
+        onRetry={loadBranches}
+        showRetry={true}
+      />
     );
   }
 

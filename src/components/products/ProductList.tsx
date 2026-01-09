@@ -7,6 +7,7 @@ import AddProductModal from "./AddProductModal";
 import ProductDetailModal from "./ProductDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Pagination from "@/components/ui/Pagination";
+import ErrorMessage from "@/components/ui/ErrorMessage";
 import {
   FaPlus,
   FaSearch,
@@ -81,7 +82,7 @@ export default function ProductList() {
   const [availableItems, setAvailableItems] = useState<Item[]>([]);
   const [staticDataLoaded, setStaticDataLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ code?: number; message: string } | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortField, setSortField] = useState<SortField>("product_name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
@@ -375,7 +376,8 @@ export default function ProductList() {
         setTotalPages(totalPages);
         localStorage.setItem(SNAP_KEY, JSON.stringify(productsWithVariants));
       } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : String(err));
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        setError({ message: errorMessage });
       } finally {
         setLoading(false);
       }
@@ -658,19 +660,18 @@ export default function ProductList() {
   }
 
   if (error) {
+    const handleRetry = () => {
+      setError(null);
+      loadDataWithFilters(filters, currentPage);
+    };
+
     return (
-      <div className="py-8 text-center">
-        <div className="inline-flex items-center gap-2 px-4 py-3 bg-red-50 text-red-600 rounded-xl border border-red-100">
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              fillRule="evenodd"
-              d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-              clipRule="evenodd"
-            />
-          </svg>
-          <span className="text-sm font-medium">Error: {error}</span>
-        </div>
-      </div>
+      <ErrorMessage
+        errorCode={error.code}
+        message={error.message}
+        onRetry={handleRetry}
+        showRetry={true}
+      />
     );
   }
 

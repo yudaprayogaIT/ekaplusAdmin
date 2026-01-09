@@ -292,10 +292,9 @@ export default function VariantList() {
           console.log("[VariantList] Categories loaded:", categoriesData.length);
         }
 
-        // Load products (only active products)
+        // Load products (all products, including disabled ones for variant mapping view)
         const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, {
           fields: ["*", "item_category.id", "item_category.category_name"],
-          filters: [["disabled", "=", 0]],
           limit: 5000,
         });
         const productsRes = await fetch(productsUrl, { headers });
