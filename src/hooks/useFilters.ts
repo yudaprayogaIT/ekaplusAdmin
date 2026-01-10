@@ -32,9 +32,19 @@ interface UseFiltersReturn {
  */
 export function useFilters(options: UseFiltersOptions): UseFiltersReturn {
   const { entity, onFiltersChange, initialFilters } = options;
-  const [filters, setFiltersInternal] = useState<FilterTriple[]>([]);
+  // Initialize with initialFilters if provided to avoid timing issues on page refresh
+  const [filters, setFiltersInternal] = useState<FilterTriple[]>(
+    initialFilters || []
+  );
   const [initialized, setInitialized] = useState(false);
   const onFiltersChangeRef = useRef(onFiltersChange);
+
+  // Debug logging
+  useEffect(() => {
+    console.log(`[useFilters:${entity}] 🔍 Initialized:`, initialized);
+    console.log(`[useFilters:${entity}] 🔍 Initial filters:`, initialFilters);
+    console.log(`[useFilters:${entity}] 🔍 Current filters:`, filters);
+  }, [entity, initialized, initialFilters, filters]);
 
   // Update ref when callback changes
   useEffect(() => {
@@ -45,26 +55,31 @@ export function useFilters(options: UseFiltersOptions): UseFiltersReturn {
   useEffect(() => {
     if (typeof window === "undefined" || initialized) return;
 
-    let loadedFilters: FilterTriple[] = [];
-
+    // If initialFilters was already provided in useState, skip additional initialization
+    // Only run this effect for fallback scenarios (legacy URL param or localStorage)
     if (initialFilters && initialFilters.length > 0) {
-      // Use provided initialFilters (highest priority, e.g., from URL sync)
-      loadedFilters = initialFilters;
-    } else {
-      // Check URL params (legacy support)
-      const urlParams = new URLSearchParams(window.location.search);
-      const filterParam = urlParams.get("filters");
-
-      if (filterParam) {
-        // Load from URL params
-        loadedFilters = urlParamToFilters(filterParam);
-      } else {
-        // Load from localStorage (fallback)
-        loadedFilters = loadFiltersFromStorage(entity);
-      }
+      setInitialized(true);
+      return;
     }
 
-    setFiltersInternal(loadedFilters);
+    let loadedFilters: FilterTriple[] = [];
+
+    // Check URL params (legacy support)
+    const urlParams = new URLSearchParams(window.location.search);
+    const filterParam = urlParams.get("filters");
+
+    if (filterParam) {
+      // Load from URL params
+      loadedFilters = urlParamToFilters(filterParam);
+    } else {
+      // Load from localStorage (fallback)
+      loadedFilters = loadFiltersFromStorage(entity);
+    }
+
+    if (loadedFilters.length > 0) {
+      setFiltersInternal(loadedFilters);
+    }
+
     setInitialized(true);
 
     // DON'T call onFiltersChange here to avoid infinite loop

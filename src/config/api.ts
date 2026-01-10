@@ -22,12 +22,19 @@ export const API_CONFIG = {
     PRODUCT_VARIANT: "/api/resource/ekatalog_variant",
     WISHLIST: "/api/resource/wishlist",
     BANNER: "/api/resource/ekatalog_banner",
-    ROLE: "/api/resource/role",
-    PERMISSION: "/resource/permission",
     USER: "/api/resource/user",
+
+    // Authorization (Authz)
+    AUTHZ_ROLE: "/api/authz/roles",
+    AUTHZ_PERMISSION: "/api/authz/permissions",
+    AUTHZ_ROLE_PERMISSION: "/api/authz/role-permissions",
     EMAIL: "/resource/email",
     WHATSAPP: "/api/resource/whatsapp",
+
+    // Workflow
+    WORKFLOW: "/api/workflow",
     WORKFLOW_STATE: "/api/workflow/state",
+
     CUSTOMER_REGISTER: "/api/resource/ekatalog_customer_register",
 
     // Customer Management - GP/GC/BC

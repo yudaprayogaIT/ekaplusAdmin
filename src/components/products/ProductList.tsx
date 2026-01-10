@@ -90,7 +90,9 @@ export default function ProductList() {
   const [availableItems, setAvailableItems] = useState<Item[]>([]);
   const [staticDataLoaded, setStaticDataLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<{ code?: number; message: string } | null>(null);
+  const [error, setError] = useState<{ code?: number; message: string } | null>(
+    null
+  );
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortField, setSortField] = useState<SortField>(
     (urlState.sortField as SortField) || "product_name"
@@ -100,7 +102,9 @@ export default function ProductList() {
   );
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState(urlState.searchQuery);
-  const [showHotDealsOnly, setShowHotDealsOnly] = useState(urlState.showHotDealsOnly);
+  const [showHotDealsOnly, setShowHotDealsOnly] = useState(
+    urlState.showHotDealsOnly
+  );
 
   // Server-side pagination state
   const [currentPage, setCurrentPage] = useState(urlState.page);
@@ -166,7 +170,13 @@ export default function ProductList() {
         {
           alias: "variants",
           table: "ekatalog_variant",
-          fields: ["item", "item.id", "item.item_code", "item.item_name", "item.image"],
+          fields: [
+            "item",
+            "item.id",
+            "item.item_code",
+            "item.item_name",
+            "item.image",
+          ],
         },
       ],
       limit: 20,
@@ -182,11 +192,11 @@ export default function ProductList() {
       productSpec.order_by = [[sort_by, sort_order]];
     }
 
-    console.log("[ProductList] Filter Triples:", filterTriples);
-    console.log("[ProductList] Product Spec:", productSpec);
+    // console.log("[ProductList] Filter Triples:", filterTriples);
+    // console.log("[ProductList] Product Spec:", productSpec);
 
     const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, productSpec);
-    console.log("[ProductList] Request URL:", productsUrl);
+    // console.log("[ProductList] Request URL:", productsUrl);
     const productsRes = await fetch(productsUrl, {
       method: "GET",
       cache: "no-store",
@@ -199,34 +209,37 @@ export default function ProductList() {
     if (productsRes.ok) {
       const response = await productsRes.json();
 
-      console.log("[ProductList] Full API Response:", response);
+      // console.log("[ProductList] Full API Response:", response);
 
       // Parse pagination metadata - check multiple possible field names
-      totalItems = response.total || response.count || response.total_count || 0;
+      totalItems =
+        response.total || response.count || response.total_count || 0;
 
       if (totalItems > 0) {
         // API returned total count
         totalPages = Math.ceil(totalItems / 20);
-        console.log("[ProductList] Using API total count");
+        // console.log("[ProductList] Using API total count");
       } else if (response.data.length > 0) {
         // API didn't return total count, use optimistic pagination
-        console.warn("[ProductList] API did not return total count, using optimistic pagination");
+        console.warn(
+          "[ProductList] API did not return total count, using optimistic pagination"
+        );
 
         if (response.data.length < 20) {
           // Less than page size means this is the last page
           totalPages = page;
           totalItems = (page - 1) * 20 + response.data.length;
-          console.log("[ProductList] Last page detected (less than 20 items)");
+          // console.log("[ProductList] Last page detected (less than 20 items)");
         } else {
           // Full page (exactly 20 items), assume there might be more pages
           totalPages = page + 1; // Show "next" button
           totalItems = (page + 1) * 20; // Approximate total to show pagination
-          console.log("[ProductList] Full page detected, showing next page button");
+          // console.log("[ProductList] Full page detected, showing next page button");
         }
       } else {
         totalPages = 1;
         totalItems = 0;
-        console.log("[ProductList] No data");
+        // console.log("[ProductList] No data");
       }
 
       console.log("[ProductList] Pagination metadata:", {
@@ -235,107 +248,152 @@ export default function ProductList() {
         currentPage: page,
         dataLength: response.data.length,
         responseKeys: Object.keys(response),
-        usingOptimisticPagination: !response.total
+        usingOptimisticPagination: !response.total,
       });
 
-      console.log("=== PRODUCT LIST - VARIANT LOADING DEBUG ===");
-      console.log("Total products loaded:", response.data.length);
+      // console.log("=== PRODUCT LIST - VARIANT LOADING DEBUG ===");
+      // console.log("Total products loaded:", response.data.length);
 
-      // Debug first product
-      if (response.data.length > 0) {
-        console.log("First product raw:", response.data[0]);
-        console.log("First product variants:", response.data[0].variants);
-      }
+      // // Debug first product
+      // if (response.data.length > 0) {
+      //   console.log("First product raw:", response.data[0]);
+      //   console.log("First product variants:", response.data[0].variants);
+      // }
 
-      productsWithVariants = response.data.map((prod: ProductApiResponse & {
-        variants?: Array<{ item: { id: number; item_code: string; item_name: string; image?: string } }>;
-        item_category: number | { id?: number; category_name?: string };
-        item_category_id?: number;
-      }) => {
-        // Use nested category data from API if available, otherwise fallback to lookup
-        let finalCategory: { id: number; name: string };
+      productsWithVariants = response.data.map(
+        (
+          prod: ProductApiResponse & {
+            variants?: Array<{
+              item: {
+                id: number;
+                item_code: string;
+                item_name: string;
+                image?: string;
+              };
+            }>;
+            item_category: number | { id?: number; category_name?: string };
+            item_category_id?: number;
+          }
+        ) => {
+          // Use nested category data from API if available, otherwise fallback to lookup
+          let finalCategory: { id: number; name: string };
 
-        if (typeof prod.item_category === "object" && prod.item_category?.category_name) {
-          // Category name fetched directly from API (nested object)
-          finalCategory = {
-            id: prod.item_category.id || prod.item_category_id || 0,
-            name: prod.item_category.category_name,
-          };
-          console.log(`[ProductList] Using nested category from API: ${finalCategory.name} (ID: ${finalCategory.id})`);
-        } else {
-          // Fallback: lookup from categories array
-          const categoryId = typeof prod.item_category === "number" ? prod.item_category : prod.item_category_id;
-          console.log(`[ProductList] Looking for category ID ${categoryId} in ${categories.length} categories`);
-          const category = categories.find((c) => c.id === categoryId);
+          // Type guard to check if item_category is an object with category_name
+          const categoryObj =
+            typeof prod.item_category === "object" &&
+            prod.item_category !== null
+              ? (prod.item_category as { id?: number; category_name?: string })
+              : null;
 
-          if (!category) {
-            console.warn(`[ProductList] Category ${categoryId} not found! Using fallback. Available categories:`, categories.map(c => ({ id: c.id, name: c.name })));
+          if (categoryObj && categoryObj.category_name) {
+            // Category name fetched directly from API (nested object)
+            finalCategory = {
+              id: categoryObj.id || prod.item_category_id || 0,
+              name: categoryObj.category_name,
+            };
+            console.log(
+              `[ProductList] Using nested category from API: ${finalCategory.name} (ID: ${finalCategory.id})`
+            );
+          } else {
+            // Fallback: lookup from categories array
+            const categoryId =
+              typeof prod.item_category === "number"
+                ? prod.item_category
+                : prod.item_category_id;
+            console.log(
+              `[ProductList] Looking for category ID ${categoryId} in ${categories.length} categories`
+            );
+            const category = categories.find((c) => c.id === categoryId);
+
+            if (!category) {
+              console.warn(
+                `[ProductList] Category ${categoryId} not found! Using fallback. Available categories:`,
+                categories.map((c) => ({ id: c.id, name: c.name }))
+              );
+            }
+
+            finalCategory = category || {
+              id: categoryId || 0,
+              name: `Category ${categoryId}`,
+            };
           }
 
-          finalCategory = category || {
-            id: categoryId || 0,
-            name: `Category ${categoryId}`,
-          };
-        }
+          // Transform variants from API response
+          const rawVariants = (prod.variants || []).map((v) => {
+            // Find full item data from availableItems state
+            const fullItem = availableItems.find(
+              (item) => item.id === v.item.id
+            );
 
-        // Transform variants from API response
-        const productVariants = (prod.variants || []).map((v) => {
-          // Find full item data from availableItems state
-          const fullItem = availableItems.find((item) => item.id === v.item.id);
+            return {
+              id: v.item.id, // Use item ID as variant ID for now
+              item: fullItem || {
+                id: v.item.id,
+                code: v.item.item_code,
+                name: v.item.item_name,
+                color: "",
+                type: "",
+                uom: "",
+                image: v.item.image ? getFileUrl(v.item.image) : undefined,
+              },
+              productid: prod.id,
+              displayOrder: 0,
+            };
+          });
+
+          // Deduplicate variants by item.id to prevent duplicate entries
+          const productVariants = rawVariants.filter(
+            (v, index, self) => index === self.findIndex((t) => t.item.id === v.item.id)
+          );
+
+          // Log warning if duplicates found
+          if (rawVariants.length !== productVariants.length) {
+            console.warn(
+              `[ProductList] Product ${prod.id} (${prod.product_name}) has duplicate variants!`,
+              `Raw: ${rawVariants.length}, Unique: ${productVariants.length}`
+            );
+          }
+
+          // Debug: Log first product with details
+          if (prod.id === response.data[0]?.id) {
+            console.log("=== FIRST PRODUCT DETAILS ===");
+            console.log("Product ID:", prod.id);
+            console.log("Product Name:", prod.product_name);
+            console.log("Raw variants from API:", prod.variants);
+            console.log("Transformed variants:", productVariants);
+          }
 
           return {
-            id: v.item.id, // Use item ID as variant ID for now
-            item: fullItem || {
-              id: v.item.id,
-              code: v.item.item_code,
-              name: v.item.item_name,
-              color: "",
-              type: "",
-              uom: "",
-              image: v.item.image ? getFileUrl(v.item.image) : undefined,
-            },
-            productid: prod.id,
-            displayOrder: 0,
+            id: prod.id,
+            name: prod.product_name,
+            itemCategory: finalCategory,
+            disabled: prod.disabled,
+            isHotDeals: Boolean(prod.hot_deals),
+            variants: productVariants, // Variants from childs API
+            // Catatan Aktivitas - extract name from nested object if available
+            created_at: prod.created_at,
+            created_by:
+              typeof prod.created_by === "object" && prod.created_by?.full_name
+                ? prod.created_by.full_name
+                : prod.created_by,
+            updated_at: prod.updated_at,
+            updated_by:
+              typeof prod.updated_by === "object" && prod.updated_by?.full_name
+                ? prod.updated_by.full_name
+                : prod.updated_by,
+            owner:
+              typeof prod.owner === "object" && prod.owner?.full_name
+                ? prod.owner.full_name
+                : prod.owner,
           };
-        });
-
-        // Debug: Log first product with details
-        if (prod.id === response.data[0]?.id) {
-          console.log("=== FIRST PRODUCT DETAILS ===");
-          console.log("Product ID:", prod.id);
-          console.log("Product Name:", prod.product_name);
-          console.log("Raw variants from API:", prod.variants);
-          console.log("Transformed variants:", productVariants);
         }
-
-        return {
-          id: prod.id,
-          name: prod.product_name,
-          itemCategory: finalCategory,
-          disabled: prod.disabled,
-          isHotDeals: Boolean(prod.hot_deals),
-          variants: productVariants, // Variants from childs API
-          // Catatan Aktivitas - extract name from nested object if available
-          created_at: prod.created_at,
-          created_by:
-            typeof prod.created_by === "object" && prod.created_by?.full_name
-              ? prod.created_by.full_name
-              : prod.created_by,
-          updated_at: prod.updated_at,
-          updated_by:
-            typeof prod.updated_by === "object" && prod.updated_by?.full_name
-              ? prod.updated_by.full_name
-              : prod.updated_by,
-          owner:
-            typeof prod.owner === "object" && prod.owner?.full_name
-              ? prod.owner.full_name
-              : prod.owner,
-        };
-      });
+      );
 
       console.log("=== FINAL PRODUCTS WITH VARIANTS ===");
       productsWithVariants.forEach((p) => {
-        console.log(`Product ID ${p.id}: "${p.name}" - ${p.variants.length} variants`);
+        console.log(
+          `Product ID ${p.id}: "${p.name}" - ${p.variants.length} variants`
+        );
       });
     } else {
       // Log error details for debugging
@@ -384,7 +442,15 @@ export default function ProductList() {
 
     const newUrl = params.toString() ? `?${params.toString()}` : "";
     router.replace(newUrl, { scroll: false });
-  }, [filters, sortField, sortDirection, currentPage, searchQuery, showHotDealsOnly, router]);
+  }, [
+    filters,
+    sortField,
+    sortDirection,
+    currentPage,
+    searchQuery,
+    showHotDealsOnly,
+    router,
+  ]);
 
   // Function to load data with filters (wrapped in useCallback to fix warning)
   const loadDataWithFilters = useCallback(
@@ -437,6 +503,7 @@ export default function ProductList() {
     async function loadStatic() {
       console.log("[ProductList] Loading static data (categories & items)...");
       // Inline load to avoid dependency issues
+      if (!token) return;
       const headers = getAuthHeaders(token);
 
       // Load categories
@@ -444,13 +511,19 @@ export default function ProductList() {
         fields: ["*"],
         limit: 1000,
       });
-      const categoriesRes = await fetch(categoriesUrl, { method: "GET", cache: "no-store", headers });
+      const categoriesRes = await fetch(categoriesUrl, {
+        method: "GET",
+        cache: "no-store",
+        headers,
+      });
       if (categoriesRes.ok) {
         const response = await categoriesRes.json();
-        const categoriesData = response.data.map((cat: { id: number; category_name: string }) => ({
-          id: cat.id,
-          name: cat.category_name,
-        }));
+        const categoriesData = response.data.map(
+          (cat: { id: number; category_name: string }) => ({
+            id: cat.id,
+            name: cat.category_name,
+          })
+        );
         setCategories(categoriesData);
         console.log("[ProductList] Categories loaded:", categoriesData.length);
       }
@@ -461,7 +534,11 @@ export default function ProductList() {
         filters: [["disabled", "=", 0]],
         limit: 10000,
       });
-      const itemsRes = await fetch(itemsUrl, { method: "GET", cache: "no-store", headers });
+      const itemsRes = await fetch(itemsUrl, {
+        method: "GET",
+        cache: "no-store",
+        headers,
+      });
       if (itemsRes.ok) {
         const response = await itemsRes.json();
         const itemsData = response.data.map((item: ItemApiResponse) => ({
@@ -543,13 +620,23 @@ export default function ProductList() {
     if (!staticDataLoaded) return;
 
     async function handler() {
-      console.log("[ProductList] 🔄 Event triggered: products_update or variants_update");
+      console.log(
+        "[ProductList] 🔄 Event triggered: products_update or variants_update"
+      );
       console.log("[ProductList] Reloading data with filters:", filters);
-      console.log("[ProductList] Reloading data with sort:", sortField, sortDirection);
+      console.log(
+        "[ProductList] Reloading data with sort:",
+        sortField,
+        sortDirection
+      );
       console.log("[ProductList] Reloading data with page:", currentPage);
       try {
-        const { productsWithVariants, totalItems, totalPages } = await loadProducts(filters, sortField, sortDirection, currentPage);
-        console.log("[ProductList] ✅ Reload complete. Total products:", productsWithVariants.length);
+        const { productsWithVariants, totalItems, totalPages } =
+          await loadProducts(filters, sortField, sortDirection, currentPage);
+        console.log(
+          "[ProductList] ✅ Reload complete. Total products:",
+          productsWithVariants.length
+        );
         setProducts(productsWithVariants);
         setTotalItems(totalItems);
         setTotalPages(totalPages);

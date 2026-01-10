@@ -121,7 +121,16 @@ function ItemSelectorModal({
   };
 
   const handleConfirm = () => {
-    onSelect(selected);
+    // Deduplicate selected items before passing back
+    const unique = selected.filter(
+      (v, index, self) => index === self.findIndex((t) => t.id === v.id)
+    );
+    console.log('[ItemSelectorModal] Selected items:', selected.length);
+    console.log('[ItemSelectorModal] After dedup:', unique.length);
+    if (selected.length !== unique.length) {
+      console.warn('[ItemSelectorModal] Found duplicate items in selection!');
+    }
+    onSelect(unique);
     onClose();
   };
 
@@ -357,6 +366,7 @@ export default function AddProductModal({
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [isHotDeals, setIsHotDeals] = useState(false);
+  const [disabled, setDisabled] = useState(0);
   const [selectedVariants, setSelectedVariants] = useState<Item[]>([]);
   const [itemSelectorOpen, setItemSelectorOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -366,6 +376,7 @@ export default function AddProductModal({
     name: "",
     categoryId: null as number | null,
     isHotDeals: false,
+    disabled: 0,
     selectedVariants: [] as Item[],
   });
 
@@ -374,6 +385,7 @@ export default function AddProductModal({
     name !== initialState.name ||
     categoryId !== initialState.categoryId ||
     isHotDeals !== initialState.isHotDeals ||
+    disabled !== initialState.disabled ||
     JSON.stringify(selectedVariants.map((v) => v.id)) !==
       JSON.stringify(initialState.selectedVariants.map((v) => v.id));
 
@@ -385,22 +397,69 @@ export default function AddProductModal({
   useEffect(() => {
     if (open) {
       if (initial) {
+        // Extract items from variants (initial.variants can be Item[] or ItemVariant[])
+        // Check if first variant has 'item' property to determine structure
+        const firstVariant = initial.variants[0] as any;
+        const isItemVariantArray = initial.variants.length > 0 &&
+          firstVariant &&
+          typeof firstVariant === 'object' &&
+          'item' in firstVariant;
+
+        let items: Item[];
+        if (isItemVariantArray) {
+          // It's ItemVariant[] - extract items
+          const variants = initial.variants as any[];
+          const variantItems = variants.map((v) => v.item as Item);
+
+          console.log('[AddProductModal] Initial variants (ItemVariant[]):', initial.variants.length);
+          console.log('[AddProductModal] Initial variant IDs:', variants.map((v) => ({ variantId: v.id, itemId: v.item.id })));
+
+          // Deduplicate by item.id
+          items = variantItems.filter(
+            (item, index, self) => index === self.findIndex((t) => t.id === item.id)
+          );
+
+          if (variantItems.length !== items.length) {
+            console.warn('[AddProductModal] Found duplicate item IDs in variants!');
+            console.warn('[AddProductModal] Duplicate item IDs:',
+              variantItems.map((item) => item.id).filter((id, idx, arr) => arr.indexOf(id) !== idx)
+            );
+          }
+        } else {
+          // It's already Item[]
+          console.log('[AddProductModal] Initial variants (Item[]):', initial.variants.length);
+
+          // Deduplicate by id
+          items = initial.variants.filter(
+            (v, index, self) => index === self.findIndex((t) => t.id === v.id)
+          );
+
+          if (initial.variants.length !== items.length) {
+            console.warn('[AddProductModal] Found duplicate items!');
+          }
+        }
+
+        console.log('[AddProductModal] Unique items after dedup:', items.length);
+
         setName(initial.name);
         setCategoryId(initial.itemCategory.id);
         setIsHotDeals(initial.isHotDeals);
-        setSelectedVariants(initial.variants); // Already Item[]
+        setDisabled(initial.disabled);
+        setSelectedVariants(items);
 
         // Set initial state for dirty checking
         setInitialState({
           name: initial.name,
           categoryId: initial.itemCategory.id,
           isHotDeals: initial.isHotDeals,
-          selectedVariants: initial.variants,
+          disabled: initial.disabled,
+          selectedVariants: items,
         });
       } else {
         setName("");
         setCategoryId(categories[0]?.id || null);
         setIsHotDeals(false);
+        setDisabled(0);
         setSelectedVariants([]);
 
         // Set initial state for dirty checking
@@ -408,6 +467,7 @@ export default function AddProductModal({
           name: "",
           categoryId: categories[0]?.id || null,
           isHotDeals: false,
+          disabled: 0,
           selectedVariants: [],
         });
       }
@@ -439,20 +499,34 @@ export default function AddProductModal({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open, saving, name, categoryId, handleClose]);
 
-  const selectedCategory = categories.find((c) => c.id === categoryId);
-
-  const removeVariant = (itemId: number) => {
-    setSelectedVariants(selectedVariants.filter((v) => v.id !== itemId));
-  };
-
   const handleSave = async () => {
     if (!name.trim() || !categoryId || !token) return;
 
     setSaving(true);
 
     try {
+      console.log("=== SAVE PRODUCT DEBUG ===");
+      console.log("Selected variants before save:", selectedVariants.length);
+      console.log("Selected variants IDs:", selectedVariants.map(v => v.id));
+      console.log("Initial variants count:", initial ? initial.variants.length : 0);
+
+      // Deduplicate selectedVariants one more time before saving (by id)
+      const uniqueSelectedVariants = selectedVariants.filter(
+        (v, index, self) => index === self.findIndex((t) => t.id === v.id)
+      );
+
+      if (selectedVariants.length !== uniqueSelectedVariants.length) {
+        console.warn(
+          "[AddProductModal] Found duplicates before save!",
+          `Original: ${selectedVariants.length}, Unique: ${uniqueSelectedVariants.length}`
+        );
+        console.warn('[AddProductModal] Duplicate item IDs:',
+          selectedVariants.map(v => v.id).filter((id, idx, arr) => arr.indexOf(id) !== idx)
+        );
+      }
+
       // Prepare variants - SIMPLE format: just {item: id}
-      const variantsData = selectedVariants.map((item) => ({
+      const variantsData = uniqueSelectedVariants.map((item) => ({
         item: item.id,
       }));
 
@@ -461,6 +535,7 @@ export default function AddProductModal({
         product_name: name.trim(),
         item_category: categoryId,
         hot_deals: isHotDeals ? 1 : 0,
+        disabled: disabled,
         variants: variantsData, // Backend auto-generates idx, name, etc.
       };
 
@@ -471,6 +546,7 @@ export default function AddProductModal({
         : getResourceUrl(API_CONFIG.ENDPOINTS.PRODUCT);
 
       console.log("Saving product to:", url, "Method:", method);
+      console.log("Variants count in payload:", variantsData.length);
       console.log("Payload:", JSON.stringify(payload, null, 2));
 
       const response = await fetch(url, {
@@ -620,6 +696,21 @@ export default function AddProductModal({
                 </button>
               </div>
 
+              {/* Status Select */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Status
+                </label>
+                <select
+                  value={disabled}
+                  onChange={(e) => setDisabled(Number(e.target.value))}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                >
+                  <option value={0}>Aktif</option>
+                  <option value={1}>Nonaktif</option>
+                </select>
+              </div>
+
               {/* Variants Section */}
               <div>
                 <div className="flex items-center justify-between mb-4">
@@ -647,9 +738,16 @@ export default function AddProductModal({
                     productName={name}
                     items={availableItems}
                     currentVariants={selectedVariants}
-                    onSelect={(items) =>
-                      setSelectedVariants([...selectedVariants, ...items])
-                    }
+                    onSelect={(items) => {
+                      // Deduplicate: merge new items with existing, remove duplicates by ID
+                      const merged = [...selectedVariants, ...items];
+                      const unique = merged.filter(
+                        (v, index, self) => index === self.findIndex((t) => t.id === v.id)
+                      );
+                      console.log('[AddProductModal] Adding variants from suggestions:', items.length);
+                      console.log('[AddProductModal] After dedup:', unique.length);
+                      setSelectedVariants(unique);
+                    }}
                   />
                 )}
 
@@ -698,12 +796,18 @@ export default function AddProductModal({
                 ) : (
                   <DraggableVariantList
                     variants={selectedVariants}
-                    onReorder={setSelectedVariants}
-                    onRemove={(id) =>
-                      setSelectedVariants(
-                        selectedVariants.filter((v) => v.id !== id)
-                      )
-                    }
+                    onReorder={(newOrder) => {
+                      console.log('[AddProductModal] Reordering variants:', newOrder.length);
+                      setSelectedVariants(newOrder);
+                    }}
+                    onRemove={(id) => {
+                      console.log('[AddProductModal] Removing variant ID:', id);
+                      console.log('[AddProductModal] Current variants before remove:', selectedVariants.length);
+                      const filtered = selectedVariants.filter((v) => v.id !== id);
+                      console.log('[AddProductModal] Variants after remove:', filtered.length);
+                      console.log('[AddProductModal] Filtered IDs:', filtered.map(v => v.id));
+                      setSelectedVariants(filtered);
+                    }}
                   />
                 )}
               </div>

@@ -144,7 +144,11 @@ export default function ItemDetailModal({
                 filters: [["id", "in", productIds]],
               };
               const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, productsSpec);
-              const productsRes = await fetch(productsUrl, { headers });
+              const productsRes = await fetch(productsUrl, {
+                method: "GET",
+                cache: "no-store",
+                headers
+              });
 
               if (productsRes.ok) {
                 const productsJson = await productsRes.json();

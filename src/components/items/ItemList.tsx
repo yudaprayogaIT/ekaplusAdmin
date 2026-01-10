@@ -188,6 +188,23 @@ export default function ItemList() {
     initialFilters: urlState.filters,
   });
 
+  // Watch for URL changes and update filters accordingly
+  useEffect(() => {
+    const newUrlState = parseSearchParams(searchParams);
+
+    console.log("[ItemList] 🔄 URL changed, new state:", newUrlState);
+
+    // Only update if filters actually changed
+    const filtersChanged =
+      JSON.stringify(filters) !== JSON.stringify(newUrlState.filters);
+
+    if (filtersChanged && newUrlState.filters.length > 0) {
+      console.log("[ItemList] ⚡ Updating filters from URL");
+      setFilters(newUrlState.filters);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]); // Only depend on searchParams to avoid infinite loop
+
   // Helper function to load data with filters and sorting
   async function loadAllData(
     filterTriples: FilterTriple[] = [],
@@ -396,13 +413,12 @@ export default function ItemList() {
           return;
         }
 
-        console.log(
-          "[ItemList] Loading data with server-side sort and pagination:",
-          sortField,
-          sortDirection,
-          "page:",
-          currentPage
-        );
+        console.log("[ItemList] 📊 Loading data with:");
+        console.log("  - Filters:", JSON.stringify(filters, null, 2));
+        console.log("  - Sort:", sortField, sortDirection);
+        console.log("  - Page:", currentPage);
+        console.log("  - URL State Filters:", JSON.stringify(urlState.filters, null, 2));
+
         const {
           items: mappedItems,
           totalItems,
@@ -447,8 +463,10 @@ export default function ItemList() {
 
   // Listen for updates - reload from API when triggered
   useEffect(() => {
-    async function handler() {
+    async function handler(eventName: string) {
       if (!isAuthenticated || !token) return;
+
+      console.log(`[ItemList] 🔄 Event triggered: ${eventName}, reloading items...`);
 
       try {
         const {
@@ -460,13 +478,25 @@ export default function ItemList() {
         setTotalItems(totalItems);
         setTotalPages(totalPages);
         localStorage.setItem(SNAP_KEY, JSON.stringify(mappedItems));
+        console.log(`[ItemList] ✅ Reload complete. Total items: ${mappedItems.length}`);
       } catch (error) {
-        console.error("Failed to reload items:", error);
+        console.error("[ItemList] ❌ Failed to reload items:", error);
       }
     }
 
-    window.addEventListener("ekatalog:items_update", handler);
-    return () => window.removeEventListener("ekatalog:items_update", handler);
+    const itemsHandler = () => handler("items_update");
+    const variantsHandler = () => handler("variants_update");
+    const productsHandler = () => handler("products_update");
+
+    window.addEventListener("ekatalog:items_update", itemsHandler);
+    window.addEventListener("ekatalog:variants_update", variantsHandler);
+    window.addEventListener("ekatalog:products_update", productsHandler);
+
+    return () => {
+      window.removeEventListener("ekatalog:items_update", itemsHandler);
+      window.removeEventListener("ekatalog:variants_update", variantsHandler);
+      window.removeEventListener("ekatalog:products_update", productsHandler);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, token, filters, sortField, sortDirection, currentPage]);
 

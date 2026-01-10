@@ -1,38 +1,36 @@
-// src/components/roles/RoleList.tsx
+// src/components/permissions/PermissionList.tsx
 "use client";
 
 import { useEffect, useState } from "react";
-import RoleCard from "./RoleCard";
-import AddRoleModal from "./AddRoleModal";
-import RoleDetailModal from "./RoleDetailModal";
+import PermissionCard from "./PermissionCard";
+import AddPermissionModal from "./AddPermissionModal";
+import PermissionDetailModal from "./PermissionDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import {
   FaPlus,
   FaSearch,
   FaList,
   FaTh,
-  FaUserShield,
-  FaUsers,
+  FaShieldAlt,
+  FaKey,
 } from "react-icons/fa";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAuthHeaders, API_CONFIG } from "@/config/api";
 
-export type Role = {
+export type Permission = {
   ID: number;
   Name: string;
   Slug: string;
-  Description: string;
-  IsSystem: boolean;
   CreatedAt: string;
   UpdatedAt: string;
 };
 
-type RoleAPIResponse = {
+type PermissionAPIResponse = {
   status: string;
   code: string;
   message: string;
-  data: Role[];
+  data: Permission[];
   meta: {
     request_id: string;
     trace_id: string;
@@ -41,25 +39,25 @@ type RoleAPIResponse = {
   };
 };
 
-export default function RoleList() {
+export default function PermissionList() {
   const { token, isAuthenticated } = useAuth();
-  const [roles, setRoles] = useState<Role[]>([]);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalInitial, setModalInitial] = useState<Role | null>(null);
+  const [modalInitial, setModalInitial] = useState<Permission | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [detailRole, setDetailRole] = useState<Role | null>(null);
+  const [detailPermission, setDetailPermission] = useState<Permission | null>(null);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
   const [confirmAction, setConfirmAction] = useState<(() => Promise<void>) | null>(null);
 
-  // Load roles from API
+  // Load permissions from API
   useEffect(() => {
     let cancelled = false;
 
@@ -74,9 +72,9 @@ export default function RoleList() {
         }
 
         const headers = getAuthHeaders(token);
-        const DATA_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_ROLE}`;
+        const DATA_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_PERMISSION}`;
 
-        console.log("[RoleList] Fetching roles from:", DATA_URL);
+        console.log("[PermissionList] Fetching permissions from:", DATA_URL);
 
         const res = await fetch(DATA_URL, {
           method: "GET",
@@ -84,27 +82,27 @@ export default function RoleList() {
           headers,
         });
 
-        console.log("[RoleList] Response status:", res.status);
-        console.log("[RoleList] Response content-type:", res.headers.get("content-type"));
+        console.log("[PermissionList] Response status:", res.status);
+        console.log("[PermissionList] Response content-type:", res.headers.get("content-type"));
 
         if (res.ok) {
           const contentType = res.headers.get("content-type");
           if (!contentType || !contentType.includes("application/json")) {
             const text = await res.text();
-            console.error("[RoleList] Non-JSON response:", text.substring(0, 200));
+            console.error("[PermissionList] Non-JSON response:", text.substring(0, 200));
             throw new Error("Server returned non-JSON response. Please check the API endpoint.");
           }
 
-          const response = (await res.json()) as RoleAPIResponse;
-          console.log("[RoleList] Roles loaded:", response.data?.length || 0);
-          const mappedRoles: Role[] = response.data;
+          const response = (await res.json()) as PermissionAPIResponse;
+          console.log("[PermissionList] Permissions loaded:", response.data?.length || 0);
+          const mappedPermissions: Permission[] = response.data;
 
           if (!cancelled) {
-            setRoles(mappedRoles);
+            setPermissions(mappedPermissions);
           }
         } else {
           const errorText = await res.text();
-          console.error("[RoleList] Error response:", errorText.substring(0, 200));
+          console.error("[PermissionList] Error response:", errorText.substring(0, 200));
           throw new Error(`HTTP ${res.status}: ${errorText}`);
         }
       } catch (err: unknown) {
@@ -141,9 +139,9 @@ export default function RoleList() {
 
       try {
         const headers = getAuthHeaders(token);
-        const DATA_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_ROLE}`;
+        const DATA_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_PERMISSION}`;
 
-        console.log("[RoleList] Auto-reloading roles from:", DATA_URL);
+        console.log("[PermissionList] Auto-reloading permissions from:", DATA_URL);
 
         const res = await fetch(DATA_URL, {
           method: "GET",
@@ -152,28 +150,26 @@ export default function RoleList() {
         });
 
         if (res.ok) {
-          const response = (await res.json()) as RoleAPIResponse;
-          console.log("[RoleList] Roles reloaded successfully:", response.data?.length || 0);
-          setRoles(response.data);
+          const response = (await res.json()) as PermissionAPIResponse;
+          console.log("[PermissionList] Permissions reloaded successfully:", response.data?.length || 0);
+          setPermissions(response.data);
         }
       } catch (error) {
-        console.error("Failed to reload roles:", error);
+        console.error("Failed to reload permissions:", error);
       }
     }
 
-    window.addEventListener("ekatalog:roles_update", handler);
-    return () => window.removeEventListener("ekatalog:roles_update", handler);
+    window.addEventListener("ekatalog:permissions_update", handler);
+    return () => window.removeEventListener("ekatalog:permissions_update", handler);
   }, [isAuthenticated, token]);
 
-  // Filter roles based on search
-  let displayedRoles = roles;
+  // Filter permissions based on search
+  let displayedPermissions = permissions;
   if (searchQuery.trim()) {
-    displayedRoles = displayedRoles.filter(
-      (role) =>
-        role.Name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        role.Slug.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (role.Description &&
-          role.Description.toLowerCase().includes(searchQuery.toLowerCase()))
+    displayedPermissions = displayedPermissions.filter(
+      (permission) =>
+        permission.Name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        permission.Slug.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }
 
@@ -182,33 +178,28 @@ export default function RoleList() {
     setModalOpen(true);
   }
 
-  function handleEdit(role: Role) {
-    setModalInitial(role);
+  function handleEdit(permission: Permission) {
+    setModalInitial(permission);
     setModalOpen(true);
   }
 
-  function promptDeleteRole(role: Role) {
-    if (role.IsSystem) {
-      alert("System roles cannot be deleted!");
-      return;
-    }
-
-    setConfirmTitle("Hapus Role");
-    setConfirmDesc(`Yakin ingin menghapus role "${role.Name}"?`);
+  function promptDeletePermission(permission: Permission) {
+    setConfirmTitle("Hapus Permission");
+    setConfirmDesc(`Yakin ingin menghapus permission "${permission.Name}"?`);
     setConfirmAction(() => async () => {
-      await deleteRole(role);
+      await deletePermission(permission);
     });
     setConfirmOpen(true);
   }
 
-  async function deleteRole(role: Role) {
+  async function deletePermission(permission: Permission) {
     if (!token) return;
 
     try {
       const headers = getAuthHeaders(token);
-      const DELETE_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_ROLE}/${role.ID}`;
+      const DELETE_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_PERMISSION}/${permission.ID}`;
 
-      console.log("[RoleList] Deleting role at:", DELETE_URL);
+      console.log("[PermissionList] Deleting permission at:", DELETE_URL);
 
       const res = await fetch(DELETE_URL, {
         method: "DELETE",
@@ -216,33 +207,33 @@ export default function RoleList() {
       });
 
       if (res.ok) {
-        window.dispatchEvent(new Event("ekatalog:roles_update"));
+        window.dispatchEvent(new Event("ekatalog:permissions_update"));
         setConfirmOpen(false);
       } else {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.message || "Failed to delete role");
+        throw new Error(errorData.message || "Failed to delete permission");
       }
     } catch (error) {
-      console.error("Failed to delete role:", error);
+      console.error("Failed to delete permission:", error);
       alert(
-        error instanceof Error ? error.message : "Gagal menghapus role. Silakan coba lagi."
+        error instanceof Error ? error.message : "Gagal menghapus permission. Silakan coba lagi."
       );
     }
   }
 
-  function openDetail(role: Role) {
-    setDetailRole(role);
+  function openDetail(permission: Permission) {
+    setDetailPermission(permission);
     setDetailOpen(true);
   }
 
-  function onDetailEdit(role: Role) {
+  function onDetailEdit(permission: Permission) {
     setDetailOpen(false);
-    setTimeout(() => handleEdit(role), 100);
+    setTimeout(() => handleEdit(permission), 100);
   }
 
-  function onDetailDelete(role: Role) {
+  function onDetailDelete(permission: Permission) {
     setDetailOpen(false);
-    setTimeout(() => promptDeleteRole(role), 100);
+    setTimeout(() => promptDeletePermission(permission), 100);
   }
 
   async function executeConfirmAction() {
@@ -259,7 +250,7 @@ export default function RoleList() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center py-16">
             <div className="w-16 h-16 border-4 border-red-200 border-t-red-500 rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-600">Memuat roles...</p>
+            <p className="text-gray-600">Memuat permissions...</p>
           </div>
         </div>
       </div>
@@ -273,10 +264,10 @@ export default function RoleList() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
             <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <FaUserShield className="w-8 h-8 text-red-500" />
+              <FaShieldAlt className="w-8 h-8 text-red-500" />
             </div>
             <h3 className="text-lg font-semibold text-gray-800 mb-2">
-              Error Loading Roles
+              Error Loading Permissions
             </h3>
             <p className="text-sm text-gray-500 mb-4">{error}</p>
             <button
@@ -298,10 +289,10 @@ export default function RoleList() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
-              Roles & Permissions
+              Permissions
             </h1>
             <p className="text-sm md:text-base text-gray-600">
-              Kelola roles dan hak akses pengguna
+              Kelola permission untuk sistem authorization
             </p>
           </div>
 
@@ -312,54 +303,36 @@ export default function RoleList() {
             className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl shadow-lg shadow-red-200 hover:shadow-xl transition-all font-medium"
           >
             <FaPlus className="w-4 h-4" />
-            <span>Tambah Role</span>
+            <span>Tambah Permission</span>
           </motion.button>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg p-6 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-blue-100 text-sm font-medium mb-1">
-                  Total Roles
-                </p>
-                <p className="text-3xl font-bold">{roles.length}</p>
-              </div>
-              <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
-                <FaUserShield className="w-7 h-7" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl shadow-lg p-6 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-green-100 text-sm font-medium mb-1">
-                  System Roles
-                </p>
-                <p className="text-3xl font-bold">
-                  {roles.filter((r) => r.IsSystem).length}
-                </p>
-              </div>
-              <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
-                <FaUserShield className="w-7 h-7" />
-              </div>
-            </div>
-          </div>
-
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl shadow-lg p-6 text-white">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-purple-100 text-sm font-medium mb-1">
-                  Custom Roles
+                  Total Permissions
                 </p>
-                <p className="text-3xl font-bold">
-                  {roles.filter((r) => !r.IsSystem).length}
-                </p>
+                <p className="text-3xl font-bold">{permissions.length}</p>
               </div>
               <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
-                <FaUsers className="w-7 h-7" />
+                <FaShieldAlt className="w-7 h-7" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-100 text-sm font-medium mb-1">
+                  Active Permissions
+                </p>
+                <p className="text-3xl font-bold">{displayedPermissions.length}</p>
+              </div>
+              <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
+                <FaKey className="w-7 h-7" />
               </div>
             </div>
           </div>
@@ -375,7 +348,7 @@ export default function RoleList() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari role berdasarkan nama, slug..."
+                placeholder="Cari permission berdasarkan nama, slug..."
                 className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
               />
             </div>
@@ -408,19 +381,19 @@ export default function RoleList() {
           </div>
         </div>
 
-        {/* Roles Display */}
-        {displayedRoles.length === 0 ? (
+        {/* Permissions Display */}
+        {displayedPermissions.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
             <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <FaSearch className="w-8 h-8 text-gray-400" />
             </div>
             <h3 className="text-lg font-semibold text-gray-800 mb-2">
-              Tidak ada role
+              Tidak ada permission
             </h3>
             <p className="text-sm text-gray-500">
               {searchQuery
                 ? "Coba ubah kata kunci pencarian"
-                : "Belum ada role yang ditambahkan"}
+                : "Belum ada permission yang ditambahkan"}
             </p>
           </div>
         ) : (
@@ -431,14 +404,14 @@ export default function RoleList() {
                 : "space-y-4"
             }
           >
-            {displayedRoles.map((role) => (
-              <RoleCard
-                key={role.ID}
-                role={role}
+            {displayedPermissions.map((permission) => (
+              <PermissionCard
+                key={permission.ID}
+                permission={permission}
                 viewMode={viewMode}
-                onEdit={() => handleEdit(role)}
-                onDelete={() => promptDeleteRole(role)}
-                onView={() => openDetail(role)}
+                onEdit={() => handleEdit(permission)}
+                onDelete={() => promptDeletePermission(permission)}
+                onView={() => openDetail(permission)}
               />
             ))}
           </div>
@@ -446,16 +419,16 @@ export default function RoleList() {
       </div>
 
       {/* Modals */}
-      <AddRoleModal
+      <AddPermissionModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         initialData={modalInitial}
       />
 
-      <RoleDetailModal
+      <PermissionDetailModal
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
-        role={detailRole}
+        permission={detailPermission}
         onEdit={onDetailEdit}
         onDelete={onDetailDelete}
       />

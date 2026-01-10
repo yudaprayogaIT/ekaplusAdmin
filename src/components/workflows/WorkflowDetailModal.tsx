@@ -1,425 +1,444 @@
-// // src/components/workflows/WorkflowDetailModal.tsx
-// "use client";
+// src/components/workflows/WorkflowDetailModal.tsx
+"use client";
 
-// import React, { useState } from "react";
-// import { AnimatePresence, motion } from "framer-motion";
-// import {
-//   FaTimes, FaEdit, FaTrash, FaProjectDiagram, FaCircle, FaArrowRight,
-//   FaCheckCircle, FaTimesCircle, FaBell, FaKey, FaUserShield, FaComment
-// } from "react-icons/fa";
-// import type { Workflow, WorkflowState, WorkflowTransition } from "./WorkflowList";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  FaTimes,
+  FaEdit,
+  FaTrash,
+  FaSitemap,
+  FaClock,
+  FaCircle,
+  FaArrowRight,
+  FaCheckCircle,
+  FaTimesCircle,
+  FaUser,
+  FaUsers,
+  FaListOl,
+  FaProjectDiagram,
+} from "react-icons/fa";
+import { WorkflowWithDetails, Role } from "./WorkflowList";
 
-// function getButtonColorClass(color: string): string {
-//   switch (color) {
-//     case 'primary': return 'bg-blue-500 text-white';
-//     case 'success': return 'bg-green-500 text-white';
-//     case 'warning': return 'bg-yellow-500 text-white';
-//     case 'danger': return 'bg-red-500 text-white';
-//     case 'info': return 'bg-cyan-500 text-white';
-//     default: return 'bg-gray-500 text-white';
-//   }
-// }
+type Props = {
+  open: boolean;
+  onClose: () => void;
+  workflow: WorkflowWithDetails | null;
+  roles: Role[];
+  onEdit: (workflow: WorkflowWithDetails) => void;
+  onDelete: (workflow: WorkflowWithDetails) => void;
+};
 
-// export default function WorkflowDetailModal({
-//   open,
-//   onClose,
-//   workflow,
-//   states,
-//   transitions,
-//   onEdit,
-//   onDelete,
-// }: {
-//   open: boolean;
-//   onClose: () => void;
-//   workflow?: Workflow | null;
-//   states: WorkflowState[];
-//   transitions: WorkflowTransition[];
-//   onEdit?: (w: Workflow) => void;
-//   onDelete?: (w: Workflow) => void;
-// }) {
-//   const [activeTab, setActiveTab] = useState<'states' | 'transitions'>('states');
+export default function WorkflowDetailModal({
+  open,
+  onClose,
+  workflow,
+  roles,
+  onEdit,
+  onDelete,
+}: Props) {
+  if (!open || !workflow) return null;
 
-//   if (!workflow) return null;
+  const { workflow: wf, document_states, transitions } = workflow;
 
-//   const initialState = states.find(s => s.is_initial);
-//   const finalStates = states.filter(s => s.is_final);
+  // Sort states by state_id for flow visualization
+  const sortedStates = [...document_states].sort(
+    (a, b) => a.state_id - b.state_id
+  );
 
-//   return (
-//     <AnimatePresence>
-//       {open && (
-//         <motion.div
-//           className="fixed inset-0 z-50 flex items-center justify-center p-4"
-//           initial={{ opacity: 0 }}
-//           animate={{ opacity: 1 }}
-//           exit={{ opacity: 0 }}
-//         >
-//           <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={onClose} />
+  // Get role name by ID
+  const getRoleName = (roleId: number): string => {
+    const role = roles.find((r) => r.ID === roleId);
+    return role ? role.Name : `Role #${roleId}`;
+  };
 
-//           <motion.div
-//             initial={{ scale: 0.9, opacity: 0, y: 20 }}
-//             animate={{ scale: 1, opacity: 1, y: 0 }}
-//             exit={{ scale: 0.9, opacity: 0, y: 20 }}
-//             transition={{ type: "spring", duration: 0.3 }}
-//             className="relative z-10 w-full max-w-5xl bg-white rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
-//           >
-//             {/* Header with Gradient */}
-//             <div
-//               className="px-8 py-10 text-white relative overflow-hidden"
-//               style={{ background: `linear-gradient(135deg, ${workflow.color} 0%, ${workflow.color}dd 100%)` }}
-//             >
-//               <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full -mr-48 -mt-48" />
-//               <div className="absolute bottom-0 left-0 w-64 h-64 bg-black/10 rounded-full -ml-32 -mb-32" />
+  // Mode badge icon
+  const getModeIcon = (mode: string) => {
+    switch (mode) {
+      case "single":
+        return <FaUser className="w-3 h-3" />;
+      case "parallel":
+        return <FaUsers className="w-3 h-3" />;
+      case "sequence":
+        return <FaListOl className="w-3 h-3" />;
+      default:
+        return <FaCircle className="w-3 h-3" />;
+    }
+  };
 
-//               <button
-//                 onClick={onClose}
-//                 className="absolute top-5 right-5 p-2.5 hover:bg-white/20 rounded-xl transition-colors z-10"
-//               >
-//                 <FaTimes className="w-6 h-6" />
-//               </button>
+  // Mode badge color
+  const getModeColor = (mode: string) => {
+    switch (mode) {
+      case "single":
+        return "bg-blue-100 text-blue-700";
+      case "parallel":
+        return "bg-orange-100 text-orange-700";
+      case "sequence":
+        return "bg-purple-100 text-purple-700";
+      default:
+        return "bg-gray-100 text-gray-700";
+    }
+  };
 
-//               <div className="relative flex items-start gap-6">
-//                 {/* Icon */}
-//                 <div
-//                   className="w-24 h-24 rounded-2xl flex items-center justify-center text-white shadow-2xl border-4 border-white/30 flex-shrink-0"
-//                   style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}
-//                 >
-//                   <FaProjectDiagram className="w-12 h-12" />
-//                 </div>
+  return (
+    <AnimatePresence>
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between p-6 border-b border-gray-100 sticky top-0 bg-white z-10">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center">
+                <FaSitemap className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">
+                  Workflow Detail
+                </h2>
+                <p className="text-sm text-gray-600">
+                  Informasi lengkap workflow
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+            >
+              <FaTimes className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
 
-//                 <div className="flex-1">
-//                   {/* Badges */}
-//                   <div className="flex items-center gap-2 mb-3">
-//                     <span className="px-4 py-1.5 bg-white/20 backdrop-blur-sm rounded-full text-sm font-semibold capitalize">
-//                       {workflow.document_type}
-//                     </span>
-//                     <span className={`px-4 py-1.5 backdrop-blur-sm rounded-full text-sm font-semibold flex items-center gap-1 ${
-//                       workflow.is_active ? 'bg-green-500/90' : 'bg-gray-500/90'
-//                     }`}>
-//                       {workflow.is_active ? (
-//                         <>
-//                           <FaCheckCircle className="w-3 h-3" />
-//                           Active
-//                         </>
-//                       ) : (
-//                         <>
-//                           <FaTimesCircle className="w-3 h-3" />
-//                           Inactive
-//                         </>
-//                       )}
-//                     </span>
-//                   </div>
+          {/* Content */}
+          <div className="p-6 space-y-6">
+            {/* Workflow Info Card */}
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-200 rounded-2xl p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-4 flex-1">
+                  <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <FaSitemap className="w-8 h-8 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-2xl font-bold text-purple-900 mb-2">
+                      {wf.name}
+                    </h3>
+                    <p className="text-purple-700 font-mono text-lg mb-3">
+                      {wf.resource}
+                    </p>
+                    {wf.description && (
+                      <p className="text-purple-800 text-sm">
+                        {wf.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  {wf.is_active ? (
+                    <span className="px-3 py-2 bg-green-100 text-green-700 rounded-xl text-sm font-bold flex items-center gap-2">
+                      <FaCheckCircle className="w-4 h-4" />
+                      Active
+                    </span>
+                  ) : (
+                    <span className="px-3 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-bold flex items-center gap-2">
+                      <FaTimesCircle className="w-4 h-4" />
+                      Inactive
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
 
-//                   {/* Title */}
-//                   <h2 className="text-3xl font-bold mb-2">{workflow.display_name}</h2>
-//                   <p className="text-white/80">{workflow.description}</p>
-//                   <code className="inline-block mt-2 px-3 py-1 bg-black/20 rounded-lg text-sm font-mono">
-//                     {workflow.name}
-//                   </code>
-//                 </div>
-//               </div>
-//             </div>
+            {/* Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <FaCircle className="w-4 h-4 text-purple-600" />
+                  <span className="text-sm text-purple-700 font-medium">
+                    Document States
+                  </span>
+                </div>
+                <p className="text-3xl font-bold text-purple-900">
+                  {document_states.length}
+                </p>
+              </div>
+              <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <FaArrowRight className="w-4 h-4 text-orange-600" />
+                  <span className="text-sm text-orange-700 font-medium">
+                    Transitions
+                  </span>
+                </div>
+                <p className="text-3xl font-bold text-orange-900">
+                  {transitions.length}
+                </p>
+              </div>
+              <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <FaProjectDiagram className="w-4 h-4 text-blue-600" />
+                  <span className="text-sm text-blue-700 font-medium">
+                    Workflow ID
+                  </span>
+                </div>
+                <p className="text-3xl font-bold text-blue-900">#{wf.id}</p>
+              </div>
+            </div>
 
-//             {/* Content */}
-//             <div className="p-8">
-//               {/* Stats */}
-//               <div className="grid grid-cols-4 gap-4 mb-8">
-//                 <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-5 border-2 border-purple-200">
-//                   <div className="flex items-center gap-2 mb-2">
-//                     <FaCircle className="w-5 h-5 text-purple-600" />
-//                     <span className="text-sm font-bold text-purple-900">States</span>
-//                   </div>
-//                   <div className="text-3xl font-bold text-purple-900">{states.length}</div>
-//                 </div>
-//                 <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-2xl p-5 border-2 border-orange-200">
-//                   <div className="flex items-center gap-2 mb-2">
-//                     <FaArrowRight className="w-5 h-5 text-orange-600" />
-//                     <span className="text-sm font-bold text-orange-900">Transitions</span>
-//                   </div>
-//                   <div className="text-3xl font-bold text-orange-900">{transitions.length}</div>
-//                 </div>
-//                 <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-5 border-2 border-green-200">
-//                   <div className="flex items-center gap-2 mb-2">
-//                     <FaCheckCircle className="w-5 h-5 text-green-600" />
-//                     <span className="text-sm font-bold text-green-900">Initial State</span>
-//                   </div>
-//                   <div className="text-lg font-bold text-green-900 truncate">
-//                     {initialState?.display_name || '-'}
-//                   </div>
-//                 </div>
-//                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-5 border-2 border-blue-200">
-//                   <div className="flex items-center gap-2 mb-2">
-//                     <FaTimesCircle className="w-5 h-5 text-blue-600" />
-//                     <span className="text-sm font-bold text-blue-900">Final States</span>
-//                   </div>
-//                   <div className="text-3xl font-bold text-blue-900">{finalStates.length}</div>
-//                 </div>
-//               </div>
+            {/* State Flow Diagram */}
+            {sortedStates.length > 0 && (
+              <div className="bg-gradient-to-br from-gray-50 to-gray-100 border-2 border-gray-200 rounded-2xl p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <FaProjectDiagram className="w-5 h-5 text-gray-700" />
+                  <h3 className="text-lg font-bold text-gray-900">
+                    State Flow Diagram
+                  </h3>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {sortedStates.map((state, idx) => (
+                    <div key={state.state_id} className="flex items-center gap-2">
+                      <div className="px-4 py-2 rounded-xl bg-white border-2 border-purple-200 shadow-sm">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{
+                              backgroundColor: state.color || "#9333ea",
+                            }}
+                          />
+                          <span className="font-bold text-gray-900">
+                            {state.state_name}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          Docstatus: {state.docstatus}
+                          {state.editable && " • Editable"}
+                        </div>
+                      </div>
+                      {idx < sortedStates.length - 1 && (
+                        <FaArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
-//               {/* Visual Flow Diagram */}
-//               <div className="mb-8 p-6 bg-gradient-to-br from-gray-50 to-white rounded-2xl border-2 border-gray-100">
-//                 <h3 className="text-lg font-bold text-gray-800 mb-4">Workflow Flow</h3>
-//                 <div className="flex items-center gap-2 overflow-x-auto pb-2">
-//                   {states.map((state, idx) => (
-//                     <React.Fragment key={state.id}>
-//                       <div className="flex flex-col items-center min-w-[120px]">
-//                         <div
-//                           className="px-4 py-2 rounded-xl text-white font-semibold text-sm text-center shadow-lg"
-//                           style={{ backgroundColor: state.color }}
-//                         >
-//                           {state.display_name}
-//                         </div>
-//                         <div className="flex gap-1 mt-2">
-//                           {state.is_initial && (
-//                             <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
-//                               Start
-//                             </span>
-//                           )}
-//                           {state.is_final && (
-//                             <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium">
-//                               End
-//                             </span>
-//                           )}
-//                           {state.allow_edit && (
-//                             <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-//                               Editable
-//                             </span>
-//                           )}
-//                         </div>
-//                       </div>
-//                       {idx < states.length - 1 && (
-//                         <div className="flex-shrink-0">
-//                           <FaArrowRight className="w-5 h-5 text-gray-400" />
-//                         </div>
-//                       )}
-//                     </React.Fragment>
-//                   ))}
-//                 </div>
-//               </div>
+            {/* Document States Table */}
+            <div className="bg-white border-2 border-gray-200 rounded-2xl overflow-hidden">
+              <div className="bg-purple-50 border-b-2 border-purple-200 px-6 py-4">
+                <div className="flex items-center gap-2">
+                  <FaCircle className="w-5 h-5 text-purple-600" />
+                  <h3 className="text-lg font-bold text-purple-900">
+                    Document States
+                  </h3>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">
+                        State ID
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">
+                        State Name
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">
+                        Docstatus
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">
+                        Editable
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">
+                        Color
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">
+                        Icon
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {sortedStates.map((state) => (
+                      <tr
+                        key={state.state_id}
+                        className="hover:bg-gray-50 transition-colors"
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm font-bold text-gray-900">
+                            #{state.state_id}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm font-bold text-gray-900">
+                            {state.state_name}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-bold">
+                            {state.docstatus}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {state.editable ? (
+                            <span className="px-2 py-1 bg-green-100 text-green-700 rounded-lg text-xs font-bold">
+                              Yes
+                            </span>
+                          ) : (
+                            <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs font-bold">
+                              No
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {state.color ? (
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-6 h-6 rounded border-2 border-gray-300"
+                                style={{ backgroundColor: state.color }}
+                              />
+                              <span className="text-xs text-gray-600 font-mono">
+                                {state.color}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm text-gray-600">
+                            {state.icon || "-"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-//               {/* Tabs */}
-//               <div className="flex border-b border-gray-200 mb-6">
-//                 <button
-//                   onClick={() => setActiveTab('states')}
-//                   className={`flex-1 px-6 py-3 text-sm font-semibold transition-all ${
-//                     activeTab === 'states'
-//                       ? 'text-red-600 border-b-2 border-red-600'
-//                       : 'text-gray-500 hover:text-gray-700'
-//                   }`}
-//                 >
-//                   <FaCircle className="w-4 h-4 inline-block mr-2" />
-//                   States ({states.length})
-//                 </button>
-//                 <button
-//                   onClick={() => setActiveTab('transitions')}
-//                   className={`flex-1 px-6 py-3 text-sm font-semibold transition-all ${
-//                     activeTab === 'transitions'
-//                       ? 'text-red-600 border-b-2 border-red-600'
-//                       : 'text-gray-500 hover:text-gray-700'
-//                   }`}
-//                 >
-//                   <FaArrowRight className="w-4 h-4 inline-block mr-2" />
-//                   Transitions ({transitions.length})
-//                 </button>
-//               </div>
+            {/* Transitions Table */}
+            <div className="bg-white border-2 border-gray-200 rounded-2xl overflow-hidden">
+              <div className="bg-orange-50 border-b-2 border-orange-200 px-6 py-4">
+                <div className="flex items-center gap-2">
+                  <FaArrowRight className="w-5 h-5 text-orange-600" />
+                  <h3 className="text-lg font-bold text-orange-900">
+                    Transitions
+                  </h3>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">
+                        Action
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">
+                        From State
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">
+                        To State
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">
+                        Mode
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">
+                        Allowed Roles
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase">
+                        Min Required
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {transitions.map((transition, idx) => {
+                      const fromState = document_states.find(
+                        (s) => s.state_id === transition.from_state_id
+                      );
+                      const toState = document_states.find(
+                        (s) => s.state_id === transition.to_state_id
+                      );
 
-//               {/* States Tab */}
-//               {activeTab === 'states' && (
-//                 <div className="space-y-3">
-//                   {states.map((state) => (
-//                     <div
-//                       key={state.id}
-//                       className="flex items-center gap-4 p-4 rounded-xl border-2 border-gray-100 hover:border-gray-200 transition-colors"
-//                     >
-//                       <div
-//                         className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-//                         style={{ backgroundColor: state.bg_color }}
-//                       >
-//                         <FaCircle className="w-5 h-5" style={{ color: state.color }} />
-//                       </div>
-//                       <div className="flex-1">
-//                         <div className="flex items-center gap-2 mb-1">
-//                           <span className="font-bold text-gray-800">{state.display_name}</span>
-//                           <code className="text-xs text-gray-400 font-mono">{state.name}</code>
-//                         </div>
-//                         <p className="text-sm text-gray-500">{state.description}</p>
-//                       </div>
-//                       <div className="flex flex-wrap gap-2">
-//                         {state.is_initial && (
-//                           <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
-//                             Initial
-//                           </span>
-//                         )}
-//                         {state.is_final && (
-//                           <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
-//                             Final
-//                           </span>
-//                         )}
-//                         {state.allow_edit && (
-//                           <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
-//                             Editable
-//                           </span>
-//                         )}
-//                         <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-semibold">
-//                           Seq: {state.sequence}
-//                         </span>
-//                       </div>
-//                     </div>
-//                   ))}
-//                 </div>
-//               )}
+                      return (
+                        <tr
+                          key={transition.id || idx}
+                          className="hover:bg-gray-50 transition-colors"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="text-sm font-bold text-gray-900">
+                              {transition.action}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="text-sm text-gray-900">
+                              {fromState?.state_name || `#${transition.from_state_id}`}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="text-sm text-gray-900">
+                              {toState?.state_name || `#${transition.to_state_id}`}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span
+                              className={`px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 w-fit ${getModeColor(
+                                transition.mode
+                              )}`}
+                            >
+                              {getModeIcon(transition.mode)}
+                              {transition.mode.charAt(0).toUpperCase() +
+                                transition.mode.slice(1)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-wrap gap-1">
+                              {transition.allowed_role_ids.map((roleId) => (
+                                <span
+                                  key={roleId}
+                                  className="px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium"
+                                >
+                                  {getRoleName(roleId)}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {transition.mode !== "single" ? (
+                              <span className="text-sm font-bold text-gray-900">
+                                {transition.min_required}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-400">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-//               {/* Transitions Tab */}
-//               {activeTab === 'transitions' && (
-//                 <div className="space-y-4">
-//                   {transitions.map((transition) => {
-//                     const fromState = states.find(s => s.name === transition.from_state);
-//                     const toState = states.find(s => s.name === transition.to_state);
-
-//                     return (
-//                       <div
-//                         key={transition.id}
-//                         className="p-5 rounded-xl border-2 border-gray-100 hover:border-gray-200 transition-colors"
-//                       >
-//                         {/* Header */}
-//                         <div className="flex items-center justify-between mb-4">
-//                           <div className="flex items-center gap-3">
-//                             <span
-//                               className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${getButtonColorClass(transition.button_color)}`}
-//                             >
-//                               {transition.button_label}
-//                             </span>
-//                             <code className="text-xs text-gray-400 font-mono">{transition.name}</code>
-//                           </div>
-//                           <div className="flex items-center gap-2">
-//                             {transition.requires_comment && (
-//                               <span className="flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-semibold">
-//                                 <FaComment className="w-3 h-3" />
-//                                 Comment Required
-//                               </span>
-//                             )}
-//                           </div>
-//                         </div>
-
-//                         {/* State Flow */}
-//                         <div className="flex items-center gap-3 mb-4 p-3 bg-gray-50 rounded-lg">
-//                           <div
-//                             className="px-3 py-1.5 rounded-lg text-white text-sm font-semibold"
-//                             style={{ backgroundColor: fromState?.color || '#6B7280' }}
-//                           >
-//                             {fromState?.display_name || transition.from_state}
-//                           </div>
-//                           <FaArrowRight className="w-4 h-4 text-gray-400" />
-//                           <div
-//                             className="px-3 py-1.5 rounded-lg text-white text-sm font-semibold"
-//                             style={{ backgroundColor: toState?.color || '#6B7280' }}
-//                           >
-//                             {toState?.display_name || transition.to_state}
-//                           </div>
-//                         </div>
-
-//                         {/* Details */}
-//                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-//                           {/* Allowed Roles */}
-//                           <div>
-//                             <div className="flex items-center gap-2 mb-2">
-//                               <FaUserShield className="w-4 h-4 text-gray-400" />
-//                               <span className="text-sm font-semibold text-gray-700">Allowed Roles</span>
-//                             </div>
-//                             <div className="flex flex-wrap gap-1">
-//                               {transition.allowed_roles.map(role => (
-//                                 <span
-//                                   key={role}
-//                                   className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium"
-//                                 >
-//                                   {role}
-//                                 </span>
-//                               ))}
-//                             </div>
-//                           </div>
-
-//                           {/* Required Permissions */}
-//                           {transition.required_permissions.length > 0 && (
-//                             <div>
-//                               <div className="flex items-center gap-2 mb-2">
-//                                 <FaKey className="w-4 h-4 text-gray-400" />
-//                                 <span className="text-sm font-semibold text-gray-700">Required Permissions</span>
-//                               </div>
-//                               <div className="flex flex-wrap gap-1">
-//                                 {transition.required_permissions.map(perm => (
-//                                   <span
-//                                     key={perm}
-//                                     className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium"
-//                                   >
-//                                     {perm}
-//                                   </span>
-//                                 ))}
-//                               </div>
-//                             </div>
-//                           )}
-//                         </div>
-
-//                         {/* Actions */}
-//                         {transition.actions.length > 0 && (
-//                           <div className="mt-4 pt-4 border-t border-gray-100">
-//                             <div className="flex items-center gap-2 mb-2">
-//                               <FaBell className="w-4 h-4 text-gray-400" />
-//                               <span className="text-sm font-semibold text-gray-700">Actions ({transition.actions.length})</span>
-//                             </div>
-//                             <div className="flex flex-wrap gap-2">
-//                               {transition.actions.map((action, idx) => (
-//                                 <span
-//                                   key={idx}
-//                                   className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium"
-//                                 >
-//                                   {action.type}
-//                                   {action.template && `: ${action.template}`}
-//                                   {action.field && `: ${action.field}`}
-//                                   {action.code_type && `: ${action.code_type}`}
-//                                   {action.tier && `: ${action.tier}`}
-//                                 </span>
-//                               ))}
-//                             </div>
-//                           </div>
-//                         )}
-
-//                         {/* Confirm Message */}
-//                         {transition.confirm_message && (
-//                           <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
-//                             <strong>Confirmation:</strong> {transition.confirm_message}
-//                           </div>
-//                         )}
-//                       </div>
-//                     );
-//                   })}
-//                 </div>
-//               )}
-
-//               {/* Actions */}
-//               <div className="flex gap-4 pt-6 mt-6 border-t-2 border-gray-100">
-//                 <motion.button
-//                   whileHover={{ scale: 1.02 }}
-//                   whileTap={{ scale: 0.98 }}
-//                   onClick={() => onEdit?.(workflow)}
-//                   className="flex-1 flex items-center justify-center gap-3 px-6 py-4 bg-gray-100 hover:bg-gray-200 rounded-2xl transition-all font-semibold text-gray-800 shadow-sm"
-//                 >
-//                   <FaEdit className="w-5 h-5" />
-//                   <span>Edit Workflow</span>
-//                 </motion.button>
-
-//                 <motion.button
-//                   whileHover={{ scale: 1.02 }}
-//                   whileTap={{ scale: 0.98 }}
-//                   onClick={() => onDelete?.(workflow)}
-//                   className="flex-1 flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-2xl transition-all font-semibold shadow-lg shadow-red-200"
-//                 >
-//                   <FaTrash className="w-5 h-5" />
-//                   <span>Hapus</span>
-//                 </motion.button>
-//               </div>
-//             </div>
-//           </motion.div>
-//         </motion.div>
-//       )}
-//     </AnimatePresence>
-//   );
-// }
+            {/* Actions */}
+            <div className="flex gap-3 pt-4 border-t border-gray-100">
+              <button
+                onClick={() => onEdit(workflow)}
+                className="flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
+              >
+                <FaEdit className="w-4 h-4" />
+                <span>Edit Workflow</span>
+              </button>
+              <button
+                onClick={() => onDelete(workflow)}
+                className="px-6 py-3 rounded-xl bg-red-100 text-red-600 font-bold hover:bg-red-200 transition-all flex items-center justify-center gap-2"
+              >
+                <FaTrash className="w-4 h-4" />
+                <span>Delete</span>
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  );
+}

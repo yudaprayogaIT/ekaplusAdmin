@@ -24,6 +24,7 @@ import {
   FaStar,
   FaShieldAlt,
   FaProjectDiagram,
+  FaSitemap,
   FaCog,
   FaLock,
   FaDatabase,
@@ -52,7 +53,7 @@ const DASHBOARD_MENU: MenuItem[] = [
     label: "Dashboard",
     href: "/",
     icon: <FaHome className="w-5 h-5" />,
-    category: "Main"
+    category: "Main",
   },
 ];
 
@@ -123,11 +124,19 @@ const ADMIN_MENU: MenuItem[] = [
     requireAuth: true,
   },
   {
-    label: "Roles & Permissions",
+    label: "Roles",
     href: "/roles",
-    icon: <FaShieldAlt className="w-4 h-4" />,
+    icon: <FaUserShield className="w-5 h-5" />,
     category: "System",
     // permission: "roles.view", // DISABLED
+    requireAuth: true,
+  },
+  {
+    label: "Permissions",
+    href: "/permissions",
+    icon: <FaShieldAlt className="w-5 h-5" />,
+    category: "System",
+    // permission: "permissions.view", // DISABLED
     requireAuth: true,
   },
   {
@@ -141,14 +150,14 @@ const ADMIN_MENU: MenuItem[] = [
   {
     label: "Workflows",
     href: "/workflows",
-    icon: <FaProjectDiagram className="w-4 h-4" />,
+    icon: <FaSitemap className="w-5 h-5" />,
     category: "System",
     // permission: "workflows.view", // DISABLED
     requireAuth: true,
   },
   {
     label: "Workflow States",
-    href: "/workflow-states",
+    href: "/workflow-state",
     icon: <FaCircle className="w-4 h-4" />,
     category: "System",
     // permission: "workflows.view", // DISABLED

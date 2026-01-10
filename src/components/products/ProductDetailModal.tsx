@@ -90,6 +90,17 @@ export default function ProductDetailModal({
                       {product.variants.length} Varian
                     </span>
                   </div>
+                  <div
+                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${
+                      product.disabled === 0
+                        ? "bg-green-500"
+                        : "bg-gray-500"
+                    }`}
+                  >
+                    <span className="text-sm font-bold">
+                      {product.disabled === 0 ? "Aktif" : "Nonaktif"}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Title */}

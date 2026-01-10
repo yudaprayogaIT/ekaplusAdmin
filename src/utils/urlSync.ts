@@ -30,9 +30,14 @@ export function deserializeFilters(filterString: string): FilterTriple[] {
       const [field, operator, value] = part.split("__").map(decodeURIComponent);
 
       // Try to parse value as number if it looks like a number
+      // BUT keep strings with leading zeros as strings (e.g., "0010296200070")
       let parsedValue: string | number = value;
       if (!isNaN(Number(value)) && value !== "") {
-        parsedValue = Number(value);
+        // Only convert to number if it doesn't have leading zeros (except for "0" itself)
+        const hasLeadingZeros = value.length > 1 && value.startsWith("0");
+        if (!hasLeadingZeros) {
+          parsedValue = Number(value);
+        }
       }
 
       return [field, operator, parsedValue] as FilterTriple;

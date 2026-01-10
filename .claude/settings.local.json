@@ -11,7 +11,11 @@
       "Bash(findstr:*)",
       "Bash(npm run dev:*)",
       "Bash(del \"d:\\\\ETM\\\\ETM\\\\PROJECT\\\\ekaplusAdmin\\\\src\\\\hooks\\\\useCustomerRegistration.ts\")",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(ls \"d:\\\\ETM\\\\ETM\\\\PROJECT\\\\ekaplusAdmin\\\\src\\\\components\\\\roles\"\" 2>&1 || echo \"Folder not found \")",
+      "Bash(if [ ! -d \"d:/ETM/ETM/PROJECT/ekaplusAdmin/src/app/workflows\" ])",
+      "Bash(then mkdir -p \"d:/ETM/ETM/PROJECT/ekaplusAdmin/src/app/workflows\")",
+      "Bash(fi)"
     ]
   }
 }

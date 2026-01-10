@@ -93,6 +93,15 @@ export default function ProductCard({
                       {variantCount} Varian
                     </span>
                   </div>
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                      product.disabled === 0
+                        ? "bg-green-100 text-green-700"
+                        : "bg-gray-100 text-gray-700"
+                    }`}
+                  >
+                    {product.disabled === 0 ? "Aktif" : "Nonaktif"}
+                  </span>
                 </div>
                 {firstVariant?.description && (
                   <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed">
@@ -169,7 +178,22 @@ export default function ProductCard({
           </div>
         )}
 
-        {/* Badges */}
+        {/* Status Badge - Top Left */}
+        <div className="absolute top-4 left-4">
+          <div
+            className={`px-3 py-1.5 rounded-full shadow-lg backdrop-blur-sm ${
+              product.disabled === 0
+                ? "bg-green-500 text-white"
+                : "bg-gray-500 text-white"
+            }`}
+          >
+            <span className="text-xs font-bold">
+              {product.disabled === 0 ? "Aktif" : "Nonaktif"}
+            </span>
+          </div>
+        </div>
+
+        {/* Badges - Top Right */}
         <div className="absolute top-4 right-4 flex flex-col gap-2">
           {product.isHotDeals && (
             <div className="px-3 py-1.5 bg-red-500 text-white rounded-full shadow-lg flex items-center gap-1.5">
@@ -184,7 +208,7 @@ export default function ProductCard({
           </div>
         </div>
 
-        {/* Variant Count Badge */}
+        {/* Variant Count Badge - Bottom Left */}
         <div className="absolute bottom-4 left-4">
           <div className="px-3 py-1.5 bg-purple-500 text-white rounded-full shadow-lg flex items-center gap-1.5">
             <FaLayerGroup className="w-3.5 h-3.5" />
