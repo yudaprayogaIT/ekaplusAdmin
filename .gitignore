@@ -11,6 +11,7 @@
 !.yarn/versions
 
 #api 
+/src/components/config/api.ts
 api.ts
 
 # testing
