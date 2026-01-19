@@ -368,7 +368,7 @@ export default function AddBannerModal({
     } catch (err: unknown) {
       console.error("Failed to save banner:", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
-      setError(errorMessage);
+     setError(errorMessage);
       setSaving(false);
     }
   }

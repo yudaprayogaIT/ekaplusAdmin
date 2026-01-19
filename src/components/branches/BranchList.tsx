@@ -279,7 +279,7 @@ export default function BranchList() {
       } catch (err: unknown) {
         console.error("Failed to delete branch:", err);
         const errorMessage = err instanceof Error ? err.message : String(err);
-        setError(errorMessage);
+        setError({message: errorMessage});
       }
     };
     setConfirmOpen(true);

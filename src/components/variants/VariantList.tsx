@@ -37,23 +37,6 @@ import { FilterTriple } from "@/types/filter";
 import { groupItemsByPattern } from "@/utils/itemGrouping";
 import { buildSearchParams, parseSearchParams } from "@/utils/urlSync";
 
-// type Branch = {
-//   id: number;
-//   name: string;
-// };
-
-// type Item = {
-//   id: number;
-//   code: string;
-//   name: string;
-//   color: string;
-//   type: string;
-//   uom: string;
-//   image?: string;
-//   branches?: Branch[];
-//   description?: string;
-// };
-
 type ItemVariant = {
   id: number;
   item: Item;
@@ -61,17 +44,6 @@ type ItemVariant = {
   created_at?: string;
   updated_at?: string;
 };
-
-// type Product = {
-//   id: number;
-//   name: string;
-//   itemCategory: {
-//     id: number;
-//     name: string;
-//   };
-//   disabled: number;
-//   isHotDeals: boolean;
-// };
 
 type SortField =
   | "name"
@@ -300,6 +272,11 @@ export default function VariantList() {
     if (!token) return;
 
     async function loadStatic() {
+      if (!token) {
+        console.warn("[VariantList] No token available");
+        return;
+      }
+
       console.log("[VariantList] Loading static data (categories, products, items)...");
       const headers = getAuthHeaders(token);
 
