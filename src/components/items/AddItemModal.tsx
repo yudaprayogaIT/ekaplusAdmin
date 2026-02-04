@@ -26,7 +26,7 @@ import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
 import MapItemsToProductModal from "./MapItemsToProductModal";
 
-const UOM_OPTIONS = ["PCS", "MTR", "SET", "PSG", "LBR", "UNIT", "BOX"];
+const UOM_OPTIONS = ["PCS", "LBR", "BOX", "MTR", "SET", "ROLL", "KG", "PACK", "UNIT", "DUS", "LTR", "LSN", "PSG", "RIM", "BAL", "BLEK", "KLG", "YARD"];
 
 type Branch = {
   id: number;

@@ -546,7 +546,7 @@ export default function WorkflowList() {
       <AddWorkflowModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        initialData={modalInitial}
+        workflow={modalInitial}
         roles={roles}
         globalStates={globalStates}
       />
