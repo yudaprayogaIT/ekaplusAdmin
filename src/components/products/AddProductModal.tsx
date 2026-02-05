@@ -424,18 +424,20 @@ export default function AddProductModal({
       if (initial) {
         // Extract items from variants (initial.variants can be Item[] or ItemVariant[])
         // Check if first variant has 'item' property to determine structure
-        const firstVariant = initial.variants[0];
-        const isItemVariantArray = initial.variants.length > 0 &&
+        const initialVariants = initial.variants as Array<Item | ItemVariant>;
+        const firstVariant = initialVariants[0];
+        const isItemVariantArray =
+          initialVariants.length > 0 &&
           firstVariant &&
           isItemVariant(firstVariant);
 
         let items: Item[];
         if (isItemVariantArray) {
           // It's ItemVariant[] - extract items
-          const variants = initial.variants.filter(isItemVariant);
+          const variants = initialVariants.filter(isItemVariant);
           const variantItems = variants.map((v) => v.item);
 
-          console.log('[AddProductModal] Initial variants (ItemVariant[]):', initial.variants.length);
+          console.log('[AddProductModal] Initial variants (ItemVariant[]):', initialVariants.length);
           console.log('[AddProductModal] Initial variant IDs:', variants.map((v) => ({ variantId: v.id, itemId: v.item.id })));
 
           // Deduplicate by item.id
@@ -451,14 +453,14 @@ export default function AddProductModal({
           }
         } else {
           // It's already Item[]
-          console.log('[AddProductModal] Initial variants (Item[]):', initial.variants.length);
+          console.log('[AddProductModal] Initial variants (Item[]):', initialVariants.length);
 
           // Deduplicate by id
-          items = initial.variants.filter(
+          items = (initialVariants as Item[]).filter(
             (v, index, self) => index === self.findIndex((t) => t.id === v.id)
           );
 
-          if (initial.variants.length !== items.length) {
+          if (initialVariants.length !== items.length) {
             console.warn('[AddProductModal] Found duplicate items!');
           }
         }

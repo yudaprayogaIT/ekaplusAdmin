@@ -53,6 +53,11 @@ import {
   Product,
   Category,
 } from "@/types";
+import type {
+  EntityFilterConfig,
+  FieldType,
+  GobackOperator,
+} from "@/types/filter";
 import {
   buildSearchParams,
   parseSearchParams,
@@ -206,7 +211,7 @@ export default function ItemList() {
     initialFilters: urlState.filters,
   });
 
-  const itemFilterConfig = useMemo(() => {
+  const itemFilterConfig: EntityFilterConfig = useMemo(() => {
     const categoryOptions = Array.from(
       new Set(
         categoriesData
@@ -221,8 +226,8 @@ export default function ItemList() {
         if (field.field !== "item_category") return field;
         return {
           ...field,
-          type: "select",
-          operators: ["=", "!=", "in", "not in"],
+          type: "select" as FieldType,
+          operators: ["=", "!=", "in", "not in"] as GobackOperator[],
           options: categoryOptions,
         };
       }),
