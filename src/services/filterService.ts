@@ -1,7 +1,13 @@
 // src/services/filterService.ts
 
-import { FilterTriple } from "@/types/filter";
-import { getQueryUrl, getAuthHeaders } from "@/config/api";
+import {
+  FilterTriple,
+} from "@/types/filter";
+import {
+  getQueryUrl,
+  getAuthHeaders,
+  apiFetch,
+} from "@/config/api";
 
 export interface FetchWithFiltersOptions {
   endpoint: string;
@@ -16,7 +22,7 @@ export interface FetchWithFiltersOptions {
 export async function fetchWithFilters<T>(
   options: FetchWithFiltersOptions
 ): Promise<T[]> {
-  const spec: Record<string, any> = {
+  const spec: Record<string, unknown> = {
     fields: options.fields || ["*"],
   };
 
@@ -37,7 +43,7 @@ export async function fetchWithFilters<T>(
   }
 
   const url = getQueryUrl(options.endpoint, spec);
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     headers: getAuthHeaders(options.token),
   });
 
@@ -45,6 +51,6 @@ export async function fetchWithFilters<T>(
     throw new Error(`Failed to fetch: ${response.statusText}`);
   }
 
-  const json = await response.json();
+  const json = (await response.json()) as { data?: T[] };
   return json.data || [];
 }

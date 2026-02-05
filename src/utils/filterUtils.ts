@@ -30,11 +30,19 @@ export function stateToTriple(filters: FilterState[]): FilterTriple[] {
 
     // Convert filter to Goback triple(s)
     if (f.operator === "is" || f.operator === "is not") {
-      // For "is"/"is not" operators, use Goback convention
-      // "is" -> ["field", "is", "set"]
-      // "is not" -> ["field", "is", "not set"]
-      const value = f.operator === "is" ? "set" : "not set";
-      result.push([f.field, "is", value] as FilterTriple);
+      // For image field, map to explicit null checks to match API expectation
+      if (f.field === "image") {
+        const desired =
+          typeof f.value === "string" ? f.value : "set";
+        const op = desired === "not set" ? "=" : "!=";
+        result.push([f.field, op, "null"] as FilterTriple);
+      } else {
+        // For other fields, use Goback convention
+        // "is" -> ["field", "is", "set"]
+        // "is not" -> ["field", "is", "not set"]
+        const value = f.operator === "is" ? "set" : "not set";
+        result.push([f.field, "is", value] as FilterTriple);
+      }
     } else if (f.operator === "between") {
       // Goback doesn't support "between" operator
       // Convert to two separate filters: >= and <=
@@ -52,12 +60,34 @@ export function stateToTriple(filters: FilterState[]): FilterTriple[] {
 
 // Convert Goback triple to UI state
 export function tripleToState(triples: FilterTriple[]): FilterState[] {
-  return triples.map((triple, idx) => ({
-    id: `filter-${idx}-${Date.now()}`,
-    field: triple[0],
-    operator: triple[1],
-    value: triple[2],
-  }));
+  return triples.map((triple, idx) => {
+    const [field, operator, value] = triple;
+    if (field === "image" && value === "null") {
+      if (operator === "=") {
+        return {
+          id: `filter-${idx}-${Date.now()}`,
+          field,
+          operator: "is",
+          value: "not set",
+        };
+      }
+      if (operator === "!=") {
+        return {
+          id: `filter-${idx}-${Date.now()}`,
+          field,
+          operator: "is",
+          value: "set",
+        };
+      }
+    }
+
+    return {
+      id: `filter-${idx}-${Date.now()}`,
+      field,
+      operator,
+      value,
+    };
+  });
 }
 
 // Helper: Unicode-safe base64 encode

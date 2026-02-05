@@ -1,8 +1,14 @@
 // src/components/items/ItemDetailModal.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import React, {
+  useState,
+  useEffect,
+} from "react";
+import {
+  AnimatePresence,
+  motion,
+} from "framer-motion";
 import {
   FaTimes,
   FaEdit,
@@ -13,10 +19,19 @@ import {
   FaCheckCircle,
   FaMapMarkerAlt,
   FaBox,
+  FaUser,
+  FaClock,
+  FaHistory,
 } from "react-icons/fa";
 import Image from "next/image";
 import { Item } from "./ItemList";
-import { getFileUrl, getQueryUrl, getAuthHeaders, API_CONFIG } from "@/config/api";
+import {
+  getFileUrl,
+  getQueryUrl,
+  getAuthHeaders,
+  API_CONFIG,
+  apiFetch,
+} from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
 
 type Branch = {
@@ -64,7 +79,7 @@ export default function ItemDetailModal({
         });
         const headers = getAuthHeaders(token);
 
-        const res = await fetch(DATA_URL, {
+        const res = await apiFetch(DATA_URL, {
           method: "GET",
           cache: "no-store",
           headers,
@@ -120,7 +135,7 @@ export default function ItemDetailModal({
         const itemUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, spec);
         const headers = getAuthHeaders(token);
 
-        const res = await fetch(itemUrl, {
+        const res = await apiFetch(itemUrl, {
           method: "GET",
           cache: "no-store",
           headers,
@@ -144,7 +159,7 @@ export default function ItemDetailModal({
                 filters: [["id", "in", productIds]],
               };
               const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, productsSpec);
-              const productsRes = await fetch(productsUrl, {
+              const productsRes = await apiFetch(productsUrl, {
                 method: "GET",
                 cache: "no-store",
                 headers
@@ -464,6 +479,82 @@ export default function ItemDetailModal({
                   </div>
                 )}
               </div>
+
+              {/* Catatan Aktivitas */}
+              {(item.created_at || item.updated_at) && (
+                <div className="mb-8">
+                  <div className="flex items-center gap-3 mb-6">
+                    <FaHistory className="w-5 h-5 text-blue-500" />
+                    <h3 className="text-xl font-bold text-gray-900">
+                      Catatan Aktivitas
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {item.created_at && (
+                      <div className="bg-gradient-to-br from-green-50 to-white rounded-2xl p-5 border-2 border-green-100">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-10 h-10 rounded-xl bg-green-500 flex items-center justify-center">
+                            <FaUser className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 font-medium">
+                              Created
+                            </p>
+                            <p className="text-sm font-bold text-gray-900">
+                              {item.created_by
+                                ? typeof item.created_by === "string"
+                                  ? item.created_by
+                                  : `User #${item.created_by}`
+                                : "Unknown"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <FaClock className="w-4 h-4 text-green-500" />
+                          <p className="text-sm">
+                            {new Date(item.created_at).toLocaleString("id-ID", {
+                              dateStyle: "long",
+                              timeStyle: "short",
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {item.updated_at && (
+                      <div className="bg-gradient-to-br from-blue-50 to-white rounded-2xl p-5 border-2 border-blue-100">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center">
+                            <FaEdit className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 font-medium">
+                              Last Updated
+                            </p>
+                            <p className="text-sm font-bold text-gray-900">
+                              {item.updated_by
+                                ? typeof item.updated_by === "string"
+                                  ? item.updated_by
+                                  : `User #${item.updated_by}`
+                                : "Unknown"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <FaClock className="w-4 h-4 text-blue-500" />
+                          <p className="text-sm">
+                            {new Date(item.updated_at).toLocaleString("id-ID", {
+                              dateStyle: "long",
+                              timeStyle: "short",
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Actions */}
               <div className="flex gap-4 pt-6 border-t-2 border-gray-100">

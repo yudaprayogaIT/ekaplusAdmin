@@ -1,9 +1,21 @@
 // src/components/wishlist/WishlistList.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { FaHeart, FaSearch, FaList, FaTh, FaPlus } from "react-icons/fa";
+import React, {
+  useEffect,
+  useState,
+} from "react";
+import {
+  motion,
+  AnimatePresence,
+} from "framer-motion";
+import {
+  FaHeart,
+  FaSearch,
+  FaList,
+  FaTh,
+  FaPlus,
+} from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   fetchWishlist,
@@ -15,12 +27,18 @@ import {
   getQueryUrl,
   getAuthHeaders,
   getFileUrl,
+  apiFetch,
 } from "@/config/api";
-import type { WishlistItem, Item } from "@/types";
+import type {
+  WishlistItem,
+  Item,
+} from "@/types";
 import WishlistCard from "./WishlistCard";
 import WishlistDetailModal from "./WishlistDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import Pagination, { usePagination } from "@/components/ui/Pagination";
+import Pagination, {
+  usePagination,
+} from "@/components/ui/Pagination";
 
 export default function WishlistList() {
   const { token } = useAuth();
@@ -66,7 +84,7 @@ export default function WishlistList() {
           fields: ["*"],
           limit: 1000000000000,
         });
-        const itemsRes = await fetch(itemsUrl, {
+        const itemsRes = await apiFetch(itemsUrl, {
           headers: getAuthHeaders(token),
         });
 

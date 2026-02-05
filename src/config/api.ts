@@ -168,7 +168,8 @@ export async function apiFetch(
   });
 
   // Handle 401 Unauthorized - Session expired
-  if (response.status === 401 && sessionExpiredCallback) {
+  const hasAuthHeader = headers.has("Authorization") || headers.has("authorization");
+  if (response.status === 401 && sessionExpiredCallback && hasAuthHeader) {
     sessionExpiredCallback();
   }
 

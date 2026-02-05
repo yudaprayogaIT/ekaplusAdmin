@@ -1,7 +1,11 @@
 // src/components/emails/EmailLogList.tsx
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import EmailLogCard from "./EmailLogCard";
 import EmailDetailModal from "./EmailDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
@@ -19,6 +23,7 @@ import {
   FaSync,
 } from "react-icons/fa";
 import { motion } from "framer-motion";
+import { apiFetch } from "@/config/api";
 
 type EmailLog = {
   id: string;
@@ -94,7 +99,7 @@ export default function EmailLogList() {
       setLoading(true);
 
       try {
-        const res = await fetch(DATA_URL, { cache: "no-store" });
+        const res = await apiFetch(DATA_URL, { cache: "no-store" });
         if (res.ok) {
           const data = (await res.json()) as EmailLog[];
           if (!cancelled) {
@@ -194,7 +199,7 @@ export default function EmailLogList() {
 
   function refreshData() {
     setLoading(true);
-    fetch(DATA_URL, { cache: "no-store" })
+    apiFetch(DATA_URL, { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
         setEmails(data);

@@ -1,8 +1,14 @@
 // src/components/products/AddProductModal.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import React, {
+  useEffect,
+  useState,
+} from "react";
+import {
+  AnimatePresence,
+  motion,
+} from "framer-motion";
 import {
   FaTimes,
   FaPlus,
@@ -17,11 +23,21 @@ import {
   FaExclamationTriangle,
 } from "react-icons/fa";
 import Image from "next/image";
-import type { Item, Category, ProductFormData } from "@/types";
+import type {
+  Item,
+  Category,
+  ItemVariant,
+  ProductFormData,
+} from "@/types";
 import { DraggableVariantList } from "./DraggableVariantList";
 import { VariantSuggestions } from "./VariantSuggestions";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_CONFIG, getAuthHeaders, getResourceUrl } from "@/config/api";
+import {
+  API_CONFIG,
+  getAuthHeaders,
+  getResourceUrl,
+  apiFetch,
+} from "@/config/api";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
 
@@ -32,6 +48,15 @@ interface AddProductModalProps {
   initial?: ProductFormData | null;
   categories: Category[];
   availableItems: Item[];
+}
+
+function isItemVariant(value: unknown): value is ItemVariant {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as { item?: unknown };
+
+  if (!candidate.item || typeof candidate.item !== "object") return false;
+  const itemCandidate = candidate.item as { id?: unknown };
+  return typeof itemCandidate.id === "number";
 }
 
 // Item Selector Modal Component
@@ -399,17 +424,16 @@ export default function AddProductModal({
       if (initial) {
         // Extract items from variants (initial.variants can be Item[] or ItemVariant[])
         // Check if first variant has 'item' property to determine structure
-        const firstVariant = initial.variants[0] as any;
+        const firstVariant = initial.variants[0];
         const isItemVariantArray = initial.variants.length > 0 &&
           firstVariant &&
-          typeof firstVariant === 'object' &&
-          'item' in firstVariant;
+          isItemVariant(firstVariant);
 
         let items: Item[];
         if (isItemVariantArray) {
           // It's ItemVariant[] - extract items
-          const variants = initial.variants as any[];
-          const variantItems = variants.map((v) => v.item as Item);
+          const variants = initial.variants.filter(isItemVariant);
+          const variantItems = variants.map((v) => v.item);
 
           console.log('[AddProductModal] Initial variants (ItemVariant[]):', initial.variants.length);
           console.log('[AddProductModal] Initial variant IDs:', variants.map((v) => ({ variantId: v.id, itemId: v.item.id })));
@@ -549,7 +573,7 @@ export default function AddProductModal({
       console.log("Variants count in payload:", variantsData.length);
       console.log("Payload:", JSON.stringify(payload, null, 2));
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method,
         headers,
         body: JSON.stringify(payload),

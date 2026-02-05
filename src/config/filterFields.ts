@@ -114,6 +114,12 @@ export const ITEM_FILTER_FIELDS: EntityFilterConfig = {
       operators: ["=", "!=", "like", "not like"],
     },
     {
+      field: "image",
+      label: "Image",
+      type: "string",
+      operators: ["is"],
+    },
+    {
       field: "disabled",
       label: "Status",
       type: "select",

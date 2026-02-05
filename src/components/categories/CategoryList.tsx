@@ -39,6 +39,7 @@ export type Category = {
   type: {
     id: number;
     name: string;
+    description?: string;
   };
   docstatus: number;
   status: string;
@@ -67,7 +68,7 @@ type CategoryAPIResponse = {
   code: string;
   message: string;
   data: Array<{
-    id: number;
+    id: number | string;
     name: string;
     category_name: string;
     icon: string | null;
@@ -75,15 +76,15 @@ type CategoryAPIResponse = {
     description: string | null;
     title: string | null;
     subtitle: string | null;
-    item_type: number;
+    item_type: number | string | null;
     docstatus: number;
     status: string;
     disabled: number;
     created_at: string;
     updated_at: string;
-    created_by: number;
-    updated_by: number;
-    owner: number;
+    created_by: number | { id?: number; full_name?: string };
+    updated_by: number | { id?: number; full_name?: string };
+    owner: number | { id?: number; full_name?: string };
   }>;
   meta: Record<string, unknown>;
 };
@@ -93,7 +94,7 @@ type TypeAPIResponse = {
   code: string;
   message: string;
   data: Array<{
-    id: number;
+    id: number | string;
     name: string;
     type_name: string;
     image: string | null;
@@ -103,9 +104,9 @@ type TypeAPIResponse = {
     disabled: number;
     created_at: string;
     updated_at: string;
-    created_by: number;
-    updated_by: number;
-    owner: number;
+    created_by: number | { id?: number; full_name?: string };
+    updated_by: number | { id?: number; full_name?: string };
+    owner: number | { id?: number; full_name?: string };
   }>;
   meta: Record<string, unknown>;
 };
@@ -114,6 +115,136 @@ type SortOption = "name-asc" | "name-desc" | "id-asc" | "id-desc";
 
 const SNAP_KEY = "ekatalog_categories_snapshot";
 const TYPES_SNAP_KEY = "ekatalog_types_snapshot";
+const CATEGORY_PAGE_SIZE = 100;
+const CATEGORY_MAX_PAGES = 200;
+
+function toNumber(value: number | string | null | undefined): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeDescription(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+async function fetchAllCategories(
+  token: string,
+  mappedTypes: CategoryType[],
+): Promise<Category[]> {
+  const collected: Category[] = [];
+  let page = 1;
+  let keepGoing = true;
+
+  while (keepGoing && page <= CATEGORY_MAX_PAGES) {
+    const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
+      fields: [
+        "*",
+        "created_by.full_name",
+        "updated_by.full_name",
+        "owner.full_name",
+      ],
+      limit: CATEGORY_PAGE_SIZE,
+      page,
+    });
+    const categoriesRes = await apiFetch(
+      categoriesUrl,
+      {
+        method: "GET",
+        cache: "no-store",
+      },
+      token,
+    );
+
+    if (!categoriesRes.ok) {
+      throw new Error(`Failed to fetch categories (${categoriesRes.status})`);
+    }
+
+    const categoriesResponse =
+      (await categoriesRes.json()) as CategoryAPIResponse;
+    const mappedBatch: Category[] = categoriesResponse.data
+      .map((item) => {
+        const typeId = toNumber(item.item_type);
+        const typeObj =
+          typeId !== null
+            ? mappedTypes.find((t) => t.id === typeId)
+            : undefined;
+
+        // if (!typeObj) {
+        //   console.warn(
+        //     `Category ${item.name} (ID: ${item.id}) has invalid item_type: ${item.item_type}`,
+        //   );
+        // }
+
+        return {
+          id: toNumber(item.id) ?? 0,
+          name: item.name,
+          category_name: item.category_name,
+          icon: item.icon || undefined,
+          image: getFileUrl(item.image),
+          description: item.description || undefined,
+          title: item.title || undefined,
+          subtitle: item.subtitle || undefined,
+          item_type: typeId ?? 0,
+          type: typeObj
+            ? {
+                id: typeObj.id,
+                name: typeObj.name,
+                description: normalizeDescription(typeObj.description),
+              }
+            : {
+                id: -1,
+                name: "Unknown Type",
+              },
+          docstatus: item.docstatus,
+          status: item.status,
+          disabled: item.disabled,
+          created_at: item.created_at,
+          created_by:
+            typeof item.created_by === "object"
+              ? {
+                  id: item.created_by.id || 0,
+                  name: item.created_by.full_name || "Unknown",
+                }
+              : item.created_by
+                ? { id: item.created_by, name: `User #${item.created_by}` }
+                : undefined,
+          updated_at: item.updated_at,
+          updated_by:
+            typeof item.updated_by === "object"
+              ? {
+                  id: item.updated_by.id || 0,
+                  name: item.updated_by.full_name || "Unknown",
+                }
+              : item.updated_by
+                ? { id: item.updated_by, name: `User #${item.updated_by}` }
+                : undefined,
+          owner:
+            typeof item.owner === "object"
+              ? { id: item.owner.id || 0, name: item.owner.full_name || "Unknown" }
+              : item.owner
+                ? { id: item.owner, name: `User #${item.owner}` }
+                : undefined,
+        };
+      })
+      .filter((item) => item.id !== 0);
+
+    collected.push(...mappedBatch);
+
+    if (categoriesResponse.data.length < CATEGORY_PAGE_SIZE) {
+      keepGoing = false;
+    } else {
+      page += 1;
+    }
+  }
+
+  return collected;
+}
 
 export default function CategoryList() {
   const { token, isAuthenticated } = useAuth();
@@ -154,25 +285,39 @@ export default function CategoryList() {
         const typesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.TYPE, {
           fields: ["*"],
         });
-        const typesRes = await apiFetch(typesUrl, {
-          method: "GET",
-          cache: "no-store",
-        }, token);
+        const typesRes = await apiFetch(
+          typesUrl,
+          {
+            method: "GET",
+            cache: "no-store",
+          },
+          token,
+        );
 
         let mappedTypes: CategoryType[] = [];
         if (typesRes.ok) {
           const typesResponse = (await typesRes.json()) as TypeAPIResponse;
           if (!cancelled) {
-            mappedTypes = typesResponse.data.map((item) => ({
-              id: item.id,
-              name: item.name,
-              type_name: item.type_name,
-              image: getFileUrl(item.image),
-              description: item.description || undefined,
-              docstatus: item.docstatus,
-              status: item.status,
-              disabled: item.disabled,
-            }));
+            mappedTypes = typesResponse.data
+              .map((item): CategoryType | null => {
+                const id = toNumber(item.id);
+                if (id === null) return null;
+                const mappedType: CategoryType = {
+                  id,
+                  name: item.name,
+                  type_name: item.type_name,
+                  docstatus: item.docstatus,
+                  status: item.status,
+                  disabled: item.disabled,
+                };
+                const imageUrl = getFileUrl(item.image);
+                if (imageUrl) {
+                  mappedType.image = imageUrl;
+                }
+                mappedType.description = normalizeDescription(item.description);
+                return mappedType;
+              })
+              .filter((item): item is CategoryType => item !== null);
             setTypes(mappedTypes);
             try {
               localStorage.setItem(TYPES_SNAP_KEY, JSON.stringify(mappedTypes));
@@ -180,73 +325,14 @@ export default function CategoryList() {
           }
         }
 
-        // Load categories from API and map type objects
-        const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
-          fields: ["*"],
-        });
-        const categoriesRes = await apiFetch(categoriesUrl, {
-          method: "GET",
-          cache: "no-store",
-        }, token);
-
-        if (categoriesRes.ok) {
-          const categoriesResponse =
-            (await categoriesRes.json()) as CategoryAPIResponse;
-          if (!cancelled) {
-            // Map and filter out categories without valid types
-            const mappedCategories: Category[] = categoriesResponse.data
-
-              .filter((item) => {
-                // Check if type exists
-                const typeExists = mappedTypes.some(
-                  (t) => t.id === item.item_type
-                );
-                if (!typeExists) {
-                  console.warn(
-                    `Category ${item.name} (ID: ${item.id}) has invalid item_type: ${item.item_type}`
-                  );
-                }
-                return typeExists;
-              })
-              .map((item) => {
-                // Find the type object from the loaded types (we know it exists now)
-                const typeObj = mappedTypes.find(
-                  (t) => t.id === item.item_type
-                )!;
-
-                return {
-                  id: item.id,
-                  name: item.name,
-                  category_name: item.category_name,
-                  icon: item.icon || undefined,
-                  image: getFileUrl(item.image),
-                  description: item.description || undefined,
-                  title: item.title || undefined,
-                  subtitle: item.subtitle || undefined,
-                  item_type: item.item_type,
-                  type: { id: typeObj.id, name: typeObj.name },
-                  docstatus: item.docstatus,
-                  status: item.status,
-                  disabled: item.disabled,
-                  // Audit trail
-                  created_at: item.created_at,
-                  created_by: item.created_by ? { id: item.created_by, name: `User #${item.created_by}` } : undefined,
-                  updated_at: item.updated_at,
-                  updated_by: item.updated_by ? { id: item.updated_by, name: `User #${item.updated_by}` } : undefined,
-                  owner: item.owner ? { id: item.owner, name: `User #${item.owner}` } : undefined,
-                };
-              });
-
-            console.log("Loaded categories:", mappedCategories);
-            setCategories(mappedCategories);
-            try {
-              localStorage.setItem(SNAP_KEY, JSON.stringify(mappedCategories));
-            } catch {}
-          }
-        } else {
-          if (!cancelled) {
-            setError(`Failed to fetch categories (${categoriesRes.status})`);
-          }
+        // Load categories from API with auto pagination
+        const mappedCategories = await fetchAllCategories(token, mappedTypes);
+        if (!cancelled) {
+          // console.log("Loaded categories:", mappedCategories);
+          setCategories(mappedCategories);
+          try {
+            localStorage.setItem(SNAP_KEY, JSON.stringify(mappedCategories));
+          } catch {}
         }
       } catch (err: unknown) {
         if (!cancelled)
@@ -267,54 +353,9 @@ export default function CategoryList() {
       if (!isAuthenticated || !token) return;
 
       try {
-        const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
-          fields: ["*"],
-        });
-
-        const res = await apiFetch(categoriesUrl, {
-          method: "GET",
-          cache: "no-store",
-        }, token);
-
-        if (res.ok) {
-          const response = (await res.json()) as CategoryAPIResponse;
-          const mappedCategories: Category[] = response.data
-            .filter((item) => {
-              // Check if type exists
-              const typeExists = types.some((t) => t.id === item.item_type);
-              if (!typeExists) {
-                console.warn(
-                  `Category ${item.name} (ID: ${item.id}) has invalid item_type: ${item.item_type}`
-                );
-              }
-              return typeExists;
-            })
-            .map((item) => {
-              // Find the type object from the current types state (we know it exists now)
-              const typeObj = types.find((t) => t.id === item.item_type)!;
-
-              return {
-                id: item.id,
-                name: item.name,
-                category_name: item.category_name,
-                icon: item.icon || undefined,
-                image: getFileUrl(item.image),
-                description: item.description || undefined,
-                title: item.title || undefined,
-                subtitle: item.subtitle || undefined,
-                item_type: item.item_type,
-                type: { id: typeObj.id, name: typeObj.name },
-                docstatus: item.docstatus,
-                status: item.status,
-                disabled: item.disabled,
-                created_at: item.created_at,
-                updated_at: item.updated_at,
-              };
-            });
-
-          setCategories(mappedCategories);
-          localStorage.setItem(SNAP_KEY, JSON.stringify(mappedCategories));
-        }
+        const mappedCategories = await fetchAllCategories(token, types);
+        setCategories(mappedCategories);
+        localStorage.setItem(SNAP_KEY, JSON.stringify(mappedCategories));
       } catch (error) {
         console.error("Failed to reload categories:", error);
       }
@@ -346,18 +387,18 @@ export default function CategoryList() {
           {
             method: "DELETE",
           },
-          token
+          token,
         );
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
             errorData.message ||
-              `Failed to delete category (${response.status})`
+              `Failed to delete category (${response.status})`,
           );
         }
 
-        console.log("Category deleted successfully");
+        // console.log("Category deleted successfully");
 
         // Remove from local state
         const next = categories.filter((x) => x.id !== c.id);
@@ -476,13 +517,13 @@ export default function CategoryList() {
     filteredCategories = filteredCategories.filter(
       (c) =>
         c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.description?.toLowerCase().includes(searchQuery.toLowerCase())
+        c.description?.toLowerCase().includes(searchQuery.toLowerCase()),
     );
   }
 
   if (selectedType) {
     filteredCategories = filteredCategories.filter(
-      (c) => c.type.id === selectedType
+      (c) => c.type.id === selectedType,
     );
   }
 
@@ -502,16 +543,42 @@ export default function CategoryList() {
     }
   });
 
-  // Group by type for "All" view
-  const groupedByType = types
-    // .sort((a, b) => a.name.localeCompare(b.name))
-    .map((type) => ({
-      type,
-      items: sortedCategories.filter((c) => c.type.id === type.id),
-    }))
-    .filter((group) => group.items.length > 0);
+  // Group by type for "All" view (include unknown/invalid types)
+  const groupedByType = (() => {
+    const groups = new Map<
+      number,
+      {
+        type: { id: number; name: string; description?: string };
+        items: Category[];
+      }
+    >();
 
-  console.log(groupedByType);
+    for (const category of sortedCategories) {
+      const existing = groups.get(category.type.id);
+      if (existing) {
+        existing.items.push(category);
+      } else {
+        groups.set(category.type.id, {
+          type: category.type,
+          items: [category],
+        });
+      }
+    }
+
+    const knownTypeOrder = new Map(
+      types.map((type, index) => [type.id, index]),
+    );
+    return Array.from(groups.values()).sort((a, b) => {
+      const aOrder = knownTypeOrder.get(a.type.id);
+      const bOrder = knownTypeOrder.get(b.type.id);
+      if (aOrder !== undefined && bOrder !== undefined) return aOrder - bOrder;
+      if (aOrder !== undefined) return -1;
+      if (bOrder !== undefined) return 1;
+      return a.type.name.localeCompare(b.type.name);
+    });
+  })();
+
+  // console.log(groupedByType);
 
   return (
     <div>
@@ -756,7 +823,7 @@ export default function CategoryList() {
                   <h2 className="text-xl font-semibold text-gray-800">
                     {type.name}
                   </h2>
-                  {type.description && (
+                  {type.description && type.description.trim().length > 0 && (
                     <p className="text-sm text-gray-500 mt-1">
                       {type.description}
                     </p>

@@ -405,8 +405,8 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                 active
                   ? "text-white"
                   : isSubmenu
-                  ? "text-gray-400"
-                  : "text-gray-500"
+                    ? "text-gray-400"
+                    : "text-gray-500"
               }`}
             >
               {typeof m.icon === "string" ? (
@@ -459,7 +459,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
     label: string,
     icon: React.ReactNode,
     menuName: SubmenuName,
-    submenu: MenuItem[]
+    submenu: MenuItem[],
   ) => {
     const visibleSubmenu = submenu.filter(canSeeMenu);
     if (visibleSubmenu.length === 0) return null;
@@ -552,16 +552,16 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
           width: isMobile
             ? expandedWidth
             : collapsed
-            ? collapsedWidth
-            : expandedWidth,
+              ? collapsedWidth
+              : expandedWidth,
         }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         style={{
           minWidth: isMobile
             ? expandedWidth
             : collapsed
-            ? collapsedWidth
-            : expandedWidth,
+              ? collapsedWidth
+              : expandedWidth,
           maxWidth: expandedWidth,
         }}
         className={`h-screen bg-white flex flex-col ${
@@ -573,12 +573,19 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
         {/* Logo section */}
         <div className="px-3 py-4 border-b border-gray-100">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-700 rounded-xl flex items-center justify-center flex-shrink-0">
+            {/* <div className="w-10 h-10 bg-gradient-to-br from-white-500 to-white-700 rounded-xl flex items-center justify-center flex-shrink-0">
               <span className="text-white font-bold text-lg">E</span>
-            </div>
+            </div> */}
+            <Image
+              src="/images/ekaplus_icon.png"
+              alt="alt"
+              width={100}
+              height={100}
+              className="w-10 h-10"
+            />
             {(!collapsed || isMobile) && (
               <span className="text-base font-semibold text-gray-800 truncate">
-                Eka+ Admin
+                EKA+ Admin
               </span>
             )}
           </div>
@@ -632,7 +639,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                   "Master Data",
                   <FaDatabase className="w-5 h-5" />,
                   "master",
-                  MASTER_MENU
+                  MASTER_MENU,
                 )}
 
                 <div className="my-3 border-t border-gray-100 mx-1" />
@@ -641,7 +648,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                   "Catalog",
                   <FaBoxes className="w-5 h-5" />,
                   "catalog",
-                  CATALOG_SUBMENU
+                  CATALOG_SUBMENU,
                 )}
 
                 <div className="my-3 border-t border-gray-100 mx-1" />
@@ -650,13 +657,13 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                   "Customer",
                   <FaLayerGroup className="w-5 h-5" />,
                   "customer",
-                  CUSTOMER_SUBMENU
+                  CUSTOMER_SUBMENU,
                 )}
 
                 <div className="my-3 border-t border-gray-100 mx-1" />
 
                 {SECONDARY_MENU.filter(canSeeMenu).map((m) =>
-                  renderMenuItem(m)
+                  renderMenuItem(m),
                 )}
 
                 {showAdminSection && (
@@ -676,7 +683,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                       "System",
                       <FaCog className="w-5 h-5" />,
                       "admin",
-                      ADMIN_MENU
+                      ADMIN_MENU,
                     )}
                   </>
                 )}
@@ -701,7 +708,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
               </span>
             </div>
           )}
-          <div className="text-center text-xs text-gray-400">v1.0</div>
+          <div className="text-center text-xs text-gray-400">v1.0.1</div>
         </div>
       </motion.aside>
     </>

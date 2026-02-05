@@ -8,10 +8,12 @@ import React, {
   useEffect,
   ReactNode,
   useCallback,
+  useRef,
 } from "react";
 import {
   registerSessionExpiredCallback,
   unregisterSessionExpiredCallback,
+  apiFetch,
 } from "../config/api";
 
 // Types
@@ -188,6 +190,60 @@ function mapApiUserToUser(apiUser: ApiUser): User {
   };
 }
 
+type JwtPayload = {
+  exp?: number;
+  [key: string]: unknown;
+};
+
+function decodeJwtPayload(token: string): JwtPayload | null {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const json = atob(padded);
+    return JSON.parse(json) as JwtPayload;
+  } catch {
+    return null;
+  }
+}
+
+function isJwtExpired(token: string): boolean {
+  const payload = decodeJwtPayload(token);
+  if (!payload || typeof payload.exp !== "number") return false;
+  return payload.exp * 1000 <= Date.now();
+}
+
+async function isForbiddenAuth(response: Response): Promise<boolean> {
+  if (response.status !== 403) return false;
+
+  try {
+    const cloned = response.clone();
+    const contentType = cloned.headers.get("content-type") || "";
+    let message = "";
+
+    if (contentType.includes("application/json")) {
+      const data = (await cloned.json().catch(() => null)) as
+        | { message?: string; error?: string; detail?: string }
+        | null;
+      message = `${data?.message || ""} ${data?.error || ""} ${data?.detail || ""}`.toLowerCase();
+    } else {
+      message = (await cloned.text().catch(() => "")).toLowerCase();
+    }
+
+    return (
+      message.includes("token") ||
+      message.includes("expired") ||
+      message.includes("unauthorized") ||
+      message.includes("authentication") ||
+      message.includes("session")
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentRole, setCurrentRole] = useState<Role | null>(null);
@@ -197,6 +253,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<Role[]>([]);
   const [rolePermissions, setRolePermissions] = useState<RolePermission[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const originalFetchRef = useRef<typeof fetch | null>(null);
 
   // Handle session expiration - logout and reload page
   const handleSessionExpired = useCallback(() => {
@@ -220,12 +277,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [handleSessionExpired]);
 
+  // Global fetch guard for expired/invalid sessions (covers direct fetch usage)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (originalFetchRef.current) return;
+
+    const originalFetch = window.fetch.bind(window);
+    originalFetchRef.current = originalFetch;
+
+    window.fetch = async (...args) => {
+      const response = await originalFetch(...args);
+      const hasSession = Boolean(localStorage.getItem(TOKEN_KEY));
+
+      if (hasSession) {
+        if (response.status === 401) {
+          handleSessionExpired();
+        } else if (response.status === 403) {
+          const storedToken = localStorage.getItem(TOKEN_KEY);
+          const tokenExpired = storedToken ? isJwtExpired(storedToken) : false;
+
+          if (tokenExpired || (await isForbiddenAuth(response))) {
+            handleSessionExpired();
+          }
+        }
+      }
+
+      return response;
+    };
+
+    return () => {
+      if (originalFetchRef.current) {
+        window.fetch = originalFetchRef.current;
+        originalFetchRef.current = null;
+      }
+    };
+  }, [handleSessionExpired]);
+
   // Load roles and permissions data - DISABLED FOR NOW (migrasi ke SQL)
   useEffect(() => {
     // async function loadData() {
     //   try {
     //     // Load roles
-    //     const rolesRes = await fetch("/data/roles.json");
+    //     const rolesRes = await apiFetch("/data/roles.json");
     //     if (rolesRes.ok) {
     //       const data = await rolesRes.json();
     //       setRoles(data.roles || []);
@@ -234,7 +327,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     //     }
 
     //     // Load role permissions
-    //     const rpRes = await fetch("/data/role_permissions.json");
+    //     const rpRes = await apiFetch("/data/role_permissions.json");
     //     if (rpRes.ok) {
     //       const data = await rpRes.json();
     //       setRolePermissions(data.role_permissions || []);
@@ -301,6 +394,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // DISABLED: removed roles and rolePermissions check (migrasi ke SQL)
         if (savedToken) {
+          if (isJwtExpired(savedToken)) {
+            localStorage.removeItem(TOKEN_KEY);
+            localStorage.removeItem(AUTH_KEY);
+            localStorage.removeItem(USER_DATA_KEY);
+            return;
+          }
           // console.log("🔍 Found saved token, restoring session...");
           const restored = await restoreSession(savedToken);
 
@@ -337,7 +436,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       // console.log("🔐 Attempting login...");
 
-      const response = await fetch(`${API_BASE_URL}/api/user/login`, {
+      const response = await apiFetch(`${API_BASE_URL}/api/user/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

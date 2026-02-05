@@ -1,8 +1,14 @@
 // src/components/items/AddItemModal.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, {
+  useEffect,
+  useState,
+} from "react";
+import {
+  motion,
+  AnimatePresence,
+} from "framer-motion";
 import {
   FaTimes,
   FaUpload,
@@ -21,6 +27,7 @@ import {
   getAuthHeaders,
   getAuthHeadersFormData,
   API_CONFIG,
+  apiFetch,
 } from "@/config/api";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
@@ -128,7 +135,7 @@ export default function AddItemModal({
         });
         const headers = getAuthHeaders(token);
 
-        const res = await fetch(DATA_URL, {
+        const res = await apiFetch(DATA_URL, {
           method: "GET",
           cache: "no-store",
           headers,
@@ -309,7 +316,7 @@ export default function AddItemModal({
         const itemUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, spec);
         const headers = getAuthHeaders(token);
 
-        const res = await fetch(itemUrl, {
+        const res = await apiFetch(itemUrl, {
           method: "GET",
           cache: "no-store",
           headers,
@@ -333,7 +340,7 @@ export default function AddItemModal({
                 filters: [["id", "in", productIds]],
               };
               const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, productsSpec);
-              const productsRes = await fetch(productsUrl, {
+              const productsRes = await apiFetch(productsUrl, {
                 method: "GET",
                 cache: "no-store",
                 headers
@@ -469,7 +476,7 @@ export default function AddItemModal({
         console.log(`  ${key}:`, value);
       }
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method,
         headers,
         body: formData,

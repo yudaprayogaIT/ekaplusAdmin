@@ -1,15 +1,64 @@
 // src/components/filters/ValueInput.tsx
 
 import React from "react";
-import { FilterFieldDef, GobackOperator } from "@/types/filter";
+import {
+  FilterFieldDef,
+  FilterOptionValue,
+  FilterValue,
+  GobackOperator,
+} from "@/types/filter";
 import type { Category } from "@/types";
 
 interface ValueInputProps {
   fieldDef: FilterFieldDef | undefined;
   operator: GobackOperator | "";
-  value: any;
-  onChange: (value: any) => void;
+  value: FilterValue;
+  onChange: (value: FilterValue) => void;
   categories?: Category[]; // For relation fields
+}
+
+function isFilterOptionValue(value: unknown): value is FilterOptionValue {
+  return (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  );
+}
+
+function toDomValue(value: FilterOptionValue): string {
+  if (value === null) return "__null__";
+  if (typeof value === "boolean") return value ? "__true__" : "__false__";
+  return String(value);
+}
+
+function getTextInputValue(value: FilterValue): string | number {
+  return typeof value === "string" || typeof value === "number" ? value : "";
+}
+
+function getNumberArray(value: FilterValue): number[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((v) =>
+      typeof v === "number"
+        ? v
+        : typeof v === "string" && v.trim() !== ""
+          ? Number(v)
+          : Number.NaN
+    )
+    .filter((v) => Number.isFinite(v));
+}
+
+function getDateRange(value: FilterValue): [string, string] {
+  if (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    typeof value[0] === "string" &&
+    typeof value[1] === "string"
+  ) {
+    return [value[0], value[1]];
+  }
+  return ["", ""];
 }
 
 export default function ValueInput({
@@ -21,13 +70,15 @@ export default function ValueInput({
 }: ValueInputProps) {
   // No input needed for "is" / "is not" operators (null checking)
   if (operator === "is" || operator === "is not") {
-    // For Goback, "is" and "is not" operators don't need a value input
-    // They check for null/not null automatically
-    // But we show "null" as the value for clarity
     return (
-      <div className="px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-sm text-gray-500 italic">
-        {operator === "is" ? "null (empty)" : "not null (has value)"}
-      </div>
+      <select
+        value={typeof value === "string" ? value : "set"}
+        onChange={(e) => onChange(e.target.value)}
+        className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+      >
+        <option value="set">set</option>
+        <option value="not set">not set</option>
+      </select>
     );
   }
 
@@ -35,7 +86,7 @@ export default function ValueInput({
     return (
       <input
         type="text"
-        value={value || ""}
+        value={getTextInputValue(value)}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Enter value"
         className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm flex-1"
@@ -48,7 +99,7 @@ export default function ValueInput({
     return (
       <input
         type="text"
-        value={value || ""}
+        value={getTextInputValue(value)}
         onChange={(e) => onChange(e.target.value)}
         placeholder={`Enter ${fieldDef.label.toLowerCase()}`}
         className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm flex-1"
@@ -64,7 +115,7 @@ export default function ValueInput({
     return (
       <input
         type="text"
-        value={Array.isArray(value) ? value.join(", ") : value || ""}
+        value={Array.isArray(value) ? value.join(", ") : getTextInputValue(value)}
         onChange={(e) => {
           const text = e.target.value.trim();
           if (!text) {
@@ -91,7 +142,7 @@ export default function ValueInput({
     return (
       <input
         type="number"
-        value={value || ""}
+        value={getTextInputValue(value)}
         onChange={(e) => onChange(e.target.value ? Number(e.target.value) : "")}
         placeholder={`Enter ${fieldDef.label.toLowerCase()}`}
         className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm flex-1"
@@ -103,8 +154,14 @@ export default function ValueInput({
   if (fieldDef.type === "boolean") {
     return (
       <select
-        value={value === undefined ? "" : String(value)}
-        onChange={(e) => onChange(e.target.value === "true")}
+        value={typeof value === "boolean" ? String(value) : ""}
+        onChange={(e) =>
+          onChange(
+            e.target.value === ""
+              ? ""
+              : e.target.value === "true"
+          )
+        }
         className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
       >
         <option value="">Select...</option>
@@ -116,7 +173,7 @@ export default function ValueInput({
 
   // Date fields - Between operator (range)
   if (fieldDef.type === "date" && operator === "between") {
-    const dateRange = Array.isArray(value) ? value : ["", ""];
+    const dateRange = getDateRange(value);
     return (
       <div className="flex items-center gap-2">
         <input
@@ -143,7 +200,7 @@ export default function ValueInput({
     return (
       <input
         type="date"
-        value={value || ""}
+        value={getTextInputValue(value)}
         onChange={(e) => onChange(e.target.value)}
         className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
       />
@@ -155,20 +212,22 @@ export default function ValueInput({
     fieldDef.type === "select" &&
     (operator === "=" || operator === "!=")
   ) {
+    const options = fieldDef.options || [];
+    const selectedOption = options.find((opt) => opt.value === value);
     return (
       <select
-        value={value || ""}
+        value={selectedOption ? toDomValue(selectedOption.value) : ""}
         onChange={(e) => {
-          const val = e.target.value;
-          // Try to parse as number if it looks like a number
-          const numVal = Number(val);
-          onChange(isNaN(numVal) ? val : numVal);
+          const matched = options.find(
+            (opt) => toDomValue(opt.value) === e.target.value
+          );
+          onChange(matched ? matched.value : e.target.value);
         }}
         className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
       >
         <option value="">Select {fieldDef.label}...</option>
-        {fieldDef.options?.map((opt) => (
-          <option key={opt.value} value={opt.value}>
+        {options.map((opt, idx) => (
+          <option key={`${toDomValue(opt.value)}-${idx}`} value={toDomValue(opt.value)}>
             {opt.label}
           </option>
         ))}
@@ -181,15 +240,17 @@ export default function ValueInput({
     (fieldDef.type === "select" || fieldDef.type === "multiselect") &&
     (operator === "in" || operator === "not in")
   ) {
-    const selectedValues = Array.isArray(value) ? value : [];
+    const selectedValues: FilterOptionValue[] = Array.isArray(value)
+      ? value.filter(isFilterOptionValue)
+      : [];
 
     return (
       <div className="flex flex-wrap gap-2 items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-sm flex-1">
-        {fieldDef.options?.map((opt) => {
+        {fieldDef.options?.map((opt, idx) => {
           const isSelected = selectedValues.includes(opt.value);
           return (
             <label
-              key={opt.value}
+              key={`${toDomValue(opt.value)}-${idx}`}
               className="flex items-center gap-1 cursor-pointer"
             >
               <input
@@ -216,7 +277,7 @@ export default function ValueInput({
   if (fieldDef.type === "relation" && fieldDef.relationEntity === "category") {
     if (operator === "in" || operator === "not in") {
       // Multi-select for categories
-      const selectedIds = Array.isArray(value) ? value : [];
+      const selectedIds = getNumberArray(value);
       return (
         <div className="flex flex-wrap gap-2 items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-sm flex-1">
           {categories?.map((cat) => {
@@ -248,8 +309,10 @@ export default function ValueInput({
       // Single select for category
       return (
         <select
-          value={value || ""}
-          onChange={(e) => onChange(Number(e.target.value))}
+          value={getTextInputValue(value)}
+          onChange={(e) =>
+            onChange(e.target.value === "" ? "" : Number(e.target.value))
+          }
           className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
         >
           <option value="">Select Category...</option>
@@ -268,7 +331,7 @@ export default function ValueInput({
     return (
       <input
         type="number"
-        value={value || ""}
+        value={getTextInputValue(value)}
         onChange={(e) => onChange(e.target.value ? Number(e.target.value) : "")}
         placeholder={`Enter ${fieldDef.label} ID`}
         className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm flex-1"
@@ -280,7 +343,7 @@ export default function ValueInput({
   return (
     <input
       type="text"
-      value={value || ""}
+      value={getTextInputValue(value)}
       onChange={(e) => onChange(e.target.value)}
       placeholder="Enter value"
       className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm flex-1"

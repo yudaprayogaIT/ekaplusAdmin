@@ -1,18 +1,25 @@
 // src/components/branches/BranchList.tsx
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import BranchCard from "./BranchCard";
 import AddBranchModal from "./AddBranchModal";
 import BranchDetailModal from "./BranchDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import ErrorMessage from "@/components/ui/ErrorMessage";
-import { useAuth } from "@/contexts/AuthContext";
+import {
+  useAuth,
+} from "@/contexts/AuthContext";
 import {
   getQueryUrl,
   getResourceUrl,
   getAuthHeaders,
   API_CONFIG,
+  apiFetch,
 } from "@/config/api";
 import {
   FaPlus,
@@ -38,6 +45,11 @@ export type Branch = {
   url: string;
   token: string;
   disabled: number;
+  created_at?: string;
+  updated_at?: string;
+  created_by?: string | number;
+  updated_by?: string | number;
+  owner?: string | number;
 };
 
 // API Response structure from SQL backend
@@ -59,9 +71,9 @@ type BranchAPIResponse = {
     disabled: number;
     created_at: string;
     updated_at: string;
-    created_by: number;
-    updated_by: number;
-    owner: number;
+    created_by: number | { id?: number; full_name?: string };
+    updated_by: number | { id?: number; full_name?: string };
+    owner: number | { id?: number; full_name?: string };
     status: string;
     docstatus: number;
   }>;
@@ -121,11 +133,16 @@ export default function BranchList() {
 
     try {
       const DATA_URL = getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH, {
-        fields: ["*"],
+        fields: [
+          "*",
+          "created_by.full_name",
+          "updated_by.full_name",
+          "owner.full_name",
+        ],
       });
       const headers = getAuthHeaders(token);
 
-      const res = await fetch(DATA_URL, {
+      const res = await apiFetch(DATA_URL, {
         method: "GET",
         cache: "no-store",
         headers,
@@ -147,6 +164,20 @@ export default function BranchList() {
           url: item.url,
           token: item.token,
           disabled: item.disabled,
+          created_at: item.created_at,
+          updated_at: item.updated_at,
+          created_by:
+            typeof item.created_by === "object"
+              ? item.created_by.full_name || "Unknown"
+              : item.created_by,
+          updated_by:
+            typeof item.updated_by === "object"
+              ? item.updated_by.full_name || "Unknown"
+              : item.updated_by,
+          owner:
+            typeof item.owner === "object"
+              ? item.owner.full_name || "Unknown"
+              : item.owner,
         }));
 
         console.log("Loaded branches:", mappedBranches);
@@ -197,11 +228,16 @@ export default function BranchList() {
 
       try {
         const DATA_URL = getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH, {
-          fields: ["*"],
+          fields: [
+            "*",
+            "created_by.full_name",
+            "updated_by.full_name",
+            "owner.full_name",
+          ],
         });
         const headers = getAuthHeaders(token);
 
-        const res = await fetch(DATA_URL, {
+        const res = await apiFetch(DATA_URL, {
           method: "GET",
           cache: "no-store",
           headers,
@@ -222,6 +258,20 @@ export default function BranchList() {
             url: item.url,
             token: item.token,
             disabled: item.disabled,
+            created_at: item.created_at,
+            updated_at: item.updated_at,
+            created_by:
+              typeof item.created_by === "object"
+                ? item.created_by.full_name || "Unknown"
+                : item.created_by,
+            updated_by:
+              typeof item.updated_by === "object"
+                ? item.updated_by.full_name || "Unknown"
+                : item.updated_by,
+            owner:
+              typeof item.owner === "object"
+                ? item.owner.full_name || "Unknown"
+                : item.owner,
           }));
 
           setBranches(mappedBranches);
@@ -255,7 +305,7 @@ export default function BranchList() {
 
         const headers = getAuthHeaders(token);
 
-        const response = await fetch(
+        const response = await apiFetch(
           getResourceUrl(API_CONFIG.ENDPOINTS.BRANCH, branch.id),
           {
             method: "DELETE",

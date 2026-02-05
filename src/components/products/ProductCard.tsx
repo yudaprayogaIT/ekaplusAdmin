@@ -31,6 +31,9 @@ export default function ProductCard({
 }: ProductCardProps) {
   const firstVariant = product.variants[0]?.item;
   const variantCount = product.variants.length;
+  const disabledVariantCount = product.variants.filter(
+    (variant) => variant.item.disabled === 1
+  ).length;
   // console.log(product.variants);
 
   if (viewMode === "list") {
@@ -102,6 +105,11 @@ export default function ProductCard({
                   >
                     {product.disabled === 0 ? "Aktif" : "Nonaktif"}
                   </span>
+                  {disabledVariantCount > 0 && (
+                    <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-semibold">
+                      {disabledVariantCount} Disabled
+                    </span>
+                  )}
                 </div>
                 {firstVariant?.description && (
                   <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed">
@@ -206,6 +214,13 @@ export default function ProductCard({
               {product.itemCategory.name}
             </span>
           </div>
+          {disabledVariantCount > 0 && (
+            <div className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-full shadow-sm border border-amber-200">
+              <span className="text-xs font-semibold">
+                {disabledVariantCount} Disabled
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Variant Count Badge - Bottom Left */}

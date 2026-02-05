@@ -1,15 +1,26 @@
 // src/components/types/AddTypeModal.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { FaTimes, FaImage, FaCheckCircle } from "react-icons/fa";
+import React, {
+  useEffect,
+  useState,
+} from "react";
+import {
+  motion,
+  AnimatePresence,
+} from "framer-motion";
+import {
+  FaTimes,
+  FaImage,
+  FaCheckCircle,
+} from "react-icons/fa";
 import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getResourceUrl,
   getAuthHeadersFormData,
   API_CONFIG,
+  apiFetch,
 } from "@/config/api";
 import { ItemType } from "./Typelist";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
@@ -165,7 +176,7 @@ export default function AddTypeModal({
 
       if (initial && initial.id) {
         // UPDATE existing type
-        response = await fetch(
+        response = await apiFetch(
           getResourceUrl(API_CONFIG.ENDPOINTS.TYPE, initial.id),
           {
             method: "PUT",
@@ -175,7 +186,7 @@ export default function AddTypeModal({
         );
       } else {
         // CREATE new type
-        response = await fetch(getResourceUrl(API_CONFIG.ENDPOINTS.TYPE), {
+        response = await apiFetch(getResourceUrl(API_CONFIG.ENDPOINTS.TYPE), {
           method: "POST",
           headers,
           body: formData,

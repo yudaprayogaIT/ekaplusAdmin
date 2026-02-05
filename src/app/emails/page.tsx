@@ -3,7 +3,7 @@ import RequireAuth from "@/components/auth/RequireAuth";
 import EmailLogList from "@/components/emails/EmailLogList";
 
 export const metadata = {
-  title: "Email Logs - Ekatalog Ekatunggal",
+  title: "Email Logs - EKA+",
   description: "Riwayat dan status pengiriman email sistem",
 };
 

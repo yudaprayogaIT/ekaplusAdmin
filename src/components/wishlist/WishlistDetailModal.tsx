@@ -3,7 +3,16 @@
 
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaTimes, FaBox, FaUser, FaCalendar, FaTag } from "react-icons/fa";
+import {
+  FaTimes,
+  FaBox,
+  FaUser,
+  FaCalendar,
+  FaTag,
+  FaClock,
+  FaHistory,
+  FaEdit,
+} from "react-icons/fa";
 import Image from "next/image";
 import type { WishlistItem } from "@/types";
 
@@ -20,7 +29,8 @@ export default function WishlistDetailModal({
 }: WishlistDetailModalProps) {
   if (!wishlistItem) return null;
 
-  const { item, createdAt, userName } = wishlistItem;
+  const { item, createdAt, userName, updatedAt, createdBy, updatedBy } =
+    wishlistItem;
 
   // Format date
   const formattedDate = new Date(createdAt).toLocaleDateString("id-ID", {
@@ -33,6 +43,8 @@ export default function WishlistDetailModal({
     hour: "2-digit",
     minute: "2-digit",
   });
+
+  const hasActivity = createdAt || updatedAt;
 
   return (
     <AnimatePresence>
@@ -190,6 +202,82 @@ export default function WishlistDetailModal({
                     </div>
                   </div>
                 </div>
+
+                {/* Activity Notes */}
+                {hasActivity && (
+                  <div className="bg-white rounded-xl p-4 border border-gray-200">
+                    <div className="flex items-center gap-2 mb-4">
+                      <FaHistory className="text-blue-600 w-4 h-4" />
+                      <h4 className="text-sm font-semibold text-gray-900">
+                        Catatan Aktivitas
+                      </h4>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {createdAt && (
+                        <div className="bg-gradient-to-br from-green-50 to-white rounded-xl p-4 border border-green-100">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="w-9 h-9 rounded-lg bg-green-500 flex items-center justify-center">
+                              <FaUser className="w-4 h-4 text-white" />
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 font-medium">
+                                Created
+                              </p>
+                              <p className="text-sm font-bold text-gray-900">
+                                {createdBy
+                                  ? typeof createdBy === "string"
+                                    ? createdBy
+                                    : `User #${createdBy}`
+                                  : "Unknown"}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 text-gray-600">
+                            <FaClock className="w-4 h-4 text-green-500" />
+                            <p className="text-sm">
+                              {new Date(createdAt).toLocaleString("id-ID", {
+                                dateStyle: "long",
+                                timeStyle: "short",
+                              })}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {updatedAt && (
+                        <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-4 border border-blue-100">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="w-9 h-9 rounded-lg bg-blue-500 flex items-center justify-center">
+                              <FaEdit className="w-4 h-4 text-white" />
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 font-medium">
+                                Last Updated
+                              </p>
+                              <p className="text-sm font-bold text-gray-900">
+                                {updatedBy
+                                  ? typeof updatedBy === "string"
+                                    ? updatedBy
+                                    : `User #${updatedBy}`
+                                  : "Unknown"}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 text-gray-600">
+                            <FaClock className="w-4 h-4 text-blue-500" />
+                            <p className="text-sm">
+                              {new Date(updatedAt).toLocaleString("id-ID", {
+                                dateStyle: "long",
+                                timeStyle: "short",
+                              })}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Branches */}
                 {item.branches && item.branches.length > 0 && (

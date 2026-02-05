@@ -19,6 +19,7 @@ type Item = {
   type: string;
   uom: string;
   image?: string;
+  disabled?: number;
   branches?: Branch[];
   description?: string;
 };
@@ -96,6 +97,11 @@ export default function VariantCard({
                 )}
 
                 <div className="flex flex-wrap gap-2">
+                  {variant.item.disabled === 1 && (
+                    <span className="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-semibold">
+                      Disabled
+                    </span>
+                  )}
                   {variant.item.color && (
                     <span className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold">
                       {variant.item.color}
@@ -196,6 +202,11 @@ export default function VariantCard({
         </p>
 
         <div className="flex flex-wrap gap-1.5 mb-4">
+          {variant.item.disabled === 1 && (
+            <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-semibold">
+              Disabled
+            </span>
+          )}
           {variant.item.color && (
             <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold">
               {variant.item.color}

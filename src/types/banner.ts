@@ -19,9 +19,9 @@ export type Banner = {
   docstatus: number;
   created_at: string;
   updated_at: string;
-  created_by?: number;
-  updated_by?: number;
-  owner?: number;
+  created_by?: number | { id?: number; name?: string };
+  updated_by?: number | { id?: number; name?: string };
+  owner?: number | { id?: number; name?: string };
 };
 
 // API Response structure
@@ -44,9 +44,9 @@ export type BannerAPIResponse = {
     docstatus: number;
     created_at: string;
     updated_at: string;
-    created_by: number;
-    updated_by: number;
-    owner: number;
+    created_by: number | { id?: number; full_name?: string };
+    updated_by: number | { id?: number; full_name?: string };
+    owner: number | { id?: number; full_name?: string };
   }>;
   meta: Record<string, unknown>;
 };

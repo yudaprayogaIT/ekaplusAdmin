@@ -1,7 +1,10 @@
 // src/components/roles/RoleList.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
 import RoleCard from "./RoleCard";
 import AddRoleModal from "./AddRoleModal";
 import RoleDetailModal from "./RoleDetailModal";
@@ -16,7 +19,11 @@ import {
 } from "react-icons/fa";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
-import { getAuthHeaders, API_CONFIG } from "@/config/api";
+import {
+  getAuthHeaders,
+  API_CONFIG,
+  apiFetch,
+} from "@/config/api";
 
 export type Role = {
   ID: number;
@@ -78,7 +85,7 @@ export default function RoleList() {
 
         console.log("[RoleList] Fetching roles from:", DATA_URL);
 
-        const res = await fetch(DATA_URL, {
+        const res = await apiFetch(DATA_URL, {
           method: "GET",
           cache: "no-store",
           headers,
@@ -145,7 +152,7 @@ export default function RoleList() {
 
         console.log("[RoleList] Auto-reloading roles from:", DATA_URL);
 
-        const res = await fetch(DATA_URL, {
+        const res = await apiFetch(DATA_URL, {
           method: "GET",
           cache: "no-store",
           headers,
@@ -210,7 +217,7 @@ export default function RoleList() {
 
       console.log("[RoleList] Deleting role at:", DELETE_URL);
 
-      const res = await fetch(DELETE_URL, {
+      const res = await apiFetch(DELETE_URL, {
         method: "DELETE",
         headers,
       });

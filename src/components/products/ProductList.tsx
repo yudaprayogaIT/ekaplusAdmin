@@ -1,8 +1,17 @@
 // src/components/products/ProductList.tsx
 "use client";
 
-import React, { useEffect, useRef, useState, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
+import {
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 import ProductCard from "./ProductCard";
 import AddProductModal from "./AddProductModal";
 import ProductDetailModal from "./ProductDetailModal";
@@ -19,8 +28,16 @@ import {
   FaSortAmountDown,
   FaChevronDown,
 } from "react-icons/fa";
-import { motion, AnimatePresence } from "framer-motion";
-import type { Item, Product, ProductFormData, Category } from "@/types";
+import {
+  motion,
+  AnimatePresence,
+} from "framer-motion";
+import type {
+  Item,
+  Product,
+  ProductFormData,
+  Category,
+} from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   API_CONFIG,
@@ -28,12 +45,16 @@ import {
   getAuthHeaders,
   getResourceUrl,
   getFileUrl,
+  apiFetch,
 } from "@/config/api";
 import FilterBuilder from "@/components/filters/FilterBuilder";
 import { useFilters } from "@/hooks/useFilters";
 import { PRODUCT_FILTER_FIELDS } from "@/config/filterFields";
 import { FilterTriple } from "@/types/filter";
-import { buildSearchParams, parseSearchParams } from "@/utils/urlSync";
+import {
+  buildSearchParams,
+  parseSearchParams,
+} from "@/utils/urlSync";
 
 type SortField =
   | "product_name"
@@ -45,9 +66,18 @@ type SortDirection = "asc" | "desc";
 
 const SNAP_KEY = "ekatalog_products_snapshot";
 
+function toNumber(value: number | string | null | undefined): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 // API Response Types
 interface ItemApiResponse {
-  id: number;
+  id: number | string;
   item_code: string;
   item_name: string;
   item_desc?: string;
@@ -62,19 +92,19 @@ interface ItemApiResponse {
 }
 
 interface ProductApiResponse {
-  id: number;
+  id: number | string;
   product_name: string;
-  item_category: number;
+  item_category: number | string;
   hot_deals: number;
   disabled: number;
   docstatus: number;
   status: string;
   // Catatan Aktivitas
   created_at?: string;
-  created_by?: number | { id: number; full_name: string };
+  created_by?: number | string | { id: number; full_name: string };
   updated_at?: string;
-  updated_by?: number | { id: number; full_name: string };
-  owner?: number | { id: number; full_name: string };
+  updated_by?: number | string | { id: number; full_name: string };
+  owner?: number | string | { id: number; full_name: string };
 }
 
 export default function ProductList() {
@@ -197,7 +227,7 @@ export default function ProductList() {
 
     const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, productSpec);
     // console.log("[ProductList] Request URL:", productsUrl);
-    const productsRes = await fetch(productsUrl, {
+    const productsRes = await apiFetch(productsUrl, {
       method: "GET",
       cache: "no-store",
       headers,
@@ -265,16 +295,27 @@ export default function ProductList() {
           prod: ProductApiResponse & {
             variants?: Array<{
               item: {
-                id: number;
+                id: number | string;
                 item_code: string;
                 item_name: string;
                 image?: string;
               };
             }>;
-            item_category: number | { id?: number; category_name?: string };
-            item_category_id?: number;
+            item_category:
+              | number
+              | string
+              | { id?: number | string; category_name?: string };
+            item_category_id?: number | string;
           }
         ) => {
+          const productId = toNumber(prod.id);
+          if (productId === null) {
+            console.warn(
+              `[ProductList] Invalid product id received: ${prod.id}. Product skipped.`
+            );
+            return null;
+          }
+
           // Use nested category data from API if available, otherwise fallback to lookup
           let finalCategory: { id: number; name: string };
 
@@ -282,13 +323,16 @@ export default function ProductList() {
           const categoryObj =
             typeof prod.item_category === "object" &&
             prod.item_category !== null
-              ? (prod.item_category as { id?: number; category_name?: string })
+              ? (prod.item_category as {
+                  id?: number | string;
+                  category_name?: string;
+                })
               : null;
 
           if (categoryObj && categoryObj.category_name) {
             // Category name fetched directly from API (nested object)
             finalCategory = {
-              id: categoryObj.id || prod.item_category_id || 0,
+              id: toNumber(categoryObj.id) ?? toNumber(prod.item_category_id) ?? 0,
               name: categoryObj.category_name,
             };
             console.log(
@@ -299,47 +343,56 @@ export default function ProductList() {
             const categoryId =
               typeof prod.item_category === "number"
                 ? prod.item_category
-                : prod.item_category_id;
+                : typeof prod.item_category === "string"
+                  ? prod.item_category
+                  : prod.item_category_id;
+            const normalizedCategoryId = toNumber(categoryId);
             console.log(
-              `[ProductList] Looking for category ID ${categoryId} in ${categories.length} categories`
+              `[ProductList] Looking for category ID ${normalizedCategoryId} in ${categories.length} categories`
             );
-            const category = categories.find((c) => c.id === categoryId);
+            const category = categories.find(
+              (c) => c.id === normalizedCategoryId
+            );
 
             if (!category) {
               console.warn(
-                `[ProductList] Category ${categoryId} not found! Using fallback. Available categories:`,
+                `[ProductList] Category ${normalizedCategoryId} not found! Using fallback. Available categories:`,
                 categories.map((c) => ({ id: c.id, name: c.name }))
               );
             }
 
             finalCategory = category || {
-              id: categoryId || 0,
-              name: `Category ${categoryId}`,
+              id: normalizedCategoryId || 0,
+              name: `Category ${normalizedCategoryId}`,
             };
           }
 
           // Transform variants from API response
           const rawVariants = (prod.variants || []).map((v) => {
+            const itemId = toNumber(v.item.id);
+            if (itemId === null) return null;
+
             // Find full item data from availableItems state
             const fullItem = availableItems.find(
-              (item) => item.id === v.item.id
+              (item) => item.id === itemId
             );
 
             return {
-              id: v.item.id, // Use item ID as variant ID for now
+              id: itemId, // Use item ID as variant ID for now
               item: fullItem || {
-                id: v.item.id,
+                id: itemId,
                 code: v.item.item_code,
                 name: v.item.item_name,
                 color: "",
                 type: "",
                 uom: "",
                 image: v.item.image ? getFileUrl(v.item.image) : undefined,
+                disabled: 0,
               },
-              productid: prod.id,
+              productid: productId,
               displayOrder: 0,
             };
-          });
+          }).filter((variant): variant is NonNullable<typeof variant> => variant !== null);
 
           // Deduplicate variants by item.id to prevent duplicate entries
           const productVariants = rawVariants.filter(
@@ -357,14 +410,14 @@ export default function ProductList() {
           // Debug: Log first product with details
           if (prod.id === response.data[0]?.id) {
             console.log("=== FIRST PRODUCT DETAILS ===");
-            console.log("Product ID:", prod.id);
+            console.log("Product ID:", productId);
             console.log("Product Name:", prod.product_name);
             console.log("Raw variants from API:", prod.variants);
             console.log("Transformed variants:", productVariants);
           }
 
           return {
-            id: prod.id,
+            id: productId,
             name: prod.product_name,
             itemCategory: finalCategory,
             disabled: prod.disabled,
@@ -387,7 +440,7 @@ export default function ProductList() {
                 : prod.owner,
           };
         }
-      );
+      ).filter((product: Product | null): product is Product => product !== null);
 
       console.log("=== FINAL PRODUCTS WITH VARIANTS ===");
       productsWithVariants.forEach((p) => {
@@ -511,7 +564,7 @@ export default function ProductList() {
         fields: ["*"],
         limit: 1000,
       });
-      const categoriesRes = await fetch(categoriesUrl, {
+      const categoriesRes = await apiFetch(categoriesUrl, {
         method: "GET",
         cache: "no-store",
         headers,
@@ -519,41 +572,46 @@ export default function ProductList() {
       if (categoriesRes.ok) {
         const response = await categoriesRes.json();
         const categoriesData = response.data.map(
-          (cat: { id: number; category_name: string }) => ({
-            id: cat.id,
-            name: cat.category_name,
-          })
-        );
+          (cat: { id: number | string; category_name: string }) => {
+            const id = toNumber(cat.id);
+            return id !== null ? { id, name: cat.category_name } : null;
+          }
+        ).filter((category: Category | null): category is Category => category !== null);
         setCategories(categoriesData);
         console.log("[ProductList] Categories loaded:", categoriesData.length);
       }
 
-      // Load items
+      // Load items (including disabled) so mapped variants can still be resolved
       const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
         fields: ["*"],
-        filters: [["disabled", "=", 0]],
         limit: 10000,
       });
-      const itemsRes = await fetch(itemsUrl, {
+      const itemsRes = await apiFetch(itemsUrl, {
         method: "GET",
         cache: "no-store",
         headers,
       });
       if (itemsRes.ok) {
         const response = await itemsRes.json();
-        const itemsData = response.data.map((item: ItemApiResponse) => ({
-          id: item.id,
-          code: item.item_code,
-          name: item.item_name,
-          description: item.item_desc || "",
-          category: item.item_category,
-          group: item.item_group,
-          type: item.ekatalog_type,
-          color: item.item_color,
-          image: getFileUrl(item.image),
-          disabled: item.disabled,
-          created_by: item.created_by,
-        }));
+        const itemsData = response.data
+          .map((item: ItemApiResponse) => {
+            const id = toNumber(item.id);
+            if (id === null) return null;
+            return {
+              id,
+              code: item.item_code,
+              name: item.item_name,
+              description: item.item_desc || "",
+              category: item.item_category,
+              group: item.item_group,
+              type: item.ekatalog_type,
+              color: item.item_color,
+              image: getFileUrl(item.image),
+              disabled: item.disabled,
+              created_by: item.created_by,
+            };
+          })
+          .filter((item: Item | null): item is Item => item !== null);
         setAvailableItems(itemsData);
         console.log("[ProductList] Items loaded:", itemsData.length);
       }
@@ -670,7 +728,7 @@ export default function ProductList() {
       try {
         const headers = getAuthHeaders(token);
         const url = getResourceUrl(API_CONFIG.ENDPOINTS.PRODUCT, p.id);
-        const response = await fetch(url, { method: "DELETE", headers });
+        const response = await apiFetch(url, { method: "DELETE", headers });
 
         if (response.ok) {
           // Remove from local state
@@ -749,6 +807,10 @@ export default function ProductList() {
   // Client-side filtering for quick search and hot deals
   // Note: With server-side pagination, client-side filters are limited to current page only
   let displayedProducts = products;
+  const selectableItems = useMemo(
+    () => availableItems.filter((item) => item.disabled !== 1),
+    [availableItems]
+  );
 
   // Quick search filter (client-side for better UX, limited to current page)
   if (searchQuery.trim()) {
@@ -1059,7 +1121,7 @@ export default function ProductList() {
         onClose={() => setModalOpen(false)}
         initial={modalInitial}
         categories={categories}
-        availableItems={availableItems}
+        availableItems={selectableItems}
       />
 
       <ProductDetailModal

@@ -1,8 +1,15 @@
 // src/components/variants/BulkProductCreationModal.tsx
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import React, {
+  useEffect,
+  useState,
+  useMemo,
+} from "react";
+import {
+  AnimatePresence,
+  motion,
+} from "framer-motion";
 import {
   FaTimes,
   FaSave,
@@ -15,9 +22,18 @@ import {
   FaLink,
 } from "react-icons/fa";
 import Image from "next/image";
-import type { Item as BaseItem, Category, Product } from "@/types";
+import type {
+  Item as BaseItem,
+  Category,
+  Product,
+} from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_CONFIG, getAuthHeaders, getResourceUrl } from "@/config/api";
+import {
+  API_CONFIG,
+  getAuthHeaders,
+  getResourceUrl,
+  apiFetch,
+} from "@/config/api";
 import { suggestProductName } from "@/utils/itemGrouping";
 import { createVariant } from "@/services/variantService";
 
@@ -189,7 +205,7 @@ export default function BulkProductCreationModal({
           JSON.stringify(payload, null, 2)
         );
 
-        const response = await fetch(url, {
+        const response = await apiFetch(url, {
           method: "POST",
           headers,
           body: JSON.stringify(payload),
