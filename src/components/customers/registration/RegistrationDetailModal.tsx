@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { CustomerRegistration } from "@/types/customerRegistration";
 import { DocumentViewer } from "./DocumentViewer";
 import { EditRegistrationModal } from "./EditRegistrationModal";
@@ -20,6 +20,8 @@ import {
   FaTimesCircle,
 } from "react-icons/fa";
 import Image from "next/image";
+import { useAuth } from "@/contexts/AuthContext";
+import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
 
 interface RegistrationDetailModalProps {
   isOpen: boolean;
@@ -30,6 +32,21 @@ interface RegistrationDetailModalProps {
   onEdit?: () => void;
 }
 
+interface CustomerRegisterAddressApiResponse {
+  id: number;
+  parent_id: number;
+  label?: string | null;
+  address?: string | null;
+  city?: string | null;
+  province?: string | null;
+  district?: string | null;
+  postal_code?: string | null;
+  country?: string | null;
+  pic_name?: string | null;
+  pic_phone?: string | null;
+  is_default?: number | boolean | null;
+}
+
 export function RegistrationDetailModal({
   isOpen,
   onClose,
@@ -38,6 +55,7 @@ export function RegistrationDetailModal({
   onReject,
   onEdit,
 }: RegistrationDetailModalProps) {
+  const { token } = useAuth();
   const [documentViewer, setDocumentViewer] = useState<{
     isOpen: boolean;
     url: string;
@@ -51,8 +69,64 @@ export function RegistrationDetailModal({
   });
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [shippingAddresses, setShippingAddresses] = useState<
+    CustomerRegisterAddressApiResponse[]
+  >([]);
+  const [shippingLoading, setShippingLoading] = useState(false);
+  const [shippingError, setShippingError] = useState<string | null>(null);
 
-  if (!isOpen || !registration) return null;
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadShippingAddresses() {
+      if (!isOpen || !registration?.id || !token) return;
+
+      setShippingLoading(true);
+      setShippingError(null);
+
+      try {
+        const spec = {
+          fields: ["*"],
+          filters: [
+            ["parent_id", "=", Number(registration.id)],
+            ["parent_type", "=", "customer_register"],
+          ],
+        };
+
+        const res = await apiFetch(
+          getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER_ADDRESS, spec),
+          { method: "GET", cache: "no-store" },
+          token
+        );
+
+        if (!res.ok) {
+          throw new Error(`Failed to fetch shipping addresses (${res.status})`);
+        }
+
+        const json = await res.json();
+        if (!cancelled) {
+          setShippingAddresses(Array.isArray(json.data) ? json.data : []);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setShippingError(
+            err instanceof Error ? err.message : "Gagal memuat alamat pengiriman"
+          );
+          setShippingAddresses([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setShippingLoading(false);
+        }
+      }
+    }
+
+    loadShippingAddresses();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, registration?.id, token]);
 
   const openDocumentViewer = (url: string, filename: string, title: string) => {
     setDocumentViewer({ isOpen: true, url, filename, title });
@@ -106,6 +180,8 @@ export function RegistrationDetailModal({
     if (status.toLowerCase() === "draft") return "Pending";
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
+
+  if (!isOpen || !registration) return null;
 
   console.log("Modal opened with registration:", registration);
 
@@ -240,6 +316,14 @@ export function RegistrationDetailModal({
                       </label>
                       <p className="text-sm text-gray-900 font-medium">
                         {registration.company.business_type}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Kebutuhan Produk
+                      </label>
+                      <p className="text-sm text-gray-900 font-medium">
+                        {registration.company.product_need || "-"}
                       </p>
                     </div>
                     <div>
@@ -415,7 +499,135 @@ export function RegistrationDetailModal({
                 </div>
               </section>
 
-              {/* 5. Dokumen */}
+              {/* 5. Alamat Pengiriman */}
+              <section className="mb-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 bg-teal-100 rounded-lg flex items-center justify-center">
+                    <FaMapMarkerAlt className="w-4 h-4 text-teal-600" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Alamat Pengiriman
+                  </h3>
+                </div>
+
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <div className="mb-4 flex flex-wrap items-center gap-2">
+                    <span className="text-sm text-gray-600">
+                      Sama dengan alamat perusahaan:
+                    </span>
+                    <span
+                      className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border ${
+                        registration.same_as_company_address
+                          ? "bg-green-50 text-green-700 border-green-200"
+                          : "bg-gray-50 text-gray-700 border-gray-200"
+                      }`}
+                    >
+                      {registration.same_as_company_address ? "Ya" : "Tidak"}
+                    </span>
+                  </div>
+
+                  {shippingLoading && (
+                    <div className="text-sm text-gray-500">
+                      Memuat alamat pengiriman...
+                    </div>
+                  )}
+
+                  {shippingError && (
+                    <div className="text-sm text-red-600">{shippingError}</div>
+                  )}
+
+                  {!shippingLoading && !shippingError && shippingAddresses.length === 0 && (
+                    <div className="text-sm text-gray-500">
+                      Tidak ada alamat pengiriman tambahan.
+                    </div>
+                  )}
+
+                  {!shippingLoading && !shippingError && shippingAddresses.length > 0 && (
+                    <div className="space-y-4">
+                      {shippingAddresses.map((addr) => (
+                        <div
+                          key={addr.id ?? `${addr.label}-${addr.address}`}
+                          className="rounded-xl border border-gray-200 p-4 bg-gray-50"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                            <div className="font-semibold text-gray-900">
+                              {addr.label || "Alamat Pengiriman"}
+                            </div>
+                            <span
+                              className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border ${
+                                addr.is_default
+                                  ? "bg-blue-50 text-blue-700 border-blue-200"
+                                  : "bg-white text-gray-600 border-gray-200"
+                              }`}
+                            >
+                              {addr.is_default ? "Default" : "Non-default"}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                            <div className="md:col-span-2">
+                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                Alamat
+                              </label>
+                              <p className="text-gray-900">
+                                {addr.address || "-"}
+                              </p>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                Kota
+                              </label>
+                              <p className="text-gray-900">{addr.city || "-"}</p>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                Provinsi
+                              </label>
+                              <p className="text-gray-900">
+                                {addr.province || "-"}
+                              </p>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                Kode Pos
+                              </label>
+                              <p className="text-gray-900">
+                                {addr.postal_code || "-"}
+                              </p>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                Negara
+                              </label>
+                              <p className="text-gray-900">
+                                {addr.country || "-"}
+                              </p>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                PIC
+                              </label>
+                              <p className="text-gray-900">
+                                {addr.pic_name || "-"}
+                              </p>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                No. PIC
+                              </label>
+                              <p className="text-gray-900">
+                                {addr.pic_phone || "-"}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              {/* 6. Dokumen */}
               <section className="mb-6">
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
@@ -504,7 +716,7 @@ export function RegistrationDetailModal({
                 </div>
               </section>
 
-              {/* 6. Catatan Aktivitas */}
+              {/* 7. Catatan Aktivitas */}
               {(registration.created_at || registration.updated_at) && (
                 <section className="mb-6">
                   <div className="flex items-center gap-2 mb-4">

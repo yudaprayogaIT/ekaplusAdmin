@@ -35,7 +35,8 @@ export const API_CONFIG = {
     WORKFLOW: "/api/workflow",
     WORKFLOW_STATE: "/api/workflow/state",
 
-    CUSTOMER_REGISTER: "/api/resource/ekatalog_customer_register",
+    CUSTOMER_REGISTER: "/api/resource/customer_register",
+    CUSTOMER_REGISTER_ADDRESS: "/api/resource/customer_register_address",
 
     // Customer Management - GP/GC/BC
     GLOBAL_PARTY: "/api/resource/ekatalog_global_party",

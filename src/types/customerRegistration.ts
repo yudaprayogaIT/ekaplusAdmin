@@ -19,7 +19,8 @@ export interface CustomerRegistration {
     npwp?: string;
     branch_id: number;
     branch_name: string;
-    branch_city: string
+    branch_city: string;
+    product_need?: string;
   };
 
   // 3. Alamat Perusahaan
@@ -41,6 +42,9 @@ export interface CustomerRegistration {
     fax?: string;
     factory_address?: string;
   };
+
+  same_as_company_address?: boolean;
+  shipping_addresses?: CustomerRegistrationShippingAddress[];
 
   // 5. Dokumen
   documents: {
@@ -77,6 +81,21 @@ export interface CustomerRegistration {
   rejection_notes?: string;
   rejected_at?: string;
   rejected_by?: string;
+}
+
+export interface CustomerRegistrationShippingAddress {
+  id?: number;
+  label: string;
+  address: string;
+  city: string;
+  province: string;
+  district?: string;
+  postal_code?: string;
+  country?: string;
+  pic_name?: string;
+  pic_phone?: string;
+  is_default?: number | boolean;
+  parent_id?: number;
 }
 
 // For filters

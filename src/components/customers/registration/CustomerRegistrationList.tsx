@@ -18,7 +18,7 @@ import {
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
-import { getQueryUrl, getFileUrl, API_CONFIG, apiFetch } from "@/config/api";
+import { getQueryUrl, API_CONFIG, apiFetch } from "@/config/api";
 import FilterBuilder from "@/components/filters/FilterBuilder";
 import { useFilters } from "@/hooks/useFilters";
 import { CUSTOMER_REGISTER_FILTER_FIELDS } from "@/config/filterFields";
@@ -26,11 +26,11 @@ import { FilterTriple } from "@/types/filter";
 import Pagination, { usePagination } from "@/components/ui/Pagination";
 
 type SortField =
-  | "business_name"
+  | "company_name"
   | "created_at"
   | "updated_at"
   | "status"
-  | "type";
+  | "company_type";
 type SortDirection = "asc" | "desc";
 
 const SNAP_KEY = "ekatalog_customer_registrations_snapshot";
@@ -38,63 +38,37 @@ const SNAP_KEY = "ekatalog_customer_registrations_snapshot";
 // API Response type from backend
 interface CustomerRegistrationApiResponse {
   id: number;
-  name: string; // Registration code like REG20251231001
-  user_id: number;
-  owner_id: number;
-
-  // Nested objects
-  user?: {
-    full_name: string;
-  };
-  owner?: {
-    full_name: string;
-    id: number;
-    email: string;
-    phone: string;
-    place_of_birth: string;
-    date_of_birth: string;
-  };
-  branch?: {
+  name: string;
+  owner?: number | null;
+  owner_full_name?: string | null;
+  owner_phone?: string | null;
+  owner_email?: string | null;
+  owner_place_of_birth?: string | null;
+  owner_date_of_birth?: string | null;
+  branch_id_id?: number | null;
+  branch_id?: {
     branch_name: string;
     city: string;
-    id: number;
-  };
-
-  // Business Info
-  type: string; // "Badan" or "Perorangan"
-  entity: string; // "PT", "CV", etc.
-  business_name: string;
-  nik: string;
-  npwp?: string | null;
-  branch_id: number;
-
-  // Address
-  address: string;
-  province: string;
-  city: string;
-  district: string;
-  sub_district: string;
-  rt: string;
-  rw: string;
-  postal_code: string;
-
-  // Support Data
-  contact_person?: string | null;
-  email?: string | null;
-  fax?: string | null;
-  factory_address?: string | null;
-
-  // Documents
-  ktp_image?: string | null;
-  npwp_image?: string | null;
-
-  // Status & Metadata
+  } | null;
+  company_type?: string | null;
+  company_title?: string | null;
+  company_name?: string | null;
+  company_address?: string | null;
+  company_province?: string | null;
+  company_city?: string | null;
+  company_district?: string | null;
+  company_postal_code?: string | null;
+  product_need?: string | null;
+  same_as_company_address?: number | boolean | null;
   status: string;
   docstatus: number;
   created_at: string;
   created_by?: number | { id: number; full_name: string };
   updated_at: string;
   updated_by?: number | { id: number; full_name: string };
+  gpid?: number | null;
+  gcid?: number | null;
+  bcid?: number | null;
 }
 
 export function CustomerRegistrationList() {
@@ -124,7 +98,7 @@ export function CustomerRegistrationList() {
 
   // Use filter system
   const { filters, setFilters } = useFilters({
-    entity: "ekatalog_customer_register",
+    entity: "customer_register",
   });
 
   // Map API response to frontend type
@@ -136,63 +110,58 @@ export function CustomerRegistrationList() {
 
       // Owner info - extract from nested objects
       user: {
-        user_id: apiData.user_id,
+        user_id: apiData.owner || 0,
         full_name:
-          apiData.owner?.full_name ||
-          apiData.user?.full_name ||
-          `User ${apiData.user_id}`,
-        phone: apiData.owner?.phone || "-",
-        email: apiData.owner?.email || "-",
-        place_of_birth: apiData.owner?.place_of_birth || "-",
-        date_of_birth: apiData.owner?.date_of_birth || "-",
+          apiData.owner_full_name ||
+          (apiData.owner ? `User ${apiData.owner}` : "Unknown User"),
+        phone: apiData.owner_phone || "-",
+        email: apiData.owner_email || "-",
+        place_of_birth: apiData.owner_place_of_birth || "-",
+        date_of_birth: apiData.owner_date_of_birth || "-",
       },
 
       // Company info - extract branch name from nested object
       company: {
-        business_type: `${apiData.type} - ${apiData.entity}`,
-        name: apiData.business_name,
-        nik: apiData.nik,
-        npwp: apiData.npwp || undefined,
-        branch_id: apiData.branch_id,
+        business_type:
+          [apiData.company_type, apiData.company_title].filter(Boolean).join(" - ") ||
+          "-",
+        name: apiData.company_name || apiData.name,
+        nik: "-",
+        npwp: undefined,
+        branch_id: apiData.branch_id_id || 0,
         branch_name:
-          apiData.branch?.branch_name || `Branch ${apiData.branch_id}`,
-        branch_city: apiData.branch?.city || "-",
+          apiData.branch_id?.branch_name ||
+          (apiData.branch_id_id ? `Branch ${apiData.branch_id_id}` : "-"),
+        branch_city: apiData.branch_id?.city || "-",
+        product_need: apiData.product_need || undefined,
       },
 
       // Address
       address: {
-        full_address: apiData.address,
-        province_name: apiData.province,
-        city_name: apiData.city,
-        district_name: apiData.district,
-        village_name: apiData.sub_district,
-        rt: apiData.rt,
-        rw: apiData.rw,
-        postal_code: apiData.postal_code,
+        full_address: apiData.company_address || "-",
+        province_name: apiData.company_province || "-",
+        city_name: apiData.company_city || "-",
+        district_name: apiData.company_district || "-",
+        village_name: "-",
+        rt: "-",
+        rw: "-",
+        postal_code: apiData.company_postal_code || "-",
       },
 
       // Support data
       support_data: {
-        contact_person: apiData.contact_person || undefined,
-        company_email: apiData.email || undefined,
-        fax: apiData.fax || undefined,
-        factory_address: apiData.factory_address || undefined,
+        contact_person: apiData.owner_full_name || undefined,
+        company_email: apiData.owner_email || undefined,
+        fax: undefined,
+        factory_address: undefined,
       },
+      same_as_company_address: Boolean(apiData.same_as_company_address),
+      shipping_addresses: [],
 
       // Documents
       documents: {
-        ktp_photo: apiData.ktp_image
-          ? {
-              url: getFileUrl(apiData.ktp_image) || "",
-              filename: apiData.ktp_image,
-            }
-          : undefined,
-        npwp_photo: apiData.npwp_image
-          ? {
-              url: getFileUrl(apiData.npwp_image) || "",
-              filename: apiData.npwp_image,
-            }
-          : undefined,
+        ktp_photo: undefined,
+        npwp_photo: undefined,
       },
 
       // Status - map to lowercase for consistency
@@ -206,12 +175,19 @@ export function CustomerRegistrationList() {
       created_by:
         typeof apiData.created_by === "object" && apiData.created_by?.full_name
           ? apiData.created_by.full_name
+          : typeof apiData.created_by === "number"
+          ? `User ${apiData.created_by}`
           : undefined,
       updated_at: apiData.updated_at,
       updated_by:
         typeof apiData.updated_by === "object" && apiData.updated_by?.full_name
           ? apiData.updated_by.full_name
+          : typeof apiData.updated_by === "number"
+          ? `User ${apiData.updated_by}`
           : undefined,
+      gp_id: apiData.gpid ?? undefined,
+      gc_id: apiData.gcid ?? undefined,
+      bc_id: apiData.bcid ?? undefined,
     };
   }
 
@@ -240,17 +216,8 @@ export function CustomerRegistrationList() {
         } = {
           fields: [
             "*",
-            "branch.branch_name",
-            "branch.id",
-            "branch.city",
-            "user.full_name",
-            "owner.full_name",
-            "owner.email",
-            "owner.place_of_birth",
-            "owner.date_of_birth",
-            "owner.phone",
-            "created_by.full_name",
-            "updated_by.full_name",
+            "branch_id.branch_name",
+            "branch_id.city",
           ],
           limit: 10000000,
         };
@@ -356,7 +323,7 @@ export function CustomerRegistrationList() {
         (reg) =>
           reg.company.name.toLowerCase().includes(query) ||
           reg.user.full_name.toLowerCase().includes(query) ||
-          reg.company.nik.includes(query) ||
+          reg.company.business_type.toLowerCase().includes(query) ||
           reg.company.branch_name.toLowerCase().includes(query)
       );
     }
@@ -526,7 +493,7 @@ export function CustomerRegistrationList() {
               type="text"
               value={searchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Cari perusahaan, pemilik, NIK, atau cabang..."
+              placeholder="Cari perusahaan, pemilik, tipe bisnis, atau cabang..."
               className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all text-sm"
             />
           </div>
@@ -549,7 +516,7 @@ export function CustomerRegistrationList() {
         {/* Advanced Filters Row */}
         <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-gray-100">
           <FilterBuilder
-            entity="ekatalog_customer_register"
+            entity="customer_register"
             config={CUSTOMER_REGISTER_FILTER_FIELDS}
             onApply={handleApplyFilters}
           />
@@ -581,11 +548,11 @@ export function CustomerRegistrationList() {
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
             >
               <span>
-                {sortField === "business_name" && "Nama Perusahaan"}
+                {sortField === "company_name" && "Nama Perusahaan"}
                 {sortField === "created_at" && "Tanggal Dibuat"}
                 {sortField === "updated_at" && "Tanggal Diupdate"}
                 {sortField === "status" && "Status"}
-                {sortField === "type" && "Tipe Bisnis"}
+                {sortField === "company_type" && "Tipe Bisnis"}
               </span>
               <FaChevronDown
                 className={`w-3 h-3 transition-transform ${
@@ -609,7 +576,7 @@ export function CustomerRegistrationList() {
                   >
                     {[
                       {
-                        value: "business_name" as SortField,
+                        value: "company_name" as SortField,
                         label: "Nama Perusahaan",
                       },
                       {
@@ -621,7 +588,10 @@ export function CustomerRegistrationList() {
                         label: "Tanggal Diupdate",
                       },
                       { value: "status" as SortField, label: "Status" },
-                      { value: "type" as SortField, label: "Tipe Bisnis" },
+                      {
+                        value: "company_type" as SortField,
+                        label: "Tipe Bisnis",
+                      },
                     ].map((option) => (
                       <button
                         key={option.value}
