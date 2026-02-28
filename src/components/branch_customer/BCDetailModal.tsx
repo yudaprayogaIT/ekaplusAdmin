@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaBuilding,
@@ -8,7 +8,6 @@ import {
   FaEdit,
   FaCheckCircle,
   FaBan,
-  FaLink,
   FaMapMarkerAlt,
   FaUser,
   FaPhone,
@@ -18,8 +17,8 @@ import {
 } from "react-icons/fa";
 import { HiXMark } from "react-icons/hi2";
 import type { BranchCustomer, GlobalParty, GlobalCustomer } from "@/types/customer";
-import { mockGlobalParties } from "@/data/mockGlobalParties";
-import { mockGlobalCustomers } from "@/data/mockGlobalCustomers";
+import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface BCDetailModalProps {
   isOpen: boolean;
@@ -29,6 +28,45 @@ interface BCDetailModalProps {
   onViewGC?: (gc: GlobalCustomer) => void;
 }
 
+interface GroupCustomerRow {
+  id: number;
+  name?: string | null;
+  gc_name?: string | null;
+  gpid?: number | null;
+  owner_full_name?: string | null;
+  owner_phone?: string | null;
+  owner_email?: string | null;
+  disabled?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  "created_by.full_name"?: string | null;
+  "updated_by.full_name"?: string | null;
+  created_by?: number | { full_name?: string } | null;
+  updated_by?: number | { full_name?: string } | null;
+}
+
+interface GroupParentRow {
+  id: number;
+  name?: string | null;
+  gp_name?: string | null;
+  disabled?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  "created_by.full_name"?: string | null;
+  "updated_by.full_name"?: string | null;
+  created_by?: number | { full_name?: string } | null;
+  updated_by?: number | { full_name?: string } | null;
+}
+
+function resolveUserName(
+  directName: string | null | undefined,
+  value: number | { full_name?: string } | null | undefined
+): string | undefined {
+  if (directName) return directName;
+  if (value && typeof value === "object" && value.full_name) return value.full_name;
+  return undefined;
+}
+
 export function BCDetailModal({
   isOpen,
   onClose,
@@ -36,26 +74,85 @@ export function BCDetailModal({
   onViewGP,
   onViewGC,
 }: BCDetailModalProps) {
-  // Parent entities
+  const { token, isAuthenticated } = useAuth();
+
   const [parentGC, setParentGC] = useState<GlobalCustomer | null>(null);
   const [parentGP, setParentGP] = useState<GlobalParty | null>(null);
 
-  // Load parents when modal opens
-  useEffect(() => {
-    if (isOpen && bc) {
-      // Find parent GC
-      const gc = mockGlobalCustomers.find(g => g.id === bc.gc_id);
-      setParentGC(gc || null);
+  const loadParents = useCallback(async () => {
+    if (!isOpen || !bc || !isAuthenticated || !token) return;
 
-      // Find parent GP (through GC)
-      if (gc) {
-        const gp = mockGlobalParties.find(g => g.id === gc.gp_id);
-        setParentGP(gp || null);
-      } else {
-        setParentGP(null);
-      }
+    const gcSpec = {
+      fields: ["*", "created_by.full_name", "updated_by.full_name"],
+      filters: [["id", "=", bc.gc_id]],
+      limit: 1,
+    };
+    const gcRes = await apiFetch(
+      getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, gcSpec),
+      { method: "GET", cache: "no-store" },
+      token
+    );
+    const gcJson = gcRes.ok ? await gcRes.json() : { data: [] };
+    const gcRow: GroupCustomerRow | undefined = Array.isArray(gcJson?.data) ? gcJson.data[0] : undefined;
+
+    let mappedGC: GlobalCustomer | null = null;
+    if (gcRow) {
+      mappedGC = {
+        id: Number(gcRow.id),
+        code: gcRow.name || undefined,
+        name: gcRow.gc_name || gcRow.name || "-",
+        gp_id: Number(gcRow.gpid || 0),
+        owner_name: gcRow.owner_full_name || undefined,
+        owner_phone: gcRow.owner_phone || undefined,
+        owner_email: gcRow.owner_email || undefined,
+        created_at: gcRow.created_at || new Date(0).toISOString(),
+        updated_at: gcRow.updated_at || gcRow.created_at || new Date(0).toISOString(),
+        created_by: resolveUserName(gcRow["created_by.full_name"], gcRow.created_by),
+        updated_by: resolveUserName(gcRow["updated_by.full_name"], gcRow.updated_by),
+        disabled: Number(gcRow.disabled || 0),
+      };
     }
-  }, [isOpen, bc]);
+
+    setParentGC(mappedGC);
+
+    if (!mappedGC?.gp_id) {
+      setParentGP(null);
+      return;
+    }
+
+    const gpSpec = {
+      fields: ["*", "created_by.full_name", "updated_by.full_name"],
+      filters: [["id", "=", mappedGC.gp_id]],
+      limit: 1,
+    };
+    const gpRes = await apiFetch(
+      getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, gpSpec),
+      { method: "GET", cache: "no-store" },
+      token
+    );
+    const gpJson = gpRes.ok ? await gpRes.json() : { data: [] };
+    const gpRow: GroupParentRow | undefined = Array.isArray(gpJson?.data) ? gpJson.data[0] : undefined;
+
+    if (!gpRow) {
+      setParentGP(null);
+      return;
+    }
+
+    setParentGP({
+      id: Number(gpRow.id),
+      code: gpRow.name || undefined,
+      name: gpRow.gp_name || gpRow.name || "-",
+      created_at: gpRow.created_at || new Date(0).toISOString(),
+      updated_at: gpRow.updated_at || gpRow.created_at || new Date(0).toISOString(),
+      created_by: resolveUserName(gpRow["created_by.full_name"], gpRow.created_by),
+      updated_by: resolveUserName(gpRow["updated_by.full_name"], gpRow.updated_by),
+      disabled: Number(gpRow.disabled || 0),
+    });
+  }, [bc, isAuthenticated, isOpen, token]);
+
+  useEffect(() => {
+    loadParents();
+  }, [loadParents]);
 
   if (!bc) return null;
 
@@ -69,41 +166,30 @@ export function BCDetailModal({
             exit={{ opacity: 0, scale: 0.95 }}
             className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden max-h-[90vh] flex flex-col"
           >
-            {/* Header */}
             <div className="bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-5 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
                   <FaBuilding className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-white">
-                    Branch Customer Details
-                  </h2>
-                  <p className="text-sm text-orange-100">BC ID: #{bc.id}</p>
+                  <h2 className="text-xl font-bold text-white">Branch Customer Details</h2>
+                  <p className="text-sm text-orange-100">BCID: {bc.code || `BC${bc.id}`}</p>
                 </div>
               </div>
 
-              <button
-                onClick={onClose}
-                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-              >
+              <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
                 <HiXMark className="w-6 h-6 text-white" />
               </button>
             </div>
 
-            {/* Body - Scrollable */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* BC Name */}
               <section>
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                  BC Name
-                </h3>
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">BC Name</h3>
                 <div className="bg-gradient-to-br from-orange-50 to-white rounded-xl p-4 border-2 border-orange-100">
                   <p className="text-2xl font-bold text-gray-900">{bc.name}</p>
                 </div>
               </section>
 
-              {/* Branch Info */}
               {(bc.branch_name || bc.branch_city) && (
                 <section>
                   <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
@@ -111,21 +197,16 @@ export function BCDetailModal({
                     Branch Information
                   </h3>
                   <div className="bg-gradient-to-br from-green-50 to-white rounded-xl p-4 border-2 border-green-100">
-                    <p className="text-lg font-bold text-green-900">
-                      {bc.branch_name}
-                    </p>
+                    <p className="text-lg font-bold text-green-900">{bc.branch_name}</p>
                     <div className="flex items-center gap-2 mt-2">
                       <FaMapMarkerAlt className="w-3.5 h-3.5 text-green-600" />
                       <p className="text-sm text-green-700">{bc.branch_city}</p>
                     </div>
-                    <p className="text-sm text-green-600 mt-1">
-                      Branch ID: #{bc.branch_id}
-                    </p>
+                    <p className="text-sm text-green-600 mt-1">Branch ID: #{bc.branch_id}</p>
                   </div>
                 </section>
               )}
 
-              {/* Owner Information */}
               {(bc.owner_name || bc.owner_phone || bc.owner_email) && (
                 <section>
                   <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
@@ -173,7 +254,6 @@ export function BCDetailModal({
                 </section>
               )}
 
-              {/* Full Hierarchy: GP → GC → BC */}
               <section>
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
                   <FaStream className="w-4 h-4" />
@@ -181,7 +261,6 @@ export function BCDetailModal({
                 </h3>
 
                 <div className="space-y-3">
-                  {/* GP (Root) */}
                   {parentGP ? (
                     <button
                       onClick={() => onViewGP && onViewGP(parentGP)}
@@ -193,13 +272,9 @@ export function BCDetailModal({
                             <FaBuilding className="w-5 h-5 text-white" />
                           </div>
                           <div className="flex-1">
-                            <p className="text-xs text-gray-500 font-medium">
-                              Level 1: Global Party (GP)
-                            </p>
-                            <p className="text-lg font-bold text-gray-900 group-hover:text-purple-600">
-                              {parentGP.name}
-                            </p>
-                            <p className="text-sm text-purple-600 mt-0.5">GP ID: #{parentGP.id}</p>
+                            <p className="text-xs text-gray-500 font-medium">Level 1: Group Parent (GP)</p>
+                            <p className="text-lg font-bold text-gray-900 group-hover:text-purple-600">{parentGP.name}</p>
+                            <p className="text-sm text-purple-600 mt-0.5">GPID: {parentGP.code || `GP${parentGP.id}`}</p>
                           </div>
                         </div>
                         <FaChevronRight className="w-5 h-5 text-gray-400 group-hover:text-purple-600" />
@@ -211,12 +286,10 @@ export function BCDetailModal({
                     </div>
                   )}
 
-                  {/* Arrow Down */}
                   <div className="flex justify-center">
                     <div className="w-0.5 h-4 bg-gradient-to-b from-purple-300 to-blue-300"></div>
                   </div>
 
-                  {/* GC (Middle) */}
                   {parentGC ? (
                     <button
                       onClick={() => onViewGC && onViewGC(parentGC)}
@@ -228,13 +301,9 @@ export function BCDetailModal({
                             <FaBuilding className="w-5 h-5 text-white" />
                           </div>
                           <div className="flex-1">
-                            <p className="text-xs text-gray-500 font-medium">
-                              Level 2: Global Customer (GC)
-                            </p>
-                            <p className="text-lg font-bold text-gray-900 group-hover:text-blue-600">
-                              {parentGC.name}
-                            </p>
-                            <p className="text-sm text-blue-600 mt-0.5">GC ID: #{parentGC.id}</p>
+                            <p className="text-xs text-gray-500 font-medium">Level 2: Group Customer (GC)</p>
+                            <p className="text-lg font-bold text-gray-900 group-hover:text-blue-600">{parentGC.name}</p>
+                            <p className="text-sm text-blue-600 mt-0.5">GCID: {parentGC.code || `GC${parentGC.id}`}</p>
                           </div>
                         </div>
                         <FaChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600" />
@@ -246,41 +315,32 @@ export function BCDetailModal({
                     </div>
                   )}
 
-                  {/* Arrow Down */}
                   <div className="flex justify-center">
                     <div className="w-0.5 h-4 bg-gradient-to-b from-blue-300 to-orange-300"></div>
                   </div>
 
-                  {/* BC (Current - This entity) */}
                   <div className="w-full bg-gradient-to-br from-orange-50 to-white rounded-xl p-4 border-2 border-orange-300">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center">
                         <FaBuilding className="w-5 h-5 text-white" />
                       </div>
                       <div className="flex-1">
-                        <p className="text-xs text-gray-500 font-medium">
-                          Level 3: Branch Customer (BC) - Current
-                        </p>
+                        <p className="text-xs text-gray-500 font-medium">Level 3: Branch Customer (BC) - Current</p>
                         <p className="text-lg font-bold text-orange-900">{bc.name}</p>
                         <div className="flex items-center gap-2 mt-1">
-                          <p className="text-sm text-orange-600">BC ID: #{bc.id}</p>
+                          <p className="text-sm text-orange-600">BCID: {bc.code || `BC${bc.id}`}</p>
                           <span className="text-xs text-gray-400">•</span>
-                          <p className="text-sm text-orange-600">{bc.branch_city}</p>
+                          <p className="text-sm text-orange-600">{bc.branch_city || "-"}</p>
                         </div>
                       </div>
-                      <div className="px-3 py-1 bg-orange-500 text-white text-xs font-bold rounded-full">
-                        YOU ARE HERE
-                      </div>
+                      <div className="px-3 py-1 bg-orange-500 text-white text-xs font-bold rounded-full">YOU ARE HERE</div>
                     </div>
                   </div>
                 </div>
               </section>
 
-              {/* Status */}
               <section>
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                  Status
-                </h3>
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Status</h3>
                 <div>
                   {bc.disabled === 1 ? (
                     <span className="inline-flex items-center gap-2 px-4 py-2 bg-red-100 text-red-700 text-sm font-semibold rounded-lg border-2 border-red-200">
@@ -296,7 +356,6 @@ export function BCDetailModal({
                 </div>
               </section>
 
-              {/* Activity Log */}
               {(bc.created_at || bc.updated_at) && (
                 <section>
                   <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
@@ -305,7 +364,6 @@ export function BCDetailModal({
                   </h3>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Created Info */}
                     {bc.created_at && (
                       <div className="bg-gradient-to-br from-green-50 to-white rounded-2xl p-5 border-2 border-green-100">
                         <div className="flex items-center gap-3 mb-4">
@@ -313,12 +371,8 @@ export function BCDetailModal({
                             <FaBuilding className="w-5 h-5 text-white" />
                           </div>
                           <div>
-                            <p className="text-xs text-gray-500 font-medium">
-                              Created By
-                            </p>
-                            <p className="text-sm font-bold text-gray-900">
-                              {bc.created_by || "System"}
-                            </p>
+                            <p className="text-xs text-gray-500 font-medium">Created By</p>
+                            <p className="text-sm font-bold text-gray-900">{bc.created_by || "System"}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 text-gray-600">
@@ -333,7 +387,6 @@ export function BCDetailModal({
                       </div>
                     )}
 
-                    {/* Updated Info */}
                     {bc.updated_at && (
                       <div className="bg-gradient-to-br from-blue-50 to-white rounded-2xl p-5 border-2 border-blue-100">
                         <div className="flex items-center gap-3 mb-4">
@@ -341,12 +394,8 @@ export function BCDetailModal({
                             <FaEdit className="w-5 h-5 text-white" />
                           </div>
                           <div>
-                            <p className="text-xs text-gray-500 font-medium">
-                              Last Updated
-                            </p>
-                            <p className="text-sm font-bold text-gray-900">
-                              {bc.updated_by || "System"}
-                            </p>
+                            <p className="text-xs text-gray-500 font-medium">Last Updated</p>
+                            <p className="text-sm font-bold text-gray-900">{bc.updated_by || "System"}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 text-gray-600">
@@ -365,12 +414,8 @@ export function BCDetailModal({
               )}
             </div>
 
-            {/* Footer */}
             <div className="bg-gray-50 px-6 py-4 flex justify-end border-t border-gray-200">
-              <button
-                onClick={onClose}
-                className="px-5 py-2.5 bg-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-300 transition-all"
-              >
+              <button onClick={onClose} className="px-5 py-2.5 bg-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-300 transition-all">
                 Close
               </button>
             </div>
@@ -380,3 +425,4 @@ export function BCDetailModal({
     </AnimatePresence>
   );
 }
+

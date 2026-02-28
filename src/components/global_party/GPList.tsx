@@ -1,12 +1,11 @@
-"use client";
+﻿"use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { GPCard } from "./GPCard";
 import { GPDetailModal } from "./GPDetailModal";
 import { GCDetailModal } from "@/components/global_customer/GCDetailModal";
 import { BCDetailModal } from "@/components/branch_customer/BCDetailModal";
 import type { GlobalParty, GlobalCustomer, BranchCustomer } from "@/types/customer";
-import { mockGlobalParties } from "@/data/mockGlobalParties";
 import {
   FaSearch,
   FaBuilding,
@@ -18,33 +17,114 @@ import {
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import Pagination, { usePagination } from "@/components/ui/Pagination";
+import { useAuth } from "@/contexts/AuthContext";
+import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
 
 type SortField = "name" | "created_at" | "updated_at";
 type SortDirection = "asc" | "desc";
 
+interface GroupParentApiResponse {
+  id: number;
+  name?: string | null;
+  gp_name?: string | null;
+  disabled?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  "created_by.full_name"?: string | null;
+  "updated_by.full_name"?: string | null;
+  created_by?: number | { id?: number; full_name?: string } | null;
+  updated_by?: number | { id?: number; full_name?: string } | null;
+}
+
+function resolveUserName(
+  directName: string | null | undefined,
+  value: number | { id?: number; full_name?: string } | null | undefined
+): string | undefined {
+  if (directName) return directName;
+  if (value && typeof value === "object" && value.full_name) return value.full_name;
+  return undefined;
+}
+
+function mapGpRow(row: GroupParentApiResponse): GlobalParty {
+  return {
+    id: Number(row.id),
+    code: row.name || undefined,
+    name: row.gp_name || row.name || "-",
+    created_at: row.created_at || new Date(0).toISOString(),
+    updated_at: row.updated_at || row.created_at || new Date(0).toISOString(),
+    created_by: resolveUserName(row["created_by.full_name"], row.created_by),
+    updated_by: resolveUserName(row["updated_by.full_name"], row.updated_by),
+    disabled: Number(row.disabled || 0),
+  };
+}
+
 export default function GPList() {
-  const [gps] = useState<GlobalParty[]>(mockGlobalParties);
+  const { token, isAuthenticated } = useAuth();
+
+  const [gps, setGps] = useState<GlobalParty[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [selectedGP, setSelectedGP] = useState<GlobalParty | null>(null);
   const [selectedGC, setSelectedGC] = useState<GlobalCustomer | null>(null);
   const [selectedBC, setSelectedBC] = useState<BranchCustomer | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Sort state
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
 
-  // Filter and sort
-  const filteredAndSortedGPs = useMemo(() => {
-    let filtered = [...gps];
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
 
-    // Search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter((gp) => gp.name.toLowerCase().includes(query));
+    try {
+      if (!isAuthenticated || !token) {
+        setGps([]);
+        setLoading(false);
+        return;
+      }
+
+      const spec = {
+        fields: ["*", "created_by.full_name", "updated_by.full_name"],
+        limit: 10000000,
+      };
+
+      const res = await apiFetch(
+        getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, spec),
+        { method: "GET", cache: "no-store" },
+        token
+      );
+
+      if (!res.ok) {
+        throw new Error(`Failed to fetch group parent (${res.status})`);
+      }
+
+      const json = await res.json();
+      const rows: GroupParentApiResponse[] = Array.isArray(json?.data) ? json.data : [];
+      setGps(rows.map(mapGpRow));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setGps([]);
+    } finally {
+      setLoading(false);
     }
+  }, [isAuthenticated, token]);
 
-    // Sort
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const filteredAndSortedGPs = useMemo(() => {
+    const filtered = gps.filter((gp) => {
+      if (!searchQuery.trim()) return true;
+      const query = searchQuery.toLowerCase();
+      return (
+        gp.name.toLowerCase().includes(query) ||
+        (gp.code || "").toLowerCase().includes(query)
+      );
+    });
+
     filtered.sort((a, b) => {
       let aValue: string | number;
       let bValue: string | number;
@@ -59,15 +139,13 @@ export default function GPList() {
 
       if (sortDirection === "asc") {
         return aValue > bValue ? 1 : -1;
-      } else {
-        return aValue < bValue ? 1 : -1;
       }
+      return aValue < bValue ? 1 : -1;
     });
 
     return filtered;
   }, [gps, searchQuery, sortField, sortDirection]);
 
-  // Calculate stats
   const stats = useMemo(() => {
     return {
       total: gps.length,
@@ -76,7 +154,6 @@ export default function GPList() {
     };
   }, [gps]);
 
-  // Pagination
   const {
     currentPage,
     setCurrentPage,
@@ -95,21 +172,35 @@ export default function GPList() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="w-16 h-16 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="py-8 text-center">
+        <div className="inline-flex items-center gap-2 px-4 py-3 bg-red-50 text-red-600 rounded-xl border border-red-100">
+          <span className="text-sm font-medium">Error: {error}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
-      {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">
-            Global Party (GP)
+            Group Parent (GP)
           </h1>
-          <p className="text-sm md:text-base text-gray-600">
-            Kelola data Global Party - entitas bisnis unik
-          </p>
+          <p className="text-sm md:text-base text-gray-600">Kelola data Group Parent</p>
         </div>
       </div>
 
-      {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border-2 border-blue-200">
           <div className="flex items-center gap-2 mb-1">
@@ -124,9 +215,7 @@ export default function GPList() {
             <FaCheckCircle className="w-4 h-4 text-green-700" />
             <div className="text-sm text-green-700 font-medium">Active</div>
           </div>
-          <div className="text-3xl font-bold text-green-900">
-            {stats.active}
-          </div>
+          <div className="text-3xl font-bold text-green-900">{stats.active}</div>
         </div>
 
         <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-5 border-2 border-red-200">
@@ -134,39 +223,29 @@ export default function GPList() {
             <FaBan className="w-4 h-4 text-red-700" />
             <div className="text-sm text-red-700 font-medium">Disabled</div>
           </div>
-          <div className="text-3xl font-bold text-red-900">
-            {stats.disabled}
-          </div>
+          <div className="text-3xl font-bold text-red-900">{stats.disabled}</div>
         </div>
       </div>
 
-      {/* Search & Sort Bar */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 mb-6">
         <div className="flex flex-col md:flex-row gap-4">
-          {/* Search */}
           <div className="flex-1 relative">
             <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 z-10" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari GP name..."
+              placeholder="Cari GP name / code..."
               className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-sm"
             />
           </div>
 
-          {/* Sort Direction Button */}
           <button
             onClick={() => {
               const newDirection = sortDirection === "asc" ? "desc" : "asc";
               setSortDirection(newDirection);
             }}
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
-            title={
-              sortDirection === "asc"
-                ? "Ascending (A-Z, Oldest)"
-                : "Descending (Z-A, Newest)"
-            }
           >
             {sortDirection === "asc" ? (
               <FaSortAmountUp className="w-3.5 h-3.5" />
@@ -175,7 +254,6 @@ export default function GPList() {
             )}
           </button>
 
-          {/* Sort Field Dropdown */}
           <div className="relative">
             <button
               onClick={() => setSortFieldDropdownOpen(!sortFieldDropdownOpen)}
@@ -208,14 +286,8 @@ export default function GPList() {
                   >
                     {[
                       { value: "name" as SortField, label: "Name" },
-                      {
-                        value: "created_at" as SortField,
-                        label: "Created Date",
-                      },
-                      {
-                        value: "updated_at" as SortField,
-                        label: "Updated Date",
-                      },
+                      { value: "created_at" as SortField, label: "Created Date" },
+                      { value: "updated_at" as SortField, label: "Updated Date" },
                     ].map((option) => (
                       <button
                         key={option.value}
@@ -240,37 +312,26 @@ export default function GPList() {
         </div>
       </div>
 
-      {/* Empty State */}
       {filteredAndSortedGPs.length === 0 && (
         <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
           <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <FaSearch className="w-8 h-8 text-gray-400" />
           </div>
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">
-            Tidak ada GP ditemukan
-          </h3>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">Tidak ada GP ditemukan</h3>
           <p className="text-sm text-gray-500">
-            {searchQuery
-              ? "Coba ubah kata kunci pencarian"
-              : "Belum ada data Global Party"}
+            {searchQuery ? "Coba ubah kata kunci pencarian" : "Belum ada data Group Parent"}
           </p>
         </div>
       )}
 
-      {/* GP Cards Grid */}
       {filteredAndSortedGPs.length > 0 && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {paginatedGPs.map((gp) => (
-              <GPCard
-                key={gp.id}
-                gp={gp}
-                onViewDetails={() => handleViewDetails(gp)}
-              />
+              <GPCard key={gp.id} gp={gp} onViewDetails={() => handleViewDetails(gp)} />
             ))}
           </div>
 
-          {/* Pagination */}
           {totalPages > 1 && (
             <Pagination
               currentPage={currentPage}
@@ -283,13 +344,13 @@ export default function GPList() {
         </>
       )}
 
-      {/* Detail Modals */}
       <GPDetailModal
         isOpen={selectedGP !== null}
         onClose={() => setSelectedGP(null)}
         gp={selectedGP}
         onGPUpdate={(updated) => {
           setSelectedGP(updated);
+          setGps((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
         }}
         onViewGC={(gc) => {
           setSelectedGP(null);
@@ -331,3 +392,4 @@ export default function GPList() {
     </div>
   );
 }
+

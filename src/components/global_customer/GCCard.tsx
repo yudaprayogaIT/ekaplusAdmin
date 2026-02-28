@@ -36,7 +36,7 @@ export function GCCard({ gc, onViewDetails }: GCCardProps) {
               <h3 className="text-lg font-bold text-white line-clamp-1">
                 {gc.name}
               </h3>
-              <p className="text-sm text-blue-100">GC ID: #{gc.id}</p>
+              <p className="text-sm text-blue-100">GCID: {gc.code || `GC${gc.id}`}</p>
             </div>
           </div>
 

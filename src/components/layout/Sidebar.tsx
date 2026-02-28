@@ -23,7 +23,6 @@ import {
   FaLayerGroup,
   FaStar,
   FaShieldAlt,
-  FaProjectDiagram,
   FaSitemap,
   FaCog,
   FaLock,
@@ -223,14 +222,21 @@ const CUSTOMER_SUBMENU: MenuItem[] = [
     requireAuth: true,
   },
   {
-    label: "Global Party",
+    label: "National Brand",
+    href: "/customers/national_brand",
+    icon: <FaLayerGroup className="w-4 h-4" />,
+    category: "Customer",
+    requireAuth: true,
+  },
+  {
+    label: "Group Parent",
     href: "/customers/global_party",
     icon: <FaUsers className="w-4 h-4" />,
     category: "Customer",
     requireAuth: true,
   },
   {
-    label: "Global Customer",
+    label: "Group Customer",
     href: "/customers/global_customer",
     icon: <FaUserGroup className="w-4 h-4" />,
     category: "Customer",
@@ -362,6 +368,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
     ) {
       setOpenSubmenu("catalog");
     } else if (
+      pathname.startsWith("/customers") ||
       pathname.startsWith("/members") ||
       pathname.startsWith("/memberGroups") ||
       pathname.startsWith("/member-tiers")

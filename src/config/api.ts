@@ -37,6 +37,11 @@ export const API_CONFIG = {
 
     CUSTOMER_REGISTER: "/api/resource/customer_register",
     CUSTOMER_REGISTER_ADDRESS: "/api/resource/customer_register_address",
+    NATIONAL_BRAND: "/api/resource/national_brand",
+    GROUP_PARENT: "/api/resource/group_parent",
+    GROUP_CUSTOMER: "/api/resource/group_customer",
+    BRANCH_CUSTOMER_V2: "/api/resource/branch_customer",
+    MEMBER_OF: "/api/resource/member_of",
 
     // Customer Management - GP/GC/BC
     GLOBAL_PARTY: "/api/resource/ekatalog_global_party",

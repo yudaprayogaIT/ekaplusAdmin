@@ -1,5 +1,11 @@
 export interface CustomerRegistration {
   id: string;
+  source?: string;
+  ekaplus_user?: {
+    id?: number | string;
+    full_name?: string;
+    email?: string;
+  };
 
   // 1. Identitas Pemilik/Pimpinan (dari user account)
   user: {
@@ -13,6 +19,8 @@ export interface CustomerRegistration {
 
   // 2. Informasi Perusahaan
   company: {
+    company_type?: string;
+    company_title?: string;
     business_type: string;
     name: string;
     nik: string;
@@ -41,6 +49,35 @@ export interface CustomerRegistration {
     company_email?: string;
     fax?: string;
     factory_address?: string;
+  };
+
+  // 4a. Identitas Penanggung Jawab Cabang
+  branch_owner?: {
+    full_name: string;
+    phone: string;
+    email: string;
+    place_of_birth?: string;
+    date_of_birth?: string;
+  };
+
+  // 4b. Relasi master data hasil approval/sinkronisasi
+  master_links?: {
+    nb_id?: number;
+    nb_name?: string;
+    gp_id?: number;
+    gp_name?: string;
+    gc_id?: number;
+    gc_name?: string;
+    bc_id?: number;
+    bc_name?: string;
+  };
+
+  // 4c. Informasi sinkronisasi
+  sync_info?: {
+    sync_saga_id?: string;
+    erp_customer_id?: string;
+    crm_customer_id?: string;
+    sync_last_error?: string;
   };
 
   same_as_company_address?: boolean;
@@ -96,6 +133,31 @@ export interface CustomerRegistrationShippingAddress {
   pic_phone?: string;
   is_default?: number | boolean;
   parent_id?: number;
+}
+
+export interface ApprovalDraft {
+  nb_mode: "skip" | "select" | "create";
+  selected_nb_id?: number;
+  new_nb_name?: string;
+  gp_mode: "select" | "create";
+  selected_gp_id?: number;
+  new_gp_name?: string;
+}
+
+export interface ApprovalResult {
+  nbid?: number;
+  gpid: number;
+  gcid: number;
+  bcid: number;
+}
+
+export interface ApprovalOperationLog {
+  stage: string;
+  status: "started" | "success" | "failed";
+  message: string;
+  payload?: unknown;
+  response?: unknown;
+  http_status?: number;
 }
 
 // For filters

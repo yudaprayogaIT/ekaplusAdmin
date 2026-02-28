@@ -76,6 +76,14 @@ export function RegistrationCard({
             {getStatusLabel(registration.status)}
           </div>
         </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200 uppercase">
+            Source: {registration.source || "-"}
+          </span>
+          <span className="text-xs text-gray-500 font-medium truncate">
+            {registration.company.business_type}
+          </span>
+        </div>
       </div>
 
       {/* Content */}

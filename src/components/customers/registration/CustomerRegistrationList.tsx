@@ -39,12 +39,22 @@ const SNAP_KEY = "ekatalog_customer_registrations_snapshot";
 interface CustomerRegistrationApiResponse {
   id: number;
   name: string;
+  source?: string | null;
+  ekaplus_user?:
+    | number
+    | { id: number; full_name?: string; email?: string }
+    | null;
   owner?: number | null;
   owner_full_name?: string | null;
   owner_phone?: string | null;
   owner_email?: string | null;
   owner_place_of_birth?: string | null;
   owner_date_of_birth?: string | null;
+  branch_owner?: string | null;
+  branch_owner_phone?: string | null;
+  branch_owner_email?: string | null;
+  branch_owner_place_of_birth?: string | null;
+  branch_owner_date_of_birth?: string | null;
   branch_id_id?: number | null;
   branch_id?: {
     branch_name: string;
@@ -60,15 +70,140 @@ interface CustomerRegistrationApiResponse {
   company_postal_code?: string | null;
   product_need?: string | null;
   same_as_company_address?: number | boolean | null;
+  nbid?: number | { id?: number; name?: string; nb_name?: string } | null;
+  nbid_id?: number | null;
+  nbid_name?: string | null;
+  nbid_link?: { id?: number; name?: string; nb_name?: string } | null;
   status: string;
   docstatus: number;
   created_at: string;
+  "created_by.full_name"?: string | null;
   created_by?: number | { id: number; full_name: string };
   updated_at: string;
+  "updated_by.full_name"?: string | null;
   updated_by?: number | { id: number; full_name: string };
-  gpid?: number | null;
-  gcid?: number | null;
-  bcid?: number | null;
+  gpid?: number | { id?: number; name?: string; gp_name?: string } | null;
+  gpid_id?: number | null;
+  gpid_name?: string | null;
+  gpid_link?: { id?: number; name?: string; gp_name?: string } | null;
+  gcid?: number | { id?: number; name?: string; gc_name?: string } | null;
+  gcid_id?: number | null;
+  gcid_name?: string | null;
+  gcid_link?: { id?: number; name?: string; gc_name?: string } | null;
+  bcid?: number | { id?: number; name?: string; bc_name?: string } | null;
+  bcid_id?: number | null;
+  bcid_name?: string | null;
+  bcid_link?: { id?: number; name?: string; bc_name?: string } | null;
+  sync_saga_id?: string | null;
+  erp_customer_id?: string | null;
+  crm_customer_id?: string | null;
+  sync_last_error?: string | null;
+}
+
+async function fetchNameMap(
+  endpoint: string,
+  ids: number[],
+  nameField: string,
+  tokenValue: string
+): Promise<Map<number, string>> {
+  const result = new Map<number, string>();
+  if (ids.length === 0) return result;
+
+  try {
+    const spec = {
+      fields: ["id", "name", nameField],
+      filters: [["id", "in", ids]],
+      limit: ids.length,
+    };
+    const res = await apiFetch(
+      getQueryUrl(endpoint, spec),
+      { method: "GET", cache: "no-store" },
+      tokenValue
+    );
+    if (!res.ok) return result;
+
+    const json = await res.json();
+    const rows = Array.isArray(json?.data) ? json.data : [];
+    for (const row of rows) {
+      const id =
+        typeof row?.id === "number"
+          ? row.id
+          : Number.parseInt(String(row?.id ?? ""), 10);
+      if (!Number.isFinite(id)) continue;
+      const label =
+        (typeof row?.[nameField] === "string" && row[nameField]) ||
+        (typeof row?.name === "string" && row.name) ||
+        undefined;
+      if (label) result.set(id, label);
+    }
+  } catch {
+    // silent fallback to ID-only display
+  }
+
+  return result;
+}
+
+async function enrichMasterLinkNames(
+  data: CustomerRegistration[],
+  tokenValue: string
+): Promise<CustomerRegistration[]> {
+  const nbIds = Array.from(
+    new Set(
+      data
+        .map((item) => item.master_links?.nb_id)
+        .filter((v): v is number => typeof v === "number")
+    )
+  );
+  const gpIds = Array.from(
+    new Set(
+      data
+        .map((item) => item.master_links?.gp_id)
+        .filter((v): v is number => typeof v === "number")
+    )
+  );
+  const gcIds = Array.from(
+    new Set(
+      data
+        .map((item) => item.master_links?.gc_id)
+        .filter((v): v is number => typeof v === "number")
+    )
+  );
+  const bcIds = Array.from(
+    new Set(
+      data
+        .map((item) => item.master_links?.bc_id)
+        .filter((v): v is number => typeof v === "number")
+    )
+  );
+
+  const [nbMap, gpMap, gcMap, bcMap] = await Promise.all([
+    fetchNameMap("/api/resource/national_brand", nbIds, "nb_name", tokenValue),
+    fetchNameMap("/api/resource/group_parent", gpIds, "gp_name", tokenValue),
+    fetchNameMap("/api/resource/group_customer", gcIds, "gc_name", tokenValue),
+    fetchNameMap("/api/resource/branch_customer", bcIds, "bc_name", tokenValue),
+  ]);
+
+  return data.map((item) => {
+    const links = item.master_links;
+    if (!links) return item;
+    const resolvedGcName =
+      links.gc_name || (links.gc_id ? gcMap.get(links.gc_id) : undefined);
+    const branchCity = item.company?.branch_city;
+    const computedBcName =
+      links.bc_name ||
+      (links.bc_id ? bcMap.get(links.bc_id) : undefined) ||
+      (resolvedGcName && branchCity ? `${resolvedGcName} - ${branchCity}` : undefined);
+    return {
+      ...item,
+      master_links: {
+        ...links,
+        nb_name: links.nb_name || (links.nb_id ? nbMap.get(links.nb_id) : undefined),
+        gp_name: links.gp_name || (links.gp_id ? gpMap.get(links.gp_id) : undefined),
+        gc_name: resolvedGcName,
+        bc_name: computedBcName,
+      },
+    };
+  });
 }
 
 export function CustomerRegistrationList() {
@@ -107,6 +242,17 @@ export function CustomerRegistrationList() {
   ): CustomerRegistration {
     return {
       id: apiData.id.toString(),
+      source: apiData.source || undefined,
+      ekaplus_user:
+        apiData.ekaplus_user !== null && typeof apiData.ekaplus_user === "object"
+          ? {
+              id: apiData.ekaplus_user.id,
+              full_name: apiData.ekaplus_user.full_name,
+              email: apiData.ekaplus_user.email,
+            }
+          : apiData.ekaplus_user
+          ? { id: apiData.ekaplus_user }
+          : undefined,
 
       // Owner info - extract from nested objects
       user: {
@@ -122,9 +268,12 @@ export function CustomerRegistrationList() {
 
       // Company info - extract branch name from nested object
       company: {
+        company_type: apiData.company_type || undefined,
+        company_title: apiData.company_title || undefined,
         business_type:
-          [apiData.company_type, apiData.company_title].filter(Boolean).join(" - ") ||
-          "-",
+          [apiData.company_type, apiData.company_title]
+            .filter(Boolean)
+            .join(" - ") || "-",
         name: apiData.company_name || apiData.name,
         nik: "-",
         npwp: undefined,
@@ -155,6 +304,73 @@ export function CustomerRegistrationList() {
         fax: undefined,
         factory_address: undefined,
       },
+      branch_owner: {
+        full_name: apiData.branch_owner || "-",
+        phone: apiData.branch_owner_phone || "-",
+        email: apiData.branch_owner_email || "-",
+        place_of_birth: apiData.branch_owner_place_of_birth || undefined,
+        date_of_birth: apiData.branch_owner_date_of_birth || undefined,
+      },
+      master_links: {
+        nb_id:
+          apiData.nbid_link?.id ??
+          (typeof apiData.nbid === "object" ? apiData.nbid?.id : undefined) ??
+          apiData.nbid_id ??
+          (typeof apiData.nbid === "number" ? apiData.nbid : undefined) ??
+          undefined,
+        nb_name:
+          apiData.nbid_link?.nb_name ??
+          (typeof apiData.nbid === "object" ? apiData.nbid?.nb_name : undefined) ??
+          apiData.nbid_name ??
+          apiData.nbid_link?.name ??
+          (typeof apiData.nbid === "object" ? apiData.nbid?.name : undefined) ??
+          undefined,
+        gp_id:
+          apiData.gpid_link?.id ??
+          (typeof apiData.gpid === "object" ? apiData.gpid?.id : undefined) ??
+          apiData.gpid_id ??
+          (typeof apiData.gpid === "number" ? apiData.gpid : undefined) ??
+          undefined,
+        gp_name:
+          apiData.gpid_link?.gp_name ??
+          (typeof apiData.gpid === "object" ? apiData.gpid?.gp_name : undefined) ??
+          apiData.gpid_name ??
+          apiData.gpid_link?.name ??
+          (typeof apiData.gpid === "object" ? apiData.gpid?.name : undefined) ??
+          undefined,
+        gc_id:
+          apiData.gcid_link?.id ??
+          (typeof apiData.gcid === "object" ? apiData.gcid?.id : undefined) ??
+          apiData.gcid_id ??
+          (typeof apiData.gcid === "number" ? apiData.gcid : undefined) ??
+          undefined,
+        gc_name:
+          apiData.gcid_link?.gc_name ??
+          (typeof apiData.gcid === "object" ? apiData.gcid?.gc_name : undefined) ??
+          apiData.gcid_name ??
+          apiData.gcid_link?.name ??
+          (typeof apiData.gcid === "object" ? apiData.gcid?.name : undefined) ??
+          undefined,
+        bc_id:
+          apiData.bcid_link?.id ??
+          (typeof apiData.bcid === "object" ? apiData.bcid?.id : undefined) ??
+          apiData.bcid_id ??
+          (typeof apiData.bcid === "number" ? apiData.bcid : undefined) ??
+          undefined,
+        bc_name:
+          apiData.bcid_link?.bc_name ??
+          (typeof apiData.bcid === "object" ? apiData.bcid?.bc_name : undefined) ??
+          apiData.bcid_name ??
+          apiData.bcid_link?.name ??
+          (typeof apiData.bcid === "object" ? apiData.bcid?.name : undefined) ??
+          undefined,
+      },
+      sync_info: {
+        sync_saga_id: apiData.sync_saga_id ?? undefined,
+        erp_customer_id: apiData.erp_customer_id ?? undefined,
+        crm_customer_id: apiData.crm_customer_id ?? undefined,
+        sync_last_error: apiData.sync_last_error ?? undefined,
+      },
       same_as_company_address: Boolean(apiData.same_as_company_address),
       shipping_addresses: [],
 
@@ -175,6 +391,8 @@ export function CustomerRegistrationList() {
       created_by:
         typeof apiData.created_by === "object" && apiData.created_by?.full_name
           ? apiData.created_by.full_name
+          : apiData["created_by.full_name"]
+          ? apiData["created_by.full_name"]
           : typeof apiData.created_by === "number"
           ? `User ${apiData.created_by}`
           : undefined,
@@ -182,12 +400,50 @@ export function CustomerRegistrationList() {
       updated_by:
         typeof apiData.updated_by === "object" && apiData.updated_by?.full_name
           ? apiData.updated_by.full_name
+          : apiData["updated_by.full_name"]
+          ? apiData["updated_by.full_name"]
           : typeof apiData.updated_by === "number"
           ? `User ${apiData.updated_by}`
           : undefined,
-      gp_id: apiData.gpid ?? undefined,
-      gc_id: apiData.gcid ?? undefined,
-      bc_id: apiData.bcid ?? undefined,
+      gp_id:
+        apiData.gpid_link?.id ??
+        (typeof apiData.gpid === "object" ? apiData.gpid?.id : undefined) ??
+        apiData.gpid_id ??
+        (typeof apiData.gpid === "number" ? apiData.gpid : undefined) ??
+        undefined,
+      gp_name:
+        apiData.gpid_link?.gp_name ??
+        (typeof apiData.gpid === "object" ? apiData.gpid?.gp_name : undefined) ??
+        apiData.gpid_name ??
+        apiData.gpid_link?.name ??
+        (typeof apiData.gpid === "object" ? apiData.gpid?.name : undefined) ??
+        undefined,
+      gc_id:
+        apiData.gcid_link?.id ??
+        (typeof apiData.gcid === "object" ? apiData.gcid?.id : undefined) ??
+        apiData.gcid_id ??
+        (typeof apiData.gcid === "number" ? apiData.gcid : undefined) ??
+        undefined,
+      gc_name:
+        apiData.gcid_link?.gc_name ??
+        (typeof apiData.gcid === "object" ? apiData.gcid?.gc_name : undefined) ??
+        apiData.gcid_name ??
+        apiData.gcid_link?.name ??
+        (typeof apiData.gcid === "object" ? apiData.gcid?.name : undefined) ??
+        undefined,
+      bc_id:
+        apiData.bcid_link?.id ??
+        (typeof apiData.bcid === "object" ? apiData.bcid?.id : undefined) ??
+        apiData.bcid_id ??
+        (typeof apiData.bcid === "number" ? apiData.bcid : undefined) ??
+        undefined,
+      bc_name:
+        apiData.bcid_link?.bc_name ??
+        (typeof apiData.bcid === "object" ? apiData.bcid?.bc_name : undefined) ??
+        apiData.bcid_name ??
+        apiData.bcid_link?.name ??
+        (typeof apiData.bcid === "object" ? apiData.bcid?.name : undefined) ??
+        undefined,
     };
   }
 
@@ -218,6 +474,8 @@ export function CustomerRegistrationList() {
             "*",
             "branch_id.branch_name",
             "branch_id.city",
+            "created_by.full_name",
+            "updated_by.full_name",
           ],
           limit: 10000000,
         };
@@ -247,10 +505,11 @@ export function CustomerRegistrationList() {
           const apiData: CustomerRegistrationApiResponse[] =
             response.data || [];
           const mapped = apiData.map((item) => mapToFrontendType(item));
-          console.log("Loaded registrations:", mapped);
-          setRegistrations(mapped);
+          const enriched = await enrichMasterLinkNames(mapped, token);
+          console.log("Loaded registrations:", enriched);
+          setRegistrations(enriched);
           try {
-            localStorage.setItem(SNAP_KEY, JSON.stringify(mapped));
+            localStorage.setItem(SNAP_KEY, JSON.stringify(enriched));
           } catch {}
         } else {
           setError(`Failed to fetch registrations (${res.status})`);
@@ -261,7 +520,7 @@ export function CustomerRegistrationList() {
         setLoading(false);
       }
     },
-    [isAuthenticated, token, sortField, sortDirection]
+    [isAuthenticated, token]
   );
 
   // Load data on mount and when filters change
@@ -324,7 +583,9 @@ export function CustomerRegistrationList() {
           reg.company.name.toLowerCase().includes(query) ||
           reg.user.full_name.toLowerCase().includes(query) ||
           reg.company.business_type.toLowerCase().includes(query) ||
-          reg.company.branch_name.toLowerCase().includes(query)
+          reg.company.branch_name.toLowerCase().includes(query) ||
+          (reg.source || "").toLowerCase().includes(query) ||
+          (reg.branch_owner?.full_name || "").toLowerCase().includes(query)
       );
     }
 

@@ -30,7 +30,7 @@ export function GPCard({ gp, onViewDetails }: GPCardProps) {
                 {gp.name}
               </h3>
               <p className="text-sm text-purple-100">
-                GP ID: #{gp.id}
+                GPID: {gp.code || `GP${gp.id}`}
               </p>
             </div>
           </div>

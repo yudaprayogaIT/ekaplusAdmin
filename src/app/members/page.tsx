@@ -1,14 +1,17 @@
+import RequireAuth from "@/components/auth/RequireAuth";
 import { MemberList } from "@/components/members/MemberList";
 
 export const metadata = {
   title: "Members - Ekatalog Admin",
-  description: "Manage all members (GP/GC/BC) in one unified view",
+  description: "Manage member relations from member_of",
 };
 
 export default function MembersPage() {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <MemberList />
-    </div>
+    <RequireAuth permission="customer.view">
+      <div className="min-h-screen bg-gray-50">
+        <MemberList />
+      </div>
+    </RequireAuth>
   );
 }
