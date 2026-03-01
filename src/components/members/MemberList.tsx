@@ -107,12 +107,14 @@ async function fetchNameMap(
     if (!res.ok) return result;
 
     const json = await res.json();
-    const rows = Array.isArray(json?.data) ? json.data : [];
-    rows.forEach((row) => {
+    const rows: Array<Record<string, unknown>> = Array.isArray(json?.data)
+      ? json.data
+      : [];
+    rows.forEach((row: Record<string, unknown>) => {
       const id = toNumber(row?.id);
       if (!id) return;
       const label =
-        (typeof row?.[nameField] === "string" && row[nameField]) ||
+        (typeof row?.[nameField] === "string" && (row[nameField] as string)) ||
         (typeof row?.name === "string" && row.name) ||
         undefined;
       if (label) result.set(id, label);

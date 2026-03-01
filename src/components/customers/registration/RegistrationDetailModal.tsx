@@ -164,6 +164,10 @@ export function RegistrationDetailModal({
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
+  const normalizedStatus = (registration?.status || "").toLowerCase();
+  const canManageRegistration =
+    normalizedStatus === "pending" || normalizedStatus === "draft";
+
   const effectiveShippingAddresses = useMemo(() => {
     if (!registration) return [] as CustomerRegisterAddressApiResponse[];
     if (registration.same_as_company_address) {
@@ -838,13 +842,17 @@ export function RegistrationDetailModal({
                 Close
               </button>
 
-              {(registration.status === "pending" ||
-                registration.status === "draft") && (
+              {canManageRegistration && (
                 <div className="flex gap-3">
                   <motion.button
+                    type="button"
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => setIsEditModalOpen(true)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsEditModalOpen(true);
+                    }}
                     className="px-5 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-medium rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
                   >
                     <FaEdit className="w-4 h-4" />
@@ -852,6 +860,7 @@ export function RegistrationDetailModal({
                   </motion.button>
 
                   <motion.button
+                    type="button"
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => onReject?.(registration)}
@@ -862,6 +871,7 @@ export function RegistrationDetailModal({
                   </motion.button>
 
                   <motion.button
+                    type="button"
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => onApprove?.(registration)}

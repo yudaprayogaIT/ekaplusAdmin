@@ -4,7 +4,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -316,6 +316,7 @@ type SubmenuName = "master" | "catalog" | "customer" | "admin" | null;
 
 export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
   const pathname = usePathname() || "/";
+  const router = useRouter();
   const { hasPermission, hasAnyPermission, isAuthenticated, currentRole } =
     useAuth();
 
@@ -386,13 +387,32 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
   const isMenuActive = (href: string) =>
     pathname === href || pathname.startsWith(href + "/");
 
+  const handleMenuClick = (
+    e: React.MouseEvent<HTMLAnchorElement>,
+    active: boolean
+  ) => {
+    if (active) {
+      e.preventDefault();
+      router.refresh();
+      return;
+    }
+
+    if (isMobile) {
+      setCollapsed(true);
+    }
+  };
+
   const renderMenuItem = (m: MenuItem, isSubmenu = false) => {
     if (!canSeeMenu(m)) return null;
     const active = isMenuActive(m.href);
 
     return (
       <li key={m.href}>
-        <Link href={m.href} className="no-underline block">
+        <Link
+          href={m.href}
+          className="no-underline block"
+          onClick={(e) => handleMenuClick(e, active)}
+        >
           <motion.div
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}

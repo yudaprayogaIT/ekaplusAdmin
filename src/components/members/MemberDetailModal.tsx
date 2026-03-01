@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaUser, FaPhone, FaEnvelope, FaLink, FaBuilding, FaStore } from "react-icons/fa";
 import { HiXMark } from "react-icons/hi2";
@@ -68,6 +68,15 @@ export function MemberDetailModal({
   onClose,
   user,
 }: MemberDetailModalProps) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!user) return null;
 
   const refsByType = user.refs.reduce<Record<string, MemberOfRef[]>>((acc, ref) => {
@@ -79,7 +88,12 @@ export function MemberDetailModal({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) onClose();
+          }}
+        >
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
