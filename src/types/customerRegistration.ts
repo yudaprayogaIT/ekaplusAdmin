@@ -96,7 +96,7 @@ export interface CustomerRegistration {
   };
 
   // Status & Metadata
-  status: 'pending' | 'approved' | 'rejected' | 'draft';
+  status: "pending" | "approved" | "rejected" | "draft";
   submission_date: string;
   created_at: string;
   created_by?: string;
@@ -182,9 +182,9 @@ export interface RejectionReason {
 }
 
 export const REJECTION_REASONS: RejectionReason[] = [
-  { code: 'incomplete_data', label: 'Data tidak lengkap' },
-  { code: 'invalid_document', label: 'Dokumen tidak valid' },
-  { code: 'fake_customer', label: 'Customer siluman/iseng' },
-  { code: 'duplicate_gp', label: 'GP name sudah ada' },
-  { code: 'other', label: 'Lainnya' },
+  { code: "incomplete_data", label: "Data tidak lengkap" },
+  { code: "invalid_document", label: "Dokumen tidak valid" },
+  { code: "fake_customer", label: "Customer siluman/iseng" },
+  { code: "duplicate_customer", label: "Customer sudah terdaftar" },
+  { code: "other", label: "Lainnya" },
 ];

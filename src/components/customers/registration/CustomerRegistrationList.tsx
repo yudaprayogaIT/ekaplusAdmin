@@ -98,6 +98,9 @@ interface CustomerRegistrationApiResponse {
   erp_customer_id?: string | null;
   crm_customer_id?: string | null;
   sync_last_error?: string | null;
+  reject_reason?: string | null;
+  rejection_reason?: string | null;
+  rejection_notes?: string | null;
 }
 
 async function fetchNameMap(
@@ -444,6 +447,11 @@ export function CustomerRegistrationList() {
         apiData.bcid_link?.name ??
         (typeof apiData.bcid === "object" ? apiData.bcid?.name : undefined) ??
         undefined,
+      rejection_reason:
+        apiData.reject_reason ??
+        apiData.rejection_reason ??
+        undefined,
+      rejection_notes: apiData.rejection_notes ?? undefined,
     };
   }
 

@@ -164,6 +164,12 @@ export function BCDetailModal({
   }, [isOpen, onClose]);
 
   if (!bc) return null;
+  const normalizedGcName = (bc.gc_name || "").trim();
+  const normalizedBranchCity = (bc.branch_city || "").trim();
+  const bcDisplayName =
+    normalizedGcName && normalizedBranchCity
+      ? `${normalizedGcName} - ${normalizedBranchCity}`
+      : bc.name;
 
   return (
     <AnimatePresence>
@@ -200,7 +206,7 @@ export function BCDetailModal({
               <section>
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">BC Name</h3>
                 <div className="bg-gradient-to-br from-orange-50 to-white rounded-xl p-4 border-2 border-orange-100">
-                  <p className="text-2xl font-bold text-gray-900">{bc.name}</p>
+                  <p className="text-2xl font-bold text-gray-900">{bcDisplayName}</p>
                 </div>
               </section>
 
@@ -340,7 +346,7 @@ export function BCDetailModal({
                       </div>
                       <div className="flex-1">
                         <p className="text-xs text-gray-500 font-medium">Level 3: Branch Customer (BC) - Current</p>
-                        <p className="text-lg font-bold text-orange-900">{bc.name}</p>
+                        <p className="text-lg font-bold text-orange-900">{bcDisplayName}</p>
                         <div className="flex items-center gap-2 mt-1">
                           <p className="text-sm text-orange-600">BCID: {bc.code || `BC${bc.id}`}</p>
                           <span className="text-xs text-gray-400">•</span>

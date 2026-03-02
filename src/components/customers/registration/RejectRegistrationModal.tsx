@@ -6,7 +6,7 @@ import { FaTimesCircle, FaExclamationTriangle } from "react-icons/fa";
 import type { CustomerRegistration } from "@/types/customerRegistration";
 import { REJECTION_REASONS } from "@/types/customerRegistration";
 import { useAuth } from "@/contexts/AuthContext";
-import { getApiUrl, API_CONFIG, apiFetch } from "@/config/api";
+import { API_CONFIG, apiFetch, getResourceUrl } from "@/config/api";
 
 interface RejectRegistrationModalProps {
   isOpen: boolean;
@@ -52,20 +52,38 @@ export function RejectRegistrationModal({
     setError(null);
 
     try {
-      // TODO: Replace with actual API call when backend is ready
-      // For now, simulate API call with localStorage update
-      const url = getApiUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER_REJECT);
+      const selectedLabel =
+        REJECTION_REASONS.find((r) => r.code === selectedReason)?.label || selectedReason;
+      const notesText = notes.trim();
+      const rejectReason = notesText
+        ? `${selectedLabel} - ${notesText}`
+        : selectedLabel;
 
-      // Simulate API delay
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // For static implementation, we'll just trigger the success callback
-      // The actual status update will happen when backend API is integrated
-      console.log("[RejectRegistrationModal] Rejecting registration:", {
-        registration_id: registration.id,
-        reason_code: selectedReason,
-        notes: notes.trim() || undefined,
-      });
+      const url = getResourceUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER, registration.id);
+      const payload = {
+        status: "Rejected",
+        docstatus: 0,
+        reject_reason: rejectReason,
+        rejection_reason: selectedLabel,
+        rejection_notes: notesText || undefined,
+      };
+      const res = await apiFetch(
+        url,
+        {
+          method: "PUT",
+          cache: "no-store",
+          body: JSON.stringify(payload),
+        },
+        token
+      );
+      if (!res.ok) {
+        const json = await res.json().catch(() => null);
+        const message =
+          json && typeof json === "object" && "message" in json && typeof json.message === "string"
+            ? json.message
+            : `Gagal reject registrasi (${res.status})`;
+        throw new Error(message);
+      }
 
       // Trigger update events
       window.dispatchEvent(
@@ -74,9 +92,9 @@ export function RejectRegistrationModal({
 
       // Show success message
       alert(
-        `Registrasi "${registration.company.name}" berhasil di-reject.\nAlasan: ${
-          REJECTION_REASONS.find((r) => r.code === selectedReason)?.label
-        }${notes ? `\nCatatan: ${notes}` : ""}`
+        `Registrasi "${registration.company.name}" berhasil di-reject.\nAlasan: ${selectedLabel}${
+          notesText ? `\nCatatan: ${notesText}` : ""
+        }`
       );
 
       onSuccess();

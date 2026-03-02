@@ -26,6 +26,7 @@ type SortDirection = "asc" | "desc";
 interface BranchCustomerApiResponse {
   id: number;
   name?: string | null;
+  bcid_name?: string | null;
   gcid?: number | { id?: number; name?: string; gc_name?: string; gpid?: number } | null;
   branch?: number | { id?: number; branch_name?: string; city?: string } | null;
   branch_owner?: string | null;
@@ -254,11 +255,21 @@ export default function BCList() {
 
         const gcName = directGcName || gcRef?.name;
         const branchCity = directBranchCity || branchRef?.city;
+        const normalizedGcName = (gcName || "").trim();
+        const normalizedBranchCity = (branchCity || "").trim();
+        const computedDisplayName =
+          normalizedGcName && normalizedBranchCity
+            ? `${normalizedGcName} - ${normalizedBranchCity}`
+            : undefined;
 
         return {
           id: Number(row.id),
           code: row.name || undefined,
-          name: row.name || (gcName && branchCity ? `${gcName} - ${branchCity}` : `BC ${row.id}`),
+          name:
+            computedDisplayName ||
+            row.bcid_name ||
+            row.name ||
+            `BC ${row.id}`,
           gc_id: gcId,
           gc_name: gcName,
           gc_code:
