@@ -3,7 +3,7 @@ import RequireAuth from "@/components/auth/RequireAuth";
 import CategoryList from "@/components/categories/CategoryList";
 
 export const metadata = {
-  title: "Categories - Kategori Barang Ekatalog Ekatunggal",
+  title: "Categories - Kategori Barang EKA+",
 };
 
 export default function Page() {

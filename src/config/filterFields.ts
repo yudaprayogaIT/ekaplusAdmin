@@ -114,6 +114,12 @@ export const ITEM_FILTER_FIELDS: EntityFilterConfig = {
       operators: ["=", "!=", "like", "not like"],
     },
     {
+      field: "image",
+      label: "Image",
+      type: "string",
+      operators: ["is"],
+    },
+    {
       field: "disabled",
       label: "Status",
       type: "select",
@@ -401,57 +407,51 @@ export const WISHLIST_FILTER_FIELDS: EntityFilterConfig = {
 
 // Customer Registration filter fields
 export const CUSTOMER_REGISTER_FILTER_FIELDS: EntityFilterConfig = {
-  entity: "ekatalog_customer_register",
+  entity: "customer_register",
   fields: [
     {
-      field: "owner.full_name",
+      field: "owner_full_name",
       label: "Owner Name",
       type: "string",
       operators: ["=", "!=", "like", "not like"],
     },
     {
-      field: "owner.phone",
+      field: "owner_phone",
       label: "Owner Phone",
       type: "string",
       operators: ["=", "!=", "like", "not like"],
     },
     {
-      field: "owner.email",
+      field: "owner_email",
       label: "Owner Email",
       type: "string",
       operators: ["=", "!=", "like", "not like"],
     },
     {
-      field: "business_name",
+      field: "company_name",
       label: "Company Name",
       type: "string",
       operators: ["=", "!=", "like", "not like"],
     },
     {
-      field: "nik",
-      label: "NIK",
+      field: "company_title",
+      label: "Company Title",
       type: "string",
       operators: ["=", "!=", "like", "not like"],
     },
     {
-      field: "npwp",
-      label: "NPWP",
-      type: "string",
-      operators: ["=", "!=", "like", "not like"],
-    },
-    {
-      field: "type",
+      field: "company_type",
       label: "Business Type",
       type: "select",
       operators: ["=", "!=", "in", "not in"],
       options: [
-        { value: "Badan", label: "Badan" },
-        { value: "Perorangan", label: "Perorangan" },
+        { value: "Company", label: "Company" },
+        { value: "Individual", label: "Individual" },
       ],
     },
     {
-      field: "entity",
-      label: "Entity Type",
+      field: "product_need",
+      label: "Product Need",
       type: "string",
       operators: ["=", "!=", "like", "not like"],
     },
@@ -463,13 +463,13 @@ export const CUSTOMER_REGISTER_FILTER_FIELDS: EntityFilterConfig = {
       relationEntity: "branch",
     },
     {
-      field: "city",
+      field: "company_city",
       label: "City",
       type: "string",
       operators: ["=", "!=", "like", "not like"],
     },
     {
-      field: "province",
+      field: "company_province",
       label: "Province",
       type: "string",
       operators: ["=", "!=", "like", "not like"],
@@ -513,9 +513,9 @@ export const CUSTOMER_REGISTER_FILTER_FIELDS: EntityFilterConfig = {
   ],
 };
 
-// Global Party (GP) filter fields
-export const GLOBAL_PARTY_FILTER_FIELDS: EntityFilterConfig = {
-  entity: "ekatalog_global_party",
+// Group Party (GP) filter fields
+export const GROUP_PARTY_FILTER_FIELDS: EntityFilterConfig = {
+  entity: "ekatalog_group_party",
   fields: [
     {
       field: "name",
@@ -561,9 +561,9 @@ export const GLOBAL_PARTY_FILTER_FIELDS: EntityFilterConfig = {
   ],
 };
 
-// Global Customer (GC) filter fields
-export const GLOBAL_CUSTOMER_FILTER_FIELDS: EntityFilterConfig = {
-  entity: "ekatalog_global_customer",
+// Group Customer (GC) filter fields
+export const GROUP_CUSTOMER_FILTER_FIELDS: EntityFilterConfig = {
+  entity: "ekatalog_group_customer",
   fields: [
     {
       field: "name",
@@ -573,10 +573,10 @@ export const GLOBAL_CUSTOMER_FILTER_FIELDS: EntityFilterConfig = {
     },
     {
       field: "gp_id",
-      label: "Global Party",
+      label: "Group Party",
       type: "relation",
       operators: ["=", "!=", "in", "not in"],
-      relationEntity: "ekatalog_global_party",
+      relationEntity: "ekatalog_group_party",
     },
     {
       field: "disabled",
@@ -628,10 +628,10 @@ export const BRANCH_CUSTOMER_FILTER_FIELDS: EntityFilterConfig = {
     },
     {
       field: "gc_id",
-      label: "Global Customer",
+      label: "Group Customer",
       type: "relation",
       operators: ["=", "!=", "in", "not in"],
-      relationEntity: "ekatalog_global_customer",
+      relationEntity: "ekatalog_group_customer",
     },
     {
       field: "branch_id",

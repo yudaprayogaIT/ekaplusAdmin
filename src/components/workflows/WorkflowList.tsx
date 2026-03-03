@@ -1,7 +1,10 @@
 // src/components/workflows/WorkflowList.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
 import Link from "next/link";
 import WorkflowCard from "./WorkflowCard";
 import AddWorkflowModal from "./AddWorkflowModal";
@@ -19,7 +22,11 @@ import {
 } from "react-icons/fa";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
-import { getAuthHeaders, API_CONFIG } from "@/config/api";
+import {
+  getAuthHeaders,
+  API_CONFIG,
+  apiFetch,
+} from "@/config/api";
 
 // Types
 export type GlobalState = {
@@ -154,17 +161,17 @@ export default function WorkflowList() {
 
         // Fetch all data in parallel
         const [workflowsRes, rolesRes, statesRes] = await Promise.all([
-          fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW}`, {
+          apiFetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW}`, {
             method: "GET",
             cache: "no-store",
             headers,
           }),
-          fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_ROLE}`, {
+          apiFetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_ROLE}`, {
             method: "GET",
             cache: "no-store",
             headers,
           }),
-          fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW_STATE}`, {
+          apiFetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW_STATE}`, {
             method: "GET",
             cache: "no-store",
             headers,
@@ -225,7 +232,7 @@ export default function WorkflowList() {
 
       try {
         const headers = getAuthHeaders(token);
-        const res = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW}`, {
+        const res = await apiFetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW}`, {
           method: "GET",
           cache: "no-store",
           headers,
@@ -284,7 +291,7 @@ export default function WorkflowList() {
 
       console.log("[WorkflowList] Deleting workflow at:", DELETE_URL);
 
-      const res = await fetch(DELETE_URL, {
+      const res = await apiFetch(DELETE_URL, {
         method: "DELETE",
         headers,
       });

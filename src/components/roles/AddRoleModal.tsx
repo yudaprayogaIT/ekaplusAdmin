@@ -1,12 +1,26 @@
 // src/components/roles/AddRoleModal.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { FaTimes, FaSave, FaUserShield } from "react-icons/fa";
+import React, {
+  useState,
+  useEffect,
+} from "react";
+import {
+  AnimatePresence,
+  motion,
+} from "framer-motion";
+import {
+  FaTimes,
+  FaSave,
+  FaUserShield,
+} from "react-icons/fa";
 import { Role } from "./RoleList";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_CONFIG, getAuthHeadersFormData } from "@/config/api";
+import {
+  API_CONFIG,
+  getAuthHeadersFormData,
+  apiFetch,
+} from "@/config/api";
 
 export default function AddRoleModal({
   open,
@@ -82,7 +96,7 @@ export default function AddRoleModal({
         // Update existing role
         const UPDATE_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_ROLE}/${initialData.ID}`;
         console.log("[AddRoleModal] Updating role at:", UPDATE_URL);
-        response = await fetch(UPDATE_URL, {
+        response = await apiFetch(UPDATE_URL, {
           method: "PUT",
           headers,
           body: formData,
@@ -97,7 +111,7 @@ export default function AddRoleModal({
           Description: description.trim(),
           IsSystem: is_system ? "1" : "0",
         });
-        response = await fetch(CREATE_URL, {
+        response = await apiFetch(CREATE_URL, {
           method: "POST",
           headers,
           body: formData,

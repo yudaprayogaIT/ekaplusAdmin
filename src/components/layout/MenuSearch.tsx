@@ -1,8 +1,8 @@
 // src/components/layout/MenuSearch.tsx
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaSearch, FaTimes } from "react-icons/fa";
@@ -15,6 +15,7 @@ interface MenuSearchProps {
 
 export default function MenuSearch({ allMenuItems }: MenuSearchProps) {
   const router = useRouter();
+  const pathname = usePathname() || "/";
   const { isAuthenticated, hasPermission, hasAnyPermission } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -56,6 +57,18 @@ export default function MenuSearch({ allMenuItems }: MenuSearchProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const navigateToMenu = useCallback((item: MenuItem) => {
+    const active = pathname === item.href || pathname.startsWith(item.href + "/");
+    if (active) {
+      router.refresh();
+    } else {
+      router.push(item.href);
+    }
+    setSearchQuery("");
+    setIsOpen(false);
+    inputRef.current?.blur();
+  }, [pathname, router]);
+
   // Handle keyboard navigation
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -81,7 +94,23 @@ export default function MenuSearch({ allMenuItems }: MenuSearchProps) {
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, filteredMenus, selectedIndex]);
+  }, [isOpen, filteredMenus, selectedIndex, navigateToMenu]);
+
+  // Global shortcut: Ctrl/Cmd + K focuses menu search like Tailwind docs
+  useEffect(() => {
+    const handleGlobalShortcut = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        inputRef.current?.focus();
+        if (searchQuery.trim()) {
+          setIsOpen(true);
+        }
+      }
+    };
+
+    document.addEventListener("keydown", handleGlobalShortcut);
+    return () => document.removeEventListener("keydown", handleGlobalShortcut);
+  }, [searchQuery]);
 
   // Reset selected index when search query changes
   useEffect(() => {
@@ -92,13 +121,6 @@ export default function MenuSearch({ allMenuItems }: MenuSearchProps) {
     const value = e.target.value;
     setSearchQuery(value);
     setIsOpen(value.trim().length > 0);
-  }
-
-  function navigateToMenu(item: MenuItem) {
-    router.push(item.href);
-    setSearchQuery("");
-    setIsOpen(false);
-    inputRef.current?.blur();
   }
 
   function clearSearch() {
@@ -124,7 +146,7 @@ export default function MenuSearch({ allMenuItems }: MenuSearchProps) {
           value={searchQuery}
           onChange={handleSearchChange}
           onFocus={() => searchQuery.trim() && setIsOpen(true)}
-          placeholder="Cari menu, fitur..."
+          placeholder="Cari menu, fitur... (Ctrl+K)"
           className="flex-1 bg-transparent border-none outline-none text-sm text-gray-700 placeholder-gray-400"
         />
         {searchQuery && (

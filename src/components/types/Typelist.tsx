@@ -1,7 +1,11 @@
 // src/components/types/TypeList.tsx
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import TypeCard from "./TypeCard";
 import AddTypeModal from "./AddTypeModal";
 import TypeDetailModal from "./TypeDetailModal";
@@ -22,6 +26,7 @@ import {
   getAuthHeaders,
   getFileUrl,
   API_CONFIG,
+  apiFetch,
 } from "@/config/api";
 import { BiSolidPurchaseTag } from "react-icons/bi";
 
@@ -57,9 +62,9 @@ type TypeAPIResponse = {
     disabled: number;
     created_at: string;
     updated_at: string;
-    created_by: number;
-    updated_by: number;
-    owner: number;
+    created_by: number | { id?: number; full_name?: string };
+    updated_by: number | { id?: number; full_name?: string };
+    owner: number | { id?: number; full_name?: string };
   }>;
   meta: Record<string, unknown>;
 };
@@ -102,11 +107,16 @@ export default function TypeList() {
         }
 
         const DATA_URL = getQueryUrl(API_CONFIG.ENDPOINTS.TYPE, {
-          fields: ["*"],
+          fields: [
+            "*",
+            "created_by.full_name",
+            "updated_by.full_name",
+            "owner.full_name",
+          ],
         });
         const headers = getAuthHeaders(token);
 
-        const res = await fetch(DATA_URL, {
+        const res = await apiFetch(DATA_URL, {
           method: "GET",
           cache: "no-store",
           headers,
@@ -128,6 +138,24 @@ export default function TypeList() {
               disabled: item.disabled,
               created_at: item.created_at,
               updated_at: item.updated_at,
+              created_by:
+                typeof item.created_by === "object"
+                  ? { id: item.created_by.id || 0, name: item.created_by.full_name || "Unknown" }
+                  : item.created_by
+                    ? { id: item.created_by, name: `User #${item.created_by}` }
+                    : undefined,
+              updated_by:
+                typeof item.updated_by === "object"
+                  ? { id: item.updated_by.id || 0, name: item.updated_by.full_name || "Unknown" }
+                  : item.updated_by
+                    ? { id: item.updated_by, name: `User #${item.updated_by}` }
+                    : undefined,
+              owner:
+                typeof item.owner === "object"
+                  ? { id: item.owner.id || 0, name: item.owner.full_name || "Unknown" }
+                  : item.owner
+                    ? { id: item.owner, name: `User #${item.owner}` }
+                    : undefined,
             }));
 
             console.log("Loaded types:", mappedTypes);
@@ -168,11 +196,16 @@ export default function TypeList() {
 
       try {
         const DATA_URL = getQueryUrl(API_CONFIG.ENDPOINTS.TYPE, {
-          fields: ["*"],
+          fields: [
+            "*",
+            "created_by.full_name",
+            "updated_by.full_name",
+            "owner.full_name",
+          ],
         });
         const headers = getAuthHeaders(token);
 
-        const res = await fetch(DATA_URL, {
+        const res = await apiFetch(DATA_URL, {
           method: "GET",
           cache: "no-store",
           headers,
@@ -192,6 +225,24 @@ export default function TypeList() {
             disabled: item.disabled,
             created_at: item.created_at,
             updated_at: item.updated_at,
+            created_by:
+              typeof item.created_by === "object"
+                ? { id: item.created_by.id || 0, name: item.created_by.full_name || "Unknown" }
+                : item.created_by
+                  ? { id: item.created_by, name: `User #${item.created_by}` }
+                  : undefined,
+            updated_by:
+              typeof item.updated_by === "object"
+                ? { id: item.updated_by.id || 0, name: item.updated_by.full_name || "Unknown" }
+                : item.updated_by
+                  ? { id: item.updated_by, name: `User #${item.updated_by}` }
+                  : undefined,
+            owner:
+              typeof item.owner === "object"
+                ? { id: item.owner.id || 0, name: item.owner.full_name || "Unknown" }
+                : item.owner
+                  ? { id: item.owner, name: `User #${item.owner}` }
+                  : undefined,
           }));
 
           setTypes(mappedTypes);
@@ -224,7 +275,7 @@ export default function TypeList() {
 
         const headers = getAuthHeaders(token);
 
-        const response = await fetch(
+        const response = await apiFetch(
           getResourceUrl(API_CONFIG.ENDPOINTS.TYPE, t.id),
           {
             method: "DELETE",

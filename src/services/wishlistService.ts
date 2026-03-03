@@ -3,6 +3,7 @@ import {
   getQueryUrl,
   getResourceUrl,
   getAuthHeaders,
+  apiFetch,
 } from "@/config/api";
 import type {
   WishlistItem,
@@ -19,6 +20,23 @@ function transformWishlistResponse(
   apiData: WishlistApiResponse,
   items: Item[]
 ): WishlistItem {
+  const resolvedUserName =
+    apiData.user?.full_name ||
+    (typeof apiData.owner === "object" ? apiData.owner?.full_name : undefined) ||
+    (typeof apiData.created_by === "object"
+      ? apiData.created_by?.full_name
+      : undefined);
+  const resolvedCreatedBy =
+    apiData.user?.full_name ||
+    (typeof apiData.owner === "object" ? apiData.owner?.full_name : undefined) ||
+    (typeof apiData.created_by === "object"
+      ? apiData.created_by?.full_name
+      : apiData.created_by);
+  const resolvedUpdatedBy =
+    (typeof apiData.updated_by === "object"
+      ? apiData.updated_by?.full_name
+      : apiData.updated_by) || undefined;
+
   const item = items.find((i) => i.id === apiData.item);
   if (!item) {
     console.warn(`Item ${apiData.item} not found in items list`);
@@ -34,8 +52,11 @@ function transformWishlistResponse(
         uom: "",
       },
       userId: apiData.user_id,
-      userName: apiData.user?.full_name,
+      userName: resolvedUserName,
       createdAt: apiData.created_at,
+      updatedAt: apiData.updated_at,
+      createdBy: resolvedCreatedBy,
+      updatedBy: resolvedUpdatedBy,
     };
   }
 
@@ -43,8 +64,11 @@ function transformWishlistResponse(
     id: apiData.id,
     item: item,
     userId: apiData.user_id,
-    userName: apiData.user?.full_name,
+    userName: resolvedUserName,
     createdAt: apiData.created_at,
+    updatedAt: apiData.updated_at,
+    createdBy: resolvedCreatedBy,
+    updatedBy: resolvedUpdatedBy,
   };
 }
 
@@ -61,12 +85,18 @@ export async function fetchWishlist(
   }
 
   const url = getQueryUrl(API_CONFIG.ENDPOINTS.WISHLIST, {
-    fields: ["*", "user.full_name"],
+    fields: [
+      "*",
+      "user.full_name",
+      "owner.full_name",
+      "created_by.full_name",
+      "updated_by.full_name",
+    ],
   });
 
   console.log("fetchWishlist: Fetching from", url);
 
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     headers: getAuthHeaders(token),
   });
 
@@ -105,7 +135,7 @@ export async function addToWishlist(
 ): Promise<WishlistItem> {
   const url = getResourceUrl(API_CONFIG.ENDPOINTS.WISHLIST);
 
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     method: "POST",
     headers: getAuthHeaders(token),
     body: JSON.stringify(data),
@@ -129,7 +159,7 @@ export async function removeFromWishlist(
 ): Promise<void> {
   const url = getResourceUrl(API_CONFIG.ENDPOINTS.WISHLIST, id);
 
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     method: "DELETE",
     headers: getAuthHeaders(token),
   });

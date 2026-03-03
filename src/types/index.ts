@@ -133,13 +133,14 @@ export type WishlistApiResponse = {
   user?: {
     full_name?: string;
   };
+  // owner?: number | { full_name?: string };
+  created_by?: number | { full_name?: string };
   status: string; // "Draft", etc.
   docstatus: number;
   created_at: string;
   updated_at: string;
-  created_by: number;
-  updated_by: number;
-  owner: number;
+  updated_by?: number | { full_name?: string };
+  owner?: number | { full_name?: string };
 };
 
 // Wishlist item for frontend (with hydrated Item)
@@ -149,6 +150,9 @@ export type WishlistItem = {
   userId: number;
   userName?: string; // User full name
   createdAt: string;
+  updatedAt?: string;
+  createdBy?: string | number;
+  updatedBy?: string | number;
 };
 
 // Request types for Wishlist API

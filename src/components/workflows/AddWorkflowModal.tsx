@@ -1,21 +1,35 @@
 // src/components/workflows/AddWorkflowModal.tsx
 "use client";
 
-import { useState, useEffect } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import {
+  useState,
+  useEffect,
+} from "react";
+import {
+  AnimatePresence,
+  motion,
+} from "framer-motion";
 import {
   FaTimes,
   FaSave,
   FaSitemap,
   FaExclamationTriangle,
 } from "react-icons/fa";
-import { API_CONFIG } from "@/config/api";
+import {
+  API_CONFIG,
+  apiFetch,
+} from "@/config/api";
 import StateManager, {
   GlobalState,
   SelectedState,
 } from "./StateManager";
-import TransitionManager, { TransitionInput } from "./TransitionManager";
-import { WorkflowWithDetails, Role } from "./WorkflowList";
+import TransitionManager, {
+  TransitionInput,
+} from "./TransitionManager";
+import {
+  WorkflowWithDetails,
+  Role,
+} from "./WorkflowList";
 
 type Props = {
   open: boolean;
@@ -166,7 +180,7 @@ export default function AddWorkflowModal({
       let response;
       if (isEdit) {
         // PUT for update (by resource)
-        response = await fetch(
+        response = await apiFetch(
           `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW}/${workflow.workflow.resource}`,
           {
             method: "PUT",
@@ -178,7 +192,7 @@ export default function AddWorkflowModal({
         );
       } else {
         // POST for create
-        response = await fetch(
+        response = await apiFetch(
           `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW}`,
           {
             method: "POST",

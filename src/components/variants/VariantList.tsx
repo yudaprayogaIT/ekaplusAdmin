@@ -8,7 +8,10 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import {
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 import VariantCard from "./VariantCard";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Pagination from "@/components/ui/Pagination";
@@ -20,22 +23,36 @@ import {
   FaSortAmountDown,
   FaChevronDown,
 } from "react-icons/fa";
-import { motion, AnimatePresence } from "framer-motion";
-import { fetchVariants, deleteVariant } from "@/services/variantService";
+import {
+  motion,
+  AnimatePresence,
+} from "framer-motion";
+import {
+  fetchVariants,
+  deleteVariant,
+} from "@/services/variantService";
 import {
   API_CONFIG,
   getQueryUrl,
   getAuthHeaders,
   getFileUrl,
+  apiFetch,
 } from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { Item, Product, Category } from "@/types";
+import {
+  Item,
+  Product,
+  Category,
+} from "@/types";
 import FilterBuilder from "@/components/filters/FilterBuilder";
 import { useFilters } from "@/hooks/useFilters";
 import { VARIANT_FILTER_FIELDS } from "@/config/filterFields";
 import { FilterTriple } from "@/types/filter";
 import { groupItemsByPattern } from "@/utils/itemGrouping";
-import { buildSearchParams, parseSearchParams } from "@/utils/urlSync";
+import {
+  buildSearchParams,
+  parseSearchParams,
+} from "@/utils/urlSync";
 
 type ItemVariant = {
   id: number;
@@ -173,7 +190,7 @@ export default function VariantList() {
       );
       console.log("[VariantList] Request URL:", variantsUrl);
 
-      const variantsRes = await fetch(variantsUrl, { headers });
+      const variantsRes = await apiFetch(variantsUrl, { headers });
 
       let variantsData: ItemVariant[] = [];
       let totalItems = 0;
@@ -286,7 +303,7 @@ export default function VariantList() {
           fields: ["*"],
           limit: 1000,
         });
-        const categoriesRes = await fetch(categoriesUrl, { headers });
+        const categoriesRes = await apiFetch(categoriesUrl, { headers });
         if (categoriesRes.ok) {
           const json = await categoriesRes.json();
           const categoriesData = json.data.map(
@@ -304,7 +321,7 @@ export default function VariantList() {
           fields: ["*", "item_category.id", "item_category.category_name"],
           limit: 5000,
         });
-        const productsRes = await fetch(productsUrl, { headers });
+        const productsRes = await apiFetch(productsUrl, { headers });
         if (productsRes.ok) {
           const json = await productsRes.json();
           const productsData = json.data.map(
@@ -344,13 +361,12 @@ export default function VariantList() {
           console.log("[VariantList] Products loaded:", productsData.length);
         }
 
-        // Load items (only active items)
+        // Load items (including disabled) so mapped variants still resolve correctly
         const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
           fields: ["*"],
-          filters: [["disabled", "=", 0]],
           limit: 10000,
         });
-        const itemsRes = await fetch(itemsUrl, { headers });
+        const itemsRes = await apiFetch(itemsUrl, { headers });
         if (itemsRes.ok) {
           const json = await itemsRes.json();
           const itemsData = json.data.map(

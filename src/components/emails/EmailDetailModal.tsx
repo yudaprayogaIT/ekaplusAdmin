@@ -112,7 +112,7 @@ export default function EmailDetailModal({
   onRetry?: (email: EmailLog) => void;
 }) {
   const [activeTab, setActiveTab] = useState<"info" | "message" | "raw">(
-    "info"
+    "info",
   );
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -154,12 +154,12 @@ export default function EmailDetailModal({
                 email.status === "Sent"
                   ? "bg-gradient-to-r from-green-500 via-green-600 to-green-700"
                   : email.status === "Error"
-                  ? "bg-gradient-to-r from-red-500 via-red-600 to-red-700"
-                  : email.status === "Pending"
-                  ? "bg-gradient-to-r from-yellow-500 via-yellow-600 to-yellow-700"
-                  : email.status === "Expired"
-                  ? "bg-gradient-to-r from-gray-500 via-gray-600 to-gray-700"
-                  : "bg-gradient-to-r from-orange-500 via-orange-600 to-orange-700"
+                    ? "bg-gradient-to-r from-red-500 via-red-600 to-red-700"
+                    : email.status === "Pending"
+                      ? "bg-gradient-to-r from-yellow-500 via-yellow-600 to-yellow-700"
+                      : email.status === "Expired"
+                        ? "bg-gradient-to-r from-gray-500 via-gray-600 to-gray-700"
+                        : "bg-gradient-to-r from-orange-500 via-orange-600 to-orange-700"
               } px-8 py-8 text-white relative overflow-hidden`}
             >
               <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full -mr-48 -mt-48" />
@@ -341,14 +341,14 @@ export default function EmailDetailModal({
                                   className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
                                     recipient.status === "Sent"
                                       ? "bg-green-100 text-green-700"
-                                      : recipient.status === "Pending"
-                                      ? "bg-yellow-100 text-yellow-700"
-                                      : "bg-red-100 text-red-700"
+                                      : recipient.status === "Draft"
+                                        ? "bg-yellow-100 text-yellow-700"
+                                        : "bg-red-100 text-red-700"
                                   }`}
                                 >
                                   {recipient.status === "Sent" ? (
                                     <FaCheckCircle className="w-3 h-3" />
-                                  ) : recipient.status === "Pending" ? (
+                                  ) : recipient.status === "Draft" ? (
                                     <FaHourglassHalf className="w-3 h-3" />
                                   ) : (
                                     <FaTimesCircle className="w-3 h-3" />

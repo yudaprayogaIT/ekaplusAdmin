@@ -1,17 +1,31 @@
 // src/components/users/UserList.tsx
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import UserCard from "./UserCard";
 import AddUserModal from "./AddUserModal";
 import UserDetailModal from "./UserDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { useAuth } from "@/contexts/AuthContext";
-import { 
-  FaPlus, FaFilter, FaSearch, FaList, FaTh, FaSortAmountDown,
-  FaUsers, FaUserShield, FaUserTie, FaUserCog, FaLock
+import {
+  FaPlus,
+  FaFilter,
+  FaSearch,
+  FaList,
+  FaTh,
+  FaSortAmountDown,
+  FaUsers,
+  FaUserShield,
+  FaUserTie,
+  FaUserCog,
+  FaLock,
 } from "react-icons/fa";
 import { motion } from "framer-motion";
+import { apiFetch } from "@/config/api";
 
 export type User = {
   id: string;
@@ -119,7 +133,7 @@ export default function UserList() {
       
       try {
         // Load users
-        const usersRes = await fetch(DATA_URL, { cache: "no-store" });
+        const usersRes = await apiFetch(DATA_URL, { cache: "no-store" });
         if (usersRes.ok) {
           const data = await usersRes.json();
           if (!cancelled) {
@@ -132,7 +146,7 @@ export default function UserList() {
         }
 
         // Load roles
-        const rolesRes = await fetch(ROLES_URL, { cache: "no-store" });
+        const rolesRes = await apiFetch(ROLES_URL, { cache: "no-store" });
         if (rolesRes.ok) {
           const rolesData = await rolesRes.json();
           if (!cancelled) {

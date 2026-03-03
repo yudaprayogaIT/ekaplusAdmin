@@ -1,7 +1,12 @@
 // src/components/filters/FilterRow.tsx
 
 import React from "react";
-import { FilterState, EntityFilterConfig, GobackOperator } from "@/types/filter";
+import {
+  FilterState,
+  EntityFilterConfig,
+  GobackOperator,
+  FilterValue,
+} from "@/types/filter";
 import ValueInput from "./ValueInput";
 import { FaTimes } from "react-icons/fa";
 import type { Category } from "@/types";
@@ -25,6 +30,10 @@ export default function FilterRow({
 
   // Get available operators based on selected field
   const availableOperators = selectedField?.operators || [];
+  const operatorLabelMap: Partial<Record<GobackOperator, string>> = {
+    is: "is",
+    "is not": "is set",
+  };
 
   return (
     <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-md">
@@ -33,7 +42,6 @@ export default function FilterRow({
         value={filter.field}
         onChange={(e) => {
           const newField = e.target.value;
-          const fieldDef = config.fields.find((f) => f.field === newField);
           onChange({
             ...filter,
             field: newField,
@@ -57,9 +65,9 @@ export default function FilterRow({
         onChange={(e) => {
           const newOperator = e.target.value as GobackOperator;
           // Auto-set value based on operator type
-          let autoValue: any = undefined;
+          let autoValue: FilterValue = undefined;
           if (newOperator === "is" || newOperator === "is not") {
-            autoValue = "null"; // For null checking operators
+            autoValue = "set"; // Default to "set" for image existence checks
           } else if (newOperator === "between") {
             autoValue = ["", ""]; // For date range operators
           }
@@ -75,7 +83,7 @@ export default function FilterRow({
         <option value="">Operator...</option>
         {availableOperators.map((op) => (
           <option key={op} value={op}>
-            {op}
+            {operatorLabelMap[op] || op}
           </option>
         ))}
       </select>

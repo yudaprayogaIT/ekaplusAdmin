@@ -1,7 +1,10 @@
 // src/components/permissions/PermissionList.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
 import PermissionCard from "./PermissionCard";
 import AddPermissionModal from "./AddPermissionModal";
 import PermissionDetailModal from "./PermissionDetailModal";
@@ -16,7 +19,11 @@ import {
 } from "react-icons/fa";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
-import { getAuthHeaders, API_CONFIG } from "@/config/api";
+import {
+  getAuthHeaders,
+  API_CONFIG,
+  apiFetch,
+} from "@/config/api";
 
 export type Permission = {
   ID: number;
@@ -76,7 +83,7 @@ export default function PermissionList() {
 
         console.log("[PermissionList] Fetching permissions from:", DATA_URL);
 
-        const res = await fetch(DATA_URL, {
+        const res = await apiFetch(DATA_URL, {
           method: "GET",
           cache: "no-store",
           headers,
@@ -143,7 +150,7 @@ export default function PermissionList() {
 
         console.log("[PermissionList] Auto-reloading permissions from:", DATA_URL);
 
-        const res = await fetch(DATA_URL, {
+        const res = await apiFetch(DATA_URL, {
           method: "GET",
           cache: "no-store",
           headers,
@@ -201,7 +208,7 @@ export default function PermissionList() {
 
       console.log("[PermissionList] Deleting permission at:", DELETE_URL);
 
-      const res = await fetch(DELETE_URL, {
+      const res = await apiFetch(DELETE_URL, {
         method: "DELETE",
         headers,
       });

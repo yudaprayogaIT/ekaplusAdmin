@@ -1,12 +1,15 @@
-"use client";
+﻿"use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { BCCard } from "./BCCard";
 import { BCDetailModal } from "./BCDetailModal";
-import { GPDetailModal } from "@/components/global_party/GPDetailModal";
-import { GCDetailModal } from "@/components/global_customer/GCDetailModal";
-import type { BranchCustomer, GlobalParty, GlobalCustomer } from "@/types/customer";
-import { mockBranchCustomers } from "@/data/mockBranchCustomers";
+import { GPDetailModal } from "@/components/group_party/GPDetailModal";
+import { GCDetailModal } from "@/components/group_customer/GCDetailModal";
+import type {
+  BranchCustomer,
+  GroupParty,
+  GroupCustomer,
+} from "@/types/customer";
 import {
   FaSearch,
   FaBuilding,
@@ -18,47 +21,347 @@ import {
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import Pagination, { usePagination } from "@/components/ui/Pagination";
+import { useAuth } from "@/contexts/AuthContext";
+import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
 
 type SortField = "name" | "branch_city" | "created_at" | "updated_at";
 type SortDirection = "asc" | "desc";
 
+interface BranchCustomerApiResponse {
+  id: number;
+  name?: string | null;
+  bcid_name?: string | null;
+  gcid?:
+    | number
+    | { id?: number; name?: string; gc_name?: string; gpid?: number }
+    | null;
+  branch?: number | { id?: number; branch_name?: string; city?: string } | null;
+  branch_owner?: string | null;
+  branch_owner_phone?: string | null;
+  branch_owner_email?: string | null;
+  disabled?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  "created_by.full_name"?: string | null;
+  "updated_by.full_name"?: string | null;
+  created_by?: number | { id?: number; full_name?: string } | null;
+  updated_by?: number | { id?: number; full_name?: string } | null;
+}
+
+interface GroupCustomerLookupRow {
+  id: number;
+  name?: string | null;
+  gc_name?: string | null;
+  gpid?: number | null;
+}
+
+interface GroupParentLookupRow {
+  id: number;
+  name?: string | null;
+  gp_name?: string | null;
+}
+
+interface BranchLookupRow {
+  id: number;
+  branch_name?: string | null;
+  city?: string | null;
+}
+
+function resolveUserName(
+  directName: string | null | undefined,
+  value: number | { id?: number; full_name?: string } | null | undefined,
+): string | undefined {
+  if (directName) return directName;
+  if (value && typeof value === "object" && value.full_name)
+    return value.full_name;
+  return undefined;
+}
+
+function toNumber(value: unknown): number | undefined {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
 export default function BCList() {
-  const [bcs] = useState<BranchCustomer[]>(mockBranchCustomers);
-  const [selectedGP, setSelectedGP] = useState<GlobalParty | null>(null);
-  const [selectedGC, setSelectedGC] = useState<GlobalCustomer | null>(null);
+  const { token, isAuthenticated } = useAuth();
+
+  const [bcs, setBcs] = useState<BranchCustomer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [selectedGP, setSelectedGP] = useState<GroupParty | null>(null);
+  const [selectedGC, setSelectedGC] = useState<GroupCustomer | null>(null);
   const [selectedBC, setSelectedBC] = useState<BranchCustomer | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Sort state
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
 
-  // Filter and sort
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      if (!isAuthenticated || !token) {
+        setBcs([]);
+        setLoading(false);
+        return;
+      }
+
+      const bcSpec = {
+        fields: ["*", "created_by.full_name", "updated_by.full_name"],
+        limit: 10000000,
+      };
+
+      const bcRes = await apiFetch(
+        getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, bcSpec),
+        { method: "GET", cache: "no-store" },
+        token,
+      );
+
+      if (!bcRes.ok) {
+        throw new Error(`Failed to fetch branch customer (${bcRes.status})`);
+      }
+
+      const bcJson = await bcRes.json();
+      const bcRows: BranchCustomerApiResponse[] = Array.isArray(bcJson?.data)
+        ? bcJson.data
+        : [];
+
+      const gcIds = Array.from(
+        new Set(
+          bcRows
+            .map((row) => {
+              if (row.gcid && typeof row.gcid === "object")
+                return toNumber(row.gcid.id);
+              return toNumber(row.gcid);
+            })
+            .filter((id): id is number => typeof id === "number"),
+        ),
+      );
+
+      const branchIds = Array.from(
+        new Set(
+          bcRows
+            .map((row) => {
+              if (row.branch && typeof row.branch === "object")
+                return toNumber(row.branch.id);
+              return toNumber(row.branch);
+            })
+            .filter((id): id is number => typeof id === "number"),
+        ),
+      );
+
+      const gcMap = new Map<
+        number,
+        { code?: string; name?: string; gpid?: number }
+      >();
+      if (gcIds.length > 0) {
+        const gcLookupSpec = {
+          fields: ["id", "name", "gc_name", "gpid"],
+          filters: [["id", "in", gcIds]],
+          limit: gcIds.length,
+        };
+
+        const gcRes = await apiFetch(
+          getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, gcLookupSpec),
+          { method: "GET", cache: "no-store" },
+          token,
+        );
+
+        if (gcRes.ok) {
+          const gcJson = await gcRes.json();
+          const gcRows: GroupCustomerLookupRow[] = Array.isArray(gcJson?.data)
+            ? gcJson.data
+            : [];
+          gcRows.forEach((row) => {
+            gcMap.set(Number(row.id), {
+              code: row.name || undefined,
+              name: row.gc_name || row.name || undefined,
+              gpid: toNumber(row.gpid),
+            });
+          });
+        }
+      }
+
+      const gpIds = Array.from(
+        new Set(
+          Array.from(gcMap.values())
+            .map((gc) => gc.gpid)
+            .filter((id): id is number => typeof id === "number"),
+        ),
+      );
+
+      const gpMap = new Map<number, { code?: string; name?: string }>();
+      if (gpIds.length > 0) {
+        const gpLookupSpec = {
+          fields: ["id", "name", "gp_name"],
+          filters: [["id", "in", gpIds]],
+          limit: gpIds.length,
+        };
+        const gpRes = await apiFetch(
+          getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, gpLookupSpec),
+          { method: "GET", cache: "no-store" },
+          token,
+        );
+        if (gpRes.ok) {
+          const gpJson = await gpRes.json();
+          const gpRows: GroupParentLookupRow[] = Array.isArray(gpJson?.data)
+            ? gpJson.data
+            : [];
+          gpRows.forEach((row) => {
+            gpMap.set(Number(row.id), {
+              code: row.name || undefined,
+              name: row.gp_name || row.name || undefined,
+            });
+          });
+        }
+      }
+
+      const branchMap = new Map<number, { name?: string; city?: string }>();
+      if (branchIds.length > 0) {
+        const branchLookupSpec = {
+          fields: ["id", "branch_name", "city"],
+          filters: [["id", "in", branchIds]],
+          limit: branchIds.length,
+        };
+        const branchRes = await apiFetch(
+          getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH, branchLookupSpec),
+          { method: "GET", cache: "no-store" },
+          token,
+        );
+        if (branchRes.ok) {
+          const branchJson = await branchRes.json();
+          const branchRows: BranchLookupRow[] = Array.isArray(branchJson?.data)
+            ? branchJson.data
+            : [];
+          branchRows.forEach((row) => {
+            branchMap.set(Number(row.id), {
+              name: row.branch_name || undefined,
+              city: row.city || undefined,
+            });
+          });
+        }
+      }
+
+      const mapped: BranchCustomer[] = bcRows.map((row) => {
+        const gcId =
+          row.gcid && typeof row.gcid === "object"
+            ? toNumber(row.gcid.id) || 0
+            : toNumber(row.gcid) || 0;
+
+        const branchId =
+          row.branch && typeof row.branch === "object"
+            ? toNumber(row.branch.id) || 0
+            : toNumber(row.branch) || 0;
+
+        const directGcName =
+          row.gcid && typeof row.gcid === "object"
+            ? row.gcid.gc_name || row.gcid.name
+            : undefined;
+
+        const directBranchName =
+          row.branch && typeof row.branch === "object"
+            ? row.branch.branch_name
+            : undefined;
+        const directBranchCity =
+          row.branch && typeof row.branch === "object"
+            ? row.branch.city
+            : undefined;
+
+        const gcRef = gcMap.get(gcId);
+        const branchRef = branchMap.get(branchId);
+        const gpRef = gpMap.get(gcRef?.gpid || 0);
+
+        const gcName = directGcName || gcRef?.name;
+        const branchCity = directBranchCity || branchRef?.city;
+        const normalizedGcName = (gcName || "").trim();
+        const normalizedBranchCity = (branchCity || "").trim();
+        const computedDisplayName =
+          normalizedGcName && normalizedBranchCity
+            ? `${normalizedGcName} - ${normalizedBranchCity}`
+            : undefined;
+
+        return {
+          id: Number(row.id),
+          code: row.name || undefined,
+          name:
+            computedDisplayName || row.bcid_name || row.name || `BC ${row.id}`,
+          gc_id: gcId,
+          gc_name: gcName,
+          gc_code:
+            (row.gcid && typeof row.gcid === "object"
+              ? row.gcid.name
+              : undefined) || gcRef?.code,
+          gp_name: gpRef?.name,
+          gp_code: gpRef?.code,
+          branch_id: branchId,
+          branch_name: directBranchName || branchRef?.name,
+          branch_city: branchCity,
+          owner_name: row.branch_owner || undefined,
+          owner_phone: row.branch_owner_phone || undefined,
+          owner_email: row.branch_owner_email || undefined,
+          created_at: row.created_at || new Date(0).toISOString(),
+          updated_at:
+            row.updated_at || row.created_at || new Date(0).toISOString(),
+          created_by: resolveUserName(
+            row["created_by.full_name"],
+            row.created_by,
+          ),
+          updated_by: resolveUserName(
+            row["updated_by.full_name"],
+            row.updated_by,
+          ),
+          disabled: Number(row.disabled || 0),
+        };
+      });
+
+      setBcs(mapped);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setBcs([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated, token]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
   const filteredAndSortedBCs = useMemo(() => {
     let filtered = [...bcs];
 
-    // Search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
         (bc) =>
           bc.name.toLowerCase().includes(query) ||
+          bc.code?.toLowerCase().includes(query) ||
           bc.gc_name?.toLowerCase().includes(query) ||
+          bc.gc_code?.toLowerCase().includes(query) ||
           bc.gp_name?.toLowerCase().includes(query) ||
+          bc.gp_code?.toLowerCase().includes(query) ||
           bc.branch_name?.toLowerCase().includes(query) ||
-          bc.branch_city?.toLowerCase().includes(query)
+          bc.branch_city?.toLowerCase().includes(query),
       );
     }
 
-    // Sort
     filtered.sort((a, b) => {
       let aValue: string | number;
       let bValue: string | number;
 
-      if (sortField === "name" || sortField === "branch_city") {
-        aValue = (a[sortField] || "").toLowerCase();
-        bValue = (b[sortField] || "").toLowerCase();
+      if (sortField === "name") {
+        aValue = a.name.toLowerCase();
+        bValue = b.name.toLowerCase();
+      } else if (sortField === "branch_city") {
+        aValue = (a.branch_city || "").toLowerCase();
+        bValue = (b.branch_city || "").toLowerCase();
       } else {
         aValue = new Date(a[sortField]).getTime();
         bValue = new Date(b[sortField]).getTime();
@@ -66,15 +369,13 @@ export default function BCList() {
 
       if (sortDirection === "asc") {
         return aValue > bValue ? 1 : -1;
-      } else {
-        return aValue < bValue ? 1 : -1;
       }
+      return aValue < bValue ? 1 : -1;
     });
 
     return filtered;
   }, [bcs, searchQuery, sortField, sortDirection]);
 
-  // Calculate stats
   const stats = useMemo(() => {
     return {
       total: bcs.length,
@@ -83,7 +384,6 @@ export default function BCList() {
     };
   }, [bcs]);
 
-  // Pagination
   const {
     currentPage,
     setCurrentPage,
@@ -102,21 +402,37 @@ export default function BCList() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="w-16 h-16 border-4 border-orange-200 border-t-orange-600 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="py-8 text-center">
+        <div className="inline-flex items-center gap-2 px-4 py-3 bg-red-50 text-red-600 rounded-xl border border-red-100">
+          <span className="text-sm font-medium">Error: {error}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
-      {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">
             Branch Customer (BC)
           </h1>
           <p className="text-sm md:text-base text-gray-600">
-            Kelola data Branch Customer - branch-level customer
+            Kelola data Branch Customer
           </p>
         </div>
       </div>
 
-      {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-5 border-2 border-orange-200">
           <div className="flex items-center gap-2 mb-1">
@@ -149,33 +465,25 @@ export default function BCList() {
         </div>
       </div>
 
-      {/* Search & Sort Bar */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 mb-6">
         <div className="flex flex-col md:flex-row gap-4">
-          {/* Search */}
           <div className="flex-1 relative">
             <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 z-10" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari BC name, GC, GP, atau branch..."
+              placeholder="Cari BC/GC/GP/branch..."
               className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all text-sm"
             />
           </div>
 
-          {/* Sort Direction Button */}
           <button
             onClick={() => {
               const newDirection = sortDirection === "asc" ? "desc" : "asc";
               setSortDirection(newDirection);
             }}
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
-            title={
-              sortDirection === "asc"
-                ? "Ascending (A-Z, Oldest)"
-                : "Descending (Z-A, Newest)"
-            }
           >
             {sortDirection === "asc" ? (
               <FaSortAmountUp className="w-3.5 h-3.5" />
@@ -184,7 +492,6 @@ export default function BCList() {
             )}
           </button>
 
-          {/* Sort Field Dropdown */}
           <div className="relative">
             <button
               onClick={() => setSortFieldDropdownOpen(!sortFieldDropdownOpen)}
@@ -254,7 +561,6 @@ export default function BCList() {
         </div>
       </div>
 
-      {/* Empty State */}
       {filteredAndSortedBCs.length === 0 && (
         <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
           <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -271,7 +577,6 @@ export default function BCList() {
         </div>
       )}
 
-      {/* BC Cards Grid */}
       {filteredAndSortedBCs.length > 0 && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -284,7 +589,6 @@ export default function BCList() {
             ))}
           </div>
 
-          {/* Pagination */}
           {totalPages > 1 && (
             <Pagination
               currentPage={currentPage}
@@ -297,7 +601,6 @@ export default function BCList() {
         </>
       )}
 
-      {/* Detail Modals */}
       <GPDetailModal
         isOpen={selectedGP !== null}
         onClose={() => setSelectedGP(null)}

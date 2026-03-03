@@ -4,7 +4,7 @@ import RequireAuth from "@/components/auth/RequireAuth";
 import TypeList from "@/components/types/Typelist";
 
 export const metadata = {
-  title: "Item Types - Tipe Item Ekatalog Ekatunggal",
+  title: "Item Types - EKA+",
   description: "Kelola tipe item untuk kategori produk",
 };
 

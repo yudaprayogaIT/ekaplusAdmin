@@ -35,7 +35,13 @@ export const API_CONFIG = {
     WORKFLOW: "/api/workflow",
     WORKFLOW_STATE: "/api/workflow/state",
 
-    CUSTOMER_REGISTER: "/api/resource/ekatalog_customer_register",
+    CUSTOMER_REGISTER: "/api/resource/customer_register",
+    CUSTOMER_REGISTER_ADDRESS: "/api/resource/customer_register_address",
+    NATIONAL_BRAND: "/api/resource/national_brand",
+    GROUP_PARENT: "/api/resource/group_parent",
+    GROUP_CUSTOMER: "/api/resource/group_customer",
+    BRANCH_CUSTOMER_V2: "/api/resource/branch_customer",
+    MEMBER_OF: "/api/resource/member_of",
 
     // Customer Management - GP/GC/BC
     GLOBAL_PARTY: "/api/resource/ekatalog_global_party",
@@ -168,7 +174,8 @@ export async function apiFetch(
   });
 
   // Handle 401 Unauthorized - Session expired
-  if (response.status === 401 && sessionExpiredCallback) {
+  const hasAuthHeader = headers.has("Authorization") || headers.has("authorization");
+  if (response.status === 401 && sessionExpiredCallback && hasAuthHeader) {
     sessionExpiredCallback();
   }
 

@@ -35,6 +35,9 @@ export default function ProductDetailModal({
   onDelete,
 }: ProductDetailModalProps) {
   if (!product) return null;
+  const disabledVariantCount = product.variants.filter(
+    (variant) => variant.item.disabled === 1
+  ).length;
 
   return (
     <AnimatePresence>
@@ -120,6 +123,11 @@ export default function ProductDetailModal({
                   <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-semibold">
                     {product.variants.length} items
                   </span>
+                  {disabledVariantCount > 0 && (
+                    <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-semibold">
+                      {disabledVariantCount} Disabled
+                    </span>
+                  )}
                 </div>
 
                 {product.variants.length === 0 ? (
@@ -167,6 +175,11 @@ export default function ProductDetailModal({
                               {variant.item.code}
                             </p>
                             <div className="flex flex-wrap gap-1.5">
+                              {variant.item.disabled === 1 && (
+                                <span className="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-semibold">
+                                  Disabled
+                                </span>
+                              )}
                               {variant.item.color && (
                                 <span className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold">
                                   {variant.item.color}

@@ -1,7 +1,11 @@
 // src/components/banners/BannerList.tsx
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import BannerCard from "./BannerCard";
 import AddBannerModal from "./AddBannerModal";
 import BannerDetailModal from "./BannerDetailModal";
@@ -25,7 +29,11 @@ import {
   API_CONFIG,
   apiFetch,
 } from "@/config/api";
-import type { Banner, BannerAPIResponse, ScheduleStatus } from "@/types/banner";
+import type {
+  Banner,
+  BannerAPIResponse,
+  ScheduleStatus,
+} from "@/types/banner";
 
 type SortOption =
   | "display_order-asc"
@@ -88,7 +96,12 @@ export default function BannerList() {
 
         // Load banners from API
         const bannersUrl = getQueryUrl(API_CONFIG.ENDPOINTS.BANNER, {
-          fields: ["*"],
+          fields: [
+            "*",
+            "created_by.full_name",
+            "updated_by.full_name",
+            "owner.full_name",
+          ],
         });
         const bannersRes = await apiFetch(
           bannersUrl,
@@ -119,9 +132,24 @@ export default function BannerList() {
                 docstatus: item.docstatus,
                 created_at: item.created_at,
                 updated_at: item.updated_at,
-                created_by: item.created_by,
-                updated_by: item.updated_by,
-                owner: item.owner,
+                created_by:
+                  typeof item.created_by === "object"
+                    ? {
+                        id: item.created_by.id,
+                        name: item.created_by.full_name,
+                      }
+                    : item.created_by,
+                updated_by:
+                  typeof item.updated_by === "object"
+                    ? {
+                        id: item.updated_by.id,
+                        name: item.updated_by.full_name,
+                      }
+                    : item.updated_by,
+                owner:
+                  typeof item.owner === "object"
+                    ? { id: item.owner.id, name: item.owner.full_name }
+                    : item.owner,
               })
             );
 
@@ -156,7 +184,12 @@ export default function BannerList() {
 
       try {
         const bannersUrl = getQueryUrl(API_CONFIG.ENDPOINTS.BANNER, {
-          fields: ["*"],
+          fields: [
+            "*",
+            "created_by.full_name",
+            "updated_by.full_name",
+            "owner.full_name",
+          ],
         });
 
         const res = await apiFetch(
@@ -185,6 +218,18 @@ export default function BannerList() {
             docstatus: item.docstatus,
             created_at: item.created_at,
             updated_at: item.updated_at,
+            created_by:
+              typeof item.created_by === "object"
+                ? { id: item.created_by.id, name: item.created_by.full_name }
+                : item.created_by,
+            updated_by:
+              typeof item.updated_by === "object"
+                ? { id: item.updated_by.id, name: item.updated_by.full_name }
+                : item.updated_by,
+            owner:
+              typeof item.owner === "object"
+                ? { id: item.owner.id, name: item.owner.full_name }
+                : item.owner,
           }));
 
           setBanners(mappedBanners);
@@ -237,7 +282,7 @@ export default function BannerList() {
         Authorization: `Bearer ${token}`,
       };
 
-      const response = await fetch(
+      const response = await apiFetch(
         getResourceUrl(API_CONFIG.ENDPOINTS.BANNER, banner.id),
         {
           method: "PUT",

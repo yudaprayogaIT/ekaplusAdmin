@@ -11,6 +11,8 @@ import {
   FaCalendar,
   FaUser,
   FaCheckCircle,
+  FaClock,
+  FaHistory,
 } from "react-icons/fa";
 import Image from "next/image";
 import { ItemType } from "./Typelist";
@@ -153,21 +155,93 @@ export default function TypeDetailModal({
                   </div>
                 )}
 
-                {/* Updated By */}
-                {type.updated_by && (
+                {/* Updated Date */}
+                {type.updated_at && (
                   <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-5 border-2 border-purple-200">
                     <div className="flex items-center gap-2 mb-2">
-                      <FaUser className="w-4 h-4 text-purple-600" />
+                      <FaCalendar className="w-4 h-4 text-purple-600" />
                       <label className="text-xs font-bold text-purple-900 uppercase tracking-wide">
-                        Diupdate Oleh
+                        Diupdate
                       </label>
                     </div>
                     <p className="text-sm font-semibold text-purple-900">
-                      {type.updated_by.name}
+                      {formatDate(type.updated_at)}
                     </p>
                   </div>
                 )}
               </div>
+
+              {/* Catatan Aktivitas */}
+              {(type.created_at || type.updated_at) && (
+                <div className="mb-8">
+                  <div className="flex items-center gap-3 mb-6">
+                    <FaHistory className="w-5 h-5 text-blue-500" />
+                    <h3 className="text-xl font-bold text-gray-900">
+                      Catatan Aktivitas
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {type.created_at && (
+                      <div className="bg-gradient-to-br from-green-50 to-white rounded-2xl p-5 border-2 border-green-100">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-10 h-10 rounded-xl bg-green-500 flex items-center justify-center">
+                            <FaUser className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 font-medium">
+                              Created
+                            </p>
+                            <p className="text-sm font-bold text-gray-900">
+                              {type.created_by
+                                ? type.created_by.name
+                                : "Unknown"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <FaClock className="w-4 h-4 text-green-500" />
+                          <p className="text-sm">
+                            {new Date(type.created_at).toLocaleString("id-ID", {
+                              dateStyle: "long",
+                              timeStyle: "short",
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {type.updated_at && (
+                      <div className="bg-gradient-to-br from-blue-50 to-white rounded-2xl p-5 border-2 border-blue-100">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center">
+                            <FaEdit className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 font-medium">
+                              Last Updated
+                            </p>
+                            <p className="text-sm font-bold text-gray-900">
+                              {type.updated_by
+                                ? type.updated_by.name
+                                : "Unknown"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <FaClock className="w-4 h-4 text-blue-500" />
+                          <p className="text-sm">
+                            {new Date(type.updated_at).toLocaleString("id-ID", {
+                              dateStyle: "long",
+                              timeStyle: "short",
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Actions */}
               <div className="flex gap-4 pt-6 border-t-2 border-gray-100">

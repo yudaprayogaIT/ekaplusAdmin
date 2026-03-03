@@ -1,8 +1,16 @@
 // src/components/items/ItemList.tsx
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+} from "react";
+import {
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 import ItemCard from "./ItemCard";
 import AddItemModal from "./AddItemModal";
 import ItemDetailModal from "./ItemDetailModal";
@@ -24,7 +32,10 @@ import {
   FaFilter,
   FaExclamationTriangle,
 } from "react-icons/fa";
-import { motion, AnimatePresence } from "framer-motion";
+import {
+  motion,
+  AnimatePresence,
+} from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getQueryUrl,
@@ -32,13 +43,25 @@ import {
   getAuthHeaders,
   getFileUrl,
   API_CONFIG,
+  apiFetch,
 } from "@/config/api";
 import FilterBuilder from "@/components/filters/FilterBuilder";
 import { useFilters } from "@/hooks/useFilters";
 import { ITEM_FILTER_FIELDS } from "@/config/filterFields";
 import { FilterTriple } from "@/types/filter";
-import { Product, Category } from "@/types";
-import { buildSearchParams, parseSearchParams } from "@/utils/urlSync";
+import {
+  Product,
+  Category,
+} from "@/types";
+import type {
+  EntityFilterConfig,
+  FieldType,
+  GobackOperator,
+} from "@/types/filter";
+import {
+  buildSearchParams,
+  parseSearchParams,
+} from "@/utils/urlSync";
 
 export type Item = {
   id: number;
@@ -59,9 +82,9 @@ export type Item = {
   docstatus: number;
   created_at?: string;
   updated_at?: string;
-  created_by?: number;
-  updated_by?: number;
-  owner?: number;
+  created_by?: string | number;
+  updated_by?: string | number;
+  owner?: string | number;
   // Additional fields
   color?: string;
   type?: string;
@@ -105,9 +128,9 @@ type ItemAPIResponse = {
     docstatus: number;
     created_at: string;
     updated_at: string;
-    created_by: number;
-    updated_by: number;
-    owner: number;
+    created_by: number | { id?: number; full_name?: string };
+    updated_by: number | { id?: number; full_name?: string };
+    owner: number | { id?: number; full_name?: string };
     variants?: Array<{
       id: number;
       parent_id: number;
@@ -188,6 +211,29 @@ export default function ItemList() {
     initialFilters: urlState.filters,
   });
 
+  const itemFilterConfig: EntityFilterConfig = useMemo(() => {
+    const categoryOptions = Array.from(
+      new Set(
+        categoriesData
+          .map((c) => c.name)
+          .filter((name) => typeof name === "string" && name.trim() !== "")
+      )
+    ).map((name) => ({ value: name, label: name }));
+
+    return {
+      ...ITEM_FILTER_FIELDS,
+      fields: ITEM_FILTER_FIELDS.fields.map((field) => {
+        if (field.field !== "item_category") return field;
+        return {
+          ...field,
+          type: "select" as FieldType,
+          operators: ["=", "!=", "in", "not in"] as GobackOperator[],
+          options: categoryOptions,
+        };
+      }),
+    };
+  }, [categoriesData]);
+
   // Watch for URL changes and update filters accordingly
   useEffect(() => {
     const newUrlState = parseSearchParams(searchParams);
@@ -232,7 +278,12 @@ export default function ItemList() {
       page: number;
       childs?: ChildQuerySpec[];
     } = {
-      fields: ["*"],
+      fields: [
+        "*",
+        "created_by.full_name",
+        "updated_by.full_name",
+        "owner.full_name",
+      ],
       limit: 20,
       page: page,
       childs: [
@@ -261,7 +312,7 @@ export default function ItemList() {
     const DATA_URL = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, itemSpec);
     console.log("[ItemList] Request URL:", DATA_URL);
 
-    const res = await fetch(DATA_URL, {
+    const res = await apiFetch(DATA_URL, {
       method: "GET",
       cache: "no-store",
       headers,
@@ -334,9 +385,18 @@ export default function ItemList() {
         docstatus: item.docstatus,
         created_at: item.created_at,
         updated_at: item.updated_at,
-        created_by: item.created_by,
-        updated_by: item.updated_by,
-        owner: item.owner,
+        created_by:
+          typeof item.created_by === "object"
+            ? item.created_by.full_name || "Unknown"
+            : item.created_by,
+        updated_by:
+          typeof item.updated_by === "object"
+            ? item.updated_by.full_name || "Unknown"
+            : item.updated_by,
+        owner:
+          typeof item.owner === "object"
+            ? item.owner.full_name || "Unknown"
+            : item.owner,
         variants: item.variants || [],
         variantCount: item.variants ? item.variants.length : 0,
       }));
@@ -518,7 +578,7 @@ export default function ItemList() {
 
         const headers = getAuthHeaders(token);
 
-        const response = await fetch(
+        const response = await apiFetch(
           getResourceUrl(API_CONFIG.ENDPOINTS.ITEM, item.id),
           {
             method: "DELETE",
@@ -575,7 +635,7 @@ export default function ItemList() {
         }
       );
 
-      const itemRes = await fetch(itemDetailUrl, {
+      const itemRes = await apiFetch(itemDetailUrl, {
         method: "GET",
         cache: "no-store",
         headers,
@@ -647,7 +707,7 @@ export default function ItemList() {
         }
       );
 
-      const itemRes = await fetch(itemDetailUrl, {
+      const itemRes = await apiFetch(itemDetailUrl, {
         method: "GET",
         cache: "no-store",
         headers,
@@ -767,7 +827,7 @@ export default function ItemList() {
         fields: ["*"],
         limit: 1000000000000,
       });
-      const categoriesRes = await fetch(categoriesUrl, { headers });
+      const categoriesRes = await apiFetch(categoriesUrl, { headers });
 
       if (categoriesRes.ok) {
         const json = await categoriesRes.json();
@@ -785,7 +845,7 @@ export default function ItemList() {
         fields: ["*"],
         limit: 1000000000000,
       });
-      const productsRes = await fetch(productsUrl, { headers });
+      const productsRes = await apiFetch(productsUrl, { headers });
 
       if (productsRes.ok) {
         const json = await productsRes.json();
@@ -1049,7 +1109,7 @@ export default function ItemList() {
               {/* Advanced FilterBuilder Component */}
               <FilterBuilder
                 entity="item"
-                config={ITEM_FILTER_FIELDS}
+                config={itemFilterConfig}
                 onApply={handleApplyFilters}
               />
 

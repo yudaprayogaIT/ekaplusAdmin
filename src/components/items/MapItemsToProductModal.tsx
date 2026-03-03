@@ -1,8 +1,14 @@
 // src/components/items/MapItemsToProductModal.tsx
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, {
+  useState,
+  useMemo,
+} from "react";
+import {
+  motion,
+  AnimatePresence,
+} from "framer-motion";
 import {
   FaTimes,
   FaSearch,
@@ -11,7 +17,13 @@ import {
   FaCheckCircle,
 } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
-import { getAuthHeaders, getQueryUrl, API_CONFIG } from "@/config/api";
+import {
+  getAuthHeaders,
+  getQueryUrl,
+  getResourceUrl,
+  API_CONFIG,
+  apiFetch,
+} from "@/config/api";
 import { Item } from "./ItemList";
 
 type Product = {
@@ -29,6 +41,15 @@ type Category = {
   id: number;
   name: string;
 };
+
+function toNumber(value: number | string | null | undefined): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
 
 export default function MapItemsToProductModal({
   open,
@@ -62,16 +83,24 @@ export default function MapItemsToProductModal({
         fields: ["*"],
         limit: 1000,
       });
-      const categoriesRes = await fetch(categoriesUrl, { headers });
+      const categoriesRes = await apiFetch(categoriesUrl, { headers });
 
       let categoriesData: Category[] = [];
       if (categoriesRes.ok) {
         const json = await categoriesRes.json();
         categoriesData = json.data.map(
-          (cat: { id: number; category_name: string }) => ({
-            id: cat.id,
-            name: cat.category_name,
-          })
+          (cat: { id: number | string; category_name: string }) => {
+            const id = toNumber(cat.id);
+            return id !== null
+              ? {
+                  id,
+                  name: cat.category_name,
+                }
+              : null;
+          }
+        );
+        categoriesData = categoriesData.filter(
+          (cat): cat is Category => cat !== null
         );
       }
 
@@ -81,28 +110,41 @@ export default function MapItemsToProductModal({
         filters: [["disabled", "=", 0]],
         limit: 5000,
       });
-      const productsRes = await fetch(productsUrl, { headers });
+      const productsRes = await apiFetch(productsUrl, { headers });
 
       let productsData: Product[] = [];
       if (productsRes.ok) {
         const json = await productsRes.json();
         productsData = json.data.map(
           (p: {
-            id: number;
+            id: number | string;
             product_name: string;
-            item_category: [];
+            item_category: number | string | null;
             disabled: number;
             hot_deals: boolean;
-          }) => ({
-            id: p.id,
-            name: p.product_name,
-            itemCategory: {
-              id: p.item_category,
-              name: `Category ${p.item_category}`,
-            },
-            disabled: p.disabled,
-            isHotDeals: Boolean(p.hot_deals),
-          })
+          }) => {
+            const productId = toNumber(p.id);
+            const categoryId = toNumber(p.item_category);
+            const category = categoriesData.find(
+              (cat) => cat.id === categoryId
+            );
+
+            return productId !== null
+              ? {
+                  id: productId,
+                  name: p.product_name,
+                  itemCategory: {
+                    id: categoryId ?? 0,
+                    name: category?.name || `Category ${p.item_category}`,
+                  },
+                  disabled: p.disabled,
+                  isHotDeals: Boolean(p.hot_deals),
+                }
+              : null;
+          }
+        );
+        productsData = productsData.filter(
+          (product): product is Product => product !== null
         );
       }
 
@@ -163,11 +205,14 @@ export default function MapItemsToProductModal({
           idx: index + 1, // Simple ordering based on selection order
         };
 
-        const response = await fetch(API_CONFIG.ENDPOINTS.PRODUCT_VARIANT, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(variantData),
-        });
+        const response = await apiFetch(
+          getResourceUrl(API_CONFIG.ENDPOINTS.PRODUCT_VARIANT),
+          {
+            method: "POST",
+            headers,
+            body: JSON.stringify(variantData),
+          }
+        );
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));

@@ -1,15 +1,27 @@
 // src/components/workflow-states/AddWorkflowStateModal.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { FaTimes, FaCheckCircle, FaPalette, FaCircle } from "react-icons/fa";
+import React, {
+  useEffect,
+  useState,
+} from "react";
+import {
+  motion,
+  AnimatePresence,
+} from "framer-motion";
+import {
+  FaTimes,
+  FaCheckCircle,
+  FaPalette,
+  FaCircle,
+} from "react-icons/fa";
 import { WorkflowState } from "./WorkflowStateList";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getResourceUrl,
   getAuthHeadersFormData,
   API_CONFIG,
+  apiFetch,
 } from "@/config/api";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
@@ -133,7 +145,7 @@ export default function AddWorkflowStateModal({
 
       if (initial) {
         // Update existing state
-        response = await fetch(
+        response = await apiFetch(
           getResourceUrl(API_CONFIG.ENDPOINTS.WORKFLOW_STATE, initial.id),
           {
             method: "PUT",
@@ -143,11 +155,14 @@ export default function AddWorkflowStateModal({
         );
       } else {
         // Create new state
-        response = await fetch(API_CONFIG.ENDPOINTS.WORKFLOW_STATE, {
-          method: "POST",
-          headers,
-          body: formData,
-        });
+        response = await apiFetch(
+          getResourceUrl(API_CONFIG.ENDPOINTS.WORKFLOW_STATE),
+          {
+            method: "POST",
+            headers,
+            body: formData,
+          }
+        );
       }
 
       if (!response.ok) {

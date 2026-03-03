@@ -3,6 +3,7 @@ import {
   getQueryUrl,
   getResourceUrl,
   getAuthHeaders,
+  apiFetch,
 } from "@/config/api";
 import type {
   ItemVariant,
@@ -89,7 +90,7 @@ export async function fetchVariants(
 
   console.log("fetchVariants: Fetching from", url);
 
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     headers: getAuthHeaders(token),
   });
 
@@ -160,7 +161,7 @@ export async function fetchVariantsByProduct(
     filters: [["parent_id", "=", productId]],
   });
 
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     headers: getAuthHeaders(token),
   });
 
@@ -184,7 +185,7 @@ export async function createVariant(
 ): Promise<ItemVariant> {
   const url = getResourceUrl(API_CONFIG.ENDPOINTS.PRODUCT_VARIANT);
 
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     method: "POST",
     headers: getAuthHeaders(token),
     body: JSON.stringify(data),
@@ -210,7 +211,7 @@ export async function updateVariant(
 ): Promise<ItemVariant> {
   const url = getResourceUrl(API_CONFIG.ENDPOINTS.PRODUCT_VARIANT, id);
 
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     method: "PUT",
     headers: getAuthHeaders(token),
     body: JSON.stringify(data),
@@ -233,7 +234,7 @@ export async function deleteVariant(
 ): Promise<void> {
   const url = getResourceUrl(API_CONFIG.ENDPOINTS.PRODUCT_VARIANT, id);
 
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     method: "DELETE",
     headers: getAuthHeaders(token),
   });

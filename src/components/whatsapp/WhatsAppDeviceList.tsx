@@ -1,7 +1,11 @@
 // src/components/whatsapp/WhatsAppDeviceList.tsx
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import WhatsAppDeviceCard from "./WhatsAppDeviceCard";
 import WhatsAppDetailModal from "./WhatsAppDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
@@ -22,6 +26,7 @@ import {
 } from "react-icons/fa";
 import { motion } from "framer-motion";
 import AddWhatsAppModal from "./AddWhatsAppModal";
+import { apiFetch } from "@/config/api";
 
 type WhatsAppDevice = {
   id: number;
@@ -98,7 +103,7 @@ export default function WhatsAppDeviceList() {
       setLoading(true);
 
       try {
-        const res = await fetch(DATA_URL, { cache: "no-store" });
+        const res = await apiFetch(DATA_URL, { cache: "no-store" });
         if (res.ok) {
           const data = (await res.json()) as WhatsAppDevice[];
           if (!cancelled) {
@@ -297,7 +302,7 @@ export default function WhatsAppDeviceList() {
 
   function refreshData() {
     setLoading(true);
-    fetch(DATA_URL, { cache: "no-store" })
+    apiFetch(DATA_URL, { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
         setDevices(data);

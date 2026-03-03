@@ -3,7 +3,7 @@ import RequireAuth from "@/components/auth/RequireAuth";
 import WhatsAppDeviceList from "@/components/whatsapp/WhatsAppDeviceList";
 
 export const metadata = {
-  title: "WhatsApp Admin - Ekatalog Ekatunggal",
+  title: "WhatsApp Admin - EKA+",
   description: "Kelola perangkat WhatsApp untuk pengiriman OTP dan notifikasi",
 };
 

@@ -1,13 +1,26 @@
 // src/components/auth/LoginSelector.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { 
-  FaShieldAlt, FaUserTie, FaUserCog, FaUser, FaSignInAlt, 
-  FaSignOutAlt, FaCheckCircle, FaKey 
+import React, {
+  useEffect,
+  useState,
+} from "react";
+import {
+  motion,
+  AnimatePresence,
+} from "framer-motion";
+import {
+  FaShieldAlt,
+  FaUserTie,
+  FaUserCog,
+  FaUser,
+  FaSignInAlt,
+  FaSignOutAlt,
+  FaCheckCircle,
+  FaKey,
 } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
+import { apiFetch } from "@/config/api";
 
 // Demo password untuk quick login
 const DEMO_PASSWORD = "admin123";
@@ -72,7 +85,7 @@ export default function LoginSelector() {
         if (snap) {
           usersList = JSON.parse(snap);
         } else {
-          const res = await fetch("/data/users.json");
+          const res = await apiFetch("/data/users.json");
           if (res.ok) {
             const data = await res.json();
             usersList = data.users || [];
@@ -80,7 +93,7 @@ export default function LoginSelector() {
         }
 
         // Load roles for display names
-        const rolesRes = await fetch("/data/roles.json");
+        const rolesRes = await apiFetch("/data/roles.json");
         let roles: RoleData[] = [];
         if (rolesRes.ok) {
           const rolesData = await rolesRes.json();

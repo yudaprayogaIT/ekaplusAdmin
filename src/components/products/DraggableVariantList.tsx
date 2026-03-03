@@ -85,6 +85,11 @@ function DraggableVariantItem({
       </div>
 
       {/* Type & Color */}
+      {item.disabled === 1 && (
+        <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-medium">
+          Disabled
+        </span>
+      )}
       {item.type && (
         <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium">
           {item.type}

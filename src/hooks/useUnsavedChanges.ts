@@ -49,7 +49,7 @@ export function useUnsavedChanges({
 /**
  * Helper hook to detect if form fields have changed
  */
-export function useFormDirty<T extends Record<string, any>>(
+export function useFormDirty<T extends Record<string, unknown>>(
   formData: T,
   initialData: T
 ): boolean {

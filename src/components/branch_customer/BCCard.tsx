@@ -37,7 +37,7 @@ export function BCCard({ bc, onViewDetails }: BCCardProps) {
               <h3 className="text-lg font-bold text-white line-clamp-1">
                 {bc.name}
               </h3>
-              <p className="text-sm text-orange-100">BC ID: #{bc.id}</p>
+              <p className="text-sm text-orange-100">BCID: {bc.code || `BC${bc.id}`}</p>
             </div>
           </div>
 

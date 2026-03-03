@@ -13,6 +13,9 @@ import {
   FaMapPin,
   FaExternalLinkAlt,
   FaLock,
+  FaUser,
+  FaClock,
+  FaHistory,
 } from "react-icons/fa";
 import Image from "next/image";
 import type { Branch } from "./BranchList";
@@ -226,6 +229,88 @@ export default function BranchDetailModal({
                       </code>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Catatan Aktivitas */}
+              {(branch.created_at || branch.updated_at) && (
+                <div className="mb-8">
+                  <div className="flex items-center gap-3 mb-4">
+                    <FaHistory className="w-5 h-5 text-blue-500" />
+                    <h3 className="text-lg font-bold text-gray-900">
+                      Catatan Aktivitas
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {branch.created_at && (
+                      <div className="bg-gradient-to-br from-green-50 to-white rounded-2xl p-5 border-2 border-green-100">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-10 h-10 rounded-xl bg-green-500 flex items-center justify-center">
+                            <FaUser className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 font-medium">
+                              Created
+                            </p>
+                            <p className="text-sm font-bold text-gray-900">
+                              {branch.created_by
+                                ? typeof branch.created_by === "string"
+                                  ? branch.created_by
+                                  : `User #${branch.created_by}`
+                                : "Unknown"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <FaClock className="w-4 h-4 text-green-500" />
+                          <p className="text-sm">
+                            {new Date(branch.created_at).toLocaleString(
+                              "id-ID",
+                              {
+                                dateStyle: "long",
+                                timeStyle: "short",
+                              }
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {branch.updated_at && (
+                      <div className="bg-gradient-to-br from-blue-50 to-white rounded-2xl p-5 border-2 border-blue-100">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center">
+                            <FaEdit className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 font-medium">
+                              Last Updated
+                            </p>
+                            <p className="text-sm font-bold text-gray-900">
+                              {branch.updated_by
+                                ? typeof branch.updated_by === "string"
+                                  ? branch.updated_by
+                                  : `User #${branch.updated_by}`
+                                : "Unknown"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <FaClock className="w-4 h-4 text-blue-500" />
+                          <p className="text-sm">
+                            {new Date(branch.updated_at).toLocaleString(
+                              "id-ID",
+                              {
+                                dateStyle: "long",
+                                timeStyle: "short",
+                              }
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 

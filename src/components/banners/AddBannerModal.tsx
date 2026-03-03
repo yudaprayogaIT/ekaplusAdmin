@@ -1,9 +1,19 @@
 // src/components/banners/AddBannerModal.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { FaTimes, FaImage, FaCheckCircle } from "react-icons/fa";
+import React, {
+  useEffect,
+  useState,
+} from "react";
+import {
+  motion,
+  AnimatePresence,
+} from "framer-motion";
+import {
+  FaTimes,
+  FaImage,
+  FaCheckCircle,
+} from "react-icons/fa";
 import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -13,7 +23,10 @@ import {
   API_CONFIG,
   apiFetch,
 } from "@/config/api";
-import type { Banner, BannerType } from "@/types/banner";
+import type {
+  Banner,
+  BannerType,
+} from "@/types/banner";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
 
@@ -333,7 +346,7 @@ export default function AddBannerModal({
 
       if (initial && initial.id) {
         // UPDATE existing banner
-        response = await fetch(
+        response = await apiFetch(
           getResourceUrl(API_CONFIG.ENDPOINTS.BANNER, initial.id),
           {
             method: "PUT",
@@ -343,7 +356,7 @@ export default function AddBannerModal({
         );
       } else {
         // CREATE new banner
-        response = await fetch(getResourceUrl(API_CONFIG.ENDPOINTS.BANNER), {
+        response = await apiFetch(getResourceUrl(API_CONFIG.ENDPOINTS.BANNER), {
           method: "POST",
           headers,
           body: formData,

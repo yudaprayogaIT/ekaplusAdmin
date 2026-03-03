@@ -1,15 +1,27 @@
 // src/components/categories/AddCategoryModal.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { FaTimes, FaUpload, FaImage, FaCheckCircle } from "react-icons/fa";
+import React, {
+  useEffect,
+  useState,
+} from "react";
+import {
+  motion,
+  AnimatePresence,
+} from "framer-motion";
+import {
+  FaTimes,
+  FaUpload,
+  FaImage,
+  FaCheckCircle,
+} from "react-icons/fa";
 import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getResourceUrl,
   getAuthHeadersFormData,
   API_CONFIG,
+  apiFetch,
 } from "@/config/api";
 import { Category } from "./CategoryList";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
@@ -37,7 +49,7 @@ export default function AddCategoryModal({
   const [description, setDescription] = useState("");
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
-  const [typeId, setTypeId] = useState<number>(1);
+  const [typeId, setTypeId] = useState<number | null>(null);
   const [iconUuid, setIconUuid] = useState("");
   const [imageUuid, setImageUuid] = useState("");
   const [iconFile, setIconFile] = useState<File | null>(null);
@@ -53,7 +65,7 @@ export default function AddCategoryModal({
     description: "",
     title: "",
     subtitle: "",
-    typeId: 1,
+    typeId: null as number | null,
     iconUuid: "",
     imageUuid: "",
   });
@@ -89,7 +101,7 @@ export default function AddCategoryModal({
       setDescription(initial.description ?? "");
       setTitle(initial.title ?? "");
       setSubtitle(initial.subtitle ?? "");
-      setTypeId(initial.item_type ?? types[0]?.id ?? 1);
+      setTypeId(initial.item_type ?? types[0]?.id ?? null);
       setIconUuid(iconUuidExtracted);
       setIconPreview(initial.icon || null);
       setIconFile(null);
@@ -103,7 +115,7 @@ export default function AddCategoryModal({
         description: initial.description ?? "",
         title: initial.title ?? "",
         subtitle: initial.subtitle ?? "",
-        typeId: initial.item_type ?? types[0]?.id ?? 1,
+        typeId: initial.item_type ?? types[0]?.id ?? null,
         iconUuid: iconUuidExtracted,
         imageUuid: imageUuidExtracted,
       });
@@ -112,7 +124,7 @@ export default function AddCategoryModal({
       setDescription("");
       setTitle("");
       setSubtitle("");
-      setTypeId(types[0]?.id ?? 1);
+      setTypeId(types[0]?.id ?? null);
       setIconUuid("");
       setImageUuid("");
       setIconPreview(null);
@@ -126,7 +138,7 @@ export default function AddCategoryModal({
         description: "",
         title: "",
         subtitle: "",
-        typeId: types[0]?.id ?? 1,
+        typeId: types[0]?.id ?? null,
         iconUuid: "",
         imageUuid: "",
       });
@@ -190,6 +202,9 @@ export default function AddCategoryModal({
       if (!authToken) {
         throw new Error("Not authenticated");
       }
+      if (!typeId) {
+        throw new Error("Tipe kategori wajib dipilih");
+      }
 
       // Prepare FormData for API - send file directly with data
       const formData = new FormData();
@@ -225,7 +240,7 @@ export default function AddCategoryModal({
 
       if (initial && initial.id) {
         // UPDATE existing category
-        response = await fetch(
+        response = await apiFetch(
           getResourceUrl(API_CONFIG.ENDPOINTS.CATEGORY, initial.id),
           {
             method: "PUT",
@@ -235,7 +250,7 @@ export default function AddCategoryModal({
         );
       } else {
         // CREATE new category
-        response = await fetch(getResourceUrl(API_CONFIG.ENDPOINTS.CATEGORY), {
+        response = await apiFetch(getResourceUrl(API_CONFIG.ENDPOINTS.CATEGORY), {
           method: "POST",
           headers,
           body: formData,
@@ -354,10 +369,16 @@ export default function AddCategoryModal({
                     Tipe <span className="text-red-500">*</span>
                   </label>
                   <select
-                    value={typeId}
-                    onChange={(e) => setTypeId(Number(e.target.value))}
+                    value={typeId ?? ""}
+                    onChange={(e) =>
+                      setTypeId(e.target.value ? Number(e.target.value) : null)
+                    }
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                    required
                   >
+                    <option value="" disabled>
+                      Pilih tipe kategori
+                    </option>
                     {types.map((type) => (
                       <option key={type.id} value={type.id}>
                         {type.name}
@@ -553,7 +574,7 @@ export default function AddCategoryModal({
                 </button>
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={saving || !typeId}
                   className="px-8 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:shadow-xl hover:shadow-red-200 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {saving ? (

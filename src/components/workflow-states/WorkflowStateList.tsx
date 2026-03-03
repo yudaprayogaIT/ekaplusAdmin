@@ -1,19 +1,32 @@
 // src/components/workflow-states/WorkflowStateList.tsx
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import WorkflowStateCard from "./WorkflowStateCard";
 import AddWorkflowStateModal from "./AddWorkflowStateModal";
 import WorkflowStateDetailModal from "./WorkflowStateDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import { useAuth } from "@/contexts/AuthContext";
-import { FaPlus, FaSearch, FaCircle, FaLock, FaPalette } from "react-icons/fa";
+import {
+  useAuth,
+} from "@/contexts/AuthContext";
+import {
+  FaPlus,
+  FaSearch,
+  FaCircle,
+  FaLock,
+  FaPalette,
+} from "react-icons/fa";
 import { motion } from "framer-motion";
 import {
   getQueryUrl,
   getResourceUrl,
   getAuthHeaders,
   API_CONFIG,
+  apiFetch,
 } from "@/config/api";
 
 export type WorkflowState = {
@@ -67,7 +80,7 @@ export default function WorkflowStateList() {
         });
         const headers = getAuthHeaders(token);
 
-        const res = await fetch(DATA_URL, {
+        const res = await apiFetch(DATA_URL, {
           method: "GET",
           cache: "no-store",
           headers,
@@ -129,7 +142,7 @@ export default function WorkflowStateList() {
         });
         const headers = getAuthHeaders(token);
 
-        const res = await fetch(DATA_URL, {
+        const res = await apiFetch(DATA_URL, {
           method: "GET",
           cache: "no-store",
           headers,
@@ -168,7 +181,7 @@ export default function WorkflowStateList() {
 
         const headers = getAuthHeaders(token);
 
-        const response = await fetch(
+        const response = await apiFetch(
           getResourceUrl(API_CONFIG.ENDPOINTS.WORKFLOW_STATE, state.id),
           {
             method: "DELETE",

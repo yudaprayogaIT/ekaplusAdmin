@@ -9,6 +9,9 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "EKA+ Admin - Web Admin Ekatunggal",
   description: "Web Admin untuk sistem EKA+ Ekatunggal Group",
+  icons: {
+    icon: "/images/ekaplus_icon.png",
+  },
 };
 
 export default function RootLayout({

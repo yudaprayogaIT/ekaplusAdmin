@@ -1,14 +1,25 @@
 // src/components/branches/AddBranchModal.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { FaTimes, FaMapMarkerAlt, FaGlobe } from "react-icons/fa";
+import React, {
+  useEffect,
+  useState,
+} from "react";
+import {
+  motion,
+  AnimatePresence,
+} from "framer-motion";
+import {
+  FaTimes,
+  FaMapMarkerAlt,
+  FaGlobe,
+} from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getResourceUrl,
   getAuthHeadersFormData,
   API_CONFIG,
+  apiFetch,
 } from "@/config/api";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
@@ -205,7 +216,7 @@ export default function AddBranchModal({
 
       if (initial && initial.id) {
         // UPDATE existing branch
-        response = await fetch(
+        response = await apiFetch(
           getResourceUrl(API_CONFIG.ENDPOINTS.BRANCH, initial.id),
           {
             method: "PUT",
@@ -215,7 +226,7 @@ export default function AddBranchModal({
         );
       } else {
         // CREATE new branch
-        response = await fetch(getResourceUrl(API_CONFIG.ENDPOINTS.BRANCH), {
+        response = await apiFetch(getResourceUrl(API_CONFIG.ENDPOINTS.BRANCH), {
           method: "POST",
           headers,
           body: formData,

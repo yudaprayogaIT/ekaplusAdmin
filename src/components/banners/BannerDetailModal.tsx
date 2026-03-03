@@ -18,6 +18,7 @@ import {
   FaEye,
   FaCalendar,
   FaUser,
+  FaHistory,
 } from "react-icons/fa";
 import Image from "next/image";
 import type { Banner, ScheduleStatus } from "@/types/banner";
@@ -337,37 +338,75 @@ export default function BannerDetailModal({
                 )}
               </div>
 
-              {/* Audit Trail */}
-              <div className="pt-6 border-t border-gray-200">
-                <h4 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
-                  <FaUser className="w-4 h-4" />
-                  Audit Trail
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-600">Created:</span>
-                    <span className="ml-2 text-gray-800 font-medium">
-                      {formatDate(banner.created_at)}
-                    </span>
-                    {banner.created_by && (
-                      <span className="ml-1 text-gray-500">
-                        (User #{banner.created_by})
-                      </span>
-                    )}
+              {/* Catatan Aktivitas */}
+              {(banner.created_at || banner.updated_at) && (
+                <div className="pt-6 border-t border-gray-200">
+                  <div className="flex items-center gap-2 mb-4">
+                    <FaHistory className="w-4 h-4 text-blue-500" />
+                    <h4 className="text-sm font-semibold text-gray-700">
+                      Catatan Aktivitas
+                    </h4>
                   </div>
-                  <div>
-                    <span className="text-gray-600">Updated:</span>
-                    <span className="ml-2 text-gray-800 font-medium">
-                      {formatDate(banner.updated_at)}
-                    </span>
-                    {banner.updated_by && (
-                      <span className="ml-1 text-gray-500">
-                        (User #{banner.updated_by})
-                      </span>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {banner.created_at && (
+                      <div className="bg-gradient-to-br from-green-50 to-white rounded-2xl p-5 border-2 border-green-100">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-10 h-10 rounded-xl bg-green-500 flex items-center justify-center">
+                            <FaUser className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 font-medium">
+                              Created
+                            </p>
+                            <p className="text-sm font-bold text-gray-900">
+                              {banner.created_by
+                                ? typeof banner.created_by === "object"
+                                  ? banner.created_by.name || "Unknown"
+                                  : `User #${banner.created_by}`
+                                : "Unknown"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <FaClock className="w-4 h-4 text-green-500" />
+                          <p className="text-sm">
+                            {formatDate(banner.created_at)}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {banner.updated_at && (
+                      <div className="bg-gradient-to-br from-blue-50 to-white rounded-2xl p-5 border-2 border-blue-100">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center">
+                            <FaEdit className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 font-medium">
+                              Last Updated
+                            </p>
+                            <p className="text-sm font-bold text-gray-900">
+                              {banner.updated_by
+                                ? typeof banner.updated_by === "object"
+                                  ? banner.updated_by.name || "Unknown"
+                                  : `User #${banner.updated_by}`
+                                : "Unknown"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <FaClock className="w-4 h-4 text-blue-500" />
+                          <p className="text-sm">
+                            {formatDate(banner.updated_at)}
+                          </p>
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-6 border-t-2 border-gray-100">

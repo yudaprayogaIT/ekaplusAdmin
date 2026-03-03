@@ -1,8 +1,13 @@
 // src/components/dashboard/Dashboard.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import React, {
+  useEffect,
+  useState,
+} from "react";
+import {
+  motion,
+} from "framer-motion";
 import {
   FaBox,
   FaLayerGroup,
@@ -16,13 +21,20 @@ import {
 } from "react-icons/fa";
 import Link from "next/link";
 import Image from "next/image";
-import type { Item, ItemVariant, Product, Category, Branch } from "@/types";
+import type {
+  Item,
+  ItemVariant,
+  Product,
+  Category,
+  Branch,
+} from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   API_CONFIG,
   getQueryUrl,
   getAuthHeaders,
   getFileUrl,
+  apiFetch,
 } from "@/config/api";
 
 type DashboardStats = {
@@ -567,7 +579,7 @@ export default function Dashboard() {
           fields: ["*"],
           limit: 100000000,
         });
-        const categoriesRes = await fetch(categoriesUrl, {
+        const categoriesRes = await apiFetch(categoriesUrl, {
           headers,
           cache: "no-store",
         });
@@ -601,7 +613,7 @@ export default function Dashboard() {
           fields: ["*"],
           limit: 100000000,
         });
-        const productsRes = await fetch(productsUrl, {
+        const productsRes = await apiFetch(productsUrl, {
           headers,
           cache: "no-store",
         });
@@ -636,7 +648,7 @@ export default function Dashboard() {
           fields: ["*"],
           limit: 100000000,
         });
-        const itemsRes = await fetch(itemsUrl, {
+        const itemsRes = await apiFetch(itemsUrl, {
           headers,
           cache: "no-store",
         });
@@ -678,7 +690,7 @@ export default function Dashboard() {
           fields: ["*"],
           limit: 100000000,
         });
-        const variantsRes = await fetch(variantsUrl, {
+        const variantsRes = await apiFetch(variantsUrl, {
           headers,
           cache: "no-store",
         });
@@ -711,7 +723,7 @@ export default function Dashboard() {
         // Load Branches from JSON (fallback - user will implement later)
         // let branchesData: Branch[] = [];
         // try {
-        //   const branchesRes = await fetch(BRANCHES_DATA_URL, {
+        //   const branchesRes = await apiFetch(BRANCHES_DATA_URL, {
         //     cache: "no-store",
         //   });
         //   if (branchesRes.ok) branchesData = await branchesRes.json();
@@ -722,7 +734,7 @@ export default function Dashboard() {
           fields: ["*"],
           limit: 100000000,
         });
-        const branchesRes = await fetch(branchesUrl, {
+        const branchesRes = await apiFetch(branchesUrl, {
           headers,
           cache: "no-store",
         });

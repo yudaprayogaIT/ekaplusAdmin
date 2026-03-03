@@ -3,7 +3,7 @@ import RequireAuth from "@/components/auth/RequireAuth";
 import ItemList from "@/components/items/ItemList";
 
 export const metadata = {
-  title: "Items - Ekatalog Ekatunggal",
+  title: "Items - EKA+",
   description: "Kelola item produk di seluruh cabang",
 };
 

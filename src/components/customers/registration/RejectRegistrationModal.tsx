@@ -6,13 +6,34 @@ import { FaTimesCircle, FaExclamationTriangle } from "react-icons/fa";
 import type { CustomerRegistration } from "@/types/customerRegistration";
 import { REJECTION_REASONS } from "@/types/customerRegistration";
 import { useAuth } from "@/contexts/AuthContext";
-import { getApiUrl, API_CONFIG, apiFetch } from "@/config/api";
+import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
+import ActionResultModal from "@/components/ui/ActionResultModal";
+
+interface CustomerRegisterAddressApiResponse {
+  id: number;
+  parent_id: number;
+  label?: string | null;
+  address?: string | null;
+  city?: string | null;
+  province?: string | null;
+  district?: string | null;
+  postal_code?: string | null;
+  pic_name?: string | null;
+  pic_phone?: string | null;
+  is_default?: number | boolean | null;
+}
 
 interface RejectRegistrationModalProps {
   isOpen: boolean;
   onClose: () => void;
   registration: CustomerRegistration | null;
   onSuccess: () => void;
+}
+
+function normalizePhone(value?: string): string | undefined {
+  if (!value) return undefined;
+  const digits = value.replace(/\D/g, "");
+  return digits || undefined;
 }
 
 export function RejectRegistrationModal({
@@ -26,6 +47,7 @@ export function RejectRegistrationModal({
   const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Reset form when modal opens with new registration
   useEffect(() => {
@@ -33,6 +55,7 @@ export function RejectRegistrationModal({
       setSelectedReason("");
       setNotes("");
       setError(null);
+      setSuccessMessage(null);
     }
   }, [isOpen, registration]);
 
@@ -52,34 +75,103 @@ export function RejectRegistrationModal({
     setError(null);
 
     try {
-      // TODO: Replace with actual API call when backend is ready
-      // For now, simulate API call with localStorage update
-      const url = getApiUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER_REJECT);
-
-      // Simulate API delay
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // For static implementation, we'll just trigger the success callback
-      // The actual status update will happen when backend API is integrated
-      console.log("[RejectRegistrationModal] Rejecting registration:", {
-        registration_id: registration.id,
-        reason_code: selectedReason,
-        notes: notes.trim() || undefined,
-      });
+      const selectedLabel =
+        REJECTION_REASONS.find((r) => r.code === selectedReason)?.label || selectedReason;
+      const notesText = notes.trim();
+      const shippingSpec = {
+        fields: ["*"],
+        filters: [
+          ["parent_id", "=", Number(registration.id)],
+          ["parent_type", "=", "customer_register"],
+        ],
+      };
+      const shippingRes = await apiFetch(
+        getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER_ADDRESS, shippingSpec),
+        { method: "GET", cache: "no-store" },
+        token
+      );
+      const shippingJson = shippingRes.ok ? await shippingRes.json().catch(() => null) : null;
+      const shippingRows: CustomerRegisterAddressApiResponse[] = Array.isArray(shippingJson?.data)
+        ? shippingJson.data
+        : [];
+      const effectiveShippingAddresses: CustomerRegisterAddressApiResponse[] =
+        registration.same_as_company_address
+          ? shippingRows.length > 0
+            ? shippingRows
+            : [
+                {
+                  id: -1,
+                  parent_id: Number(registration.id),
+                  label: "Alamat Perusahaan",
+                  address: registration.address.full_address,
+                  city: registration.address.city_name,
+                  province: registration.address.province_name,
+                  district: registration.address.district_name,
+                  postal_code: registration.address.postal_code,
+                  pic_name:
+                    registration.branch_owner?.full_name || registration.user.full_name,
+                  pic_phone:
+                    registration.branch_owner?.phone || registration.user.phone,
+                  is_default: 1,
+                },
+              ]
+          : shippingRows;
+      const shippingPayload = effectiveShippingAddresses.map((addr) => ({
+        label: addr.label || "Warehouse",
+        pic_name: addr.pic_name || undefined,
+        pic_phone: normalizePhone(addr.pic_phone || undefined),
+        address: addr.address || "",
+        city: addr.city || "",
+        district: addr.district || "",
+        postal_code: addr.postal_code || "",
+        province: addr.province || "",
+        is_default: addr.is_default ? 1 : undefined,
+      }));
+      const url = getQueryUrl(
+        `${API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER}/${registration.id}`,
+        { fields: ["*"] }
+      );
+      const payload = {
+        status: "Rejected",
+        docstatus: 0,
+        nbid: null,
+        gpid: null,
+        gcid: null,
+        bcid: null,
+        reject_reason: selectedLabel,
+        reject_notes: notesText || null,
+        rejection_reason: selectedLabel,
+        rejection_notes: notesText || null,
+        customer_shipping_address: shippingPayload,
+      };
+      const res = await apiFetch(
+        url,
+        {
+          method: "PUT",
+          cache: "no-store",
+          body: JSON.stringify(payload),
+        },
+        token
+      );
+      if (!res.ok) {
+        const json = await res.json().catch(() => null);
+        const message =
+          json && typeof json === "object" && "message" in json && typeof json.message === "string"
+            ? json.message
+            : `Gagal reject registrasi (${res.status})`;
+        throw new Error(message);
+      }
 
       // Trigger update events
       window.dispatchEvent(
         new Event("ekatalog:customer_registrations_update")
       );
 
-      // Show success message
-      alert(
-        `Registrasi "${registration.company.name}" berhasil di-reject.\nAlasan: ${
-          REJECTION_REASONS.find((r) => r.code === selectedReason)?.label
-        }${notes ? `\nCatatan: ${notes}` : ""}`
+      setSuccessMessage(
+        `Registrasi "${registration.company.name}" berhasil di-reject.\nAlasan: ${selectedLabel}${
+          notesText ? `\nCatatan: ${notesText}` : ""
+        }`
       );
-
-      onSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal reject registrasi");
     } finally {
@@ -92,13 +184,14 @@ export function RejectRegistrationModal({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden"
-          >
+        <>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden"
+            >
             {/* Header */}
             <div className="bg-gradient-to-r from-red-500 to-red-600 px-6 py-5 flex items-center gap-3">
               <FaTimesCircle className="w-7 h-7 text-white" />
@@ -209,8 +302,19 @@ export function RejectRegistrationModal({
                 )}
               </motion.button>
             </div>
-          </motion.div>
-        </div>
+            </motion.div>
+          </div>
+          <ActionResultModal
+            isOpen={Boolean(successMessage)}
+            type="success"
+            title="Reject Berhasil"
+            message={successMessage || ""}
+            onClose={() => {
+              setSuccessMessage(null);
+              onSuccess();
+            }}
+          />
+        </>
       )}
     </AnimatePresence>
   );
