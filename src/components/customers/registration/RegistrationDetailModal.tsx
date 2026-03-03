@@ -83,7 +83,7 @@ export function RegistrationDetailModal({
         const res = await apiFetch(
           getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER_ADDRESS, spec),
           { method: "GET", cache: "no-store" },
-          token
+          token,
         );
 
         if (!res.ok) {
@@ -97,7 +97,9 @@ export function RegistrationDetailModal({
       } catch (err) {
         if (!cancelled) {
           setShippingError(
-            err instanceof Error ? err.message : "Gagal memuat alamat pengiriman"
+            err instanceof Error
+              ? err.message
+              : "Gagal memuat alamat pengiriman",
           );
           setShippingAddresses([]);
         }
@@ -147,7 +149,7 @@ export function RegistrationDetailModal({
 
   const getStatusBadgeClass = (status: string) => {
     switch (status.toLowerCase()) {
-      case "pending":
+      // case "pending":
       case "draft":
         return "bg-yellow-100 text-yellow-700 border-yellow-200";
       case "approved":
@@ -160,13 +162,16 @@ export function RegistrationDetailModal({
   };
 
   const getStatusLabel = (status: string) => {
-    if (status.toLowerCase() === "draft") return "Pending";
+    if (status.toLowerCase() === "draft") return "draft";
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
   const normalizedStatus = (registration?.status || "").toLowerCase();
-  const canManageRegistration =
-    normalizedStatus === "pending" || normalizedStatus === "draft";
+  const canManageRegistration = normalizedStatus === "draft";
+  const rejectReason =
+    registration?.reject_reason || registration?.rejection_reason || "-";
+  const rejectNotes =
+    registration?.reject_notes || registration?.rejection_notes || "-";
 
   const effectiveShippingAddresses = useMemo(() => {
     if (!registration) return [] as CustomerRegisterAddressApiResponse[];
@@ -181,8 +186,10 @@ export function RegistrationDetailModal({
           province: registration.address.province_name,
           district: registration.address.district_name,
           postal_code: registration.address.postal_code,
-          pic_name: registration.branch_owner?.full_name || registration.user.full_name,
-          pic_phone: registration.branch_owner?.phone || registration.user.phone,
+          pic_name:
+            registration.branch_owner?.full_name || registration.user.full_name,
+          pic_phone:
+            registration.branch_owner?.phone || registration.user.phone,
           is_default: 1,
         },
       ];
@@ -223,7 +230,7 @@ export function RegistrationDetailModal({
               <div className="flex items-center gap-3">
                 <span
                   className={`px-3 py-1.5 rounded-full text-sm font-semibold border-2 bg-white ${getStatusBadgeClass(
-                    registration.status
+                    registration.status,
                   )}`}
                 >
                   {getStatusLabel(registration.status)}
@@ -267,10 +274,10 @@ export function RegistrationDetailModal({
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                        Ekaplus User ID
+                        Ekaplus User Full Name
                       </label>
                       <p className="text-sm text-gray-900 font-medium">
-                        {displayValue(registration.ekaplus_user?.id)}
+                        {displayValue(registration.ekaplus_user?.full_name)}
                       </p>
                     </div>
                     <div>
@@ -284,6 +291,39 @@ export function RegistrationDetailModal({
                   </div>
                 </div>
               </section>
+
+              {normalizedStatus === "rejected" && (
+                <section className="mb-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
+                      <FaTimesCircle className="w-4 h-4 text-red-600" />
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900">
+                      Informasi Rejection
+                    </h3>
+                  </div>
+                  <div className="bg-white rounded-xl border border-red-200 p-5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                          Reject Reason
+                        </label>
+                        <p className="text-sm text-red-700 font-semibold">
+                          {displayValue(rejectReason)}
+                        </p>
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                          Reject Notes
+                        </label>
+                        <p className="text-sm text-gray-900 bg-red-50 border border-red-100 rounded-lg p-3 whitespace-pre-wrap">
+                          {displayValue(rejectNotes)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              )}
 
               <section className="mb-6">
                 <div className="flex items-center gap-2 mb-4">
@@ -372,7 +412,9 @@ export function RegistrationDetailModal({
                       <div className="flex items-center gap-2">
                         <FaPhone className="w-3 h-3 text-gray-400" />
                         <p className="text-sm text-gray-900 font-medium">
-                          {formatPhoneNumber(registration.branch_owner?.phone || "-")}
+                          {formatPhoneNumber(
+                            registration.branch_owner?.phone || "-",
+                          )}
                         </p>
                       </div>
                     </div>
@@ -392,7 +434,9 @@ export function RegistrationDetailModal({
                         Tempat Lahir
                       </label>
                       <p className="text-sm text-gray-900 font-medium">
-                        {displayValue(registration.branch_owner?.place_of_birth)}
+                        {displayValue(
+                          registration.branch_owner?.place_of_birth,
+                        )}
                       </p>
                     </div>
                     <div>
@@ -400,7 +444,9 @@ export function RegistrationDetailModal({
                         Tanggal Lahir
                       </label>
                       <p className="text-sm text-gray-900 font-medium">
-                        {formatDate(registration.branch_owner?.date_of_birth || "-")}
+                        {formatDate(
+                          registration.branch_owner?.date_of_birth || "-",
+                        )}
                       </p>
                     </div>
                   </div>
@@ -456,7 +502,8 @@ export function RegistrationDetailModal({
                       <div className="flex items-center gap-2">
                         <FaMapMarkerAlt className="w-3 h-3 text-gray-400" />
                         <span className="inline-flex items-center px-3 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
-                          {registration.company.branch_name} ({registration.company.branch_city})
+                          {registration.company.branch_name} (
+                          {registration.company.branch_city})
                         </span>
                       </div>
                     </div>
@@ -539,7 +586,7 @@ export function RegistrationDetailModal({
                       <p className="text-sm text-gray-900 font-mono font-medium">
                         {displayValue(
                           registration.master_links?.nb_name ||
-                            registration.master_links?.nb_id
+                            registration.master_links?.nb_id,
                         )}
                       </p>
                     </div>
@@ -550,7 +597,7 @@ export function RegistrationDetailModal({
                       <p className="text-sm text-gray-900 font-mono font-medium">
                         {displayValue(
                           registration.master_links?.gp_name ||
-                            registration.master_links?.gp_id
+                            registration.master_links?.gp_id,
                         )}
                       </p>
                     </div>
@@ -561,7 +608,7 @@ export function RegistrationDetailModal({
                       <p className="text-sm text-gray-900 font-mono font-medium">
                         {displayValue(
                           registration.master_links?.gc_name ||
-                            registration.master_links?.gc_id
+                            registration.master_links?.gc_id,
                         )}
                       </p>
                     </div>
@@ -572,7 +619,7 @@ export function RegistrationDetailModal({
                       <p className="text-sm text-gray-900 font-mono font-medium">
                         {displayValue(
                           registration.master_links?.bc_name ||
-                            registration.master_links?.bc_id
+                            registration.master_links?.bc_id,
                         )}
                       </p>
                     </div>
@@ -615,100 +662,100 @@ export function RegistrationDetailModal({
                     <div className="text-sm text-red-600">{shippingError}</div>
                   )}
 
-                  {!shippingLoading && !shippingError && effectiveShippingAddresses.length === 0 && (
-                    <div className="text-sm text-gray-500">
-                      Tidak ada alamat pengiriman.
-                    </div>
-                  )}
+                  {!shippingLoading &&
+                    !shippingError &&
+                    effectiveShippingAddresses.length === 0 && (
+                      <div className="text-sm text-gray-500">
+                        Tidak ada alamat pengiriman.
+                      </div>
+                    )}
 
-                  {!shippingLoading && !shippingError && effectiveShippingAddresses.length > 0 && (
-                    <div className="space-y-4">
-                      {effectiveShippingAddresses.map((addr) => (
-                        <div
-                          key={addr.id ?? `${addr.label}-${addr.address}`}
-                          className="rounded-xl border border-gray-200 p-4 bg-gray-50"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                            <div className="font-semibold text-gray-900">
-                              {addr.label || "Alamat Pengiriman"}
+                  {!shippingLoading &&
+                    !shippingError &&
+                    effectiveShippingAddresses.length > 0 && (
+                      <div className="space-y-4">
+                        {effectiveShippingAddresses.map((addr) => (
+                          <div
+                            key={addr.id ?? `${addr.label}-${addr.address}`}
+                            className="rounded-xl border border-gray-200 p-4 bg-gray-50"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                              <div className="font-semibold text-gray-900">
+                                {addr.label || "Alamat Pengiriman"}
+                              </div>
+                              <span
+                                className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border ${
+                                  addr.is_default
+                                    ? "bg-blue-50 text-blue-700 border-blue-200"
+                                    : "bg-white text-gray-600 border-gray-200"
+                                }`}
+                              >
+                                {addr.is_default ? "Default" : "Non-default"}
+                              </span>
                             </div>
-                            <span
-                              className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border ${
-                                addr.is_default
-                                  ? "bg-blue-50 text-blue-700 border-blue-200"
-                                  : "bg-white text-gray-600 border-gray-200"
-                              }`}
-                            >
-                              {addr.is_default ? "Default" : "Non-default"}
-                            </span>
-                          </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                            <div className="md:col-span-2">
-                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                Alamat
-                              </label>
-                              <p className="text-gray-900">
-                                {addr.address || "-"}
-                              </p>
-                            </div>
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                Kota
-                              </label>
-                              <p className="text-gray-900">{addr.city || "-"}</p>
-                            </div>
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                Provinsi
-                              </label>
-                              <p className="text-gray-900">
-                                {addr.province || "-"}
-                              </p>
-                            </div>
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                Kecamatan
-                              </label>
-                              <p className="text-gray-900">{addr.district || "-"}</p>
-                            </div>
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                Kode Pos
-                              </label>
-                              <p className="text-gray-900">
-                                {addr.postal_code || "-"}
-                              </p>
-                            </div>
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                Negara
-                              </label>
-                              <p className="text-gray-900">
-                                {addr.country || "-"}
-                              </p>
-                            </div>
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                PIC
-                              </label>
-                              <p className="text-gray-900">
-                                {addr.pic_name || "-"}
-                              </p>
-                            </div>
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                No. PIC
-                              </label>
-                              <p className="text-gray-900">
-                                {addr.pic_phone || "-"}
-                              </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                              <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                  Alamat
+                                </label>
+                                <p className="text-gray-900">
+                                  {addr.address || "-"}
+                                </p>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                  Kota
+                                </label>
+                                <p className="text-gray-900">
+                                  {addr.city || "-"}
+                                </p>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                  Provinsi
+                                </label>
+                                <p className="text-gray-900">
+                                  {addr.province || "-"}
+                                </p>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                  Kecamatan
+                                </label>
+                                <p className="text-gray-900">
+                                  {addr.district || "-"}
+                                </p>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                  Kode Pos
+                                </label>
+                                <p className="text-gray-900">
+                                  {addr.postal_code || "-"}
+                                </p>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                  PIC
+                                </label>
+                                <p className="text-gray-900">
+                                  {addr.pic_name || "-"}
+                                </p>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                  No. PIC
+                                </label>
+                                <p className="text-gray-900">
+                                  {addr.pic_phone || "-"}
+                                </p>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    )}
                 </div>
               </section>
 
@@ -793,7 +840,7 @@ export function RegistrationDetailModal({
                               {
                                 dateStyle: "long",
                                 timeStyle: "short",
-                              }
+                              },
                             )}
                           </p>
                         </div>
@@ -823,7 +870,7 @@ export function RegistrationDetailModal({
                               {
                                 dateStyle: "long",
                                 timeStyle: "short",
-                              }
+                              },
                             )}
                           </p>
                         </div>
@@ -892,15 +939,14 @@ export function RegistrationDetailModal({
                 </div>
               )}
 
-              {registration.status === "rejected" &&
-                registration.rejection_reason && (
-                  <div className="flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-200 rounded-xl">
-                    <FaTimesCircle className="w-4 h-4 text-red-600" />
-                    <span className="text-sm text-red-700 font-medium">
-                      Rejected - {registration.rejection_reason}
-                    </span>
-                  </div>
-                )}
+              {normalizedStatus === "rejected" && rejectReason !== "-" && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-200 rounded-xl">
+                  <FaTimesCircle className="w-4 h-4 text-red-600" />
+                  <span className="text-sm text-red-700 font-medium">
+                    Rejected - {rejectReason}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>

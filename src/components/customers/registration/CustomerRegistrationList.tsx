@@ -107,7 +107,7 @@ async function fetchNameMap(
   endpoint: string,
   ids: number[],
   nameField: string,
-  tokenValue: string
+  tokenValue: string,
 ): Promise<Map<number, string>> {
   const result = new Map<number, string>();
   if (ids.length === 0) return result;
@@ -121,7 +121,7 @@ async function fetchNameMap(
     const res = await apiFetch(
       getQueryUrl(endpoint, spec),
       { method: "GET", cache: "no-store" },
-      tokenValue
+      tokenValue,
     );
     if (!res.ok) return result;
 
@@ -148,35 +148,35 @@ async function fetchNameMap(
 
 async function enrichMasterLinkNames(
   data: CustomerRegistration[],
-  tokenValue: string
+  tokenValue: string,
 ): Promise<CustomerRegistration[]> {
   const nbIds = Array.from(
     new Set(
       data
         .map((item) => item.master_links?.nb_id)
-        .filter((v): v is number => typeof v === "number")
-    )
+        .filter((v): v is number => typeof v === "number"),
+    ),
   );
   const gpIds = Array.from(
     new Set(
       data
         .map((item) => item.master_links?.gp_id)
-        .filter((v): v is number => typeof v === "number")
-    )
+        .filter((v): v is number => typeof v === "number"),
+    ),
   );
   const gcIds = Array.from(
     new Set(
       data
         .map((item) => item.master_links?.gc_id)
-        .filter((v): v is number => typeof v === "number")
-    )
+        .filter((v): v is number => typeof v === "number"),
+    ),
   );
   const bcIds = Array.from(
     new Set(
       data
         .map((item) => item.master_links?.bc_id)
-        .filter((v): v is number => typeof v === "number")
-    )
+        .filter((v): v is number => typeof v === "number"),
+    ),
   );
 
   const [nbMap, gpMap, gcMap, bcMap] = await Promise.all([
@@ -195,13 +195,17 @@ async function enrichMasterLinkNames(
     const computedBcName =
       links.bc_name ||
       (links.bc_id ? bcMap.get(links.bc_id) : undefined) ||
-      (resolvedGcName && branchCity ? `${resolvedGcName} - ${branchCity}` : undefined);
+      (resolvedGcName && branchCity
+        ? `${resolvedGcName} - ${branchCity}`
+        : undefined);
     return {
       ...item,
       master_links: {
         ...links,
-        nb_name: links.nb_name || (links.nb_id ? nbMap.get(links.nb_id) : undefined),
-        gp_name: links.gp_name || (links.gp_id ? gpMap.get(links.gp_id) : undefined),
+        nb_name:
+          links.nb_name || (links.nb_id ? nbMap.get(links.nb_id) : undefined),
+        gp_name:
+          links.gp_name || (links.gp_id ? gpMap.get(links.gp_id) : undefined),
         gc_name: resolvedGcName,
         bc_name: computedBcName,
       },
@@ -212,7 +216,7 @@ async function enrichMasterLinkNames(
 export function CustomerRegistrationList() {
   const { token, isAuthenticated } = useAuth();
   const [registrations, setRegistrations] = useState<CustomerRegistration[]>(
-    []
+    [],
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -241,21 +245,22 @@ export function CustomerRegistrationList() {
 
   // Map API response to frontend type
   function mapToFrontendType(
-    apiData: CustomerRegistrationApiResponse
+    apiData: CustomerRegistrationApiResponse,
   ): CustomerRegistration {
     return {
       id: apiData.id.toString(),
       source: apiData.source || undefined,
       ekaplus_user:
-        apiData.ekaplus_user !== null && typeof apiData.ekaplus_user === "object"
+        apiData.ekaplus_user !== null &&
+        typeof apiData.ekaplus_user === "object"
           ? {
               id: apiData.ekaplus_user.id,
               full_name: apiData.ekaplus_user.full_name,
               email: apiData.ekaplus_user.email,
             }
           : apiData.ekaplus_user
-          ? { id: apiData.ekaplus_user }
-          : undefined,
+            ? { id: apiData.ekaplus_user }
+            : undefined,
 
       // Owner info - extract from nested objects
       user: {
@@ -323,7 +328,9 @@ export function CustomerRegistrationList() {
           undefined,
         nb_name:
           apiData.nbid_link?.nb_name ??
-          (typeof apiData.nbid === "object" ? apiData.nbid?.nb_name : undefined) ??
+          (typeof apiData.nbid === "object"
+            ? apiData.nbid?.nb_name
+            : undefined) ??
           apiData.nbid_name ??
           apiData.nbid_link?.name ??
           (typeof apiData.nbid === "object" ? apiData.nbid?.name : undefined) ??
@@ -336,7 +343,9 @@ export function CustomerRegistrationList() {
           undefined,
         gp_name:
           apiData.gpid_link?.gp_name ??
-          (typeof apiData.gpid === "object" ? apiData.gpid?.gp_name : undefined) ??
+          (typeof apiData.gpid === "object"
+            ? apiData.gpid?.gp_name
+            : undefined) ??
           apiData.gpid_name ??
           apiData.gpid_link?.name ??
           (typeof apiData.gpid === "object" ? apiData.gpid?.name : undefined) ??
@@ -349,7 +358,9 @@ export function CustomerRegistrationList() {
           undefined,
         gc_name:
           apiData.gcid_link?.gc_name ??
-          (typeof apiData.gcid === "object" ? apiData.gcid?.gc_name : undefined) ??
+          (typeof apiData.gcid === "object"
+            ? apiData.gcid?.gc_name
+            : undefined) ??
           apiData.gcid_name ??
           apiData.gcid_link?.name ??
           (typeof apiData.gcid === "object" ? apiData.gcid?.name : undefined) ??
@@ -362,7 +373,9 @@ export function CustomerRegistrationList() {
           undefined,
         bc_name:
           apiData.bcid_link?.bc_name ??
-          (typeof apiData.bcid === "object" ? apiData.bcid?.bc_name : undefined) ??
+          (typeof apiData.bcid === "object"
+            ? apiData.bcid?.bc_name
+            : undefined) ??
           apiData.bcid_name ??
           apiData.bcid_link?.name ??
           (typeof apiData.bcid === "object" ? apiData.bcid?.name : undefined) ??
@@ -384,30 +397,27 @@ export function CustomerRegistrationList() {
       },
 
       // Status - map to lowercase for consistency
-      status: apiData.status.toLowerCase() as
-        | "pending"
-        | "approved"
-        | "rejected"
-        | "draft",
+      status: apiData.status.toLowerCase() as // | "pending"
+        "approved" | "rejected" | "draft",
       submission_date: apiData.created_at,
       created_at: apiData.created_at,
       created_by:
         typeof apiData.created_by === "object" && apiData.created_by?.full_name
           ? apiData.created_by.full_name
           : apiData["created_by.full_name"]
-          ? apiData["created_by.full_name"]
-          : typeof apiData.created_by === "number"
-          ? `User ${apiData.created_by}`
-          : undefined,
+            ? apiData["created_by.full_name"]
+            : typeof apiData.created_by === "number"
+              ? `User ${apiData.created_by}`
+              : undefined,
       updated_at: apiData.updated_at,
       updated_by:
         typeof apiData.updated_by === "object" && apiData.updated_by?.full_name
           ? apiData.updated_by.full_name
           : apiData["updated_by.full_name"]
-          ? apiData["updated_by.full_name"]
-          : typeof apiData.updated_by === "number"
-          ? `User ${apiData.updated_by}`
-          : undefined,
+            ? apiData["updated_by.full_name"]
+            : typeof apiData.updated_by === "number"
+              ? `User ${apiData.updated_by}`
+              : undefined,
       gp_id:
         apiData.gpid_link?.id ??
         (typeof apiData.gpid === "object" ? apiData.gpid?.id : undefined) ??
@@ -416,7 +426,9 @@ export function CustomerRegistrationList() {
         undefined,
       gp_name:
         apiData.gpid_link?.gp_name ??
-        (typeof apiData.gpid === "object" ? apiData.gpid?.gp_name : undefined) ??
+        (typeof apiData.gpid === "object"
+          ? apiData.gpid?.gp_name
+          : undefined) ??
         apiData.gpid_name ??
         apiData.gpid_link?.name ??
         (typeof apiData.gpid === "object" ? apiData.gpid?.name : undefined) ??
@@ -429,7 +441,9 @@ export function CustomerRegistrationList() {
         undefined,
       gc_name:
         apiData.gcid_link?.gc_name ??
-        (typeof apiData.gcid === "object" ? apiData.gcid?.gc_name : undefined) ??
+        (typeof apiData.gcid === "object"
+          ? apiData.gcid?.gc_name
+          : undefined) ??
         apiData.gcid_name ??
         apiData.gcid_link?.name ??
         (typeof apiData.gcid === "object" ? apiData.gcid?.name : undefined) ??
@@ -442,15 +456,15 @@ export function CustomerRegistrationList() {
         undefined,
       bc_name:
         apiData.bcid_link?.bc_name ??
-        (typeof apiData.bcid === "object" ? apiData.bcid?.bc_name : undefined) ??
+        (typeof apiData.bcid === "object"
+          ? apiData.bcid?.bc_name
+          : undefined) ??
         apiData.bcid_name ??
         apiData.bcid_link?.name ??
         (typeof apiData.bcid === "object" ? apiData.bcid?.name : undefined) ??
         undefined,
       rejection_reason:
-        apiData.reject_reason ??
-        apiData.rejection_reason ??
-        undefined,
+        apiData.reject_reason ?? apiData.rejection_reason ?? undefined,
       rejection_notes: apiData.rejection_notes ?? undefined,
     };
   }
@@ -460,7 +474,7 @@ export function CustomerRegistrationList() {
     async (
       filterTriples: FilterTriple[] = [],
       sort_by?: SortField,
-      sort_order?: SortDirection
+      sort_order?: SortDirection,
     ) => {
       setLoading(true);
       setError(null);
@@ -505,7 +519,7 @@ export function CustomerRegistrationList() {
             method: "GET",
             cache: "no-store",
           },
-          token
+          token,
         );
 
         if (res.ok) {
@@ -528,7 +542,7 @@ export function CustomerRegistrationList() {
         setLoading(false);
       }
     },
-    [isAuthenticated, token]
+    [isAuthenticated, token],
   );
 
   // Load data on mount and when filters change
@@ -554,7 +568,7 @@ export function CustomerRegistrationList() {
     return () =>
       window.removeEventListener(
         "ekatalog:customer_registrations_update",
-        handler
+        handler,
       );
   }, [loadDataWithFilters, filters, sortField, sortDirection]);
 
@@ -564,7 +578,7 @@ export function CustomerRegistrationList() {
       console.log("[CustomerRegistrationList] Applying filters:", newFilters);
       setFilters(newFilters);
     },
-    [setFilters]
+    [setFilters],
   );
 
   // Filter locally based on search and status
@@ -573,11 +587,9 @@ export function CustomerRegistrationList() {
 
     // Filter by status
     if (selectedStatus !== "all") {
-      if (selectedStatus === "pending") {
-        // "pending" includes both "pending" and "draft" status
-        filtered = filtered.filter(
-          (reg) => reg.status === "pending" || reg.status === "draft"
-        );
+      if (selectedStatus === "draft") {
+        // "draft" includes only "draft" status
+        filtered = filtered.filter((reg) => reg.status === "draft");
       } else {
         filtered = filtered.filter((reg) => reg.status === selectedStatus);
       }
@@ -593,7 +605,7 @@ export function CustomerRegistrationList() {
           reg.company.business_type.toLowerCase().includes(query) ||
           reg.company.branch_name.toLowerCase().includes(query) ||
           (reg.source || "").toLowerCase().includes(query) ||
-          (reg.branch_owner?.full_name || "").toLowerCase().includes(query)
+          (reg.branch_owner?.full_name || "").toLowerCase().includes(query),
       );
     }
 
@@ -604,9 +616,7 @@ export function CustomerRegistrationList() {
   const stats = useMemo(() => {
     return {
       total: registrations.length,
-      pending: registrations.filter(
-        (r) => r.status === "pending" || r.status === "draft"
-      ).length,
+      draft: registrations.filter((r) => r.status === "draft").length,
       approved: registrations.filter((r) => r.status === "approved").length,
       rejected: registrations.filter((r) => r.status === "rejected").length,
     };
@@ -725,10 +735,10 @@ export function CustomerRegistrationList() {
         <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl p-5 border-2 border-yellow-200">
           <div className="flex items-center gap-2 mb-1">
             <FaClock className="w-4 h-4 text-yellow-700" />
-            <div className="text-sm text-yellow-700 font-medium">Pending</div>
+            <div className="text-sm text-yellow-700 font-medium">Draft</div>
           </div>
           <div className="text-3xl font-bold text-yellow-900">
-            {stats.pending}
+            {stats.draft}
           </div>
         </div>
         <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-5 border-2 border-green-200">
@@ -775,7 +785,7 @@ export function CustomerRegistrationList() {
               className="pl-4 pr-10 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all font-medium text-gray-700 bg-white appearance-none cursor-pointer min-w-[200px]"
             >
               <option value="all">Semua Status</option>
-              <option value="pending">Pending</option>
+              <option value="draft">Draft</option>
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
             </select>

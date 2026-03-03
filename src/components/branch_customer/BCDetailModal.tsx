@@ -16,7 +16,11 @@ import {
   FaStream,
 } from "react-icons/fa";
 import { HiXMark } from "react-icons/hi2";
-import type { BranchCustomer, GlobalParty, GlobalCustomer } from "@/types/customer";
+import type {
+  BranchCustomer,
+  GroupParty,
+  GroupCustomer,
+} from "@/types/customer";
 import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -24,8 +28,8 @@ interface BCDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   bc: BranchCustomer | null;
-  onViewGP?: (gp: GlobalParty) => void;
-  onViewGC?: (gc: GlobalCustomer) => void;
+  onViewGP?: (gp: GroupParty) => void;
+  onViewGC?: (gc: GroupCustomer) => void;
 }
 
 interface GroupCustomerRow {
@@ -60,10 +64,11 @@ interface GroupParentRow {
 
 function resolveUserName(
   directName: string | null | undefined,
-  value: number | { full_name?: string } | null | undefined
+  value: number | { full_name?: string } | null | undefined,
 ): string | undefined {
   if (directName) return directName;
-  if (value && typeof value === "object" && value.full_name) return value.full_name;
+  if (value && typeof value === "object" && value.full_name)
+    return value.full_name;
   return undefined;
 }
 
@@ -76,8 +81,8 @@ export function BCDetailModal({
 }: BCDetailModalProps) {
   const { token, isAuthenticated } = useAuth();
 
-  const [parentGC, setParentGC] = useState<GlobalCustomer | null>(null);
-  const [parentGP, setParentGP] = useState<GlobalParty | null>(null);
+  const [parentGC, setParentGC] = useState<GroupCustomer | null>(null);
+  const [parentGP, setParentGP] = useState<GroupParty | null>(null);
 
   const loadParents = useCallback(async () => {
     if (!isOpen || !bc || !isAuthenticated || !token) return;
@@ -90,12 +95,14 @@ export function BCDetailModal({
     const gcRes = await apiFetch(
       getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, gcSpec),
       { method: "GET", cache: "no-store" },
-      token
+      token,
     );
     const gcJson = gcRes.ok ? await gcRes.json() : { data: [] };
-    const gcRow: GroupCustomerRow | undefined = Array.isArray(gcJson?.data) ? gcJson.data[0] : undefined;
+    const gcRow: GroupCustomerRow | undefined = Array.isArray(gcJson?.data)
+      ? gcJson.data[0]
+      : undefined;
 
-    let mappedGC: GlobalCustomer | null = null;
+    let mappedGC: GroupCustomer | null = null;
     if (gcRow) {
       mappedGC = {
         id: Number(gcRow.id),
@@ -106,9 +113,16 @@ export function BCDetailModal({
         owner_phone: gcRow.owner_phone || undefined,
         owner_email: gcRow.owner_email || undefined,
         created_at: gcRow.created_at || new Date(0).toISOString(),
-        updated_at: gcRow.updated_at || gcRow.created_at || new Date(0).toISOString(),
-        created_by: resolveUserName(gcRow["created_by.full_name"], gcRow.created_by),
-        updated_by: resolveUserName(gcRow["updated_by.full_name"], gcRow.updated_by),
+        updated_at:
+          gcRow.updated_at || gcRow.created_at || new Date(0).toISOString(),
+        created_by: resolveUserName(
+          gcRow["created_by.full_name"],
+          gcRow.created_by,
+        ),
+        updated_by: resolveUserName(
+          gcRow["updated_by.full_name"],
+          gcRow.updated_by,
+        ),
         disabled: Number(gcRow.disabled || 0),
       };
     }
@@ -128,10 +142,12 @@ export function BCDetailModal({
     const gpRes = await apiFetch(
       getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, gpSpec),
       { method: "GET", cache: "no-store" },
-      token
+      token,
     );
     const gpJson = gpRes.ok ? await gpRes.json() : { data: [] };
-    const gpRow: GroupParentRow | undefined = Array.isArray(gpJson?.data) ? gpJson.data[0] : undefined;
+    const gpRow: GroupParentRow | undefined = Array.isArray(gpJson?.data)
+      ? gpJson.data[0]
+      : undefined;
 
     if (!gpRow) {
       setParentGP(null);
@@ -143,9 +159,16 @@ export function BCDetailModal({
       code: gpRow.name || undefined,
       name: gpRow.gp_name || gpRow.name || "-",
       created_at: gpRow.created_at || new Date(0).toISOString(),
-      updated_at: gpRow.updated_at || gpRow.created_at || new Date(0).toISOString(),
-      created_by: resolveUserName(gpRow["created_by.full_name"], gpRow.created_by),
-      updated_by: resolveUserName(gpRow["updated_by.full_name"], gpRow.updated_by),
+      updated_at:
+        gpRow.updated_at || gpRow.created_at || new Date(0).toISOString(),
+      created_by: resolveUserName(
+        gpRow["created_by.full_name"],
+        gpRow.created_by,
+      ),
+      updated_by: resolveUserName(
+        gpRow["updated_by.full_name"],
+        gpRow.updated_by,
+      ),
       disabled: Number(gpRow.disabled || 0),
     });
   }, [bc, isAuthenticated, isOpen, token]);
@@ -192,21 +215,32 @@ export function BCDetailModal({
                   <FaBuilding className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-white">Branch Customer Details</h2>
-                  <p className="text-sm text-orange-100">BCID: {bc.code || `BC${bc.id}`}</p>
+                  <h2 className="text-xl font-bold text-white">
+                    Branch Customer Details
+                  </h2>
+                  <p className="text-sm text-orange-100">
+                    BCID: {bc.code || `BC${bc.id}`}
+                  </p>
                 </div>
               </div>
 
-              <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
+              <button
+                onClick={onClose}
+                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+              >
                 <HiXMark className="w-6 h-6 text-white" />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
               <section>
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">BC Name</h3>
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                  BC Name
+                </h3>
                 <div className="bg-gradient-to-br from-orange-50 to-white rounded-xl p-4 border-2 border-orange-100">
-                  <p className="text-2xl font-bold text-gray-900">{bcDisplayName}</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {bcDisplayName}
+                  </p>
                 </div>
               </section>
 
@@ -217,12 +251,16 @@ export function BCDetailModal({
                     Branch Information
                   </h3>
                   <div className="bg-gradient-to-br from-green-50 to-white rounded-xl p-4 border-2 border-green-100">
-                    <p className="text-lg font-bold text-green-900">{bc.branch_name}</p>
+                    <p className="text-lg font-bold text-green-900">
+                      {bc.branch_name}
+                    </p>
                     <div className="flex items-center gap-2 mt-2">
                       <FaMapMarkerAlt className="w-3.5 h-3.5 text-green-600" />
                       <p className="text-sm text-green-700">{bc.branch_city}</p>
                     </div>
-                    <p className="text-sm text-green-600 mt-1">Branch ID: #{bc.branch_id}</p>
+                    <p className="text-sm text-green-600 mt-1">
+                      Branch ID: #{bc.branch_id}
+                    </p>
                   </div>
                 </section>
               )}
@@ -241,8 +279,12 @@ export function BCDetailModal({
                           <FaUser className="w-5 h-5 text-white" />
                         </div>
                         <div className="flex-1">
-                          <p className="text-xs text-gray-500 font-medium">Nama Owner</p>
-                          <p className="text-base font-bold text-gray-900">{bc.owner_name}</p>
+                          <p className="text-xs text-gray-500 font-medium">
+                            Nama Owner
+                          </p>
+                          <p className="text-base font-bold text-gray-900">
+                            {bc.owner_name}
+                          </p>
                         </div>
                       </div>
                     )}
@@ -253,8 +295,12 @@ export function BCDetailModal({
                           <FaPhone className="w-5 h-5 text-white" />
                         </div>
                         <div className="flex-1">
-                          <p className="text-xs text-gray-500 font-medium">Nomor Telepon</p>
-                          <p className="text-base font-bold text-gray-900">{bc.owner_phone}</p>
+                          <p className="text-xs text-gray-500 font-medium">
+                            Nomor Telepon
+                          </p>
+                          <p className="text-base font-bold text-gray-900">
+                            {bc.owner_phone}
+                          </p>
                         </div>
                       </div>
                     )}
@@ -265,8 +311,12 @@ export function BCDetailModal({
                           <FaEnvelope className="w-5 h-5 text-white" />
                         </div>
                         <div className="flex-1">
-                          <p className="text-xs text-gray-500 font-medium">Email</p>
-                          <p className="text-base font-bold text-gray-900">{bc.owner_email}</p>
+                          <p className="text-xs text-gray-500 font-medium">
+                            Email
+                          </p>
+                          <p className="text-base font-bold text-gray-900">
+                            {bc.owner_email}
+                          </p>
                         </div>
                       </div>
                     )}
@@ -292,9 +342,15 @@ export function BCDetailModal({
                             <FaBuilding className="w-5 h-5 text-white" />
                           </div>
                           <div className="flex-1">
-                            <p className="text-xs text-gray-500 font-medium">Level 1: Group Parent (GP)</p>
-                            <p className="text-lg font-bold text-gray-900 group-hover:text-purple-600">{parentGP.name}</p>
-                            <p className="text-sm text-purple-600 mt-0.5">GPID: {parentGP.code || `GP${parentGP.id}`}</p>
+                            <p className="text-xs text-gray-500 font-medium">
+                              Level 1: Group Parent (GP)
+                            </p>
+                            <p className="text-lg font-bold text-gray-900 group-hover:text-purple-600">
+                              {parentGP.name}
+                            </p>
+                            <p className="text-sm text-purple-600 mt-0.5">
+                              GPID: {parentGP.code || `GP${parentGP.id}`}
+                            </p>
                           </div>
                         </div>
                         <FaChevronRight className="w-5 h-5 text-gray-400 group-hover:text-purple-600" />
@@ -302,7 +358,9 @@ export function BCDetailModal({
                     </button>
                   ) : (
                     <div className="bg-gray-50 rounded-xl p-4 border-2 border-gray-200">
-                      <p className="text-sm text-gray-500 italic">GP tidak ditemukan</p>
+                      <p className="text-sm text-gray-500 italic">
+                        GP tidak ditemukan
+                      </p>
                     </div>
                   )}
 
@@ -321,9 +379,15 @@ export function BCDetailModal({
                             <FaBuilding className="w-5 h-5 text-white" />
                           </div>
                           <div className="flex-1">
-                            <p className="text-xs text-gray-500 font-medium">Level 2: Group Customer (GC)</p>
-                            <p className="text-lg font-bold text-gray-900 group-hover:text-blue-600">{parentGC.name}</p>
-                            <p className="text-sm text-blue-600 mt-0.5">GCID: {parentGC.code || `GC${parentGC.id}`}</p>
+                            <p className="text-xs text-gray-500 font-medium">
+                              Level 2: Group Customer (GC)
+                            </p>
+                            <p className="text-lg font-bold text-gray-900 group-hover:text-blue-600">
+                              {parentGC.name}
+                            </p>
+                            <p className="text-sm text-blue-600 mt-0.5">
+                              GCID: {parentGC.code || `GC${parentGC.id}`}
+                            </p>
                           </div>
                         </div>
                         <FaChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600" />
@@ -331,7 +395,9 @@ export function BCDetailModal({
                     </button>
                   ) : (
                     <div className="bg-gray-50 rounded-xl p-4 border-2 border-gray-200">
-                      <p className="text-sm text-gray-500 italic">GC tidak ditemukan</p>
+                      <p className="text-sm text-gray-500 italic">
+                        GC tidak ditemukan
+                      </p>
                     </div>
                   )}
 
@@ -345,22 +411,34 @@ export function BCDetailModal({
                         <FaBuilding className="w-5 h-5 text-white" />
                       </div>
                       <div className="flex-1">
-                        <p className="text-xs text-gray-500 font-medium">Level 3: Branch Customer (BC) - Current</p>
-                        <p className="text-lg font-bold text-orange-900">{bcDisplayName}</p>
+                        <p className="text-xs text-gray-500 font-medium">
+                          Level 3: Branch Customer (BC) - Current
+                        </p>
+                        <p className="text-lg font-bold text-orange-900">
+                          {bcDisplayName}
+                        </p>
                         <div className="flex items-center gap-2 mt-1">
-                          <p className="text-sm text-orange-600">BCID: {bc.code || `BC${bc.id}`}</p>
+                          <p className="text-sm text-orange-600">
+                            BCID: {bc.code || `BC${bc.id}`}
+                          </p>
                           <span className="text-xs text-gray-400">•</span>
-                          <p className="text-sm text-orange-600">{bc.branch_city || "-"}</p>
+                          <p className="text-sm text-orange-600">
+                            {bc.branch_city || "-"}
+                          </p>
                         </div>
                       </div>
-                      <div className="px-3 py-1 bg-orange-500 text-white text-xs font-bold rounded-full">YOU ARE HERE</div>
+                      <div className="px-3 py-1 bg-orange-500 text-white text-xs font-bold rounded-full">
+                        YOU ARE HERE
+                      </div>
                     </div>
                   </div>
                 </div>
               </section>
 
               <section>
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Status</h3>
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                  Status
+                </h3>
                 <div>
                   {bc.disabled === 1 ? (
                     <span className="inline-flex items-center gap-2 px-4 py-2 bg-red-100 text-red-700 text-sm font-semibold rounded-lg border-2 border-red-200">
@@ -391,8 +469,12 @@ export function BCDetailModal({
                             <FaBuilding className="w-5 h-5 text-white" />
                           </div>
                           <div>
-                            <p className="text-xs text-gray-500 font-medium">Created By</p>
-                            <p className="text-sm font-bold text-gray-900">{bc.created_by || "System"}</p>
+                            <p className="text-xs text-gray-500 font-medium">
+                              Created By
+                            </p>
+                            <p className="text-sm font-bold text-gray-900">
+                              {bc.created_by || "System"}
+                            </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 text-gray-600">
@@ -414,8 +496,12 @@ export function BCDetailModal({
                             <FaEdit className="w-5 h-5 text-white" />
                           </div>
                           <div>
-                            <p className="text-xs text-gray-500 font-medium">Last Updated</p>
-                            <p className="text-sm font-bold text-gray-900">{bc.updated_by || "System"}</p>
+                            <p className="text-xs text-gray-500 font-medium">
+                              Last Updated
+                            </p>
+                            <p className="text-sm font-bold text-gray-900">
+                              {bc.updated_by || "System"}
+                            </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 text-gray-600">
@@ -435,7 +521,10 @@ export function BCDetailModal({
             </div>
 
             <div className="bg-gray-50 px-6 py-4 flex justify-end border-t border-gray-200">
-              <button onClick={onClose} className="px-5 py-2.5 bg-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-300 transition-all">
+              <button
+                onClick={onClose}
+                className="px-5 py-2.5 bg-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-300 transition-all"
+              >
                 Close
               </button>
             </div>
@@ -445,4 +534,3 @@ export function BCDetailModal({
     </AnimatePresence>
   );
 }
-

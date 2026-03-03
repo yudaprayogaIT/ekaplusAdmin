@@ -513,9 +513,9 @@ export const CUSTOMER_REGISTER_FILTER_FIELDS: EntityFilterConfig = {
   ],
 };
 
-// Global Party (GP) filter fields
-export const GLOBAL_PARTY_FILTER_FIELDS: EntityFilterConfig = {
-  entity: "ekatalog_global_party",
+// Group Party (GP) filter fields
+export const GROUP_PARTY_FILTER_FIELDS: EntityFilterConfig = {
+  entity: "ekatalog_group_party",
   fields: [
     {
       field: "name",
@@ -561,9 +561,9 @@ export const GLOBAL_PARTY_FILTER_FIELDS: EntityFilterConfig = {
   ],
 };
 
-// Global Customer (GC) filter fields
-export const GLOBAL_CUSTOMER_FILTER_FIELDS: EntityFilterConfig = {
-  entity: "ekatalog_global_customer",
+// Group Customer (GC) filter fields
+export const GROUP_CUSTOMER_FILTER_FIELDS: EntityFilterConfig = {
+  entity: "ekatalog_group_customer",
   fields: [
     {
       field: "name",
@@ -573,10 +573,10 @@ export const GLOBAL_CUSTOMER_FILTER_FIELDS: EntityFilterConfig = {
     },
     {
       field: "gp_id",
-      label: "Global Party",
+      label: "Group Party",
       type: "relation",
       operators: ["=", "!=", "in", "not in"],
-      relationEntity: "ekatalog_global_party",
+      relationEntity: "ekatalog_group_party",
     },
     {
       field: "disabled",
@@ -628,10 +628,10 @@ export const BRANCH_CUSTOMER_FILTER_FIELDS: EntityFilterConfig = {
     },
     {
       field: "gc_id",
-      label: "Global Customer",
+      label: "Group Customer",
       type: "relation",
       operators: ["=", "!=", "in", "not in"],
-      relationEntity: "ekatalog_global_customer",
+      relationEntity: "ekatalog_group_customer",
     },
     {
       field: "branch_id",

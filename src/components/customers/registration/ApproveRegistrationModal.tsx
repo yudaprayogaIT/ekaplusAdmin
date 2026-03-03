@@ -20,6 +20,7 @@ import type {
 } from "@/types/customerRegistration";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getApiUrl, getQueryUrl } from "@/config/api";
+import ActionResultModal from "@/components/ui/ActionResultModal";
 
 interface ApproveRegistrationModalProps {
   isOpen: boolean;
@@ -96,6 +97,17 @@ function normalizeDate(value?: string): string | undefined {
   return value.split("T")[0];
 }
 
+function normalizeEntityName(value?: string): string {
+  if (!value) return "";
+  return value
+    .trim()
+    .replace(/\s+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
 function extractIdFromResourceResponse(json: unknown): number | undefined {
   if (
     json &&
@@ -131,6 +143,7 @@ export function ApproveRegistrationModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [operationLogs, setOperationLogs] = useState<ApprovalOperationLog[]>(
     [],
   );
@@ -167,6 +180,15 @@ export function ApproveRegistrationModal({
   const existingGcid = registration?.gc_id;
   const existingBcid = registration?.bc_id;
   const existingNbid = registration?.master_links?.nb_id;
+  const isCreatingNewGpFlow = Boolean(
+    !existingGpid && !selectedGpid && gpMode === "create",
+  );
+  const canSearchExistingGc = Boolean(
+    !isCreatingNewGpFlow && (existingGpid || selectedGpid),
+  );
+  const canSearchExistingBc = Boolean(
+    !isCreatingNewGpFlow && (existingGcid || selectedGcid),
+  );
 
   // ---- Filtered lists (only meaningful when mode === "search" and query is non-empty) ----
   const filteredGroupParents = useMemo(() => {
@@ -189,7 +211,7 @@ export function ApproveRegistrationModal({
 
   const filteredGroupCustomers = useMemo(() => {
     const qGc = gcSearch.trim().toLowerCase();
-    const effectiveGpid = existingGpid || selectedGpid;
+    const effectiveGpid = canSearchExistingGc ? existingGpid || selectedGpid : 0;
     const base = effectiveGpid
       ? groupCustomers.filter(
           (row) => Number(row.gpid || 0) === Number(effectiveGpid),
@@ -200,11 +222,11 @@ export function ApproveRegistrationModal({
       const label = `${row.gc_name || ""} ${row.name || ""}`.toLowerCase();
       return label.includes(qGc);
     });
-  }, [gcSearch, groupCustomers, selectedGpid, existingGpid]);
+  }, [gcSearch, groupCustomers, selectedGpid, existingGpid, canSearchExistingGc]);
 
   const filteredBranchCustomers = useMemo(() => {
     const q = bcSearch.trim().toLowerCase();
-    const effectiveGcid = selectedGcid || existingGcid;
+    const effectiveGcid = canSearchExistingBc ? selectedGcid || existingGcid : 0;
     const base = effectiveGcid
       ? branchCustomers.filter(
           (row) => Number(row.gcid || 0) === Number(effectiveGcid),
@@ -215,11 +237,20 @@ export function ApproveRegistrationModal({
       const label = `${row.bcid_name || ""} ${row.name || ""}`.toLowerCase();
       return label.includes(q);
     });
-  }, [bcSearch, branchCustomers, selectedGcid, existingGcid]);
+  }, [
+    bcSearch,
+    branchCustomers,
+    selectedGcid,
+    existingGcid,
+    canSearchExistingBc,
+  ]);
 
   const effectiveShippingAddresses = useMemo(() => {
     if (!registration) return [] as CustomerRegisterAddressApiResponse[];
     if (registration.same_as_company_address) {
+      if (shippingAddresses.length > 0) {
+        return shippingAddresses;
+      }
       return [
         {
           id: -1,
@@ -318,15 +349,16 @@ export function ApproveRegistrationModal({
 
       setStep(1);
       setCreateNationalBrand(false);
-      setNbName(registration.user.full_name || "");
+      setNbName(normalizeEntityName(registration.user.full_name || ""));
       setGpName(
-        `${registration.user.full_name || registration.company.name} GP`,
+        normalizeEntityName(
+          `${registration.user.full_name || registration.company.name} GP`,
+        ),
       );
-      setGcName(
-        `${registration.user.full_name || registration.company.name} GC`,
-      );
+      setGcName(normalizeEntityName(registration.company.name || ""));
       setIsSubmitting(false);
       setError(null);
+      setSuccessMessage(null);
       setOperationLogs([]);
       setNationalBrands([]);
       setExistingGp(null);
@@ -506,27 +538,33 @@ export function ApproveRegistrationModal({
 
   useEffect(() => {
     if (step !== 3 || existingGcid) return;
-    const canSearchExistingGc = Boolean(existingGpid || selectedGpid);
     if (!canSearchExistingGc) {
       setGcMode("create");
       setSelectedGcid(null);
     }
-  }, [step, existingGcid, existingGpid, selectedGpid]);
+  }, [step, existingGcid, canSearchExistingGc]);
 
   useEffect(() => {
     if (step !== 4 || existingBcid) return;
-    const canSearchExistingBc = Boolean(existingGcid || selectedGcid);
     if (!canSearchExistingBc) {
       setBcMode("create");
       setSelectedBcid(null);
     }
-  }, [step, existingBcid, existingGcid, selectedGcid]);
+  }, [step, existingBcid, canSearchExistingBc]);
+
+  useEffect(() => {
+    if (!isCreatingNewGpFlow) return;
+    setSelectedGcid(null);
+    setSelectedBcid(null);
+    if (step >= 3) setGcMode("create");
+    if (step >= 4) setBcMode("create");
+  }, [isCreatingNewGpFlow, step]);
 
   const buildGroupCustomerPayload = useCallback(
     (gpid: number) => {
       if (!registration) return null;
       return {
-        gc_name: gcName,
+        gc_name: normalizeEntityName(gcName),
         gpid,
         owner_full_name: registration.user.full_name,
         owner_phone: normalizePhone(registration.user.phone),
@@ -544,6 +582,11 @@ export function ApproveRegistrationModal({
   const buildBranchCustomerPayload = useCallback(
     (gcid: number) => {
       if (!registration) return null;
+      const branchOwnerName =
+        registration.branch_owner?.full_name || registration.user.full_name;
+      const branchOwnerPhone =
+        normalizePhone(registration.branch_owner?.phone || registration.user.phone) ||
+        undefined;
 
       const officeAddress = {
         type: "office",
@@ -555,7 +598,7 @@ export function ApproveRegistrationModal({
         postal_code: registration.address.postal_code,
       };
 
-      const warehouseAddresses = effectiveShippingAddresses.map((addr) => ({
+      const warehouseAddressesFromShipping = effectiveShippingAddresses.map((addr) => ({
         type: "warehouse",
         label: addr.label || "Warehouse",
         address: addr.address || "",
@@ -568,17 +611,33 @@ export function ApproveRegistrationModal({
         is_default: addr.is_default ? 1 : undefined,
       }));
 
+      const firstShipping = effectiveShippingAddresses[0];
+      const warehouseCopyFromOffice = {
+        type: "warehouse",
+        label: firstShipping?.label || "Warehouse",
+        address: registration.address.full_address,
+        city: registration.address.city_name,
+        district: registration.address.district_name,
+        province: registration.address.province_name,
+        postal_code: registration.address.postal_code,
+        pic_name: firstShipping?.pic_name || branchOwnerName || undefined,
+        pic_phone:
+          normalizePhone(firstShipping?.pic_phone || undefined) || branchOwnerPhone,
+        is_default: 1,
+      };
+
+      const customerAddress = registration.same_as_company_address
+        ? [officeAddress, warehouseCopyFromOffice]
+        : [officeAddress, ...warehouseAddressesFromShipping];
+
       return {
         gcid,
         branch: registration.company.branch_id,
         product_need: registration.company.product_need,
-        branch_owner:
-          registration.branch_owner?.full_name || registration.user.full_name,
+        branch_owner: branchOwnerName,
         branch_owner_email:
           registration.branch_owner?.email || registration.user.email,
-        branch_owner_phone: normalizePhone(
-          registration.branch_owner?.phone || registration.user.phone,
-        ),
+        branch_owner_phone: branchOwnerPhone,
         branch_owner_place_of_birth:
           registration.branch_owner?.place_of_birth ||
           registration.user.place_of_birth,
@@ -587,7 +646,7 @@ export function ApproveRegistrationModal({
             registration.user.date_of_birth,
         ),
         customer_register: Number(registration.id),
-        customer_address: [officeAddress, ...warehouseAddresses],
+        customer_address: customerAddress,
       };
     },
     [effectiveShippingAddresses, registration],
@@ -614,7 +673,7 @@ export function ApproveRegistrationModal({
         gpid: ids.gpid,
         gcid: ids.gcid,
         bcid: ids.bcid,
-        ...(ids.nbid ? { nbid: ids.nbid } : {}),
+        nbid: ids.nbid ?? null,
         customer_shipping_address: shippingPayload,
       };
     },
@@ -624,7 +683,7 @@ export function ApproveRegistrationModal({
   const validateCurrentStep = (): string | null => {
     // Step 1: National Brand (optional)
     if (step === 1) {
-      if (createNationalBrand && !nbName.trim()) {
+      if (createNationalBrand && !normalizeEntityName(nbName)) {
         return "Nama National Brand wajib diisi";
       }
     }
@@ -633,7 +692,7 @@ export function ApproveRegistrationModal({
     if (step === 2 && !existingGpid) {
       if (selectedGpid) return null;
       if (gpMode === "create") {
-        if (!gpName.trim()) return "Nama Group Parent wajib diisi";
+        if (!normalizeEntityName(gpName)) return "Nama Group Parent wajib diisi";
       } else if (gpMode === "idle" || gpMode === "search") {
         return "Pilih Group Parent yang ada atau klik 'Create New' untuk membuat baru";
       }
@@ -641,10 +700,9 @@ export function ApproveRegistrationModal({
 
     // Step 3: Group Customer
     if (step === 3 && !existingGcid) {
-      const canSearchExistingGc = Boolean(existingGpid || selectedGpid);
       if (canSearchExistingGc && selectedGcid) return null;
       if (gcMode === "create" || !canSearchExistingGc) {
-        if (!gcName.trim()) return "GC Name wajib diisi";
+        if (!normalizeEntityName(gcName)) return "GC Name wajib diisi";
       } else if (gcMode === "idle" || gcMode === "search") {
         return "Pilih Group Customer yang ada atau klik 'Create New' untuk membuat baru";
       }
@@ -652,7 +710,6 @@ export function ApproveRegistrationModal({
 
     // Step 4: Branch Customer
     if (step === 4 && !existingBcid) {
-      const canSearchExistingBc = Boolean(existingGcid || selectedGcid);
       if (canSearchExistingBc && selectedBcid) return null;
       if (bcMode === "create" || !canSearchExistingBc) {
         return null;
@@ -701,7 +758,7 @@ export function ApproveRegistrationModal({
             "creating National Brand",
             getApiUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND),
             "POST",
-            { nb_name: nbName.trim() },
+            { nb_name: normalizeEntityName(nbName) },
           );
           const createdNbid = extractIdFromResourceResponse(nbJson);
           if (!createdNbid)
@@ -709,7 +766,10 @@ export function ApproveRegistrationModal({
           nbid = createdNbid;
         }
 
-        const gpPayload = { gp_name: gpName.trim(), ...(nbid ? { nbid } : {}) };
+        const gpPayload = {
+          gp_name: normalizeEntityName(gpName),
+          ...(nbid ? { nbid } : {}),
+        };
         const gpJson = await apiJsonRequest(
           "creating Group Parent",
           getApiUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT),
@@ -827,8 +887,9 @@ export function ApproveRegistrationModal({
       const updatePayload = buildCustomerRegisterApprovePayload(finalResult);
       await apiJsonRequest(
         "updating customer_register approved",
-        getApiUrl(
+        getQueryUrl(
           `${API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER}/${registration.id}`,
+          { fields: ["*"] },
         ),
         "PUT",
         updatePayload,
@@ -839,11 +900,10 @@ export function ApproveRegistrationModal({
       window.dispatchEvent(new Event("ekatalog:gc_update"));
       window.dispatchEvent(new Event("ekatalog:bc_update"));
 
-      alert(
-        `Registrasi "${registration.company.name}" berhasil diapprove!\n\n` +
+      setSuccessMessage(
+        `Registrasi "${registration.company.name}" berhasil diapprove.\n\n` +
           `GP ID: ${gpid}\nGC ID: ${gcid}\nBC ID: ${bcid}${nbid ? `\nNB ID: ${nbid}` : ""}`,
       );
-      onSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal approve registrasi");
     } finally {
@@ -863,8 +923,16 @@ export function ApproveRegistrationModal({
   const selectedBcRow = branchCustomers.find(
     (bc) => Number(bc.id) === Number(selectedBcid),
   );
-  const canSearchExistingGc = Boolean(existingGpid || selectedGpid);
-  const canSearchExistingBc = Boolean(existingGcid || selectedGcid);
+  const previewGcName = (
+    selectedGcRow?.gc_name ||
+    registration.gc_name ||
+    gcName ||
+    registration.company.name ||
+    "-"
+  ).trim();
+  const previewBcCity =
+    registration.company.branch_city || registration.address.city_name || "-";
+  const previewBcName = `${normalizeEntityName(previewGcName)} - ${previewBcCity}`;
 
   const getBranchNameFromBc = (row?: BranchCustomerRow | null): string => {
     if (!row) return "-";
@@ -965,13 +1033,14 @@ export function ApproveRegistrationModal({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden max-h-[90vh] flex flex-col"
-          >
+        <>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden max-h-[90vh] flex flex-col"
+            >
             <div className="bg-gradient-to-r from-green-500 to-green-600 px-6 py-5 flex items-center gap-3">
               <FaCheckCircle className="w-7 h-7 text-white" />
               <div className="flex-1">
@@ -1121,13 +1190,13 @@ export function ApproveRegistrationModal({
                               checked={createNationalBrand}
                               onChange={(e) => {
                                 setCreateNationalBrand(e.target.checked);
-                                if (e.target.checked) {
-                                  setSelectedNbid(null);
-                                  if (!nbName.trim() && nbSearch.trim()) {
-                                    setNbName(nbSearch.trim());
-                                  }
+                              if (e.target.checked) {
+                                setSelectedNbid(null);
+                                if (!nbName.trim() && nbSearch.trim()) {
+                                  setNbName(normalizeEntityName(nbSearch));
                                 }
-                              }}
+                              }
+                            }}
                             />
                             <span className="text-sm">Buat National Brand baru</span>
                           </label>
@@ -1149,6 +1218,9 @@ export function ApproveRegistrationModal({
                             <input
                               value={nbName}
                               onChange={(e) => setNbName(e.target.value)}
+                              onBlur={() =>
+                                setNbName((prev) => normalizeEntityName(prev))
+                              }
                               className="w-full px-4 py-2.5 border border-gray-300 rounded-xl"
                               placeholder="Contoh: Yuda Prayoga"
                             />
@@ -1306,12 +1378,12 @@ export function ApproveRegistrationModal({
                                     </span>
                                     &quot;
                                   </p>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setGpName(gpSearch.trim());
-                                      setGpMode("create");
-                                    }}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setGpName(normalizeEntityName(gpSearch));
+                                  setGpMode("create");
+                                }}
                                     className="w-full py-2 rounded-xl border-2 border-green-300 text-green-700 text-sm font-medium hover:border-green-500 hover:bg-green-50 transition-all flex items-center justify-center gap-2"
                                   >
                                     <FaPlusCircle className="w-4 h-4" />
@@ -1346,6 +1418,9 @@ export function ApproveRegistrationModal({
                               <input
                                 value={gpName}
                                 onChange={(e) => setGpName(e.target.value)}
+                                onBlur={() =>
+                                  setGpName((prev) => normalizeEntityName(prev))
+                                }
                                 className="w-full px-4 py-2.5 border border-gray-300 rounded-xl bg-white"
                                 placeholder="Contoh: Yuda Prayoga GP"
                               />
@@ -1528,7 +1603,7 @@ export function ApproveRegistrationModal({
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      setGcName(gcSearch.trim());
+                                      setGcName(normalizeEntityName(gcSearch));
                                       setGcMode("create");
                                     }}
                                     className="w-full py-2 rounded-xl border-2 border-green-300 text-green-700 text-sm font-medium hover:border-green-500 hover:bg-green-50 transition-all flex items-center justify-center gap-2"
@@ -1568,6 +1643,9 @@ export function ApproveRegistrationModal({
                               <input
                                 value={gcName}
                                 onChange={(e) => setGcName(e.target.value)}
+                                onBlur={() =>
+                                  setGcName((prev) => normalizeEntityName(prev))
+                                }
                                 className="w-full px-4 py-2.5 border border-gray-300 rounded-xl bg-white"
                               />
                             </div>
@@ -1780,7 +1858,7 @@ export function ApproveRegistrationModal({
                               </p>
                               <p>
                                 <span className="font-semibold">Preview:</span>{" "}
-                                (auto) - {registration.company.branch_name}
+                                {previewBcName}
                               </p>
                               <p>
                                 <span className="font-semibold">Branch:</span>{" "}
@@ -1911,8 +1989,19 @@ export function ApproveRegistrationModal({
                 </motion.button>
               )}
             </div>
-          </motion.div>
-        </div>
+            </motion.div>
+          </div>
+          <ActionResultModal
+            isOpen={Boolean(successMessage)}
+            type="success"
+            title="Approve Berhasil"
+            message={successMessage || ""}
+            onClose={() => {
+              setSuccessMessage(null);
+              onSuccess();
+            }}
+          />
+        </>
       )}
     </AnimatePresence>
   );

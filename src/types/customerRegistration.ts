@@ -116,6 +116,8 @@ export interface CustomerRegistration {
   // Rejection metadata (populated when status = 'rejected')
   rejection_reason?: string;
   rejection_notes?: string;
+  reject_reason?: string;
+  reject_notes?: string;
   rejected_at?: string;
   rejected_by?: string;
 }

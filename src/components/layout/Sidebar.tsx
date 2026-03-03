@@ -230,14 +230,14 @@ const CUSTOMER_SUBMENU: MenuItem[] = [
   },
   {
     label: "Group Parent",
-    href: "/customers/global_party",
+    href: "/customers/group_party",
     icon: <FaUsers className="w-4 h-4" />,
     category: "Customer",
     requireAuth: true,
   },
   {
     label: "Group Customer",
-    href: "/customers/global_customer",
+    href: "/customers/group_customer",
     icon: <FaUserGroup className="w-4 h-4" />,
     category: "Customer",
     requireAuth: true,
@@ -389,7 +389,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
 
   const handleMenuClick = (
     e: React.MouseEvent<HTMLAnchorElement>,
-    active: boolean
+    active: boolean,
   ) => {
     if (active) {
       e.preventDefault();

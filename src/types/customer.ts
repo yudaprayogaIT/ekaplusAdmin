@@ -1,7 +1,7 @@
-// Type definitions for GP (Global Party), GC (Global Customer), and BC (Branch Customer)
+// Type definitions for GP ( Group Party), GC ( Group Customer), and BC (Branch Customer)
 
-// GP (Global Party) - Represents a unique business entity
-export interface GlobalParty {
+// GP (Group Party) - Represents a unique business entity
+export interface GroupParty {
   id: number; // GPID (auto-increment)
   code?: string; // document name/code (e.g. GP00002)
   name: string; // GPName (unique)
@@ -15,8 +15,8 @@ export interface GlobalParty {
   disabled?: number;
 }
 
-// GC (Global Customer) - Company-level customer
-export interface GlobalCustomer {
+// GC (Group Customer) - Company-level customer
+export interface GroupCustomer {
   id: number; // GCID (auto-increment)
   code?: string; // document name/code (e.g. GC00002)
   name: string; // GCName (from company name)
@@ -57,7 +57,7 @@ export interface BranchCustomer {
 }
 
 // API Response types (for mapping from backend)
-export interface GlobalPartyApiResponse {
+export interface GroupPartyApiResponse {
   id: number;
   name: string;
   owner_name?: string;
@@ -70,11 +70,11 @@ export interface GlobalPartyApiResponse {
   disabled?: number;
 }
 
-export interface GlobalCustomerApiResponse {
+export interface GroupCustomerApiResponse {
   id: number;
   name: string;
   gp_id: number;
-  gp?: GlobalPartyApiResponse;
+  gp?: GroupPartyApiResponse;
   owner_name?: string;
   owner_phone?: string;
   owner_email?: string;
@@ -89,7 +89,7 @@ export interface BranchCustomerApiResponse {
   id: number;
   name: string;
   gc_id: number;
-  gc?: GlobalCustomerApiResponse;
+  gc?: GroupCustomerApiResponse;
   branch_id: number;
   branch?: {
     id: number;

@@ -16,7 +16,7 @@ export function RegistrationCard({
 }: RegistrationCardProps) {
   const getStatusBadgeClass = (status: string) => {
     switch (status.toLowerCase()) {
-      case "pending":
+      // case "pending":
       case "draft":
         return "bg-yellow-100 text-yellow-700 border-yellow-200";
       case "approved":
@@ -29,7 +29,7 @@ export function RegistrationCard({
   };
 
   const getStatusLabel = (status: string) => {
-    if (status.toLowerCase() === "draft") return "Pending";
+    if (status.toLowerCase() === "draft") return "Draft";
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
@@ -70,7 +70,7 @@ export function RegistrationCard({
           </div>
           <div
             className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 ${getStatusBadgeClass(
-              registration.status
+              registration.status,
             )} flex-shrink-0`}
           >
             {getStatusLabel(registration.status)}
