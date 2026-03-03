@@ -1,0 +1,296 @@
+{
+  "permissions": [
+    {
+      "id": "perm_001",
+      "module": "users",
+      "name": "users.view",
+      "display_name": "Lihat Semua Users",
+      "description": "Dapat melihat daftar semua user",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_002",
+      "module": "users",
+      "name": "users.view_own",
+      "display_name": "Lihat User Sendiri",
+      "description": "Hanya dapat melihat data user sendiri",
+      "scope": "own",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_003",
+      "module": "users",
+      "name": "users.view_branch",
+      "display_name": "Lihat User Cabang",
+      "description": "Dapat melihat user di cabang sendiri",
+      "scope": "branch",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_004",
+      "module": "users",
+      "name": "users.create",
+      "display_name": "Tambah User",
+      "description": "Dapat menambah user baru",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_005",
+      "module": "users",
+      "name": "users.edit",
+      "display_name": "Edit User",
+      "description": "Dapat mengedit data user",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_006",
+      "module": "users",
+      "name": "users.delete",
+      "display_name": "Hapus User",
+      "description": "Dapat menghapus user",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_010",
+      "module": "customers",
+      "name": "customers.view",
+      "display_name": "Lihat Semua Customer",
+      "description": "Dapat melihat semua customer nasional",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_011",
+      "module": "customers",
+      "name": "customers.view_branch",
+      "display_name": "Lihat Customer Cabang",
+      "description": "Hanya dapat melihat customer cabang sendiri",
+      "scope": "branch",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_012",
+      "module": "customers",
+      "name": "customers.create",
+      "display_name": "Tambah Customer",
+      "description": "Dapat menambah customer baru",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_013",
+      "module": "customers",
+      "name": "customers.edit",
+      "display_name": "Edit Customer",
+      "description": "Dapat mengedit data customer",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_014",
+      "module": "customers",
+      "name": "customers.verify",
+      "display_name": "Verifikasi Customer",
+      "description": "Dapat memverifikasi pengajuan customer baru",
+      "scope": "branch",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_015",
+      "module": "customers",
+      "name": "customers.approve",
+      "display_name": "Approve Customer",
+      "description": "Dapat approve final customer baru",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_016",
+      "module": "customers",
+      "name": "customers.reject",
+      "display_name": "Reject Customer",
+      "description": "Dapat menolak pengajuan customer",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_020",
+      "module": "items",
+      "name": "items.view",
+      "display_name": "Lihat Item/Produk",
+      "description": "Dapat melihat master item",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_021",
+      "module": "items",
+      "name": "items.create",
+      "display_name": "Tambah Item",
+      "description": "Dapat menambah item baru",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_022",
+      "module": "items",
+      "name": "items.edit",
+      "display_name": "Edit Item",
+      "description": "Dapat mengedit data item",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_023",
+      "module": "items",
+      "name": "items.delete",
+      "display_name": "Hapus Item",
+      "description": "Dapat menghapus item",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_030",
+      "module": "categories",
+      "name": "categories.view",
+      "display_name": "Lihat Kategori",
+      "description": "Dapat melihat kategori",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_031",
+      "module": "categories",
+      "name": "categories.create",
+      "display_name": "Tambah Kategori",
+      "description": "Dapat menambah kategori baru",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_032",
+      "module": "categories",
+      "name": "categories.edit",
+      "display_name": "Edit Kategori",
+      "description": "Dapat mengedit kategori",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_033",
+      "module": "categories",
+      "name": "categories.delete",
+      "display_name": "Hapus Kategori",
+      "description": "Dapat menghapus kategori",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_040",
+      "module": "credits",
+      "name": "credits.view",
+      "display_name": "Lihat Kredit",
+      "description": "Dapat melihat data kredit customer",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_041",
+      "module": "credits",
+      "name": "credits.set_limit",
+      "display_name": "Set Limit Kredit",
+      "description": "Dapat mengatur limit kredit",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_050",
+      "module": "memberships",
+      "name": "memberships.view",
+      "display_name": "Lihat Membership",
+      "description": "Dapat melihat data membership",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_051",
+      "module": "memberships",
+      "name": "memberships.upgrade_tier",
+      "display_name": "Upgrade Tier",
+      "description": "Dapat upgrade tier membership manual",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_060",
+      "module": "workflows",
+      "name": "workflows.view",
+      "display_name": "Lihat Workflow",
+      "description": "Dapat melihat konfigurasi workflow",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_061",
+      "module": "workflows",
+      "name": "workflows.manage",
+      "display_name": "Kelola Workflow",
+      "description": "Dapat membuat/edit/hapus workflow",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_070",
+      "module": "roles",
+      "name": "roles.view",
+      "display_name": "Lihat Roles",
+      "description": "Dapat melihat daftar role",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_071",
+      "module": "roles",
+      "name": "roles.manage",
+      "display_name": "Kelola Roles",
+      "description": "Dapat membuat/edit/hapus role dan permission",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_080",
+      "module": "branches",
+      "name": "branches.view",
+      "display_name": "Lihat Cabang",
+      "description": "Dapat melihat data cabang",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_081",
+      "module": "branches",
+      "name": "branches.manage",
+      "display_name": "Kelola Cabang",
+      "description": "Dapat mengelola data cabang",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "perm_082",
+      "module": "emails",
+      "name": "emails.view",
+      "display_name": "Melihat Log Email",
+      "description": "Dapat mengelola Log Email",
+      "scope": "all",
+      "created_at": "2025-01-01T00:00:00.000000"
+    }
+  ],
+  "meta": {
+    "last_updated": "2025-01-01T00:00:00.000000",
+    "total_permissions": 31
+  }
+}

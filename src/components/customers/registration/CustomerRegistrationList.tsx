@@ -99,6 +99,7 @@ interface CustomerRegistrationApiResponse {
   crm_customer_id?: string | null;
   sync_last_error?: string | null;
   reject_reason?: string | null;
+  reject_notes?: string | null;
   rejection_reason?: string | null;
   rejection_notes?: string | null;
 }
@@ -465,7 +466,7 @@ export function CustomerRegistrationList() {
         undefined,
       rejection_reason:
         apiData.reject_reason ?? apiData.rejection_reason ?? undefined,
-      rejection_notes: apiData.rejection_notes ?? undefined,
+      rejection_notes: apiData.reject_notes ?? undefined,
     };
   }
 

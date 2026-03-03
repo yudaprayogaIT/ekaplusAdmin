@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { GPCard } from "./GPCard";
 import { GPDetailModal } from "./GPDetailModal";
-import { GCDetailModal } from "@/components/global_customer/GCDetailModal";
+import { GCDetailModal } from "@/components/group_customer/GCDetailModal";
 import { BCDetailModal } from "@/components/branch_customer/BCDetailModal";
 import type {
   GroupParty,
