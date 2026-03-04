@@ -107,6 +107,12 @@ export function RegistrationCard({
 
         {/* Submission Date */}
         <div className="pt-2 border-t border-gray-100">
+          <p className="text-xs text-gray-500 mb-1">
+            No Reg:{" "}
+            <span className="font-medium text-gray-700">
+              {registration.registration_number || registration.id}
+            </span>
+          </p>
           <p className="text-xs text-gray-500">
             Submitted:{" "}
             <span className="font-medium text-gray-700">

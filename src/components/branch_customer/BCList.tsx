@@ -3,11 +3,11 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { BCCard } from "./BCCard";
 import { BCDetailModal } from "./BCDetailModal";
-import { GPDetailModal } from "@/components/group_party/GPDetailModal";
+import { GPDetailModal } from "@/components/group_parent/GPDetailModal";
 import { GCDetailModal } from "@/components/group_customer/GCDetailModal";
 import type {
   BranchCustomer,
-  GroupParty,
+  GroupParent,
   GroupCustomer,
 } from "@/types/customer";
 import {
@@ -93,7 +93,7 @@ export default function BCList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [selectedGP, setSelectedGP] = useState<GroupParty | null>(null);
+  const [selectedGP, setSelectedGP] = useState<GroupParent | null>(null);
   const [selectedGC, setSelectedGC] = useState<GroupCustomer | null>(null);
   const [selectedBC, setSelectedBC] = useState<BranchCustomer | null>(null);
   const [searchQuery, setSearchQuery] = useState("");

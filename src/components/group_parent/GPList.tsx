@@ -6,7 +6,7 @@ import { GPDetailModal } from "./GPDetailModal";
 import { GCDetailModal } from "@/components/group_customer/GCDetailModal";
 import { BCDetailModal } from "@/components/branch_customer/BCDetailModal";
 import type {
-  GroupParty,
+  GroupParent,
   GroupCustomer,
   BranchCustomer,
 } from "@/types/customer";
@@ -50,7 +50,7 @@ function resolveUserName(
   return undefined;
 }
 
-function mapGpRow(row: GroupParentApiResponse): GroupParty {
+function mapGpRow(row: GroupParentApiResponse): GroupParent {
   return {
     id: Number(row.id),
     code: row.name || undefined,
@@ -66,11 +66,11 @@ function mapGpRow(row: GroupParentApiResponse): GroupParty {
 export default function GPList() {
   const { token, isAuthenticated } = useAuth();
 
-  const [gps, setGps] = useState<GroupParty[]>([]);
+  const [gps, setGps] = useState<GroupParent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [selectedGP, setSelectedGP] = useState<GroupParty | null>(null);
+  const [selectedGP, setSelectedGP] = useState<GroupParent | null>(null);
   const [selectedGC, setSelectedGC] = useState<GroupCustomer | null>(null);
   const [selectedBC, setSelectedBC] = useState<BranchCustomer | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -170,7 +170,7 @@ export default function GPList() {
     itemsPerPage,
   } = usePagination(filteredAndSortedGPs, 20);
 
-  const handleViewDetails = (gp: GroupParty) => {
+  const handleViewDetails = (gp: GroupParent) => {
     setSelectedGP(gp);
   };
 

@@ -14,11 +14,12 @@ import {
   FaEnvelope,
   FaChevronRight,
   FaStream,
+  FaTags,
 } from "react-icons/fa";
 import { HiXMark } from "react-icons/hi2";
 import type {
   BranchCustomer,
-  GroupParty,
+  GroupParent,
   GroupCustomer,
 } from "@/types/customer";
 import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
@@ -28,7 +29,7 @@ interface BCDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   bc: BranchCustomer | null;
-  onViewGP?: (gp: GroupParty) => void;
+  onViewGP?: (gp: GroupParent) => void;
   onViewGC?: (gc: GroupCustomer) => void;
 }
 
@@ -53,6 +54,7 @@ interface GroupParentRow {
   id: number;
   name?: string | null;
   gp_name?: string | null;
+  nbid?: number | { id?: number | string; name?: string; nb_name?: string } | null;
   disabled?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -62,6 +64,12 @@ interface GroupParentRow {
   updated_by?: number | { full_name?: string } | null;
 }
 
+interface NationalBrandRow {
+  id: number;
+  name?: string | null;
+  nb_name?: string | null;
+}
+
 function resolveUserName(
   directName: string | null | undefined,
   value: number | { full_name?: string } | null | undefined,
@@ -69,6 +77,15 @@ function resolveUserName(
   if (directName) return directName;
   if (value && typeof value === "object" && value.full_name)
     return value.full_name;
+  return undefined;
+}
+
+function toNumber(value: unknown): number | undefined {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed)) return parsed;
+  }
   return undefined;
 }
 
@@ -82,7 +99,8 @@ export function BCDetailModal({
   const { token, isAuthenticated } = useAuth();
 
   const [parentGC, setParentGC] = useState<GroupCustomer | null>(null);
-  const [parentGP, setParentGP] = useState<GroupParty | null>(null);
+  const [parentGP, setParentGP] = useState<GroupParent | null>(null);
+  const [linkedNB, setLinkedNB] = useState<{ id: number; code: string; name: string } | null>(null);
 
   const loadParents = useCallback(async () => {
     if (!isOpen || !bc || !isAuthenticated || !token) return;
@@ -131,6 +149,7 @@ export function BCDetailModal({
 
     if (!mappedGC?.gp_id) {
       setParentGP(null);
+      setLinkedNB(null);
       return;
     }
 
@@ -151,6 +170,7 @@ export function BCDetailModal({
 
     if (!gpRow) {
       setParentGP(null);
+      setLinkedNB(null);
       return;
     }
 
@@ -170,6 +190,41 @@ export function BCDetailModal({
         gpRow.updated_by,
       ),
       disabled: Number(gpRow.disabled || 0),
+    });
+
+    const nbId =
+      typeof gpRow.nbid === "number"
+        ? gpRow.nbid
+        : gpRow.nbid && typeof gpRow.nbid === "object"
+          ? toNumber(gpRow.nbid.id)
+          : undefined;
+
+    if (!nbId) {
+      setLinkedNB(null);
+      return;
+    }
+
+    const nbRes = await apiFetch(
+      getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, {
+        fields: ["id", "name", "nb_name"],
+        filters: [["id", "=", nbId]],
+        limit: 1,
+      }),
+      { method: "GET", cache: "no-store" },
+      token,
+    );
+    const nbJson = nbRes.ok ? await nbRes.json() : { data: [] };
+    const nbRow: NationalBrandRow | undefined = Array.isArray(nbJson?.data)
+      ? nbJson.data[0]
+      : undefined;
+    if (!nbRow) {
+      setLinkedNB(null);
+      return;
+    }
+    setLinkedNB({
+      id: Number(nbRow.id),
+      code: nbRow.name || `NB${nbRow.id}`,
+      name: nbRow.nb_name || nbRow.name || "-",
     });
   }, [bc, isAuthenticated, isOpen, token]);
 
@@ -331,6 +386,35 @@ export function BCDetailModal({
                 </h3>
 
                 <div className="space-y-3">
+                  {linkedNB ? (
+                    <div className="w-full bg-gradient-to-br from-indigo-50 to-white rounded-xl p-4 border-2 border-indigo-100">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-indigo-500 rounded-lg flex items-center justify-center">
+                            <FaTags className="w-5 h-5 text-white" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-xs text-gray-500 font-medium">
+                              Level 0: National Brand (NB)
+                            </p>
+                            <p className="text-lg font-bold text-gray-900">
+                              {linkedNB.name}
+                            </p>
+                            <p className="text-sm text-indigo-600 mt-0.5">
+                              NBID: {linkedNB.code}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {linkedNB ? (
+                    <div className="flex justify-center">
+                      <div className="w-0.5 h-4 bg-gradient-to-b from-indigo-300 to-purple-300"></div>
+                    </div>
+                  ) : null}
+
                   {parentGP ? (
                     <button
                       onClick={() => onViewGP && onViewGP(parentGP)}

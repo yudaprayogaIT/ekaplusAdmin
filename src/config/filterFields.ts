@@ -513,9 +513,9 @@ export const CUSTOMER_REGISTER_FILTER_FIELDS: EntityFilterConfig = {
   ],
 };
 
-// Group Party (GP) filter fields
-export const GROUP_PARTY_FILTER_FIELDS: EntityFilterConfig = {
-  entity: "ekatalog_group_party",
+// Group Parent (GP) filter fields
+export const GROUP_PARENT_FILTER_FIELDS: EntityFilterConfig = {
+  entity: "ekatalog_group_parent",
   fields: [
     {
       field: "name",
@@ -573,10 +573,10 @@ export const GROUP_CUSTOMER_FILTER_FIELDS: EntityFilterConfig = {
     },
     {
       field: "gp_id",
-      label: "Group Party",
+      label: "Group Parent",
       type: "relation",
       operators: ["=", "!=", "in", "not in"],
-      relationEntity: "ekatalog_group_party",
+      relationEntity: "ekatalog_group_parent",
     },
     {
       field: "disabled",

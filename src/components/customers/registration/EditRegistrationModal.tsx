@@ -61,6 +61,8 @@ interface FormState {
   branch_owner_date_of_birth: string;
   company_type: string;
   company_title: string;
+  company_name_base: string;
+  company_name_suffix: string;
   company_name: string;
   product_need: string;
   branch_id: number | null;
@@ -74,9 +76,20 @@ interface FormState {
 }
 
 const COMPANY_TYPE_OPTIONS = ["Company", "Individual"];
-const COMPANY_TITLE_OPTIONS = ["Toko", "Home Industri", "Freelance", "PT", "CV", "UD"];
+const COMPANY_TITLE_OPTIONS_BY_TYPE: Record<string, string[]> = {
+  Individual: ["Home Industri", "Toko", "Freelance"],
+  Company: ["PT", "CV", "UD"],
+};
+const COMPANY_SUFFIX_OPTIONS_BY_TITLE: Record<string, string[]> = {
+  "Home Industri": ["HI"],
+  Toko: ["TK"],
+  Freelance: ["BP", "IBU"],
+  PT: ["PT"],
+  CV: ["CV"],
+  UD: ["UD"],
+};
 const PRODUCT_NEED_OPTIONS = ["Bahan Baku Springbed & Sofa", "Furniture"];
-const WILAYAH_BASE_URL = "https://wilayah.id/api";
+const WILAYAH_BASE_URL = "https://www.emsifa.com/api-wilayah-indonesia/api";
 
 function toInputDate(value?: string) {
   if (!value || value === "-") return "";
@@ -117,6 +130,39 @@ function normalizeName(value?: string | null) {
   return (value || "").trim().toLowerCase();
 }
 
+function buildCompanyName(base: string, suffix: string) {
+  return `${(base || "").trim()} ${(suffix || "").trim()}`.trim();
+}
+
+function splitCompanyName(fullName: string, title: string) {
+  const full = (fullName || "").trim();
+  const titleOptions = COMPANY_SUFFIX_OPTIONS_BY_TITLE[title] || [];
+  if (!full) {
+    return {
+      company_name_base: "",
+      company_name_suffix: titleOptions[0] || "",
+      company_name: "",
+    };
+  }
+
+  for (const suffix of titleOptions) {
+    if (full.toUpperCase().endsWith(` ${suffix.toUpperCase()}`)) {
+      const base = full.slice(0, full.length - suffix.length).trim();
+      return {
+        company_name_base: base,
+        company_name_suffix: suffix,
+        company_name: buildCompanyName(base, suffix),
+      };
+    }
+  }
+
+  return {
+    company_name_base: full,
+    company_name_suffix: titleOptions[0] || "",
+    company_name: buildCompanyName(full, titleOptions[0] || ""),
+  };
+}
+
 function matchByName(options: WilayahOption[], value?: string | null) {
   const target = normalizeName(value);
   if (!target) return null;
@@ -132,11 +178,14 @@ async function fetchWilayah(path: string): Promise<WilayahOption[]> {
     throw new Error(`Failed loading wilayah (${res.status})`);
   }
   const json = await res.json();
-  const rows: Array<{ code?: string; name?: string }> = Array.isArray(json?.data)
-    ? json.data
-    : [];
+  const rows: Array<{ code?: string; id?: string; name?: string }> =
+    Array.isArray(json?.data)
+      ? json.data
+      : Array.isArray(json)
+        ? json
+        : [];
   const mapped: WilayahOption[] = rows.map((row) => ({
-    code: String(row.code || ""),
+    code: String(row.code || row.id || ""),
     name: String(row.name || ""),
   }));
   return mapped.filter((row: WilayahOption) => Boolean(row.code && row.name));
@@ -275,7 +324,10 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
           branch_owner_date_of_birth: toInputDate(registration.branch_owner?.date_of_birth),
           company_type: registration.company.company_type || "",
           company_title: registration.company.company_title || "",
-          company_name: registration.company.name || "",
+          ...splitCompanyName(
+            registration.company.name || "",
+            registration.company.company_title || "",
+          ),
           product_need: registration.company.product_need || "",
           branch_id: registration.company.branch_id || null,
           company_address: registration.address.full_address || "",
@@ -511,6 +563,64 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
     updateShip(idx, { district: selected?.name || "" });
   };
 
+  const companyTitleOptions = COMPANY_TITLE_OPTIONS_BY_TYPE[form.company_type] || [];
+  const currentSuffixOptions =
+    COMPANY_SUFFIX_OPTIONS_BY_TITLE[form.company_title] || [];
+  const isSuffixEditable = form.company_title === "Freelance";
+
+  const setCompanyType = (type: string) => {
+    const nextTitles = COMPANY_TITLE_OPTIONS_BY_TYPE[type] || [];
+    const nextTitle = type ? nextTitles[0] || "" : "";
+    const nextSuffix = nextTitle
+      ? (COMPANY_SUFFIX_OPTIONS_BY_TITLE[nextTitle] || [])[0] || ""
+      : "";
+    setForm((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        company_type: type,
+        company_title: nextTitle,
+        company_name_suffix: nextSuffix,
+        company_name: buildCompanyName(prev.company_name_base, nextSuffix),
+      };
+    });
+  };
+
+  const setCompanyTitle = (title: string) => {
+    const nextSuffix = (COMPANY_SUFFIX_OPTIONS_BY_TITLE[title] || [])[0] || "";
+    setForm((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        company_title: title,
+        company_name_suffix: nextSuffix,
+        company_name: buildCompanyName(prev.company_name_base, nextSuffix),
+      };
+    });
+  };
+
+  const setCompanyNameBase = (base: string) => {
+    setForm((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        company_name_base: base,
+        company_name: buildCompanyName(base, prev.company_name_suffix),
+      };
+    });
+  };
+
+  const setCompanyNameSuffix = (suffix: string) => {
+    setForm((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        company_name_suffix: suffix,
+        company_name: buildCompanyName(prev.company_name_base, suffix),
+      };
+    });
+  };
+
   const validate = () => {
     if (!form.owner_full_name.trim()) return "Nama pemilik wajib diisi";
     if (!form.owner_phone.trim()) return "No HP pemilik wajib diisi";
@@ -520,7 +630,8 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
     if (!form.branch_owner_email.trim()) return "Email PIC branch wajib diisi";
     if (!form.company_type.trim()) return "Jenis perusahaan wajib diisi";
     if (!form.company_title.trim()) return "Gelar perusahaan wajib diisi";
-    if (!form.company_name.trim()) return "Nama perusahaan wajib diisi";
+    if (!form.company_name_base.trim()) return "Nama perusahaan wajib diisi";
+    if (!form.company_name_suffix.trim()) return "Sebutan perusahaan wajib diisi";
     if (!form.product_need.trim()) return "Kebutuhan produk wajib diisi";
     if (!form.branch_id) return "Cabang wajib dipilih";
     if (!form.company_address.trim()) return "Alamat perusahaan wajib diisi";
@@ -549,7 +660,21 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
     setError(null);
     setIsSaving(true);
     try {
+      const rawApplicantOwnerId = registration.ekaplus_user?.id;
+      const applicantOwnerId =
+        typeof rawApplicantOwnerId === "number"
+          ? rawApplicantOwnerId
+          : Number.parseInt(String(rawApplicantOwnerId || ""), 10);
+      const fallbackOwnerId =
+        Number(registration.created_by_id || 0) ||
+        Number(registration.user.user_id || 0);
       const payload = {
+        owner:
+          Number.isFinite(applicantOwnerId) && applicantOwnerId > 0
+            ? applicantOwnerId
+            : fallbackOwnerId > 0
+              ? fallbackOwnerId
+              : undefined,
         owner_full_name: form.owner_full_name,
         owner_phone: form.owner_phone,
         owner_email: form.owner_email,
@@ -562,7 +687,10 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
         branch_owner_date_of_birth: form.branch_owner_date_of_birth || null,
         company_type: form.company_type,
         company_title: form.company_title,
-        company_name: form.company_name,
+        company_name: buildCompanyName(
+          form.company_name_base,
+          form.company_name_suffix,
+        ),
         product_need: form.product_need,
         branch_id: form.branch_id,
         company_address: form.company_address,
@@ -616,7 +744,9 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-white">Edit Data Registrasi</h2>
-                  <p className="text-sm text-orange-100">ID: #{registration.id}</p>
+                  <p className="text-sm text-orange-100">
+                    No: {registration.registration_number || registration.id}
+                  </p>
                 </div>
               </div>
               <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-lg">
@@ -707,21 +837,55 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label className="text-sm font-semibold text-gray-700 block mb-1">Jenis Perusahaan *</label>
-                    <select value={form.company_type} onChange={(e) => setField("company_type", e.target.value)} className="w-full px-3 py-2.5 border rounded-lg bg-white">
+                    <select value={form.company_type} onChange={(e) => setCompanyType(e.target.value)} className="w-full px-3 py-2.5 border rounded-lg bg-white">
                       <option value="">Pilih Jenis Perusahaan</option>
                       {COMPANY_TYPE_OPTIONS.map((x) => <option key={x}>{x}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="text-sm font-semibold text-gray-700 block mb-1">Gelar Perusahaan *</label>
-                    <select value={form.company_title} onChange={(e) => setField("company_title", e.target.value)} className="w-full px-3 py-2.5 border rounded-lg bg-white">
+                    <select value={form.company_title} onChange={(e) => setCompanyTitle(e.target.value)} className="w-full px-3 py-2.5 border rounded-lg bg-white">
                       <option value="">Pilih Gelar Perusahaan</option>
-                      {COMPANY_TITLE_OPTIONS.map((x) => <option key={x}>{x}</option>)}
+                      {companyTitleOptions.map((x) => <option key={x}>{x}</option>)}
                     </select>
                   </div>
-                  <div>
+                  <div className="md:col-span-2">
                     <label className="text-sm font-semibold text-gray-700 block mb-1">Nama Perusahaan *</label>
-                    <input value={form.company_name} onChange={(e) => setField("company_name", e.target.value)} className="w-full px-3 py-2.5 border rounded-lg" />
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
+                      <input
+                        value={form.company_name_base}
+                        onChange={(e) => setCompanyNameBase(e.target.value)}
+                        className="md:col-span-8 w-full px-3 py-2.5 border rounded-lg"
+                        placeholder="Nama inti perusahaan"
+                      />
+                      {isSuffixEditable ? (
+                        <select
+                          value={form.company_name_suffix}
+                          onChange={(e) => setCompanyNameSuffix(e.target.value)}
+                          className="md:col-span-4 w-full px-3 py-2.5 border rounded-lg bg-white"
+                        >
+                          <option value="">Pilih Sebutan</option>
+                          {currentSuffixOptions.map((suffix) => (
+                            <option key={suffix} value={suffix}>
+                              {suffix}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          value={form.company_name_suffix}
+                          readOnly
+                          className="md:col-span-4 w-full px-3 py-2.5 border rounded-lg bg-gray-100"
+                          placeholder="Sebutan"
+                        />
+                      )}
+                    </div>
+                    <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 font-semibold text-amber-900">
+                      {buildCompanyName(
+                        form.company_name_base,
+                        form.company_name_suffix,
+                      ) || "-"}
+                    </div>
                   </div>
                   <div>
                     <label className="text-sm font-semibold text-gray-700 block mb-1">Kebutuhan Produk *</label>

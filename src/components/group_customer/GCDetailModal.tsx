@@ -15,11 +15,12 @@ import {
   FaStore,
   FaArrowUp,
   FaArrowDown,
+  FaTags,
 } from "react-icons/fa";
 import { HiXMark } from "react-icons/hi2";
 import type {
   GroupCustomer,
-  GroupParty,
+  GroupParent,
   BranchCustomer,
 } from "@/types/customer";
 import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
@@ -29,7 +30,7 @@ interface GCDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   gc: GroupCustomer | null;
-  onViewGP?: (gp: GroupParty) => void;
+  onViewGP?: (gp: GroupParent) => void;
   onViewBC?: (bc: BranchCustomer) => void;
 }
 
@@ -37,6 +38,7 @@ interface GroupParentRow {
   id: number;
   name?: string | null;
   gp_name?: string | null;
+  nbid?: number | { id?: number | string; name?: string; nb_name?: string } | null;
   disabled?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -44,6 +46,12 @@ interface GroupParentRow {
   "updated_by.full_name"?: string | null;
   created_by?: number | { full_name?: string } | null;
   updated_by?: number | { full_name?: string } | null;
+}
+
+interface NationalBrandRow {
+  id: number;
+  name?: string | null;
+  nb_name?: string | null;
 }
 
 interface BranchCustomerRow {
@@ -97,7 +105,8 @@ export function GCDetailModal({
 }: GCDetailModalProps) {
   const { token, isAuthenticated } = useAuth();
 
-  const [parentGP, setParentGP] = useState<GroupParty | null>(null);
+  const [parentGP, setParentGP] = useState<GroupParent | null>(null);
+  const [linkedNB, setLinkedNB] = useState<{ id: number; code: string; name: string } | null>(null);
   const [childBCs, setChildBCs] = useState<BranchCustomer[]>([]);
 
   const loadRelations = useCallback(async () => {
@@ -140,8 +149,42 @@ export function GCDetailModal({
             }
           : null,
       );
+
+      const nbId =
+        row && typeof row.nbid === "number"
+          ? row.nbid
+          : row?.nbid && typeof row.nbid === "object"
+            ? toNumber(row.nbid.id)
+            : undefined;
+      if (!nbId) {
+        setLinkedNB(null);
+      } else {
+        const nbRes = await apiFetch(
+          getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, {
+            fields: ["id", "name", "nb_name"],
+            filters: [["id", "=", nbId]],
+            limit: 1,
+          }),
+          { method: "GET", cache: "no-store" },
+          token,
+        );
+        const nbJson = nbRes.ok ? await nbRes.json() : { data: [] };
+        const nbRow: NationalBrandRow | undefined = Array.isArray(nbJson?.data)
+          ? nbJson.data[0]
+          : undefined;
+        if (!nbRow) {
+          setLinkedNB(null);
+        } else {
+          setLinkedNB({
+            id: Number(nbRow.id),
+            code: nbRow.name || `NB${nbRow.id}`,
+            name: nbRow.nb_name || nbRow.name || "-",
+          });
+        }
+      }
     } else {
       setParentGP(null);
+      setLinkedNB(null);
     }
 
     const bcSpec = {
@@ -371,8 +414,23 @@ export function GCDetailModal({
               <section>
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
                   <FaArrowUp className="w-4 h-4" />
-                  Parent: Group Parent
+                  Parent Hierarki
                 </h3>
+
+                {linkedNB ? (
+                  <div className="w-full bg-gradient-to-br from-indigo-50 to-white rounded-xl p-4 border-2 border-indigo-100 mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-indigo-500 rounded-lg flex items-center justify-center">
+                        <FaTags className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-xs text-gray-500 font-medium">National Brand (NB)</p>
+                        <p className="text-lg font-bold text-gray-900">{linkedNB.name}</p>
+                        <p className="text-sm text-indigo-600 mt-0.5">NBID: {linkedNB.code}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
 
                 {parentGP ? (
                   <button

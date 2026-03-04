@@ -23,7 +23,16 @@ export function GCCard({ gc, onViewDetails }: GCCardProps) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -4 }}
-      className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-lg transition-all overflow-hidden"
+      className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-lg transition-all overflow-hidden cursor-pointer"
+      role="button"
+      tabIndex={0}
+      onClick={onViewDetails}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onViewDetails();
+        }
+      }}
     >
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-5 py-4">
@@ -99,7 +108,10 @@ export function GCCard({ gc, onViewDetails }: GCCardProps) {
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          onClick={onViewDetails}
+          onClick={(e) => {
+            e.stopPropagation();
+            onViewDetails();
+          }}
           className="w-full px-4 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-medium rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-2"
         >
           <FaEye className="w-4 h-4" />

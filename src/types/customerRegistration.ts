@@ -1,5 +1,6 @@
 export interface CustomerRegistration {
   id: string;
+  registration_number?: string;
   source?: string;
   ekaplus_user?: {
     id?: number | string;
@@ -99,8 +100,10 @@ export interface CustomerRegistration {
   status: "pending" | "approved" | "rejected" | "draft";
   submission_date: string;
   created_at: string;
+  created_by_id?: number;
   created_by?: string;
   updated_at: string;
+  updated_by_id?: number;
   updated_by?: string;
 
   // Approval metadata (populated when status = 'approved')

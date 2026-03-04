@@ -258,10 +258,10 @@ export function RegistrationDetailModal({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                        ID Registrasi
+                        Nomor Registrasi
                       </label>
                       <p className="text-sm text-gray-900 font-medium">
-                        {registration.id}
+                        {registration.registration_number || registration.id}
                       </p>
                     </div>
                     <div>

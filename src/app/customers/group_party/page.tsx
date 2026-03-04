@@ -1,9 +1,9 @@
 import RequireAuth from "@/components/auth/RequireAuth";
-import GPList from "@/components/group_party/GPList";
+import GPList from "@/components/group_parent/GPList";
 
 export const metadata = {
-  title: "Group Party (GP) - EKA+ Web Admin",
-  description: "Manage Group Party data",
+  title: "Group Parent (GP) - EKA+ Web Admin",
+  description: "Manage Group Parent data",
 };
 
 export default function GPPage() {

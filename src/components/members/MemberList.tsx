@@ -147,47 +147,53 @@ export function MemberList() {
       }
 
       const memberSpec = { fields: ["*"], limit: 10000000 };
-      const customerSpec = {
-        fields: [
-          "*",
-          "ekaplus_user.full_name",
-          "ekaplus_user.email",
-          "ekaplus_user.phone",
-          "branch_id.branch_name",
-          "branch_id.city",
-        ],
-        limit: 10000000,
-      };
-
-      const [memberRes, customerRes] = await Promise.all([
-        apiFetch(
-          getQueryUrl(API_CONFIG.ENDPOINTS.MEMBER_OF, memberSpec),
-          { method: "GET", cache: "no-store" },
-          token
-        ),
-        apiFetch(
-          getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER, customerSpec),
-          { method: "GET", cache: "no-store" },
-          token
-        ),
-      ]);
+      const memberRes = await apiFetch(
+        getQueryUrl(API_CONFIG.ENDPOINTS.MEMBER_OF, memberSpec),
+        { method: "GET", cache: "no-store" },
+        token
+      );
 
       if (!memberRes.ok) throw new Error(`Failed to fetch members (${memberRes.status})`);
-      if (!customerRes.ok) {
-        throw new Error(`Failed to fetch customer register (${customerRes.status})`);
-      }
-
-      const [memberJson, customerJson] = await Promise.all([
-        memberRes.json(),
-        customerRes.json(),
-      ]);
+      const memberJson = await memberRes.json();
 
       const members: MemberOfApiResponse[] = Array.isArray(memberJson?.data)
         ? memberJson.data
         : [];
-      const customers: CustomerRegisterApiResponse[] = Array.isArray(customerJson?.data)
-        ? customerJson.data
-        : [];
+
+      const customerSpecs = [
+        {
+          fields: [
+            "*",
+            "ekaplus_user.full_name",
+            "ekaplus_user.email",
+            "ekaplus_user.phone",
+            "branch_id.branch_name",
+            "branch_id.city",
+          ],
+          limit: 10000000,
+        },
+        {
+          fields: ["*"],
+          limit: 10000000,
+        },
+      ];
+
+      let customers: CustomerRegisterApiResponse[] = [];
+      for (const customerSpec of customerSpecs) {
+        const customerRes = await apiFetch(
+          getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER, customerSpec),
+          { method: "GET", cache: "no-store" },
+          token
+        );
+
+        if (!customerRes.ok) {
+          continue;
+        }
+
+        const customerJson = await customerRes.json();
+        customers = Array.isArray(customerJson?.data) ? customerJson.data : [];
+        break;
+      }
 
       const nbIds = Array.from(
         new Set(customers.map((r) => extractLinkId(r.nbid)).filter((v): v is number => typeof v === "number"))

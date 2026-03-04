@@ -5,6 +5,7 @@ import { RegistrationCard } from "./RegistrationCard";
 import { RegistrationDetailModal } from "./RegistrationDetailModal";
 import { ApproveRegistrationModal } from "./ApproveRegistrationModal";
 import { RejectRegistrationModal } from "./RejectRegistrationModal";
+import ActionResultModal from "@/components/ui/ActionResultModal";
 import type { CustomerRegistration } from "@/types/customerRegistration";
 import {
   FaSearch,
@@ -239,6 +240,15 @@ export function CustomerRegistrationList() {
   const [selectedForAction, setSelectedForAction] =
     useState<CustomerRegistration | null>(null);
 
+  const [resultModal, setResultModal] = useState<{
+    isOpen: boolean;
+    type: "success" | "error";
+    title: string;
+    message: string;
+    description?: string;
+    details?: { label: string; value: string }[];
+  } | null>(null);
+
   // Use filter system
   const { filters, setFilters } = useFilters({
     entity: "customer_register",
@@ -250,6 +260,7 @@ export function CustomerRegistrationList() {
   ): CustomerRegistration {
     return {
       id: apiData.id.toString(),
+      registration_number: apiData.name || apiData.id.toString(),
       source: apiData.source || undefined,
       ekaplus_user:
         apiData.ekaplus_user !== null &&
@@ -398,10 +409,16 @@ export function CustomerRegistrationList() {
       },
 
       // Status - map to lowercase for consistency
-      status: apiData.status.toLowerCase() as // | "pending"
-        "approved" | "rejected" | "draft",
+      status: apiData.status.toLowerCase() as "approved" | "rejected" | "draft", // | "pending"
       submission_date: apiData.created_at,
       created_at: apiData.created_at,
+      created_by_id:
+        typeof apiData.created_by === "number"
+          ? apiData.created_by
+          : typeof apiData.created_by === "object" &&
+              typeof apiData.created_by?.id === "number"
+            ? apiData.created_by.id
+            : undefined,
       created_by:
         typeof apiData.created_by === "object" && apiData.created_by?.full_name
           ? apiData.created_by.full_name
@@ -411,6 +428,13 @@ export function CustomerRegistrationList() {
               ? `User ${apiData.created_by}`
               : undefined,
       updated_at: apiData.updated_at,
+      updated_by_id:
+        typeof apiData.updated_by === "number"
+          ? apiData.updated_by
+          : typeof apiData.updated_by === "object" &&
+              typeof apiData.updated_by?.id === "number"
+            ? apiData.updated_by.id
+            : undefined,
       updated_by:
         typeof apiData.updated_by === "object" && apiData.updated_by?.full_name
           ? apiData.updated_by.full_name
@@ -664,16 +688,56 @@ export function CustomerRegistrationList() {
     setIsRejectModalOpen(true);
   };
 
-  const handleApproveSuccess = () => {
+  const handleApproveSuccess = (message: string) => {
+    const active = selectedForAction;
+    const gpLine =
+      message.match(/GROUP PARENT:\s*(.+)/)?.[1]?.trim() ||
+      message.match(/GP ID:\s*(.+)/)?.[1]?.trim() ||
+      "-";
+    const gcLine =
+      message.match(/GROUP CUSTOMER:\s*(.+)/)?.[1]?.trim() ||
+      message.match(/GC ID:\s*(.+)/)?.[1]?.trim() ||
+      "-";
+    const bcLine =
+      message.match(/BRANCH CUSTOMER:\s*(.+)/)?.[1]?.trim() ||
+      message.match(/BC ID:\s*(.+)/)?.[1]?.trim() ||
+      "-";
+
     setIsApproveModalOpen(false);
     setSelectedForAction(null);
-    // Data will auto-reload via event listener
+    setResultModal({
+      isOpen: true,
+      type: "success",
+      title: "Approve Berhasil",
+      message: `Registrasi "${active?.company.name || "-"}" Berhasil Disetujui`,
+      description: "Akun customer ini aktif dan dapat melakukan transaksi.",
+      details: [
+        { label: "ID Pelanggan", value: active?.registration_number || "-" },
+        { label: "Group Parent", value: gpLine },
+        { label: "Group Customer", value: gcLine },
+        { label: "Branch Customer", value: bcLine },
+      ],
+    });
   };
 
-  const handleRejectSuccess = () => {
+  const handleRejectSuccess = (message: string) => {
+    const active = selectedForAction;
+    const rejectReason = message.match(/Alasan:\s*(.+)/)?.[1]?.trim() || "-";
+    const rejectNotes = message.match(/Catatan:\s*(.+)/)?.[1]?.trim() || "-";
+
     setIsRejectModalOpen(false);
     setSelectedForAction(null);
-    // Data will auto-reload via event listener
+    setResultModal({
+      isOpen: true,
+      type: "error",
+      title: "Customer di Reject",
+      message: `Registrasi "${active?.company.name || "-"}" Ditolak`,
+      description: "Data customer ditolak dan belum dapat diproses ke tahap berikutnya.",
+      details: [
+        { label: "Reject Reason", value: rejectReason },
+        { label: "Reject Notes", value: rejectNotes },
+      ],
+    });
   };
 
   // Loading state
@@ -962,7 +1026,10 @@ export function CustomerRegistrationList() {
       {/* Approve Modal */}
       <ApproveRegistrationModal
         isOpen={isApproveModalOpen}
-        onClose={() => setIsApproveModalOpen(false)}
+        onClose={() => {
+          setIsApproveModalOpen(false);
+          setSelectedForAction(null);
+        }}
         registration={selectedForAction}
         onSuccess={handleApproveSuccess}
       />
@@ -970,9 +1037,22 @@ export function CustomerRegistrationList() {
       {/* Reject Modal */}
       <RejectRegistrationModal
         isOpen={isRejectModalOpen}
-        onClose={() => setIsRejectModalOpen(false)}
+        onClose={() => {
+          setIsRejectModalOpen(false);
+          setSelectedForAction(null);
+        }}
         registration={selectedForAction}
         onSuccess={handleRejectSuccess}
+      />
+
+      <ActionResultModal
+        isOpen={Boolean(resultModal?.isOpen)}
+        type={resultModal?.type || "success"}
+        title={resultModal?.title || "Informasi"}
+        message={resultModal?.message || ""}
+        description={resultModal?.description}
+        details={resultModal?.details}
+        onClose={() => setResultModal(null)}
       />
     </div>
   );

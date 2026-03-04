@@ -137,56 +137,63 @@ export function NBDetailModal({ isOpen, onClose, item }: NBDetailModalProps) {
               </section>
 
               <section>
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
-                  <FaBuilding className="w-4 h-4" />
-                  Group Parent Aktif
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                  Hierarki Aktif
                 </h3>
-                <div className="bg-white rounded-xl border-2 border-purple-100 p-4">
-                  {item.active_gp_names.length > 0 ? (
-                    <div className="space-y-2">
-                      {item.active_gp_names.map((name) => (
-                        <p key={name} className="text-sm text-gray-900">{name}</p>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 italic">Belum ada GP aktif</p>
-                  )}
-                </div>
-              </section>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="bg-white rounded-xl border-2 border-purple-100 p-4">
+                    <h4 className="text-xs text-purple-700 font-semibold uppercase tracking-wide mb-3 flex items-center gap-2">
+                      <FaBuilding className="w-3.5 h-3.5" />
+                      Group Parent
+                    </h4>
+                    {item.active_gp_names.length > 0 ? (
+                      <div className="space-y-2">
+                        {item.active_gp_names.map((name) => (
+                          <div key={name} className="rounded-lg bg-purple-50 border border-purple-100 px-2.5 py-2 text-sm text-gray-900">
+                            {name}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 italic">Belum ada GP aktif</p>
+                    )}
+                  </div>
 
-              <section>
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
-                  <FaBuilding className="w-4 h-4" />
-                  Group Customer Aktif
-                </h3>
-                <div className="bg-white rounded-xl border-2 border-blue-100 p-4">
-                  {item.active_gc_names.length > 0 ? (
-                    <div className="space-y-2">
-                      {item.active_gc_names.map((name) => (
-                        <p key={name} className="text-sm text-gray-900">{name}</p>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 italic">Belum ada GC aktif</p>
-                  )}
-                </div>
-              </section>
+                  <div className="bg-white rounded-xl border-2 border-blue-100 p-4">
+                    <h4 className="text-xs text-blue-700 font-semibold uppercase tracking-wide mb-3 flex items-center gap-2">
+                      <FaBuilding className="w-3.5 h-3.5" />
+                      Group Customer
+                    </h4>
+                    {item.active_gc_names.length > 0 ? (
+                      <div className="space-y-2">
+                        {item.active_gc_names.map((name) => (
+                          <div key={name} className="rounded-lg bg-blue-50 border border-blue-100 px-2.5 py-2 text-sm text-gray-900">
+                            {name}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 italic">Belum ada GC aktif</p>
+                    )}
+                  </div>
 
-              <section>
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
-                  <FaStore className="w-4 h-4" />
-                  Branch Customer Aktif
-                </h3>
-                <div className="bg-white rounded-xl border-2 border-orange-100 p-4">
-                  {item.active_bc_names.length > 0 ? (
-                    <div className="space-y-2">
-                      {item.active_bc_names.map((name) => (
-                        <p key={name} className="text-sm text-gray-900">{name}</p>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 italic">Belum ada BC aktif</p>
-                  )}
+                  <div className="bg-white rounded-xl border-2 border-orange-100 p-4">
+                    <h4 className="text-xs text-orange-700 font-semibold uppercase tracking-wide mb-3 flex items-center gap-2">
+                      <FaStore className="w-3.5 h-3.5" />
+                      Branch Customer
+                    </h4>
+                    {item.active_bc_names.length > 0 ? (
+                      <div className="space-y-2">
+                        {item.active_bc_names.map((name) => (
+                          <div key={name} className="rounded-lg bg-orange-50 border border-orange-100 px-2.5 py-2 text-sm text-gray-900">
+                            {name}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 italic">Belum ada BC aktif</p>
+                    )}
+                  </div>
                 </div>
               </section>
 

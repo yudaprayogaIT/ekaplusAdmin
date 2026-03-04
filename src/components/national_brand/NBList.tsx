@@ -9,7 +9,6 @@ import {
   FaSortAmountUp,
   FaSortAmountDown,
   FaChevronDown,
-  FaUser,
   FaBuilding,
   FaStore,
 } from "react-icons/fa";
@@ -131,8 +130,7 @@ export default function NBList() {
         return;
       }
 
-      const [nbRes, memberRes, gpRes, gcRes, bcRes, customerRes] =
-        await Promise.all([
+      const [nbRes, memberRes, gpRes, gcRes, bcRes] = await Promise.all([
           apiFetch(
             getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, {
               fields: ["*"],
@@ -174,14 +172,6 @@ export default function NBList() {
             { method: "GET", cache: "no-store" },
             token,
           ),
-          apiFetch(
-            getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER, {
-              fields: ["nbid", "owner_full_name", "ekaplus_user.full_name"],
-              limit: 10000000,
-            }),
-            { method: "GET", cache: "no-store" },
-            token,
-          ),
         ]);
 
       if (!nbRes.ok)
@@ -194,21 +184,13 @@ export default function NBList() {
         throw new Error(`Failed to fetch group customer (${gcRes.status})`);
       if (!bcRes.ok)
         throw new Error(`Failed to fetch branch customer (${bcRes.status})`);
-      if (!customerRes.ok) {
-        throw new Error(
-          `Failed to fetch customer register (${customerRes.status})`,
-        );
-      }
-
-      const [nbJson, memberJson, gpJson, gcJson, bcJson, customerJson] =
-        await Promise.all([
-          nbRes.json(),
-          memberRes.json(),
-          gpRes.json(),
-          gcRes.json(),
-          bcRes.json(),
-          customerRes.json(),
-        ]);
+      const [nbJson, memberJson, gpJson, gcJson, bcJson] = await Promise.all([
+        nbRes.json(),
+        memberRes.json(),
+        gpRes.json(),
+        gcRes.json(),
+        bcRes.json(),
+      ]);
 
       const nbRows: NationalBrandApiResponse[] = Array.isArray(nbJson?.data)
         ? nbJson.data
@@ -225,11 +207,32 @@ export default function NBList() {
       const bcRows: BranchCustomerApiResponse[] = Array.isArray(bcJson?.data)
         ? bcJson.data
         : [];
-      const customerRows: CustomerRegisterOwnerRow[] = Array.isArray(
-        customerJson?.data,
-      )
-        ? customerJson.data
-        : [];
+      let customerRows: CustomerRegisterOwnerRow[] = [];
+      try {
+        const customerRes = await apiFetch(
+          getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER, {
+            fields: ["nbid", "owner_full_name"],
+            limit: 10000000,
+          }),
+          { method: "GET", cache: "no-store" },
+          token,
+        );
+        if (customerRes.ok) {
+          const customerJson = await customerRes.json();
+          customerRows = Array.isArray(customerJson?.data)
+            ? customerJson.data
+            : [];
+        } else {
+          console.warn(
+            `Failed to fetch customer register (${customerRes.status}), using owner fallback from member_of only.`,
+          );
+        }
+      } catch (customerErr) {
+        console.warn(
+          "Failed to fetch customer register, using owner fallback from member_of only.",
+          customerErr,
+        );
+      }
 
       const ownersByNb = new Map<number, string[]>();
       memberRows.forEach((row) => {
