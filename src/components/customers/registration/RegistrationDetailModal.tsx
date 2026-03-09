@@ -31,9 +31,13 @@ interface RegistrationDetailModalProps {
   onReject?: (registration: CustomerRegistration) => void;
   onEdit?: () => void;
   onSync?: (registration: CustomerRegistration) => void;
+  onRollback?: (registration: CustomerRegistration) => void;
   isSyncing?: boolean;
+  isRollbacking?: boolean;
   syncLabel?: string;
   syncReadOnly?: boolean;
+  rollbackLabel?: string;
+  rollbackReadOnly?: boolean;
 }
 
 interface CustomerRegisterAddressApiResponse {
@@ -59,9 +63,13 @@ export function RegistrationDetailModal({
   onReject,
   onEdit,
   onSync,
+  onRollback,
   isSyncing = false,
+  isRollbacking = false,
   syncLabel = "Sync",
   syncReadOnly = false,
+  rollbackLabel = "Rollback",
+  rollbackReadOnly = false,
 }: RegistrationDetailModalProps) {
   const { token } = useAuth();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -169,9 +177,12 @@ export function RegistrationDetailModal({
   const normalizedStatus = (registration?.status || "").toLowerCase();
   const sagaStatus = (registration?.sync_info?.saga_status || "").toLowerCase();
   const hasSagaStatus = Boolean(sagaStatus);
+  const hasSagaId = Boolean(registration?.sync_info?.sync_saga_id);
   const canShowSyncButton =
     Boolean(onSync) && hasSagaStatus && sagaStatus !== "completed";
-  const canManageRegistration = normalizedStatus === "draft" || normalizedStatus === "request";
+  const canShowRollbackButton = Boolean(onRollback) && hasSagaId;
+  const canManageRegistration =
+    normalizedStatus === "draft" || normalizedStatus === "request";
   const rejectReason =
     registration?.reject_reason || registration?.rejection_reason || "-";
   const rejectNotes =
@@ -261,6 +272,24 @@ export function RegistrationDetailModal({
                   >
                     <FaSyncAlt className={isSyncing ? "animate-spin" : ""} />
                     <span>{isSyncing ? "Syncing..." : syncLabel}</span>
+                  </button>
+                )}
+                {canShowRollbackButton && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!rollbackReadOnly && !isRollbacking)
+                        onRollback?.(registration);
+                    }}
+                    disabled={rollbackReadOnly || isRollbacking}
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold border-2 transition-all ${
+                      rollbackReadOnly
+                        ? "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed"
+                        : "bg-white text-rose-700 border-rose-200 hover:bg-rose-50"
+                    }`}
+                  >
+                    <FaTimesCircle />
+                    <span>{isRollbacking ? "Rolling back..." : rollbackLabel}</span>
                   </button>
                 )}
                 <button
@@ -598,64 +627,6 @@ export function RegistrationDetailModal({
 
               <section className="mb-6">
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
-                    <FaLink className="w-4 h-4 text-amber-600" />
-                  </div>
-                  <h3 className="text-lg font-bold text-gray-900">
-                    Relasi Master Data
-                  </h3>
-                </div>
-                <div className="bg-white rounded-xl border border-gray-200 p-5">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                        National Brand (NB)
-                      </label>
-                      <p className="text-sm text-gray-900 font-mono font-medium">
-                        {displayValue(
-                          registration.master_links?.nb_name ||
-                            registration.master_links?.nb_id,
-                        )}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                        Group Parent (GP)
-                      </label>
-                      <p className="text-sm text-gray-900 font-mono font-medium">
-                        {displayValue(
-                          registration.master_links?.gp_name ||
-                            registration.master_links?.gp_id,
-                        )}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                        Group Customer (GC)
-                      </label>
-                      <p className="text-sm text-gray-900 font-mono font-medium">
-                        {displayValue(
-                          registration.master_links?.gc_name ||
-                            registration.master_links?.gc_id,
-                        )}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                        Branch Customer (BC)
-                      </label>
-                      <p className="text-sm text-gray-900 font-mono font-medium">
-                        {displayValue(
-                          registration.master_links?.bc_name ||
-                            registration.master_links?.bc_id,
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </section>
-              <section className="mb-6">
-                <div className="flex items-center gap-2 mb-4">
                   <div className="w-8 h-8 bg-teal-100 rounded-lg flex items-center justify-center">
                     <FaMapMarkerAlt className="w-4 h-4 text-teal-600" />
                   </div>
@@ -784,6 +755,65 @@ export function RegistrationDetailModal({
                         ))}
                       </div>
                     )}
+                </div>
+              </section>
+
+              <section className="mb-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
+                    <FaLink className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Relasi Master Data
+                  </h3>
+                </div>
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        National Brand (NB)
+                      </label>
+                      <p className="text-sm text-gray-900 font-mono font-medium">
+                        {displayValue(
+                          registration.master_links?.nb_name ||
+                            registration.master_links?.nb_id,
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Group Parent (GP)
+                      </label>
+                      <p className="text-sm text-gray-900 font-mono font-medium">
+                        {displayValue(
+                          registration.master_links?.gp_name ||
+                            registration.master_links?.gp_id,
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Group Customer (GC)
+                      </label>
+                      <p className="text-sm text-gray-900 font-mono font-medium">
+                        {displayValue(
+                          registration.master_links?.gc_name ||
+                            registration.master_links?.gc_id,
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Branch Customer (BC)
+                      </label>
+                      <p className="text-sm text-gray-900 font-mono font-medium">
+                        {displayValue(
+                          registration.master_links?.bc_name ||
+                            registration.master_links?.bc_id,
+                        )}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </section>
 
@@ -1010,6 +1040,3 @@ export function RegistrationDetailModal({
     </>
   );
 }
-
-
-

@@ -654,6 +654,75 @@ export default function CustomerOverviewPage() {
     setSelectedBC(card.detail.item);
   };
 
+  const handleGCUpdate = (updatedGC: GroupCustomer) => {
+    setSelectedGC(updatedGC);
+    setCards((prev) =>
+      prev.map((card) => {
+        if (card.type === "gc" && card.id === updatedGC.id) {
+          return {
+            ...card,
+            name: updatedGC.name,
+            contact: updatedGC.owner_name || "-",
+            detail: { kind: "gc", item: updatedGC },
+          };
+        }
+        if (card.type === "nb" && card.detail.kind === "nb") {
+          const oldName =
+            prev.find((x) => x.type === "gc" && x.id === updatedGC.id)?.name ||
+            "";
+          return {
+            ...card,
+            detail: {
+              kind: "nb",
+              item: {
+                ...card.detail.item,
+                active_gc_names: card.detail.item.active_gc_names.map((name) =>
+                  name === oldName ? updatedGC.name : name,
+                ),
+              },
+            },
+          };
+        }
+        return card;
+      }),
+    );
+  };
+
+  const handleBCUpdate = (updatedBC: BranchCustomer) => {
+    setSelectedBC(updatedBC);
+    setCards((prev) =>
+      prev.map((card) => {
+        if (card.type === "bc" && card.id === updatedBC.id) {
+          return {
+            ...card,
+            name: updatedBC.name,
+            contact: updatedBC.owner_name || "-",
+            branchLocation: updatedBC.branch_city || updatedBC.branch_name || "-",
+            detail: { kind: "bc", item: updatedBC },
+          };
+        }
+        if (card.type === "nb" && card.detail.kind === "nb") {
+          const oldName =
+            prev.find((x) => x.type === "bc" && x.id === updatedBC.id)?.name ||
+            "";
+          return {
+            ...card,
+            detail: {
+              kind: "nb",
+              item: {
+                ...card.detail.item,
+                active_bc_names: card.detail.item.active_bc_names.map((name) =>
+                  name === oldName ? updatedBC.name : name,
+                ),
+              },
+            },
+          };
+        }
+        return card;
+      }),
+    );
+  };
+
   return (
     <div className="space-y-8">
       <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -918,6 +987,7 @@ export default function CustomerOverviewPage() {
         isOpen={selectedGC !== null}
         onClose={() => setSelectedGC(null)}
         gc={selectedGC}
+        onGCUpdate={handleGCUpdate}
         onViewGP={(gp) => {
           setSelectedGC(null);
           setSelectedGP(gp);
@@ -932,6 +1002,7 @@ export default function CustomerOverviewPage() {
         isOpen={selectedBC !== null}
         onClose={() => setSelectedBC(null)}
         bc={selectedBC}
+        onBCUpdate={handleBCUpdate}
         onViewGP={(gp) => {
           setSelectedBC(null);
           setSelectedGP(gp);

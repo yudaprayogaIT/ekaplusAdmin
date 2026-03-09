@@ -251,6 +251,9 @@ export function CustomerRegistrationList() {
     details?: { label: string; value: string }[];
   } | null>(null);
   const [syncingIds, setSyncingIds] = useState<Record<string, boolean>>({});
+  const [rollbackingIds, setRollbackingIds] = useState<Record<string, boolean>>(
+    {},
+  );
 
   // Use filter system
   const { filters, setFilters } = useFilters({
@@ -741,7 +744,8 @@ export function CustomerRegistrationList() {
       type: "error",
       title: "Customer di Reject",
       message: `Registrasi "${active?.company.name || "-"}" Ditolak`,
-      description: "Data customer ditolak dan belum dapat diproses ke tahap berikutnya.",
+      description:
+        "Data customer ditolak dan belum dapat diproses ke tahap berikutnya.",
       details: [
         { label: "Reject Reason", value: rejectReason },
         { label: "Reject Notes", value: rejectNotes },
@@ -752,7 +756,7 @@ export function CustomerRegistrationList() {
   const getSyncLabel = (registration: CustomerRegistration): string => {
     const saga = (registration.sync_info?.saga_status || "").toLowerCase();
     if (!saga || saga === "completed") return "Sync";
-    return "Resyncing";
+    return "Resync";
   };
 
   const isSyncReadOnly = (registration: CustomerRegistration): boolean => {
@@ -817,6 +821,66 @@ export function CustomerRegistrationList() {
       });
     } finally {
       setSyncingIds((prev) => ({ ...prev, [registration.id]: false }));
+    }
+  };
+
+  const handleRollback = async (registration: CustomerRegistration) => {
+    if (!token) return;
+
+    setRollbackingIds((prev) => ({ ...prev, [registration.id]: true }));
+
+    try {
+      const sagaId = registration.sync_info?.sync_saga_id;
+      if (!sagaId) {
+        throw new Error("saga_id tidak tersedia pada customer_register");
+      }
+      const response = await apiFetch(
+        `${API_CONFIG.BASE_URL}/api/saga/force-rollback`,
+        {
+          method: "POST",
+          cache: "no-store",
+          body: JSON.stringify({
+            status: "Syncing",
+            saga_id: sagaId,
+          }),
+        },
+        token,
+      );
+
+      if (!response.ok) {
+        let serverMessage = "";
+        try {
+          const json = await response.json();
+          if (json?.message && typeof json.message === "string") {
+            serverMessage = json.message;
+          }
+        } catch {}
+        throw new Error(
+          `HTTP ${response.status}${serverMessage ? `: ${serverMessage}` : ""}`,
+        );
+      }
+
+      await loadDataWithFilters(filters, sortField, sortDirection);
+      setResultModal({
+        isOpen: true,
+        type: "success",
+        title: "Rollback Berhasil",
+        message: `Rollback untuk "${registration.company.name}" berhasil dijalankan.`,
+        description:
+          "Force rollback dipicu. Silakan cek Saga Status terbaru di detail sinkronisasi.",
+      });
+    } catch (errorRollback) {
+      setResultModal({
+        isOpen: true,
+        type: "error",
+        title: "Rollback Gagal",
+        message:
+          errorRollback instanceof Error
+            ? errorRollback.message
+            : "Terjadi kesalahan saat rollback.",
+      });
+    } finally {
+      setRollbackingIds((prev) => ({ ...prev, [registration.id]: false }));
     }
   };
 
@@ -1106,9 +1170,15 @@ export function CustomerRegistrationList() {
         onApprove={handleApprove}
         onReject={handleReject}
         onSync={(registration) => handleSync(registration)}
+        onRollback={(registration) => handleRollback(registration)}
         isSyncing={
           selectedRegistration
             ? Boolean(syncingIds[selectedRegistration.id])
+            : false
+        }
+        isRollbacking={
+          selectedRegistration
+            ? Boolean(rollbackingIds[selectedRegistration.id])
             : false
         }
         syncLabel={
@@ -1117,6 +1187,8 @@ export function CustomerRegistrationList() {
         syncReadOnly={
           selectedRegistration ? isSyncReadOnly(selectedRegistration) : false
         }
+        rollbackLabel="Rollback"
+        rollbackReadOnly={false}
       />
 
       {/* Approve Modal */}
@@ -1153,4 +1225,3 @@ export function CustomerRegistrationList() {
     </div>
   );
 }
-
