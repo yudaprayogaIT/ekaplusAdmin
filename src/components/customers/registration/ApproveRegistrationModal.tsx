@@ -203,7 +203,7 @@ export function ApproveRegistrationModal({
     !isCreatingNewGpFlow && (existingGpid || selectedGpid),
   );
   const canSearchExistingBc = Boolean(
-    !isCreatingNewGpFlow && !isGcCreatedInFlow && (existingGcid || selectedGcid),
+    false,
   );
 
   // ---- Filtered lists (only meaningful when mode === "search" and query is non-empty) ----
@@ -353,9 +353,15 @@ export function ApproveRegistrationModal({
 
   const refreshReferenceLists = useCallback(async () => {
     if (!token) return;
-    const gpSpec = { fields: ["id", "name", "gp_name", "nbid"], limit: 1000000 };
+    const gpSpec = {
+      fields: ["id", "name", "gp_name", "nbid"],
+      limit: 1000000,
+    };
     const nbSpec = { fields: ["id", "name", "nb_name"], limit: 1000000 };
-    const gcSpec = { fields: ["id", "name", "gc_name", "gpid"], limit: 1000000 };
+    const gcSpec = {
+      fields: ["id", "name", "gc_name", "gpid"],
+      limit: 1000000,
+    };
     const bcSpec = {
       fields: [
         "id",
@@ -371,10 +377,26 @@ export function ApproveRegistrationModal({
     };
 
     const [gpListRes, nbListRes, gcListRes, bcListRes] = await Promise.all([
-      apiFetch(getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, gpSpec), { method: "GET", cache: "no-store" }, token),
-      apiFetch(getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, nbSpec), { method: "GET", cache: "no-store" }, token),
-      apiFetch(getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, gcSpec), { method: "GET", cache: "no-store" }, token),
-      apiFetch(getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, bcSpec), { method: "GET", cache: "no-store" }, token),
+      apiFetch(
+        getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, gpSpec),
+        { method: "GET", cache: "no-store" },
+        token,
+      ),
+      apiFetch(
+        getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, nbSpec),
+        { method: "GET", cache: "no-store" },
+        token,
+      ),
+      apiFetch(
+        getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, gcSpec),
+        { method: "GET", cache: "no-store" },
+        token,
+      ),
+      apiFetch(
+        getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, bcSpec),
+        { method: "GET", cache: "no-store" },
+        token,
+      ),
     ]);
 
     const [gpListJson, nbListJson, gcListJson, bcListJson] = await Promise.all([
@@ -674,8 +696,7 @@ export function ApproveRegistrationModal({
         typeof rawApplicantOwnerId === "number"
           ? rawApplicantOwnerId
           : Number.parseInt(String(rawApplicantOwnerId || ""), 10);
-      const fallbackOwnerId =
-        Number(registration?.created_by_id || 0);
+      const fallbackOwnerId = Number(registration?.created_by_id || 0);
 
       const shippingPayload = effectiveShippingAddresses.map((addr) => ({
         label: addr.label || "Warehouse",
@@ -690,7 +711,7 @@ export function ApproveRegistrationModal({
       }));
 
       return {
-        status: "Approved",
+        status: "Syncing",
         docstatus: 1,
         owner:
           Number.isFinite(applicantOwnerId) && applicantOwnerId > 0
@@ -701,7 +722,7 @@ export function ApproveRegistrationModal({
         same_as_company_address: registration?.same_as_company_address ? 1 : 0,
         gpid: ids.gpid,
         gcid: ids.gcid,
-        bcid: ids.bcid,
+        bcid: ids.bcid ?? null,
         nbid: ids.nbid ?? null,
         ...(gpManualName ? { gp_manual: gpManualName } : {}),
         ...(nbManualName ? { nb_manual: nbManualName } : {}),
@@ -902,7 +923,7 @@ export function ApproveRegistrationModal({
       const nbid = effectiveNbid;
       const gpid = effectiveGpid;
       const gcid = effectiveGcid;
-      let bcid = effectiveBcid;
+      const bcid = effectiveBcid;
 
       if (!gpid || !gcid) {
         throw new Error(
@@ -924,105 +945,9 @@ export function ApproveRegistrationModal({
           ? ekaplusUserId
           : createdById;
       if (!Number.isFinite(userId) || userId <= 0) {
-        throw new Error("User pengaju tidak tersedia (ekaplus_user/created_by).");
-      }
-
-      if (!bcid) {
-        const bcPayload = buildBranchCustomerPayload(gcid);
-        if (!bcPayload) throw new Error("Payload Branch Customer tidak valid");
-
-        try {
-          const bcJson = await apiJsonRequest(
-            "creating Branch Customer",
-            getApiUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2),
-            "POST",
-            bcPayload,
-          );
-          const newBcid = extractIdFromResourceResponse(bcJson);
-          if (!newBcid)
-            throw new Error("Failed creating Branch Customer (missing id)");
-          bcid = newBcid;
-          setCreatedBcid(newBcid);
-          setSelectedBcid(newBcid);
-          if (
-            bcJson &&
-            typeof bcJson === "object" &&
-            "data" in bcJson &&
-            bcJson.data &&
-            typeof bcJson.data === "object"
-          ) {
-            const row = bcJson.data as BranchCustomerRow;
-            setCreatedBc({
-              id: newBcid,
-              name: row.name,
-              bcid_name: row.bcid_name,
-              gcid: row.gcid,
-              branch: row.branch,
-              "branch.branch_name": row["branch.branch_name"],
-              branch_owner: row.branch_owner,
-              branch_owner_phone: row.branch_owner_phone,
-            });
-          }
-        } catch (err) {
-          const msg = err instanceof Error ? err.message.toLowerCase() : "";
-          const isDuplicate =
-            msg.includes("unique") ||
-            msg.includes("duplicate") ||
-            msg.includes("sudah terdaftar");
-          if (!isDuplicate) throw err;
-
-          const findSpec = {
-            fields: [
-              "id",
-              "name",
-              "bcid_name",
-              "gcid",
-              "branch",
-              "branch.branch_name",
-              "branch_owner",
-              "branch_owner_phone",
-            ],
-            filters: [
-              ["gcid", "=", gcid],
-              ["branch", "=", registration.company.branch_id],
-            ],
-            limit: 1,
-          };
-          const findRes = await apiFetch(
-            getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, findSpec),
-            { method: "GET", cache: "no-store" },
-            token,
-          );
-          const findJson = findRes.ok ? await findRes.json().catch(() => null) : null;
-          const row =
-            findJson && Array.isArray(findJson.data) ? findJson.data[0] : null;
-          const recoveredId =
-            row && typeof row.id === "number"
-              ? row.id
-              : Number.parseInt(String(row?.id || ""), 10);
-          if (!Number.isFinite(recoveredId) || recoveredId <= 0) {
-            throw err;
-          }
-          bcid = recoveredId;
-          setSelectedBcid(recoveredId);
-          setCreatedBcid(recoveredId);
-          setCreatedBc({
-            id: recoveredId,
-            name: row?.name,
-            bcid_name: row?.bcid_name,
-            gcid: row?.gcid,
-            branch: row?.branch,
-            "branch.branch_name": row?.["branch.branch_name"],
-            branch_owner: row?.branch_owner,
-            branch_owner_phone: row?.branch_owner_phone,
-          });
-          pushLog({
-            stage: "creating Branch Customer",
-            status: "success",
-            message:
-              "Duplicate branch_customer terdeteksi, menggunakan BC existing.",
-          });
-        }
+        throw new Error(
+          "User pengaju tidak tersedia (ekaplus_user/created_by).",
+        );
       }
 
       try {
@@ -1056,9 +981,6 @@ export function ApproveRegistrationModal({
         });
       }
 
-      if (!bcid) {
-        throw new Error("BC belum tersedia. Gagal menyelesaikan approve.");
-      }
       const finalResult: ApprovalResult = { nbid, gpid, gcid, bcid };
       const updatePayload = buildCustomerRegisterApprovePayload(
         finalResult,
@@ -1091,7 +1013,7 @@ export function ApproveRegistrationModal({
       const bcCode =
         createdBc?.name ||
         branchCustomers.find((row) => Number(row.id) === Number(bcid))?.name ||
-        `BC${bcid}`;
+        previewBcName;
       const nbCode =
         (nbid
           ? createdNb?.name ||
@@ -1099,7 +1021,7 @@ export function ApproveRegistrationModal({
           : null) || undefined;
 
       onSuccess(
-        `Registrasi "${registration.company.name}" berhasil diapprove.\n\nGROUP PARENT: ${gpCode}\nGROUP CUSTOMER: ${gcCode}\nBRANCH CUSTOMER: ${bcCode}${
+        `Registrasi "${registration.company.name}" berhasil diproses ke Syncing.\n\nGROUP PARENT: ${gpCode}\nGROUP CUSTOMER: ${gcCode}\nBRANCH CUSTOMER: ${bcCode}${
           nbCode ? `\nNATIONAL BRAND: ${nbCode}` : ""
         }`,
       );
@@ -1145,32 +1067,28 @@ export function ApproveRegistrationModal({
     (nbCreatedViaCreateFlow ? normalizeEntityName(nbName) : "") ||
     "-";
   const historyNbCode =
-    nbDisplayRow?.name ||
-    (effectiveNbid ? `NB${effectiveNbid}` : "-");
+    nbDisplayRow?.name || (effectiveNbid ? `NB${effectiveNbid}` : "-");
   const historyGpName =
     gpResolvedRow?.gp_name ||
     registration.gp_name ||
     (gpCreatedViaCreateFlow ? normalizeEntityName(gpName) : "") ||
     "-";
   const historyGpCode =
-    gpResolvedRow?.name ||
-    (effectiveGpid ? `GP${effectiveGpid}` : "-");
+    gpResolvedRow?.name || (effectiveGpid ? `GP${effectiveGpid}` : "-");
   const historyGcName =
     gcDisplayRow?.gc_name ||
     registration.gc_name ||
     (effectiveGcid ? normalizeEntityName(gcName) : "") ||
     "-";
   const historyGcCode =
-    gcDisplayRow?.name ||
-    (effectiveGcid ? `GC${effectiveGcid}` : "-");
+    gcDisplayRow?.name || (effectiveGcid ? `GC${effectiveGcid}` : "-");
   const historyBcName =
     bcDisplayRow?.bcid_name ||
     registration.bc_name ||
-    (effectiveBcid ? previewBcName : "") ||
+    previewBcName ||
     "-";
   const historyBcCode =
-    bcDisplayRow?.name ||
-    (effectiveBcid ? `BC${effectiveBcid}` : "-");
+    bcDisplayRow?.name || (effectiveBcid ? `BC${effectiveBcid}` : "AUTO");
 
   const renderProcessHistory = ({
     showNb,
@@ -1190,29 +1108,45 @@ export function ApproveRegistrationModal({
       {showNb && (
         <div className="rounded-lg bg-white border border-gray-200 px-3 py-2">
           <div className="text-xs font-semibold text-gray-500">NB Name</div>
-          <div className="text-sm font-medium text-gray-900">{historyNbName}</div>
-          <div className="text-xs text-gray-500 mt-0.5">NBID: {historyNbCode}</div>
+          <div className="text-sm font-medium text-gray-900">
+            {historyNbName}
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5">
+            NBID: {historyNbCode}
+          </div>
         </div>
       )}
       {showGp && (
         <div className="rounded-lg bg-white border border-gray-200 px-3 py-2">
           <div className="text-xs font-semibold text-gray-500">GP Name</div>
-          <div className="text-sm font-medium text-gray-900">{historyGpName}</div>
-          <div className="text-xs text-gray-500 mt-0.5">GPID: {historyGpCode}</div>
+          <div className="text-sm font-medium text-gray-900">
+            {historyGpName}
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5">
+            GPID: {historyGpCode}
+          </div>
         </div>
       )}
       {showGc && (
         <div className="rounded-lg bg-white border border-gray-200 px-3 py-2">
           <div className="text-xs font-semibold text-gray-500">GC Name</div>
-          <div className="text-sm font-medium text-gray-900">{historyGcName}</div>
-          <div className="text-xs text-gray-500 mt-0.5">GCID: {historyGcCode}</div>
+          <div className="text-sm font-medium text-gray-900">
+            {historyGcName}
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5">
+            GCID: {historyGcCode}
+          </div>
         </div>
       )}
       {showBc && (
         <div className="rounded-lg bg-white border border-gray-200 px-3 py-2">
           <div className="text-xs font-semibold text-gray-500">BC Name</div>
-          <div className="text-sm font-medium text-gray-900">{historyBcName}</div>
-          <div className="text-xs text-gray-500 mt-0.5">BCID: {historyBcCode}</div>
+          <div className="text-sm font-medium text-gray-900">
+            {historyBcName}
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5">
+            BCID: {historyBcCode}
+          </div>
         </div>
       )}
     </div>
@@ -1516,9 +1450,9 @@ export function ApproveRegistrationModal({
                                       }}
                                       onChange={() => {
                                         setSelectedNbid(nb.id);
-                                            setCreatedNbid(null);
-                                            setCreatedNb(null);
-                                            setNbCreatedViaCreateFlow(false);
+                                        setCreatedNbid(null);
+                                        setCreatedNb(null);
+                                        setNbCreatedViaCreateFlow(false);
                                         setCreateNationalBrand(false);
                                       }}
                                     />
@@ -1541,9 +1475,9 @@ export function ApproveRegistrationModal({
                                 setCreateNationalBrand(e.target.checked);
                                 if (e.target.checked) {
                                   setSelectedNbid(null);
-                                      setCreatedNbid(null);
-                                      setCreatedNb(null);
-                                      setNbCreatedViaCreateFlow(false);
+                                  setCreatedNbid(null);
+                                  setCreatedNb(null);
+                                  setNbCreatedViaCreateFlow(false);
                                   if (!nbName.trim() && nbSearch.trim()) {
                                     setNbName(normalizeEntityName(nbSearch));
                                   }
@@ -2278,7 +2212,7 @@ export function ApproveRegistrationModal({
                     <p className="text-xs text-green-700 mt-1">
                       Klik <span className="font-semibold">Commit Approve</span>{" "}
                       untuk membuat member_of dan update status customer
-                      register menjadi Approved.
+                      register menjadi Syncing.
                     </p>
                   </div>
                   {renderProcessHistory({

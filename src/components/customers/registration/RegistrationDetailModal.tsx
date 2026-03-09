@@ -18,6 +18,7 @@ import {
   FaTimesCircle,
   FaLink,
   FaDatabase,
+  FaSyncAlt,
 } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
@@ -29,6 +30,10 @@ interface RegistrationDetailModalProps {
   onApprove?: (registration: CustomerRegistration) => void;
   onReject?: (registration: CustomerRegistration) => void;
   onEdit?: () => void;
+  onSync?: (registration: CustomerRegistration) => void;
+  isSyncing?: boolean;
+  syncLabel?: string;
+  syncReadOnly?: boolean;
 }
 
 interface CustomerRegisterAddressApiResponse {
@@ -53,6 +58,10 @@ export function RegistrationDetailModal({
   onApprove,
   onReject,
   onEdit,
+  onSync,
+  isSyncing = false,
+  syncLabel = "Sync",
+  syncReadOnly = false,
 }: RegistrationDetailModalProps) {
   const { token } = useAuth();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -147,27 +156,22 @@ export function RegistrationDetailModal({
     return String(value);
   };
 
-  const getStatusBadgeClass = (status: string) => {
-    switch (status.toLowerCase()) {
-      // case "pending":
-      case "draft":
-        return "bg-yellow-100 text-yellow-700 border-yellow-200";
-      case "approved":
-        return "bg-green-100 text-green-700 border-green-200";
-      case "rejected":
-        return "bg-red-100 text-red-700 border-red-200";
-      default:
-        return "bg-gray-100 text-gray-700 border-gray-200";
-    }
+  const getStatusBadgeClass = (docstatus?: number) => {
+    if (docstatus === 1) return "bg-green-100 text-green-700 border-green-200";
+    if (docstatus === 2) return "bg-red-100 text-red-700 border-red-200";
+    return "bg-yellow-100 text-yellow-700 border-yellow-200";
   };
 
   const getStatusLabel = (status: string) => {
-    if (status.toLowerCase() === "draft") return "draft";
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
   const normalizedStatus = (registration?.status || "").toLowerCase();
-  const canManageRegistration = normalizedStatus === "draft";
+  const sagaStatus = (registration?.sync_info?.saga_status || "").toLowerCase();
+  const hasSagaStatus = Boolean(sagaStatus);
+  const canShowSyncButton =
+    Boolean(onSync) && hasSagaStatus && sagaStatus !== "completed";
+  const canManageRegistration = normalizedStatus === "draft" || normalizedStatus === "request";
   const rejectReason =
     registration?.reject_reason || registration?.rejection_reason || "-";
   const rejectNotes =
@@ -228,13 +232,37 @@ export function RegistrationDetailModal({
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span
-                  className={`px-3 py-1.5 rounded-full text-sm font-semibold border-2 bg-white ${getStatusBadgeClass(
-                    registration.status,
-                  )}`}
-                >
-                  {getStatusLabel(registration.status)}
-                </span>
+                {registration.sync_info?.saga_status ? (
+                  <span className="px-3 py-1.5 rounded-full text-sm font-semibold border-2 bg-white text-blue-700 border-blue-200">
+                    Saga: {registration.sync_info.saga_status}
+                  </span>
+                ) : null}
+                {!canShowSyncButton && (
+                  <span
+                    className={`px-3 py-1.5 rounded-full text-sm font-semibold border-2 bg-white ${getStatusBadgeClass(
+                      registration.docstatus,
+                    )}`}
+                  >
+                    {getStatusLabel(registration.status)}
+                  </span>
+                )}
+                {canShowSyncButton && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!syncReadOnly && !isSyncing) onSync?.(registration);
+                    }}
+                    disabled={syncReadOnly || isSyncing}
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold border-2 transition-all ${
+                      syncReadOnly
+                        ? "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed"
+                        : "bg-white text-blue-700 border-blue-200 hover:bg-blue-50"
+                    }`}
+                  >
+                    <FaSyncAlt className={isSyncing ? "animate-spin" : ""} />
+                    <span>{isSyncing ? "Syncing..." : syncLabel}</span>
+                  </button>
+                )}
                 <button
                   onClick={onClose}
                   className="rounded-xl p-2 hover:bg-white/20 transition-colors"
@@ -780,6 +808,14 @@ export function RegistrationDetailModal({
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Saga Status
+                      </label>
+                      <p className="text-sm text-gray-900 font-medium uppercase">
+                        {displayValue(registration.sync_info?.saga_status)}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                         ERP Customer ID
                       </label>
                       <p className="text-sm text-gray-900 font-mono font-medium">
@@ -800,6 +836,16 @@ export function RegistrationDetailModal({
                       </label>
                       <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3 whitespace-pre-wrap">
                         {displayValue(registration.sync_info?.sync_last_error)}
+                      </p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Sync Last Rollback Error
+                      </label>
+                      <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3 whitespace-pre-wrap">
+                        {displayValue(
+                          registration.sync_info?.sync_last_rollback_error,
+                        )}
                       </p>
                     </div>
                   </div>
@@ -964,3 +1010,6 @@ export function RegistrationDetailModal({
     </>
   );
 }
+
+
+

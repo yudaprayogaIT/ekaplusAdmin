@@ -96,9 +96,11 @@ interface CustomerRegistrationApiResponse {
   bcid_name?: string | null;
   bcid_link?: { id?: number; name?: string; bc_name?: string } | null;
   sync_saga_id?: string | null;
+  saga_status?: string | null;
   erp_customer_id?: string | null;
   crm_customer_id?: string | null;
   sync_last_error?: string | null;
+  sync_last_rollback_error?: string | null;
   reject_reason?: string | null;
   reject_notes?: string | null;
   rejection_reason?: string | null;
@@ -248,6 +250,7 @@ export function CustomerRegistrationList() {
     description?: string;
     details?: { label: string; value: string }[];
   } | null>(null);
+  const [syncingIds, setSyncingIds] = useState<Record<string, boolean>>({});
 
   // Use filter system
   const { filters, setFilters } = useFilters({
@@ -394,10 +397,12 @@ export function CustomerRegistrationList() {
           undefined,
       },
       sync_info: {
+        saga_status: apiData.saga_status ?? undefined,
         sync_saga_id: apiData.sync_saga_id ?? undefined,
         erp_customer_id: apiData.erp_customer_id ?? undefined,
         crm_customer_id: apiData.crm_customer_id ?? undefined,
         sync_last_error: apiData.sync_last_error ?? undefined,
+        sync_last_rollback_error: apiData.sync_last_rollback_error ?? undefined,
       },
       same_as_company_address: Boolean(apiData.same_as_company_address),
       shipping_addresses: [],
@@ -409,7 +414,15 @@ export function CustomerRegistrationList() {
       },
 
       // Status - map to lowercase for consistency
-      status: apiData.status.toLowerCase() as "approved" | "rejected" | "draft", // | "pending"
+      status: apiData.status.toLowerCase() as
+        | "approved"
+        | "rejected"
+        | "request"
+        | "draft",
+      docstatus:
+        typeof apiData.docstatus === "number"
+          ? apiData.docstatus
+          : Number(apiData.docstatus || 0),
       submission_date: apiData.created_at,
       created_at: apiData.created_at,
       created_by_id:
@@ -527,10 +540,11 @@ export function CustomerRegistrationList() {
           limit: 10000000,
         };
 
-        // Add filters if provided
-        if (filterTriples.length > 0) {
-          spec.filters = filterTriples;
-        }
+        const defaultFilters: FilterTriple[] = [["status", "!=", "Draft"]];
+        spec.filters =
+          filterTriples.length > 0
+            ? [...defaultFilters, ...filterTriples]
+            : defaultFilters;
 
         // Add server-side sorting
         if (sort_by && sort_order) {
@@ -612,12 +626,7 @@ export function CustomerRegistrationList() {
 
     // Filter by status
     if (selectedStatus !== "all") {
-      if (selectedStatus === "draft") {
-        // "draft" includes only "draft" status
-        filtered = filtered.filter((reg) => reg.status === "draft");
-      } else {
-        filtered = filtered.filter((reg) => reg.status === selectedStatus);
-      }
+      filtered = filtered.filter((reg) => reg.status === selectedStatus);
     }
 
     // Filter by search query
@@ -641,7 +650,7 @@ export function CustomerRegistrationList() {
   const stats = useMemo(() => {
     return {
       total: registrations.length,
-      draft: registrations.filter((r) => r.status === "draft").length,
+      request: registrations.filter((r) => r.status === "request").length,
       approved: registrations.filter((r) => r.status === "approved").length,
       rejected: registrations.filter((r) => r.status === "rejected").length,
     };
@@ -708,9 +717,9 @@ export function CustomerRegistrationList() {
     setResultModal({
       isOpen: true,
       type: "success",
-      title: "Approve Berhasil",
-      message: `Registrasi "${active?.company.name || "-"}" Berhasil Disetujui`,
-      description: "Akun customer ini aktif dan dapat melakukan transaksi.",
+      title: "Syncing Dipicu",
+      message: `Registrasi "${active?.company.name || "-"}" berhasil masuk status Syncing`,
+      description: "Data customer sedang diproses sinkronisasi melalui Saga.",
       details: [
         { label: "ID Pelanggan", value: active?.registration_number || "-" },
         { label: "Group Parent", value: gpLine },
@@ -738,6 +747,77 @@ export function CustomerRegistrationList() {
         { label: "Reject Notes", value: rejectNotes },
       ],
     });
+  };
+
+  const getSyncLabel = (registration: CustomerRegistration): string => {
+    const saga = (registration.sync_info?.saga_status || "").toLowerCase();
+    if (!saga || saga === "completed") return "Sync";
+    return "Resyncing";
+  };
+
+  const isSyncReadOnly = (registration: CustomerRegistration): boolean => {
+    const saga = (registration.sync_info?.saga_status || "").toLowerCase();
+    return saga === "completed";
+  };
+
+  const handleSync = async (registration: CustomerRegistration) => {
+    if (!token) return;
+    if (isSyncReadOnly(registration)) return;
+
+    setSyncingIds((prev) => ({ ...prev, [registration.id]: true }));
+
+    try {
+      const sagaId = registration.sync_info?.sync_saga_id;
+      if (!sagaId) {
+        throw new Error("saga_id tidak tersedia pada customer_register");
+      }
+      const response = await apiFetch(
+        `${API_CONFIG.BASE_URL}/api/saga/recover`,
+        {
+          method: "POST",
+          cache: "no-store",
+          body: JSON.stringify({
+            status: "Syncing",
+            saga_id: sagaId,
+          }),
+        },
+        token,
+      );
+      if (!response.ok) {
+        let serverMessage = "";
+        try {
+          const json = await response.json();
+          if (json?.message && typeof json.message === "string") {
+            serverMessage = json.message;
+          }
+        } catch {}
+        throw new Error(
+          `HTTP ${response.status}${serverMessage ? `: ${serverMessage}` : ""}`,
+        );
+      }
+
+      await loadDataWithFilters(filters, sortField, sortDirection);
+      setResultModal({
+        isOpen: true,
+        type: "success",
+        title: `${getSyncLabel(registration)} Berhasil`,
+        message: `Sinkronisasi untuk "${registration.company.name}" berhasil dijalankan.`,
+        description:
+          "Data sync ke ERP/CRM/Ekaplus sudah dipicu. Silakan cek Saga Status terbaru.",
+      });
+    } catch (errorSync) {
+      setResultModal({
+        isOpen: true,
+        type: "error",
+        title: `${getSyncLabel(registration)} Gagal`,
+        message:
+          errorSync instanceof Error
+            ? errorSync.message
+            : "Terjadi kesalahan saat sinkronisasi.",
+      });
+    } finally {
+      setSyncingIds((prev) => ({ ...prev, [registration.id]: false }));
+    }
   };
 
   // Loading state
@@ -800,10 +880,10 @@ export function CustomerRegistrationList() {
         <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl p-5 border-2 border-yellow-200">
           <div className="flex items-center gap-2 mb-1">
             <FaClock className="w-4 h-4 text-yellow-700" />
-            <div className="text-sm text-yellow-700 font-medium">Draft</div>
+            <div className="text-sm text-yellow-700 font-medium">Request</div>
           </div>
           <div className="text-3xl font-bold text-yellow-900">
-            {stats.draft}
+            {stats.request}
           </div>
         </div>
         <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-5 border-2 border-green-200">
@@ -850,7 +930,7 @@ export function CustomerRegistrationList() {
               className="pl-4 pr-10 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all font-medium text-gray-700 bg-white appearance-none cursor-pointer min-w-[200px]"
             >
               <option value="all">Semua Status</option>
-              <option value="draft">Draft</option>
+              <option value="request">Request</option>
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
             </select>
@@ -997,6 +1077,10 @@ export function CustomerRegistrationList() {
                 key={registration.id}
                 registration={registration}
                 onViewDetails={() => handleViewDetails(registration)}
+                onSync={() => handleSync(registration)}
+                isSyncing={Boolean(syncingIds[registration.id])}
+                syncLabel={getSyncLabel(registration)}
+                syncReadOnly={isSyncReadOnly(registration)}
               />
             ))}
           </div>
@@ -1021,6 +1105,18 @@ export function CustomerRegistrationList() {
         registration={selectedRegistration}
         onApprove={handleApprove}
         onReject={handleReject}
+        onSync={(registration) => handleSync(registration)}
+        isSyncing={
+          selectedRegistration
+            ? Boolean(syncingIds[selectedRegistration.id])
+            : false
+        }
+        syncLabel={
+          selectedRegistration ? getSyncLabel(selectedRegistration) : "Sync"
+        }
+        syncReadOnly={
+          selectedRegistration ? isSyncReadOnly(selectedRegistration) : false
+        }
       />
 
       {/* Approve Modal */}
@@ -1057,3 +1153,4 @@ export function CustomerRegistrationList() {
     </div>
   );
 }
+

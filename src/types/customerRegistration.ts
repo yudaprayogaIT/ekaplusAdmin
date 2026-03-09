@@ -75,10 +75,12 @@ export interface CustomerRegistration {
 
   // 4c. Informasi sinkronisasi
   sync_info?: {
+    saga_status?: string;
     sync_saga_id?: string;
     erp_customer_id?: string;
     crm_customer_id?: string;
     sync_last_error?: string;
+    sync_last_rollback_error?: string;
   };
 
   same_as_company_address?: boolean;
@@ -97,7 +99,8 @@ export interface CustomerRegistration {
   };
 
   // Status & Metadata
-  status: "pending" | "approved" | "rejected" | "draft";
+  status: "pending" | "approved" | "rejected" | "request" | "draft";
+  docstatus?: number;
   submission_date: string;
   created_at: string;
   created_by_id?: number;
@@ -153,7 +156,7 @@ export interface ApprovalResult {
   nbid?: number;
   gpid: number;
   gcid: number;
-  bcid: number;
+  bcid?: number;
 }
 
 export interface ApprovalOperationLog {
