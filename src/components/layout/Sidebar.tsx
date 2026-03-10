@@ -215,40 +215,47 @@ const CATALOG_SUBMENU: MenuItem[] = [
 
 const CUSTOMER_SUBMENU: MenuItem[] = [
   {
+    label: "Customers (New)",
+    href: "/customers/company",
+    icon: <FaLayerGroup className="w-4 h-4" />,
+    category: "Customer",
+    requireAuth: true,
+  },
+  {
     label: "Customer Register",
     href: "/customers/registrations",
     icon: <BiSolidUserDetail className="w-4 h-4" />,
     category: "Customer",
     requireAuth: true,
   },
-  {
-    label: "National Brand",
-    href: "/customers/national_brand",
-    icon: <FaLayerGroup className="w-4 h-4" />,
-    category: "Customer",
-    requireAuth: true,
-  },
-  {
-    label: "Group Parent",
-    href: "/customers/group_party",
-    icon: <FaUsers className="w-4 h-4" />,
-    category: "Customer",
-    requireAuth: true,
-  },
-  {
-    label: "Group Customer",
-    href: "/customers/group_customer",
-    icon: <FaUserGroup className="w-4 h-4" />,
-    category: "Customer",
-    requireAuth: true,
-  },
-  {
-    label: "Branch Customer",
-    href: "/customers/branch_customer",
-    icon: <FaUserShield className="w-4 h-4" />,
-    category: "Customer",
-    requireAuth: true,
-  },
+  // {
+  //   label: "National Brand",
+  //   href: "/customers/national_brand",
+  //   icon: <FaLayerGroup className="w-4 h-4" />,
+  //   category: "Customer",
+  //   requireAuth: true,
+  // },
+  // {
+  //   label: "Group Parent",
+  //   href: "/customers/group_party",
+  //   icon: <FaUsers className="w-4 h-4" />,
+  //   category: "Customer",
+  //   requireAuth: true,
+  // },
+  // {
+  //   label: "Group Customer",
+  //   href: "/customers/group_customer",
+  //   icon: <FaUserGroup className="w-4 h-4" />,
+  //   category: "Customer",
+  //   requireAuth: true,
+  // },
+  // {
+  //   label: "Branch Customer",
+  //   href: "/customers/branch_customer",
+  //   icon: <FaUserShield className="w-4 h-4" />,
+  //   category: "Customer",
+  //   requireAuth: true,
+  // },
   {
     label: "Members",
     href: "/members",
@@ -256,13 +263,13 @@ const CUSTOMER_SUBMENU: MenuItem[] = [
     category: "Customer",
     requireAuth: true,
   },
-  {
-    label: "Tiers",
-    href: "/member-tiers",
-    icon: <FaStar className="w-4 h-4" />,
-    category: "Customer",
-    requireAuth: true,
-  },
+  // {
+  //   label: "Tiers",
+  //   href: "/member-tiers",
+  //   icon: <FaStar className="w-4 h-4" />,
+  //   category: "Customer",
+  //   requireAuth: true,
+  // },
 ];
 
 // Export function to get all menu items for search functionality

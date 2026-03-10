@@ -5,6 +5,7 @@ import { RegistrationCard } from "./RegistrationCard";
 import { RegistrationDetailModal } from "./RegistrationDetailModal";
 import { ApproveRegistrationModal } from "./ApproveRegistrationModal";
 import { RejectRegistrationModal } from "./RejectRegistrationModal";
+import ActionResultModal from "@/components/ui/ActionResultModal";
 import type { CustomerRegistration } from "@/types/customerRegistration";
 import {
   FaSearch,
@@ -95,10 +96,13 @@ interface CustomerRegistrationApiResponse {
   bcid_name?: string | null;
   bcid_link?: { id?: number; name?: string; bc_name?: string } | null;
   sync_saga_id?: string | null;
+  saga_status?: string | null;
   erp_customer_id?: string | null;
   crm_customer_id?: string | null;
   sync_last_error?: string | null;
+  sync_last_rollback_error?: string | null;
   reject_reason?: string | null;
+  reject_notes?: string | null;
   rejection_reason?: string | null;
   rejection_notes?: string | null;
 }
@@ -238,6 +242,19 @@ export function CustomerRegistrationList() {
   const [selectedForAction, setSelectedForAction] =
     useState<CustomerRegistration | null>(null);
 
+  const [resultModal, setResultModal] = useState<{
+    isOpen: boolean;
+    type: "success" | "error";
+    title: string;
+    message: string;
+    description?: string;
+    details?: { label: string; value: string }[];
+  } | null>(null);
+  const [syncingIds, setSyncingIds] = useState<Record<string, boolean>>({});
+  const [rollbackingIds, setRollbackingIds] = useState<Record<string, boolean>>(
+    {},
+  );
+
   // Use filter system
   const { filters, setFilters } = useFilters({
     entity: "customer_register",
@@ -249,6 +266,7 @@ export function CustomerRegistrationList() {
   ): CustomerRegistration {
     return {
       id: apiData.id.toString(),
+      registration_number: apiData.name || apiData.id.toString(),
       source: apiData.source || undefined,
       ekaplus_user:
         apiData.ekaplus_user !== null &&
@@ -382,10 +400,12 @@ export function CustomerRegistrationList() {
           undefined,
       },
       sync_info: {
+        saga_status: apiData.saga_status ?? undefined,
         sync_saga_id: apiData.sync_saga_id ?? undefined,
         erp_customer_id: apiData.erp_customer_id ?? undefined,
         crm_customer_id: apiData.crm_customer_id ?? undefined,
         sync_last_error: apiData.sync_last_error ?? undefined,
+        sync_last_rollback_error: apiData.sync_last_rollback_error ?? undefined,
       },
       same_as_company_address: Boolean(apiData.same_as_company_address),
       shipping_addresses: [],
@@ -397,10 +417,24 @@ export function CustomerRegistrationList() {
       },
 
       // Status - map to lowercase for consistency
-      status: apiData.status.toLowerCase() as // | "pending"
-        "approved" | "rejected" | "draft",
+      status: apiData.status.toLowerCase() as
+        | "approved"
+        | "rejected"
+        | "request"
+        | "draft",
+      docstatus:
+        typeof apiData.docstatus === "number"
+          ? apiData.docstatus
+          : Number(apiData.docstatus || 0),
       submission_date: apiData.created_at,
       created_at: apiData.created_at,
+      created_by_id:
+        typeof apiData.created_by === "number"
+          ? apiData.created_by
+          : typeof apiData.created_by === "object" &&
+              typeof apiData.created_by?.id === "number"
+            ? apiData.created_by.id
+            : undefined,
       created_by:
         typeof apiData.created_by === "object" && apiData.created_by?.full_name
           ? apiData.created_by.full_name
@@ -410,6 +444,13 @@ export function CustomerRegistrationList() {
               ? `User ${apiData.created_by}`
               : undefined,
       updated_at: apiData.updated_at,
+      updated_by_id:
+        typeof apiData.updated_by === "number"
+          ? apiData.updated_by
+          : typeof apiData.updated_by === "object" &&
+              typeof apiData.updated_by?.id === "number"
+            ? apiData.updated_by.id
+            : undefined,
       updated_by:
         typeof apiData.updated_by === "object" && apiData.updated_by?.full_name
           ? apiData.updated_by.full_name
@@ -465,7 +506,7 @@ export function CustomerRegistrationList() {
         undefined,
       rejection_reason:
         apiData.reject_reason ?? apiData.rejection_reason ?? undefined,
-      rejection_notes: apiData.rejection_notes ?? undefined,
+      rejection_notes: apiData.reject_notes ?? undefined,
     };
   }
 
@@ -502,10 +543,11 @@ export function CustomerRegistrationList() {
           limit: 10000000,
         };
 
-        // Add filters if provided
-        if (filterTriples.length > 0) {
-          spec.filters = filterTriples;
-        }
+        const defaultFilters: FilterTriple[] = [["status", "!=", "Draft"]];
+        spec.filters =
+          filterTriples.length > 0
+            ? [...defaultFilters, ...filterTriples]
+            : defaultFilters;
 
         // Add server-side sorting
         if (sort_by && sort_order) {
@@ -587,12 +629,7 @@ export function CustomerRegistrationList() {
 
     // Filter by status
     if (selectedStatus !== "all") {
-      if (selectedStatus === "draft") {
-        // "draft" includes only "draft" status
-        filtered = filtered.filter((reg) => reg.status === "draft");
-      } else {
-        filtered = filtered.filter((reg) => reg.status === selectedStatus);
-      }
+      filtered = filtered.filter((reg) => reg.status === selectedStatus);
     }
 
     // Filter by search query
@@ -616,7 +653,7 @@ export function CustomerRegistrationList() {
   const stats = useMemo(() => {
     return {
       total: registrations.length,
-      draft: registrations.filter((r) => r.status === "draft").length,
+      request: registrations.filter((r) => r.status === "request").length,
       approved: registrations.filter((r) => r.status === "approved").length,
       rejected: registrations.filter((r) => r.status === "rejected").length,
     };
@@ -663,16 +700,188 @@ export function CustomerRegistrationList() {
     setIsRejectModalOpen(true);
   };
 
-  const handleApproveSuccess = () => {
+  const handleApproveSuccess = (message: string) => {
+    const active = selectedForAction;
+    const gpLine =
+      message.match(/GROUP PARENT:\s*(.+)/)?.[1]?.trim() ||
+      message.match(/GP ID:\s*(.+)/)?.[1]?.trim() ||
+      "-";
+    const gcLine =
+      message.match(/GROUP CUSTOMER:\s*(.+)/)?.[1]?.trim() ||
+      message.match(/GC ID:\s*(.+)/)?.[1]?.trim() ||
+      "-";
+    const bcLine =
+      message.match(/BRANCH CUSTOMER:\s*(.+)/)?.[1]?.trim() ||
+      message.match(/BC ID:\s*(.+)/)?.[1]?.trim() ||
+      "-";
+
     setIsApproveModalOpen(false);
     setSelectedForAction(null);
-    // Data will auto-reload via event listener
+    setResultModal({
+      isOpen: true,
+      type: "success",
+      title: "Syncing Dipicu",
+      message: `Registrasi "${active?.company.name || "-"}" berhasil masuk status Syncing`,
+      description: "Data customer sedang diproses sinkronisasi melalui Saga.",
+      details: [
+        { label: "ID Pelanggan", value: active?.registration_number || "-" },
+        { label: "Group Parent", value: gpLine },
+        { label: "Group Customer", value: gcLine },
+        { label: "Branch Customer", value: bcLine },
+      ],
+    });
   };
 
-  const handleRejectSuccess = () => {
+  const handleRejectSuccess = (message: string) => {
+    const active = selectedForAction;
+    const rejectReason = message.match(/Alasan:\s*(.+)/)?.[1]?.trim() || "-";
+    const rejectNotes = message.match(/Catatan:\s*(.+)/)?.[1]?.trim() || "-";
+
     setIsRejectModalOpen(false);
     setSelectedForAction(null);
-    // Data will auto-reload via event listener
+    setResultModal({
+      isOpen: true,
+      type: "error",
+      title: "Customer di Reject",
+      message: `Registrasi "${active?.company.name || "-"}" Ditolak`,
+      description:
+        "Data customer ditolak dan belum dapat diproses ke tahap berikutnya.",
+      details: [
+        { label: "Reject Reason", value: rejectReason },
+        { label: "Reject Notes", value: rejectNotes },
+      ],
+    });
+  };
+
+  const getSyncLabel = (registration: CustomerRegistration): string => {
+    const saga = (registration.sync_info?.saga_status || "").toLowerCase();
+    if (!saga || saga === "completed") return "Sync";
+    return "Resync";
+  };
+
+  const isSyncReadOnly = (registration: CustomerRegistration): boolean => {
+    const saga = (registration.sync_info?.saga_status || "").toLowerCase();
+    return saga === "completed";
+  };
+
+  const handleSync = async (registration: CustomerRegistration) => {
+    if (!token) return;
+    if (isSyncReadOnly(registration)) return;
+
+    setSyncingIds((prev) => ({ ...prev, [registration.id]: true }));
+
+    try {
+      const sagaId = registration.sync_info?.sync_saga_id;
+      if (!sagaId) {
+        throw new Error("saga_id tidak tersedia pada customer_register");
+      }
+      const response = await apiFetch(
+        `${API_CONFIG.BASE_URL}/api/saga/recover`,
+        {
+          method: "POST",
+          cache: "no-store",
+          body: JSON.stringify({
+            status: "Syncing",
+            saga_id: sagaId,
+          }),
+        },
+        token,
+      );
+      if (!response.ok) {
+        let serverMessage = "";
+        try {
+          const json = await response.json();
+          if (json?.message && typeof json.message === "string") {
+            serverMessage = json.message;
+          }
+        } catch {}
+        throw new Error(
+          `HTTP ${response.status}${serverMessage ? `: ${serverMessage}` : ""}`,
+        );
+      }
+
+      await loadDataWithFilters(filters, sortField, sortDirection);
+      setResultModal({
+        isOpen: true,
+        type: "success",
+        title: `${getSyncLabel(registration)} Berhasil`,
+        message: `Sinkronisasi untuk "${registration.company.name}" berhasil dijalankan.`,
+        description:
+          "Data sync ke ERP/CRM/Ekaplus sudah dipicu. Silakan cek Saga Status terbaru.",
+      });
+    } catch (errorSync) {
+      setResultModal({
+        isOpen: true,
+        type: "error",
+        title: `${getSyncLabel(registration)} Gagal`,
+        message:
+          errorSync instanceof Error
+            ? errorSync.message
+            : "Terjadi kesalahan saat sinkronisasi.",
+      });
+    } finally {
+      setSyncingIds((prev) => ({ ...prev, [registration.id]: false }));
+    }
+  };
+
+  const handleRollback = async (registration: CustomerRegistration) => {
+    if (!token) return;
+
+    setRollbackingIds((prev) => ({ ...prev, [registration.id]: true }));
+
+    try {
+      const sagaId = registration.sync_info?.sync_saga_id;
+      if (!sagaId) {
+        throw new Error("saga_id tidak tersedia pada customer_register");
+      }
+      const response = await apiFetch(
+        `${API_CONFIG.BASE_URL}/api/saga/force-rollback`,
+        {
+          method: "POST",
+          cache: "no-store",
+          body: JSON.stringify({
+            status: "Syncing",
+            saga_id: sagaId,
+          }),
+        },
+        token,
+      );
+
+      if (!response.ok) {
+        let serverMessage = "";
+        try {
+          const json = await response.json();
+          if (json?.message && typeof json.message === "string") {
+            serverMessage = json.message;
+          }
+        } catch {}
+        throw new Error(
+          `HTTP ${response.status}${serverMessage ? `: ${serverMessage}` : ""}`,
+        );
+      }
+
+      await loadDataWithFilters(filters, sortField, sortDirection);
+      setResultModal({
+        isOpen: true,
+        type: "success",
+        title: "Rollback Berhasil",
+        message: `Rollback untuk "${registration.company.name}" berhasil dijalankan.`,
+        description:
+          "Force rollback dipicu. Silakan cek Saga Status terbaru di detail sinkronisasi.",
+      });
+    } catch (errorRollback) {
+      setResultModal({
+        isOpen: true,
+        type: "error",
+        title: "Rollback Gagal",
+        message:
+          errorRollback instanceof Error
+            ? errorRollback.message
+            : "Terjadi kesalahan saat rollback.",
+      });
+    } finally {
+      setRollbackingIds((prev) => ({ ...prev, [registration.id]: false }));
+    }
   };
 
   // Loading state
@@ -735,10 +944,10 @@ export function CustomerRegistrationList() {
         <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl p-5 border-2 border-yellow-200">
           <div className="flex items-center gap-2 mb-1">
             <FaClock className="w-4 h-4 text-yellow-700" />
-            <div className="text-sm text-yellow-700 font-medium">Draft</div>
+            <div className="text-sm text-yellow-700 font-medium">Request</div>
           </div>
           <div className="text-3xl font-bold text-yellow-900">
-            {stats.draft}
+            {stats.request}
           </div>
         </div>
         <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-5 border-2 border-green-200">
@@ -785,7 +994,7 @@ export function CustomerRegistrationList() {
               className="pl-4 pr-10 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all font-medium text-gray-700 bg-white appearance-none cursor-pointer min-w-[200px]"
             >
               <option value="all">Semua Status</option>
-              <option value="draft">Draft</option>
+              <option value="request">Request</option>
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
             </select>
@@ -932,6 +1141,10 @@ export function CustomerRegistrationList() {
                 key={registration.id}
                 registration={registration}
                 onViewDetails={() => handleViewDetails(registration)}
+                onSync={() => handleSync(registration)}
+                isSyncing={Boolean(syncingIds[registration.id])}
+                syncLabel={getSyncLabel(registration)}
+                syncReadOnly={isSyncReadOnly(registration)}
               />
             ))}
           </div>
@@ -956,12 +1169,35 @@ export function CustomerRegistrationList() {
         registration={selectedRegistration}
         onApprove={handleApprove}
         onReject={handleReject}
+        onSync={(registration) => handleSync(registration)}
+        onRollback={(registration) => handleRollback(registration)}
+        isSyncing={
+          selectedRegistration
+            ? Boolean(syncingIds[selectedRegistration.id])
+            : false
+        }
+        isRollbacking={
+          selectedRegistration
+            ? Boolean(rollbackingIds[selectedRegistration.id])
+            : false
+        }
+        syncLabel={
+          selectedRegistration ? getSyncLabel(selectedRegistration) : "Sync"
+        }
+        syncReadOnly={
+          selectedRegistration ? isSyncReadOnly(selectedRegistration) : false
+        }
+        rollbackLabel="Rollback"
+        rollbackReadOnly={false}
       />
 
       {/* Approve Modal */}
       <ApproveRegistrationModal
         isOpen={isApproveModalOpen}
-        onClose={() => setIsApproveModalOpen(false)}
+        onClose={() => {
+          setIsApproveModalOpen(false);
+          setSelectedForAction(null);
+        }}
         registration={selectedForAction}
         onSuccess={handleApproveSuccess}
       />
@@ -969,9 +1205,22 @@ export function CustomerRegistrationList() {
       {/* Reject Modal */}
       <RejectRegistrationModal
         isOpen={isRejectModalOpen}
-        onClose={() => setIsRejectModalOpen(false)}
+        onClose={() => {
+          setIsRejectModalOpen(false);
+          setSelectedForAction(null);
+        }}
         registration={selectedForAction}
         onSuccess={handleRejectSuccess}
+      />
+
+      <ActionResultModal
+        isOpen={Boolean(resultModal?.isOpen)}
+        type={resultModal?.type || "success"}
+        title={resultModal?.title || "Informasi"}
+        message={resultModal?.message || ""}
+        description={resultModal?.description}
+        details={resultModal?.details}
+        onClose={() => setResultModal(null)}
       />
     </div>
   );

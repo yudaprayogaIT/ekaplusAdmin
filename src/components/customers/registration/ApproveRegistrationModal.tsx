@@ -20,13 +20,12 @@ import type {
 } from "@/types/customerRegistration";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getApiUrl, getQueryUrl } from "@/config/api";
-import ActionResultModal from "@/components/ui/ActionResultModal";
 
 interface ApproveRegistrationModalProps {
   isOpen: boolean;
   onClose: () => void;
   registration: CustomerRegistration | null;
-  onSuccess: () => void;
+  onSuccess: (message: string) => void;
 }
 
 interface CustomerRegisterAddressApiResponse {
@@ -68,16 +67,13 @@ interface BranchCustomerRow {
   name?: string | null;
   bcid_name?: string | null;
   gcid?: number | null;
-  branch?:
-    | number
-    | { id?: number; branch_name?: string; city?: string }
-    | null;
+  branch?: number | { id?: number; branch_name?: string; city?: string } | null;
   "branch.branch_name"?: string | null;
   branch_owner?: string | null;
   branch_owner_phone?: string | null;
 }
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3 | 4 | 5;
 
 // "idle"   = nothing shown yet (initial state)
 // "search" = user is searching (show results only when query exists)
@@ -99,13 +95,19 @@ function normalizeDate(value?: string): string | undefined {
 
 function normalizeEntityName(value?: string): string {
   if (!value) return "";
-  return value
-    .trim()
-    .replace(/\s+/g, " ")
-    .split(" ")
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
+  return value.trim().replace(/\s+/g, " ").toUpperCase();
+}
+
+function toUpperInput(value?: string): string {
+  return (value || "").toUpperCase();
+}
+
+function extractUserIdFromDisplay(value?: string): number {
+  if (!value) return 0;
+  const m = value.match(/(\d+)\s*$/);
+  if (!m) return 0;
+  const parsed = Number.parseInt(m[1], 10);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function extractIdFromResourceResponse(json: unknown): number | undefined {
@@ -143,7 +145,6 @@ export function ApproveRegistrationModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [operationLogs, setOperationLogs] = useState<ApprovalOperationLog[]>(
     [],
   );
@@ -151,13 +152,16 @@ export function ApproveRegistrationModal({
     CustomerRegisterAddressApiResponse[]
   >([]);
   const [nationalBrands, setNationalBrands] = useState<NationalBrandRow[]>([]);
+  const [createdNb, setCreatedNb] = useState<NationalBrandRow | null>(null);
   const [existingGp, setExistingGp] = useState<GroupParentRow | null>(null);
   const [createdGp, setCreatedGp] = useState<GroupParentRow | null>(null);
   const [groupParents, setGroupParents] = useState<GroupParentRow[]>([]);
   const [groupCustomers, setGroupCustomers] = useState<GroupCustomerRow[]>([]);
+  const [createdGc, setCreatedGc] = useState<GroupCustomerRow | null>(null);
   const [branchCustomers, setBranchCustomers] = useState<BranchCustomerRow[]>(
     [],
   );
+  const [createdBc, setCreatedBc] = useState<BranchCustomerRow | null>(null);
 
   // --- GP state ---
   const [gpMode, setGpMode] = useState<PanelMode>("idle");
@@ -175,19 +179,31 @@ export function ApproveRegistrationModal({
   const [selectedBcid, setSelectedBcid] = useState<number | null>(null);
   const [nbSearch, setNbSearch] = useState("");
   const [selectedNbid, setSelectedNbid] = useState<number | null>(null);
+  const [createdNbid, setCreatedNbid] = useState<number | null>(null);
+  const [createdGpid, setCreatedGpid] = useState<number | null>(null);
+  const [createdGcid, setCreatedGcid] = useState<number | null>(null);
+  const [createdBcid, setCreatedBcid] = useState<number | null>(null);
+  const [gpCreatedViaCreateFlow, setGpCreatedViaCreateFlow] = useState(false);
+  const [nbCreatedViaCreateFlow, setNbCreatedViaCreateFlow] = useState(false);
 
   const existingGpid = registration?.gp_id;
   const existingGcid = registration?.gc_id;
   const existingBcid = registration?.bc_id;
   const existingNbid = registration?.master_links?.nb_id;
+  const effectiveNbid = existingNbid || selectedNbid || undefined;
+  const effectiveGpid = existingGpid || selectedGpid || undefined;
+  const effectiveGcid = existingGcid || selectedGcid || undefined;
+  const effectiveBcid = existingBcid || selectedBcid || undefined;
+  const isGcCreatedInFlow = Boolean(createdGcid || createdGc);
   const isCreatingNewGpFlow = Boolean(
-    !existingGpid && !selectedGpid && gpMode === "create",
+    gpCreatedViaCreateFlow ||
+    (!existingGpid && !selectedGpid && gpMode === "create"),
   );
   const canSearchExistingGc = Boolean(
     !isCreatingNewGpFlow && (existingGpid || selectedGpid),
   );
   const canSearchExistingBc = Boolean(
-    !isCreatingNewGpFlow && (existingGcid || selectedGcid),
+    false,
   );
 
   // ---- Filtered lists (only meaningful when mode === "search" and query is non-empty) ----
@@ -211,10 +227,10 @@ export function ApproveRegistrationModal({
 
   const filteredGroupCustomers = useMemo(() => {
     const qGc = gcSearch.trim().toLowerCase();
-    const effectiveGpid = canSearchExistingGc ? existingGpid || selectedGpid : 0;
-    const base = effectiveGpid
+    const effectiveGpidForFilter = canSearchExistingGc ? effectiveGpid : 0;
+    const base = effectiveGpidForFilter
       ? groupCustomers.filter(
-          (row) => Number(row.gpid || 0) === Number(effectiveGpid),
+          (row) => Number(row.gpid || 0) === Number(effectiveGpidForFilter),
         )
       : groupCustomers;
     if (!qGc) return base.slice(0, 20);
@@ -222,14 +238,14 @@ export function ApproveRegistrationModal({
       const label = `${row.gc_name || ""} ${row.name || ""}`.toLowerCase();
       return label.includes(qGc);
     });
-  }, [gcSearch, groupCustomers, selectedGpid, existingGpid, canSearchExistingGc]);
+  }, [gcSearch, groupCustomers, effectiveGpid, canSearchExistingGc]);
 
   const filteredBranchCustomers = useMemo(() => {
     const q = bcSearch.trim().toLowerCase();
-    const effectiveGcid = canSearchExistingBc ? selectedGcid || existingGcid : 0;
-    const base = effectiveGcid
+    const effectiveGcidForFilter = canSearchExistingBc ? effectiveGcid : 0;
+    const base = effectiveGcidForFilter
       ? branchCustomers.filter(
-          (row) => Number(row.gcid || 0) === Number(effectiveGcid),
+          (row) => Number(row.gcid || 0) === Number(effectiveGcidForFilter),
         )
       : branchCustomers;
     if (!q) return base.slice(0, 20);
@@ -237,13 +253,7 @@ export function ApproveRegistrationModal({
       const label = `${row.bcid_name || ""} ${row.name || ""}`.toLowerCase();
       return label.includes(q);
     });
-  }, [
-    bcSearch,
-    branchCustomers,
-    selectedGcid,
-    existingGcid,
-    canSearchExistingBc,
-  ]);
+  }, [bcSearch, branchCustomers, effectiveGcid, canSearchExistingBc]);
 
   const effectiveShippingAddresses = useMemo(() => {
     if (!registration) return [] as CustomerRegisterAddressApiResponse[];
@@ -341,6 +351,67 @@ export function ApproveRegistrationModal({
     [pushLog, token],
   );
 
+  const refreshReferenceLists = useCallback(async () => {
+    if (!token) return;
+    const gpSpec = {
+      fields: ["id", "name", "gp_name", "nbid"],
+      limit: 1000000,
+    };
+    const nbSpec = { fields: ["id", "name", "nb_name"], limit: 1000000 };
+    const gcSpec = {
+      fields: ["id", "name", "gc_name", "gpid"],
+      limit: 1000000,
+    };
+    const bcSpec = {
+      fields: [
+        "id",
+        "name",
+        "bcid_name",
+        "gcid",
+        "branch",
+        "branch.branch_name",
+        "branch_owner",
+        "branch_owner_phone",
+      ],
+      limit: 1000000,
+    };
+
+    const [gpListRes, nbListRes, gcListRes, bcListRes] = await Promise.all([
+      apiFetch(
+        getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, gpSpec),
+        { method: "GET", cache: "no-store" },
+        token,
+      ),
+      apiFetch(
+        getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, nbSpec),
+        { method: "GET", cache: "no-store" },
+        token,
+      ),
+      apiFetch(
+        getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, gcSpec),
+        { method: "GET", cache: "no-store" },
+        token,
+      ),
+      apiFetch(
+        getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, bcSpec),
+        { method: "GET", cache: "no-store" },
+        token,
+      ),
+    ]);
+
+    const [gpListJson, nbListJson, gcListJson, bcListJson] = await Promise.all([
+      gpListRes.json().catch(() => null),
+      nbListRes.json().catch(() => null),
+      gcListRes.json().catch(() => null),
+      bcListRes.json().catch(() => null),
+    ]);
+
+    setGroupParents(Array.isArray(gpListJson?.data) ? gpListJson.data : []);
+    setNationalBrands(Array.isArray(nbListJson?.data) ? nbListJson.data : []);
+    setGroupCustomers(Array.isArray(gcListJson?.data) ? gcListJson.data : []);
+    setBranchCustomers(Array.isArray(bcListJson?.data) ? bcListJson.data : []);
+  }, [token]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -358,16 +429,27 @@ export function ApproveRegistrationModal({
       setGcName(normalizeEntityName(registration.company.name || ""));
       setIsSubmitting(false);
       setError(null);
-      setSuccessMessage(null);
       setOperationLogs([]);
       setNationalBrands([]);
       setExistingGp(null);
       setCreatedGp(null);
+      setCreatedNb(null);
+      setCreatedGc(null);
+      setCreatedBc(null);
       setGroupParents([]);
       setGroupCustomers([]);
       setBranchCustomers([]);
       setNbSearch("");
       setSelectedNbid(existingNbid || null);
+      setCreatedNbid(null);
+      setCreatedGpid(null);
+      setCreatedGcid(null);
+      setCreatedBcid(null);
+      setCreatedNb(null);
+      setCreatedGc(null);
+      setCreatedBc(null);
+      setGpCreatedViaCreateFlow(false);
+      setNbCreatedViaCreateFlow(false);
 
       // Reset all modes & searches
       setGpMode("search");
@@ -391,88 +473,20 @@ export function ApproveRegistrationModal({
             ["parent_type", "=", "customer_register"],
           ],
         };
-        const gpSpec = {
-          fields: ["id", "name", "gp_name", "nbid"],
-          limit: 1000000,
-        };
-        const nbSpec = {
-          fields: ["id", "name", "nb_name"],
-          limit: 1000000,
-        };
-        const gcSpec = {
-          fields: ["id", "name", "gc_name", "gpid"],
-          limit: 1000000,
-        };
-        const bcSpec = {
-          fields: [
-            "id",
-            "name",
-            "bcid_name",
-            "gcid",
-            "branch",
-            "branch.branch_name",
-            "branch_owner",
-            "branch_owner_phone",
-          ],
-          limit: 1000000,
-        };
-
-        const [shippingRes, gpListRes, nbListRes, gcListRes, bcListRes] =
-          await Promise.all([
-            apiFetch(
-              getQueryUrl(
-                API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER_ADDRESS,
-                shippingSpec,
-              ),
-              { method: "GET", cache: "no-store" },
-              token,
-            ),
-            apiFetch(
-              getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, gpSpec),
-              { method: "GET", cache: "no-store" },
-              token,
-            ),
-            apiFetch(
-              getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, nbSpec),
-              { method: "GET", cache: "no-store" },
-              token,
-            ),
-            apiFetch(
-              getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, gcSpec),
-              { method: "GET", cache: "no-store" },
-              token,
-            ),
-            apiFetch(
-              getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, bcSpec),
-              { method: "GET", cache: "no-store" },
-              token,
-            ),
-          ]);
-
-        const [shippingJson, gpListJson, nbListJson, gcListJson, bcListJson] =
-          await Promise.all([
-            shippingRes.json().catch(() => null),
-            gpListRes.json().catch(() => null),
-            nbListRes.json().catch(() => null),
-            gcListRes.json().catch(() => null),
-            bcListRes.json().catch(() => null),
-          ]);
+        const shippingRes = await apiFetch(
+          getQueryUrl(
+            API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER_ADDRESS,
+            shippingSpec,
+          ),
+          { method: "GET", cache: "no-store" },
+          token,
+        );
+        const shippingJson = await shippingRes.json().catch(() => null);
+        await refreshReferenceLists();
 
         if (!cancelled) {
           setShippingAddresses(
             Array.isArray(shippingJson?.data) ? shippingJson.data : [],
-          );
-          setGroupParents(
-            Array.isArray(gpListJson?.data) ? gpListJson.data : [],
-          );
-          setNationalBrands(
-            Array.isArray(nbListJson?.data) ? nbListJson.data : [],
-          );
-          setGroupCustomers(
-            Array.isArray(gcListJson?.data) ? gcListJson.data : [],
-          );
-          setBranchCustomers(
-            Array.isArray(bcListJson?.data) ? bcListJson.data : [],
           );
         }
 
@@ -509,7 +523,12 @@ export function ApproveRegistrationModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, registration, token, existingNbid]);
+  }, [isOpen, registration, token, existingNbid, refreshReferenceLists]);
+
+  useEffect(() => {
+    if (!isOpen || !token || isPreparing) return;
+    void refreshReferenceLists();
+  }, [isOpen, token, step, isPreparing, refreshReferenceLists]);
 
   useEffect(() => {
     if (!selectedGpid) return;
@@ -538,27 +557,41 @@ export function ApproveRegistrationModal({
 
   useEffect(() => {
     if (step !== 3 || existingGcid) return;
+    if (!selectedGcid && canSearchExistingGc) {
+      setGcMode("search");
+      return;
+    }
     if (!canSearchExistingGc) {
       setGcMode("create");
       setSelectedGcid(null);
     }
-  }, [step, existingGcid, canSearchExistingGc]);
+  }, [step, existingGcid, canSearchExistingGc, selectedGcid]);
 
   useEffect(() => {
     if (step !== 4 || existingBcid) return;
     if (!canSearchExistingBc) {
       setBcMode("create");
       setSelectedBcid(null);
+      setBcSearch("");
     }
   }, [step, existingBcid, canSearchExistingBc]);
 
   useEffect(() => {
     if (!isCreatingNewGpFlow) return;
-    setSelectedGcid(null);
-    setSelectedBcid(null);
-    if (step >= 3) setGcMode("create");
-    if (step >= 4) setBcMode("create");
-  }, [isCreatingNewGpFlow, step]);
+    if (step >= 3 && !existingGcid && !selectedGcid) {
+      setGcMode("create");
+    }
+    if (step >= 4 && !existingBcid && !selectedBcid) {
+      setBcMode("create");
+    }
+  }, [
+    isCreatingNewGpFlow,
+    step,
+    existingGcid,
+    selectedGcid,
+    existingBcid,
+    selectedBcid,
+  ]);
 
   const buildGroupCustomerPayload = useCallback(
     (gpid: number) => {
@@ -579,81 +612,15 @@ export function ApproveRegistrationModal({
     [gcName, registration],
   );
 
-  const buildBranchCustomerPayload = useCallback(
-    (gcid: number) => {
-      if (!registration) return null;
-      const branchOwnerName =
-        registration.branch_owner?.full_name || registration.user.full_name;
-      const branchOwnerPhone =
-        normalizePhone(registration.branch_owner?.phone || registration.user.phone) ||
-        undefined;
-
-      const officeAddress = {
-        type: "office",
-        label: "Office",
-        address: registration.address.full_address,
-        city: registration.address.city_name,
-        district: registration.address.district_name,
-        province: registration.address.province_name,
-        postal_code: registration.address.postal_code,
-      };
-
-      const warehouseAddressesFromShipping = effectiveShippingAddresses.map((addr) => ({
-        type: "warehouse",
-        label: addr.label || "Warehouse",
-        address: addr.address || "",
-        city: addr.city || "",
-        district: addr.district || "",
-        province: addr.province || "",
-        postal_code: addr.postal_code || "",
-        pic_name: addr.pic_name || undefined,
-        pic_phone: normalizePhone(addr.pic_phone || undefined),
-        is_default: addr.is_default ? 1 : undefined,
-      }));
-
-      const firstShipping = effectiveShippingAddresses[0];
-      const warehouseCopyFromOffice = {
-        type: "warehouse",
-        label: firstShipping?.label || "Warehouse",
-        address: registration.address.full_address,
-        city: registration.address.city_name,
-        district: registration.address.district_name,
-        province: registration.address.province_name,
-        postal_code: registration.address.postal_code,
-        pic_name: firstShipping?.pic_name || branchOwnerName || undefined,
-        pic_phone:
-          normalizePhone(firstShipping?.pic_phone || undefined) || branchOwnerPhone,
-        is_default: 1,
-      };
-
-      const customerAddress = registration.same_as_company_address
-        ? [officeAddress, warehouseCopyFromOffice]
-        : [officeAddress, ...warehouseAddressesFromShipping];
-
-      return {
-        gcid,
-        branch: registration.company.branch_id,
-        product_need: registration.company.product_need,
-        branch_owner: branchOwnerName,
-        branch_owner_email:
-          registration.branch_owner?.email || registration.user.email,
-        branch_owner_phone: branchOwnerPhone,
-        branch_owner_place_of_birth:
-          registration.branch_owner?.place_of_birth ||
-          registration.user.place_of_birth,
-        branch_owner_date_of_birth: normalizeDate(
-          registration.branch_owner?.date_of_birth ||
-            registration.user.date_of_birth,
-        ),
-        customer_register: Number(registration.id),
-        customer_address: customerAddress,
-      };
-    },
-    [effectiveShippingAddresses, registration],
-  );
-
   const buildCustomerRegisterApprovePayload = useCallback(
-    (ids: ApprovalResult) => {
+    (ids: ApprovalResult, gpManualName?: string, nbManualName?: string) => {
+      const rawApplicantOwnerId = registration?.ekaplus_user?.id;
+      const applicantOwnerId =
+        typeof rawApplicantOwnerId === "number"
+          ? rawApplicantOwnerId
+          : Number.parseInt(String(rawApplicantOwnerId || ""), 10);
+      const fallbackOwnerId = Number(registration?.created_by_id || 0);
+
       const shippingPayload = effectiveShippingAddresses.map((addr) => ({
         label: addr.label || "Warehouse",
         pic_name: addr.pic_name || undefined,
@@ -667,17 +634,30 @@ export function ApproveRegistrationModal({
       }));
 
       return {
-        status: "Approved",
+        status: "Syncing",
         docstatus: 1,
+        owner:
+          Number.isFinite(applicantOwnerId) && applicantOwnerId > 0
+            ? applicantOwnerId
+            : fallbackOwnerId > 0
+              ? fallbackOwnerId
+              : undefined,
         same_as_company_address: registration?.same_as_company_address ? 1 : 0,
         gpid: ids.gpid,
         gcid: ids.gcid,
-        bcid: ids.bcid,
+        bcid: ids.bcid ?? null,
         nbid: ids.nbid ?? null,
+        ...(gpManualName ? { gp_manual: gpManualName } : {}),
+        ...(nbManualName ? { nb_manual: nbManualName } : {}),
         customer_shipping_address: shippingPayload,
       };
     },
-    [effectiveShippingAddresses, registration?.same_as_company_address],
+    [
+      effectiveShippingAddresses,
+      registration?.same_as_company_address,
+      registration?.ekaplus_user?.id,
+      registration?.created_by_id,
+    ],
   );
 
   const validateCurrentStep = (): string | null => {
@@ -692,7 +672,8 @@ export function ApproveRegistrationModal({
     if (step === 2 && !existingGpid) {
       if (selectedGpid) return null;
       if (gpMode === "create") {
-        if (!normalizeEntityName(gpName)) return "Nama Group Parent wajib diisi";
+        if (!normalizeEntityName(gpName))
+          return "Nama Group Parent wajib diisi";
       } else if (gpMode === "idle" || gpMode === "search") {
         return "Pilih Group Parent yang ada atau klik 'Create New' untuk membuat baru";
       }
@@ -710,26 +691,146 @@ export function ApproveRegistrationModal({
 
     // Step 4: Branch Customer
     if (step === 4 && !existingBcid) {
-      if (canSearchExistingBc && selectedBcid) return null;
-      if (bcMode === "create" || !canSearchExistingBc) {
-        return null;
-      }
-      if (bcMode === "idle" || bcMode === "search") {
-        return "Pilih Branch Customer yang ada atau klik 'Create New' untuk membuat baru";
-      }
+      return null;
     }
 
     return null;
   };
 
-  const handleNextStep = () => {
+  const handleNextStep = async () => {
     const validationError = validateCurrentStep();
     if (validationError) {
       setError(validationError);
       return;
     }
+
+    if (!registration || !token) {
+      setError("Data tidak lengkap");
+      return;
+    }
+
+    setIsSubmitting(true);
     setError(null);
-    setStep((prev) => Math.min(4, prev + 1) as Step);
+
+    try {
+      if (step === 1) {
+        if (createNationalBrand && !effectiveNbid) {
+          const nbJson = await apiJsonRequest(
+            "creating National Brand",
+            getApiUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND),
+            "POST",
+            { nb_name: normalizeEntityName(nbName) },
+          );
+          const newNbid = extractIdFromResourceResponse(nbJson);
+          if (!newNbid)
+            throw new Error("Failed creating National Brand (missing id)");
+          setCreatedNbid(newNbid);
+          setSelectedNbid(newNbid);
+          setNbCreatedViaCreateFlow(true);
+          if (
+            nbJson &&
+            typeof nbJson === "object" &&
+            "data" in nbJson &&
+            nbJson.data &&
+            typeof nbJson.data === "object"
+          ) {
+            const row = nbJson.data as NationalBrandRow;
+            setCreatedNb({
+              id: newNbid,
+              name: row.name,
+              nb_name: row.nb_name,
+            });
+          }
+          setCreateNationalBrand(false);
+        }
+      } else if (step === 2) {
+        if (!effectiveGpid) {
+          const gpPayload = {
+            gp_name: normalizeEntityName(gpName),
+            ...(effectiveNbid ? { nbid: effectiveNbid } : {}),
+          };
+          const gpJson = await apiJsonRequest(
+            "creating Group Parent",
+            getApiUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT),
+            "POST",
+            gpPayload,
+          );
+          const newGpid = extractIdFromResourceResponse(gpJson);
+          if (!newGpid)
+            throw new Error("Failed creating Group Parent (missing id)");
+
+          setCreatedGpid(newGpid);
+          setSelectedGpid(newGpid);
+          setGpCreatedViaCreateFlow(true);
+
+          if (
+            gpJson &&
+            typeof gpJson === "object" &&
+            "data" in gpJson &&
+            gpJson.data &&
+            typeof gpJson.data === "object"
+          ) {
+            const row = gpJson.data as GroupParentRow;
+            setCreatedGp({
+              id: newGpid,
+              name: row.name,
+              gp_name: row.gp_name,
+              nbid: row.nbid,
+            });
+          }
+        }
+      } else if (step === 3) {
+        if (!effectiveGcid) {
+          if (!effectiveGpid) {
+            throw new Error(
+              "GP belum tersedia. Selesaikan step Group Parent terlebih dahulu.",
+            );
+          }
+          const gcPayload = buildGroupCustomerPayload(effectiveGpid);
+          if (!gcPayload) throw new Error("Payload Group Customer tidak valid");
+
+          const gcJson = await apiJsonRequest(
+            "creating Group Customer",
+            getApiUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER),
+            "POST",
+            gcPayload,
+          );
+          const newGcid = extractIdFromResourceResponse(gcJson);
+          if (!newGcid)
+            throw new Error("Failed creating Group Customer (missing id)");
+          setCreatedGcid(newGcid);
+          setSelectedGcid(newGcid);
+          if (
+            gcJson &&
+            typeof gcJson === "object" &&
+            "data" in gcJson &&
+            gcJson.data &&
+            typeof gcJson.data === "object"
+          ) {
+            const row = gcJson.data as GroupCustomerRow;
+            setCreatedGc({
+              id: newGcid,
+              name: row.name,
+              gc_name: row.gc_name,
+              gpid: row.gpid,
+            });
+          }
+        }
+      } else if (step === 4) {
+        if (!effectiveGcid) {
+          throw new Error(
+            "GC belum tersedia. Selesaikan step Group Customer terlebih dahulu.",
+          );
+        }
+        // BC will be created/resolved on final commit (Step 5).
+      }
+
+      setStep((prev) => Math.min(5, prev + 1) as Step);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal memproses step");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSubmitApproval = async () => {
@@ -742,149 +843,73 @@ export function ApproveRegistrationModal({
     setError(null);
 
     try {
-      let nbid: number | undefined = existingNbid;
-      if (!nbid && selectedNbid) {
-        nbid = selectedNbid;
+      const nbid = effectiveNbid;
+      const gpid = effectiveGpid;
+      const gcid = effectiveGcid;
+      const bcid = effectiveBcid;
+
+      if (!gpid || !gcid) {
+        throw new Error(
+          "Relasi GP/GC belum lengkap. Pastikan step sebelumnya sudah selesai.",
+        );
       }
 
-      let gpid: number;
-      if (existingGpid) {
-        gpid = existingGpid;
-      } else if (selectedGpid) {
-        gpid = selectedGpid;
-      } else {
-        if (createNationalBrand) {
-          const nbJson = await apiJsonRequest(
-            "creating National Brand",
-            getApiUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND),
-            "POST",
-            { nb_name: normalizeEntityName(nbName) },
-          );
-          const createdNbid = extractIdFromResourceResponse(nbJson);
-          if (!createdNbid)
-            throw new Error("Failed creating National Brand (missing id)");
-          nbid = createdNbid;
-        }
-
-        const gpPayload = {
-          gp_name: normalizeEntityName(gpName),
-          ...(nbid ? { nbid } : {}),
-        };
-        const gpJson = await apiJsonRequest(
-          "creating Group Parent",
-          getApiUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT),
-          "POST",
-          gpPayload,
-        );
-        const createdGpid = extractIdFromResourceResponse(gpJson);
-        if (!createdGpid)
-          throw new Error("Failed creating Group Parent (missing id)");
-        gpid = createdGpid;
-
-        if (
-          gpJson &&
-          typeof gpJson === "object" &&
-          "data" in gpJson &&
-          gpJson.data &&
-          typeof gpJson.data === "object"
-        ) {
-          const row = gpJson.data as GroupParentRow;
-          setCreatedGp({
-            id: createdGpid,
-            name: row.name,
-            gp_name: row.gp_name,
-            nbid: row.nbid,
-          });
-        }
-      }
-
-      let gcid: number;
-      if (existingGcid) {
-        gcid = existingGcid;
-      } else if (selectedGcid) {
-        const selectedGc = groupCustomers.find(
-          (row) => Number(row.id) === Number(selectedGcid),
-        );
-        if (selectedGc?.gpid && Number(selectedGc.gpid) !== Number(gpid)) {
-          throw new Error(
-            "GC yang dipilih tidak berada di Group Parent yang dipilih.",
-          );
-        }
-        gcid = selectedGcid;
-      } else {
-        const gcPayload = buildGroupCustomerPayload(gpid);
-        if (!gcPayload) throw new Error("Payload Group Customer tidak valid");
-        const gcJson = await apiJsonRequest(
-          "creating Group Customer",
-          getApiUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER),
-          "POST",
-          gcPayload,
-        );
-        const createdGcid = extractIdFromResourceResponse(gcJson);
-        if (!createdGcid)
-          throw new Error("Failed creating Group Customer (missing id)");
-        gcid = createdGcid;
-      }
-
-      let bcid: number;
-      if (existingBcid) {
-        bcid = existingBcid;
-      } else if (selectedBcid) {
-        const selectedBc = branchCustomers.find(
-          (row) => Number(row.id) === Number(selectedBcid),
-        );
-        if (selectedBc?.gcid && Number(selectedBc.gcid) !== Number(gcid)) {
-          throw new Error(
-            "BC yang dipilih tidak berada di Group Customer yang dipilih.",
-          );
-        }
-        bcid = selectedBcid;
-      } else {
-        const bcPayload = buildBranchCustomerPayload(gcid);
-        if (!bcPayload) throw new Error("Payload Branch Customer tidak valid");
-        const bcJson = await apiJsonRequest(
-          "creating Branch Customer",
-          getApiUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2),
-          "POST",
-          bcPayload,
-        );
-        const createdBcid = extractIdFromResourceResponse(bcJson);
-        if (!createdBcid)
-          throw new Error("Failed creating Branch Customer (missing id)");
-        bcid = createdBcid;
-      }
-
+      const rawEkaplusUserId = registration.ekaplus_user?.id;
+      const ekaplusUserId =
+        typeof rawEkaplusUserId === "number"
+          ? rawEkaplusUserId
+          : Number.parseInt(String(rawEkaplusUserId || ""), 10);
+      const createdById =
+        typeof registration.created_by_id === "number"
+          ? registration.created_by_id
+          : extractUserIdFromDisplay(registration.created_by);
       const userId =
-        Number(registration.ekaplus_user?.id ?? registration.user.user_id) || 0;
-      if (userId > 0) {
-        try {
-          await apiJsonRequest(
-            "creating member_of owner gpid",
-            getApiUrl(API_CONFIG.ENDPOINTS.MEMBER_OF),
-            "POST",
-            { user: userId, ref_type: "gpid", ref_id: gpid, is_owner: 1 },
-          );
-        } catch (err) {
-          const msg = err instanceof Error ? err.message.toLowerCase() : "";
-          if (
-            !msg.includes("duplicate") &&
-            !msg.includes("unique") &&
-            !msg.includes("already") &&
-            !msg.includes("terdaftar") &&
-            !msg.includes("conflict")
-          ) {
-            throw err;
-          }
-          pushLog({
-            stage: "creating member_of owner gpid",
-            status: "success",
-            message: "Duplicate member_of treated as success",
-          });
+        Number.isFinite(ekaplusUserId) && ekaplusUserId > 0
+          ? ekaplusUserId
+          : createdById;
+      if (!Number.isFinite(userId) || userId <= 0) {
+        throw new Error(
+          "User pengaju tidak tersedia (ekaplus_user/created_by).",
+        );
+      }
+
+      try {
+        await apiJsonRequest(
+          "creating member_of owner gpid",
+          getApiUrl(API_CONFIG.ENDPOINTS.MEMBER_OF),
+          "POST",
+          {
+            user: userId,
+            owner: userId,
+            ref_type: "gpid",
+            ref_id: gpid,
+            is_owner: 1,
+          },
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message.toLowerCase() : "";
+        if (
+          !msg.includes("duplicate") &&
+          !msg.includes("unique") &&
+          !msg.includes("already") &&
+          !msg.includes("terdaftar") &&
+          !msg.includes("conflict")
+        ) {
+          throw err;
         }
+        pushLog({
+          stage: "creating member_of owner gpid",
+          status: "success",
+          message: "Duplicate member_of treated as success",
+        });
       }
 
       const finalResult: ApprovalResult = { nbid, gpid, gcid, bcid };
-      const updatePayload = buildCustomerRegisterApprovePayload(finalResult);
+      const updatePayload = buildCustomerRegisterApprovePayload(
+        finalResult,
+        gpCreatedViaCreateFlow ? normalizeEntityName(gpName) : undefined,
+        nbCreatedViaCreateFlow ? normalizeEntityName(nbName) : undefined,
+      );
       await apiJsonRequest(
         "updating customer_register approved",
         getQueryUrl(
@@ -900,9 +925,28 @@ export function ApproveRegistrationModal({
       window.dispatchEvent(new Event("ekatalog:gc_update"));
       window.dispatchEvent(new Event("ekatalog:bc_update"));
 
-      setSuccessMessage(
-        `Registrasi "${registration.company.name}" berhasil diapprove.\n\n` +
-          `GP ID: ${gpid}\nGC ID: ${gcid}\nBC ID: ${bcid}${nbid ? `\nNB ID: ${nbid}` : ""}`,
+      const gpCode =
+        createdGp?.name ||
+        groupParents.find((row) => Number(row.id) === Number(gpid))?.name ||
+        `GP${gpid}`;
+      const gcCode =
+        createdGc?.name ||
+        groupCustomers.find((row) => Number(row.id) === Number(gcid))?.name ||
+        `GC${gcid}`;
+      const bcCode =
+        createdBc?.name ||
+        branchCustomers.find((row) => Number(row.id) === Number(bcid))?.name ||
+        previewBcName;
+      const nbCode =
+        (nbid
+          ? createdNb?.name ||
+            nationalBrands.find((row) => Number(row.id) === Number(nbid))?.name
+          : null) || undefined;
+
+      onSuccess(
+        `Registrasi "${registration.company.name}" berhasil diproses ke Syncing.\n\nGROUP PARENT: ${gpCode}\nGROUP CUSTOMER: ${gcCode}\nBRANCH CUSTOMER: ${bcCode}${
+          nbCode ? `\nNATIONAL BRAND: ${nbCode}` : ""
+        }`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal approve registrasi");
@@ -914,15 +958,22 @@ export function ApproveRegistrationModal({
   if (!registration) return null;
 
   const gpDisplay = createdGp || existingGp;
+  const selectedNbRow = nationalBrands.find(
+    (nb) => Number(nb.id) === Number(selectedNbid),
+  );
+  const nbDisplayRow = selectedNbRow || createdNb;
   const selectedGpRow = groupParents.find(
     (gp) => Number(gp.id) === Number(selectedGpid),
   );
+  const gpResolvedRow = selectedGpRow || gpDisplay;
   const selectedGcRow = groupCustomers.find(
     (gc) => Number(gc.id) === Number(selectedGcid),
   );
+  const gcDisplayRow = selectedGcRow || createdGc;
   const selectedBcRow = branchCustomers.find(
     (bc) => Number(bc.id) === Number(selectedBcid),
   );
+  const bcDisplayRow = selectedBcRow || createdBc;
   const previewGcName = (
     selectedGcRow?.gc_name ||
     registration.gc_name ||
@@ -933,6 +984,96 @@ export function ApproveRegistrationModal({
   const previewBcCity =
     registration.company.branch_city || registration.address.city_name || "-";
   const previewBcName = `${normalizeEntityName(previewGcName)} - ${previewBcCity}`;
+  const historyNbName =
+    nbDisplayRow?.nb_name ||
+    registration.master_links?.nb_name ||
+    (nbCreatedViaCreateFlow ? normalizeEntityName(nbName) : "") ||
+    "-";
+  const historyNbCode =
+    nbDisplayRow?.name || (effectiveNbid ? `NB${effectiveNbid}` : "-");
+  const historyGpName =
+    gpResolvedRow?.gp_name ||
+    registration.gp_name ||
+    (gpCreatedViaCreateFlow ? normalizeEntityName(gpName) : "") ||
+    "-";
+  const historyGpCode =
+    gpResolvedRow?.name || (effectiveGpid ? `GP${effectiveGpid}` : "-");
+  const historyGcName =
+    gcDisplayRow?.gc_name ||
+    registration.gc_name ||
+    (effectiveGcid ? normalizeEntityName(gcName) : "") ||
+    "-";
+  const historyGcCode =
+    gcDisplayRow?.name || (effectiveGcid ? `GC${effectiveGcid}` : "-");
+  const historyBcName =
+    bcDisplayRow?.bcid_name ||
+    registration.bc_name ||
+    previewBcName ||
+    "-";
+  const historyBcCode =
+    bcDisplayRow?.name || (effectiveBcid ? `BC${effectiveBcid}` : "AUTO");
+
+  const renderProcessHistory = ({
+    showNb,
+    showGp,
+    showGc,
+    showBc,
+  }: {
+    showNb: boolean;
+    showGp: boolean;
+    showGc: boolean;
+    showBc: boolean;
+  }) => (
+    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
+      <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">
+        Histori Proses
+      </p>
+      {showNb && (
+        <div className="rounded-lg bg-white border border-gray-200 px-3 py-2">
+          <div className="text-xs font-semibold text-gray-500">NB Name</div>
+          <div className="text-sm font-medium text-gray-900">
+            {historyNbName}
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5">
+            NBID: {historyNbCode}
+          </div>
+        </div>
+      )}
+      {showGp && (
+        <div className="rounded-lg bg-white border border-gray-200 px-3 py-2">
+          <div className="text-xs font-semibold text-gray-500">GP Name</div>
+          <div className="text-sm font-medium text-gray-900">
+            {historyGpName}
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5">
+            GPID: {historyGpCode}
+          </div>
+        </div>
+      )}
+      {showGc && (
+        <div className="rounded-lg bg-white border border-gray-200 px-3 py-2">
+          <div className="text-xs font-semibold text-gray-500">GC Name</div>
+          <div className="text-sm font-medium text-gray-900">
+            {historyGcName}
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5">
+            GCID: {historyGcCode}
+          </div>
+        </div>
+      )}
+      {showBc && (
+        <div className="rounded-lg bg-white border border-gray-200 px-3 py-2">
+          <div className="text-xs font-semibold text-gray-500">BC Name</div>
+          <div className="text-sm font-medium text-gray-900">
+            {historyBcName}
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5">
+            BCID: {historyBcCode}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   const getBranchNameFromBc = (row?: BranchCustomerRow | null): string => {
     if (!row) return "-";
@@ -968,6 +1109,14 @@ export function ApproveRegistrationModal({
           className="text-xs text-red-500 hover:underline ml-2"
           onClick={() => {
             setSelectedGpid(null);
+            setCreatedGpid(null);
+            setGpCreatedViaCreateFlow(false);
+            setSelectedGcid(null);
+            setCreatedGcid(null);
+            setSelectedBcid(null);
+            setCreatedBcid(null);
+            setGcMode("idle");
+            setBcMode("idle");
             setGpMode("search");
             setGpSearch("");
           }}
@@ -993,6 +1142,10 @@ export function ApproveRegistrationModal({
           className="text-xs text-red-500 hover:underline ml-2"
           onClick={() => {
             setSelectedGcid(null);
+            setCreatedGcid(null);
+            setSelectedBcid(null);
+            setCreatedBcid(null);
+            setBcMode("idle");
             setGcMode("idle");
             setGcSearch("");
           }}
@@ -1016,6 +1169,7 @@ export function ApproveRegistrationModal({
             className="text-xs text-red-500 hover:underline ml-2"
             onClick={() => {
               setSelectedBcid(null);
+              setCreatedBcid(null);
               setBcMode("idle");
               setBcSearch("");
             }}
@@ -1024,23 +1178,42 @@ export function ApproveRegistrationModal({
           </button>
         </div>
         <div className="text-xs text-blue-700">
-          PIC Branch: {selectedBcRow?.branch_owner || "-"} ({selectedBcRow?.branch_owner_phone || "-"})
+          PIC Branch: {selectedBcRow?.branch_owner || "-"} (
+          {selectedBcRow?.branch_owner_phone || "-"})
         </div>
       </div>
     );
   };
 
+  const handleModalKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Enter" || e.shiftKey) return;
+    if (isSubmitting || isPreparing) return;
+
+    const target = e.target as HTMLElement | null;
+    const tag = target?.tagName?.toLowerCase() || "";
+    if (tag === "textarea" || tag === "button") return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    if (step < 5) {
+      void handleNextStep();
+      return;
+    }
+    void handleSubmitApproval();
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
-        <>
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden max-h-[90vh] flex flex-col"
-            >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            onKeyDown={handleModalKeyDown}
+            tabIndex={-1}
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden max-h-[90vh] flex flex-col"
+          >
             <div className="bg-gradient-to-r from-green-500 to-green-600 px-6 py-5 flex items-center gap-3">
               <FaCheckCircle className="w-7 h-7 text-white" />
               <div className="flex-1">
@@ -1052,6 +1225,7 @@ export function ApproveRegistrationModal({
                   {step === 2 && "Group Parent"}
                   {step === 3 && "Group Customer"}
                   {step === 4 && "Branch Customer"}
+                  {step === 5 && "Finalize Approve"}
                 </p>
               </div>
             </div>
@@ -1096,37 +1270,60 @@ export function ApproveRegistrationModal({
                       <div className="flex items-center gap-2">
                         <FaBuilding className="text-gray-700" />
                         <div className="flex flex-col items-start">
-                          <div className="text-xs font-semibold text-gray-500">Business Type</div>
-                          <div className="font-medium text-black">{registration.company.business_type}</div>
+                          <div className="text-xs font-semibold text-gray-500">
+                            Business Type
+                          </div>
+                          <div className="font-medium text-black">
+                            {registration.company.business_type}
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <FaMapMarkerAlt className="text-gray-700" />
                         <div className="flex flex-col items-start">
-                          <div className="text-xs font-semibold text-gray-500">Location</div>
-                          <div className="font-medium text-black">{registration.company.branch_name}</div>
+                          <div className="text-xs font-semibold text-gray-500">
+                            Location
+                          </div>
+                          <div className="font-medium text-black">
+                            {registration.company.branch_name}
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <FaUser className="text-gray-700" />
                         <div className="flex flex-col items-start">
-                          <div className="text-xs font-semibold text-gray-500">Contact Person</div>
+                          <div className="text-xs font-semibold text-gray-500">
+                            Contact Person
+                          </div>
                           <div className="flex flex-col font-medium text-black">
                             {registration.user.full_name}
-                            <span className="text-blue-600">{registration.user.phone}</span>
+                            <span className="text-blue-600">
+                              {registration.user.phone}
+                            </span>
                           </div>
                         </div>
                       </div>
                     </div>
+                    {renderProcessHistory({
+                      showNb: true,
+                      showGp: false,
+                      showGc: false,
+                      showBc: false,
+                    })}
                   </aside>
                   <div className="md:col-span-8 rounded-xl border border-gray-200 bg-white p-4 space-y-4">
-                    <h3 className="text-base font-bold text-gray-900">National Brand (Optional)</h3>
+                    <h3 className="text-base font-bold text-gray-900">
+                      National Brand (Optional)
+                    </h3>
                     <p className="text-sm text-gray-600">
-                      Step ini opsional. Anda bisa lanjut tanpa membuat National Brand.
+                      Step ini opsional. Anda bisa lanjut tanpa membuat National
+                      Brand.
                     </p>
                     {existingNbid ? (
                       <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 text-sm text-green-900">
-                        <p className="font-semibold">National Brand sudah terpasang di registrasi.</p>
+                        <p className="font-semibold">
+                          National Brand sudah terpasang di registrasi.
+                        </p>
                         <p className="mt-1">NB ID: {existingNbid}</p>
                       </div>
                     ) : (
@@ -1143,7 +1340,9 @@ export function ApproveRegistrationModal({
                           </div>
                           <div className="rounded-xl border border-gray-200 overflow-hidden">
                             <div className="px-3 py-2 text-xs font-bold text-gray-500 bg-gray-50 border-b">
-                              {nbSearch.trim() ? "HASIL PENCARIAN NATIONAL BRAND" : "DAFTAR NATIONAL BRAND"}
+                              {nbSearch.trim()
+                                ? "HASIL PENCARIAN NATIONAL BRAND"
+                                : "DAFTAR NATIONAL BRAND"}
                             </div>
                             {filteredNationalBrands.length > 0 ? (
                               <div className="max-h-56 overflow-y-auto divide-y divide-gray-100">
@@ -1161,15 +1360,22 @@ export function ApproveRegistrationModal({
                                     <input
                                       type="radio"
                                       name="select-nb"
-                                      checked={Number(selectedNbid) === Number(nb.id)}
+                                      checked={
+                                        Number(selectedNbid) === Number(nb.id)
+                                      }
                                       onClick={(e) => {
-                                        if (Number(selectedNbid) === Number(nb.id)) {
+                                        if (
+                                          Number(selectedNbid) === Number(nb.id)
+                                        ) {
                                           e.preventDefault();
                                           setSelectedNbid(null);
                                         }
                                       }}
                                       onChange={() => {
                                         setSelectedNbid(nb.id);
+                                        setCreatedNbid(null);
+                                        setCreatedNb(null);
+                                        setNbCreatedViaCreateFlow(false);
                                         setCreateNationalBrand(false);
                                       }}
                                     />
@@ -1190,20 +1396,32 @@ export function ApproveRegistrationModal({
                               checked={createNationalBrand}
                               onChange={(e) => {
                                 setCreateNationalBrand(e.target.checked);
-                              if (e.target.checked) {
-                                setSelectedNbid(null);
-                                if (!nbName.trim() && nbSearch.trim()) {
-                                  setNbName(normalizeEntityName(nbSearch));
+                                if (e.target.checked) {
+                                  setSelectedNbid(null);
+                                  setCreatedNbid(null);
+                                  setCreatedNb(null);
+                                  setNbCreatedViaCreateFlow(false);
+                                  if (!nbName.trim() && nbSearch.trim()) {
+                                    setNbName(normalizeEntityName(nbSearch));
+                                  }
+                                } else {
+                                  setNbCreatedViaCreateFlow(false);
                                 }
-                              }
-                            }}
+                              }}
                             />
-                            <span className="text-sm">Buat National Brand baru</span>
+                            <span className="text-sm">
+                              Buat National Brand baru
+                            </span>
                           </label>
                           {!createNationalBrand && selectedNbid && (
                             <button
                               type="button"
-                              onClick={() => setSelectedNbid(null)}
+                              onClick={() => {
+                                setSelectedNbid(null);
+                                setCreatedNbid(null);
+                                setCreatedNb(null);
+                                setNbCreatedViaCreateFlow(false);
+                              }}
                               className="text-xs font-medium text-gray-600 hover:text-red-600 hover:underline"
                             >
                               Hapus pilihan NB
@@ -1213,22 +1431,27 @@ export function ApproveRegistrationModal({
                         {createNationalBrand && (
                           <div>
                             <label className="block text-sm font-semibold text-gray-700 mb-2">
-                              National Brand Name <span className="text-red-500">*</span>
+                              National Brand Name{" "}
+                              <span className="text-red-500">*</span>
                             </label>
                             <input
                               value={nbName}
-                              onChange={(e) => setNbName(e.target.value)}
+                              onChange={(e) =>
+                                setNbName(toUpperInput(e.target.value))
+                              }
                               onBlur={() =>
                                 setNbName((prev) => normalizeEntityName(prev))
                               }
                               className="w-full px-4 py-2.5 border border-gray-300 rounded-xl"
-                              placeholder="Contoh: Yuda Prayoga"
+                              placeholder="Contoh: EKATUNGGAL"
                             />
                           </div>
                         )}
                         {!createNationalBrand && (
                           <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
-                            Anda bisa pilih NB existing dari list, atau klik <span className="font-semibold">Next</span> untuk lanjut tanpa NB.
+                            Anda bisa pilih NB existing dari list, atau klik{" "}
+                            <span className="font-semibold">Next</span> untuk
+                            lanjut tanpa NB.
                           </div>
                         )}
                       </>
@@ -1312,7 +1535,6 @@ export function ApproveRegistrationModal({
                     ) : (
                       <>
                         {/* Idle: single search button */}
-                        
 
                         {/* SEARCH mode — create option appears inline when no results */}
                         {gpMode !== "create" && (
@@ -1342,7 +1564,9 @@ export function ApproveRegistrationModal({
 
                             <div className="rounded-xl border border-gray-200 overflow-hidden">
                               <div className="px-3 py-2 text-xs font-bold text-gray-500 bg-gray-50 border-b">
-                                {gpSearch.trim() ? "HASIL PENCARIAN" : "DAFTAR GROUP PARENT"}
+                                {gpSearch.trim()
+                                  ? "HASIL PENCARIAN"
+                                  : "DAFTAR GROUP PARENT"}
                               </div>
                               {filteredGroupParents.length > 0 ? (
                                 <div className="max-h-56 overflow-y-auto divide-y divide-gray-100">
@@ -1353,6 +1577,16 @@ export function ApproveRegistrationModal({
                                       className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 text-left transition-colors"
                                       onClick={() => {
                                         setSelectedGpid(gp.id);
+                                        setCreatedGpid(null);
+                                        setGpCreatedViaCreateFlow(false);
+                                        setSelectedGcid(null);
+                                        setCreatedGcid(null);
+                                        setCreatedGc(null);
+                                        setSelectedBcid(null);
+                                        setCreatedBcid(null);
+                                        setCreatedBc(null);
+                                        setGcMode("idle");
+                                        setBcMode("idle");
                                         setGpMode("search");
                                         setGpSearch("");
                                       }}
@@ -1369,7 +1603,7 @@ export function ApproveRegistrationModal({
                                     </button>
                                   ))}
                                 </div>
-                              ) : (
+                              ) : gpSearch.trim() ? (
                                 <div className="px-3 py-3 space-y-2.5">
                                   <p className="text-xs text-gray-500">
                                     GP tidak ditemukan untuk &quot;
@@ -1378,18 +1612,33 @@ export function ApproveRegistrationModal({
                                     </span>
                                     &quot;
                                   </p>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setGpName(normalizeEntityName(gpSearch));
-                                  setGpMode("create");
-                                }}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setGpName(normalizeEntityName(gpSearch));
+                                      setSelectedGpid(null);
+                                      setCreatedGpid(null);
+                                      setGpCreatedViaCreateFlow(false);
+                                      setSelectedGcid(null);
+                                      setCreatedGcid(null);
+                                      setCreatedGc(null);
+                                      setSelectedBcid(null);
+                                      setCreatedBcid(null);
+                                      setCreatedBc(null);
+                                      setGcMode("idle");
+                                      setBcMode("idle");
+                                      setGpMode("create");
+                                    }}
                                     className="w-full py-2 rounded-xl border-2 border-green-300 text-green-700 text-sm font-medium hover:border-green-500 hover:bg-green-50 transition-all flex items-center justify-center gap-2"
                                   >
                                     <FaPlusCircle className="w-4 h-4" />
                                     Buat GP Baru
                                   </button>
                                 </div>
+                              ) : (
+                                <p className="px-3 py-3 text-xs text-gray-400">
+                                  Menampilkan 20 data GP terbaru.
+                                </p>
                               )}
                             </div>
                           </div>
@@ -1417,12 +1666,14 @@ export function ApproveRegistrationModal({
                               </label>
                               <input
                                 value={gpName}
-                                onChange={(e) => setGpName(e.target.value)}
+                                onChange={(e) =>
+                                  setGpName(toUpperInput(e.target.value))
+                                }
                                 onBlur={() =>
                                   setGpName((prev) => normalizeEntityName(prev))
                                 }
                                 className="w-full px-4 py-2.5 border border-gray-300 rounded-xl bg-white"
-                                placeholder="Contoh: Yuda Prayoga GP"
+                                placeholder="Contoh: EKATUNGGAL GP"
                               />
                             </div>
                           </div>
@@ -1436,39 +1687,13 @@ export function ApproveRegistrationModal({
               {/* ===================== STEP 3: GROUP CUSTOMER ===================== */}
               {!isPreparing && step === 3 && (
                 <section className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                  <aside className="md:col-span-4 rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
-                    <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">
-                      Group Parent
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <FaBuilding className="text-gray-400" />
-                      <div className="flex flex-col items-start">
-                        <div className="text-xs font-semibold text-gray-500">
-                          GP Name
-                        </div>
-                        <div className="font-medium text-black">
-                          {selectedGpRow?.gp_name ||
-                            gpDisplay?.gp_name ||
-                            registration.gp_name ||
-                            gpName ||
-                            "-"}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <FaUser className="text-gray-400" />
-                      <div className="flex flex-col items-start">
-                        <div className="text-xs font-semibold text-gray-500">
-                          GPID
-                        </div>
-                        <div className="font-medium text-black">
-                          {selectedGpRow?.name ||
-                            gpDisplay?.name ||
-                            registration.gp_name ||
-                            "-"}
-                        </div>
-                      </div>
-                    </div>
+                  <aside className="md:col-span-4 space-y-3">
+                    {renderProcessHistory({
+                      showNb: true,
+                      showGp: true,
+                      showGc: false,
+                      showBc: false,
+                    })}
                   </aside>
 
                   <div className="md:col-span-8 rounded-xl border border-gray-200 bg-white p-4 space-y-4">
@@ -1509,7 +1734,8 @@ export function ApproveRegistrationModal({
                       <>
                         {!canSearchExistingGc && (
                           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                            Karena Group Parent akan dibuat baru, Group Customer harus dibuat baru (tidak bisa pilih existing).
+                            Karena Group Parent akan dibuat baru, Group Customer
+                            harus dibuat baru (tidak bisa pilih existing).
                           </div>
                         )}
 
@@ -1564,7 +1790,9 @@ export function ApproveRegistrationModal({
 
                             <div className="rounded-xl border border-gray-200 overflow-hidden">
                               <div className="px-3 py-2 text-xs font-bold text-gray-500 bg-gray-50 border-b">
-                                {gcSearch.trim() ? "HASIL PENCARIAN" : "DAFTAR GROUP CUSTOMER"}
+                                {gcSearch.trim()
+                                  ? "HASIL PENCARIAN"
+                                  : "DAFTAR GROUP CUSTOMER"}
                               </div>
                               {filteredGroupCustomers.length > 0 ? (
                                 <div className="max-h-56 overflow-y-auto divide-y divide-gray-100">
@@ -1575,6 +1803,11 @@ export function ApproveRegistrationModal({
                                       className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 text-left transition-colors"
                                       onClick={() => {
                                         setSelectedGcid(gc.id);
+                                        setCreatedGcid(null);
+                                        setSelectedBcid(null);
+                                        setCreatedBcid(null);
+                                        setCreatedBc(null);
+                                        setBcMode("idle");
                                         setGcMode("idle");
                                         setGcSearch("");
                                       }}
@@ -1603,7 +1836,16 @@ export function ApproveRegistrationModal({
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      setGcName(normalizeEntityName(gcSearch));
+                                      setGcName(
+                                        normalizeEntityName(
+                                          registration.company.name || "",
+                                        ),
+                                      );
+                                      setSelectedGcid(null);
+                                      setCreatedGcid(null);
+                                      setSelectedBcid(null);
+                                      setCreatedBcid(null);
+                                      setBcMode("idle");
                                       setGcMode("create");
                                     }}
                                     className="w-full py-2 rounded-xl border-2 border-green-300 text-green-700 text-sm font-medium hover:border-green-500 hover:bg-green-50 transition-all flex items-center justify-center gap-2"
@@ -1638,15 +1880,16 @@ export function ApproveRegistrationModal({
                             </div>
                             <div>
                               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                GC Name <span className="text-red-500">*</span>
+                                GC Name (otomatis dari company){" "}
+                                <span className="text-red-500">*</span>
                               </label>
                               <input
                                 value={gcName}
-                                onChange={(e) => setGcName(e.target.value)}
+                                readOnly
                                 onBlur={() =>
                                   setGcName((prev) => normalizeEntityName(prev))
                                 }
-                                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl bg-white"
+                                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl bg-gray-100 text-gray-800"
                               />
                             </div>
                             <div className="bg-white rounded-xl border border-gray-200 p-3 text-sm space-y-1">
@@ -1678,35 +1921,13 @@ export function ApproveRegistrationModal({
               {/* ===================== STEP 4: BRANCH CUSTOMER ===================== */}
               {!isPreparing && step === 4 && (
                 <section className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                  <aside className="md:col-span-4 rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
-                    <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">
-                      Group Customer
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <FaBuilding className="text-gray-400" />
-                      <div className="flex flex-col items-start">
-                        <div className="text-xs font-semibold text-gray-500">
-                          GC Name
-                        </div>
-                        <div className="font-medium text-black">
-                          {selectedGcRow?.gc_name ||
-                            registration.gc_name ||
-                            gcName ||
-                            "-"}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <FaUser className="text-gray-400" />
-                      <div className="flex flex-col items-start">
-                        <div className="text-xs font-semibold text-gray-500">
-                          GCID
-                        </div>
-                        <div className="font-medium text-black">
-                          {selectedGcRow?.name || registration.gc_name || "-"}
-                        </div>
-                      </div>
-                    </div>
+                  <aside className="md:col-span-4 space-y-3">
+                    {renderProcessHistory({
+                      showNb: true,
+                      showGp: true,
+                      showGc: true,
+                      showBc: false,
+                    })}
                   </aside>
 
                   <div className="md:col-span-8 rounded-xl border border-gray-200 bg-white p-4 space-y-4">
@@ -1727,7 +1948,9 @@ export function ApproveRegistrationModal({
                       <>
                         {!canSearchExistingBc && (
                           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                            Karena Group Customer akan dibuat baru, Branch Customer harus dibuat baru (tidak bisa pilih existing).
+                            Karena Group Customer akan dibuat baru, Branch
+                            Customer harus dibuat baru (tidak bisa pilih
+                            existing).
                           </div>
                         )}
                         {/* Idle: single search button */}
@@ -1781,7 +2004,9 @@ export function ApproveRegistrationModal({
 
                             <div className="rounded-xl border border-gray-200 overflow-hidden">
                               <div className="px-3 py-2 text-xs font-bold text-gray-500 bg-gray-50 border-b">
-                                {bcSearch.trim() ? "HASIL PENCARIAN" : "DAFTAR BRANCH CUSTOMER"}
+                                {bcSearch.trim()
+                                  ? "HASIL PENCARIAN"
+                                  : "DAFTAR BRANCH CUSTOMER"}
                               </div>
                               {filteredBranchCustomers.length > 0 ? (
                                 <div className="max-h-56 overflow-y-auto divide-y divide-gray-100">
@@ -1792,6 +2017,7 @@ export function ApproveRegistrationModal({
                                       className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 text-left transition-colors"
                                       onClick={() => {
                                         setSelectedBcid(bc.id);
+                                        setCreatedBcid(null);
                                         setBcMode("idle");
                                         setBcSearch("");
                                       }}
@@ -1801,7 +2027,8 @@ export function ApproveRegistrationModal({
                                           {getBcPreviewLabel(bc)}
                                         </span>
                                         <span className="text-xs text-gray-500">
-                                          PIC: {bc.branch_owner || "-"} ({bc.branch_owner_phone || "-"})
+                                          PIC: {bc.branch_owner || "-"} (
+                                          {bc.branch_owner_phone || "-"})
                                         </span>
                                       </span>
                                       <span className="text-xs text-blue-600 font-medium">
@@ -1899,6 +2126,55 @@ export function ApproveRegistrationModal({
                 </section>
               )}
 
+              {!isPreparing && step === 5 && (
+                <section className="space-y-4">
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                    <p className="text-sm font-semibold text-green-800">
+                      Semua resource sudah diproses.
+                    </p>
+                    <p className="text-xs text-green-700 mt-1">
+                      Klik <span className="font-semibold">Commit Approve</span>{" "}
+                      untuk membuat member_of dan update status customer
+                      register menjadi Syncing.
+                    </p>
+                  </div>
+                  {renderProcessHistory({
+                    showNb: true,
+                    showGp: true,
+                    showGc: true,
+                    showBc: true,
+                  })}
+                  <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 text-sm space-y-1">
+                    {nbCreatedViaCreateFlow && (
+                      <p>
+                        <span className="font-semibold">NB Manual:</span>{" "}
+                        {normalizeEntityName(nbName)}
+                      </p>
+                    )}
+                    {gpCreatedViaCreateFlow && (
+                      <p>
+                        <span className="font-semibold">GP Manual:</span>{" "}
+                        {normalizeEntityName(gpName)}
+                      </p>
+                    )}
+                    {createdGcid && (
+                      <p>
+                        <span className="font-semibold">GC Manual:</span>{" "}
+                        {normalizeEntityName(gcName)}
+                      </p>
+                    )}
+                    {(createdNbid || createdGpid || createdBcid) && (
+                      <p className="text-xs text-gray-500 pt-1">
+                        Ref IDs:
+                        {createdNbid ? ` NB:${createdNbid}` : ""}
+                        {createdGpid ? ` GP:${createdGpid}` : ""}
+                        {createdBcid ? ` BC:${createdBcid}` : ""}
+                      </p>
+                    )}
+                  </div>
+                </section>
+              )}
+
               {error && (
                 <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2">
                   <FaExclamationTriangle className="w-4 h-4 text-red-600 flex-shrink-0" />
@@ -1957,11 +2233,11 @@ export function ApproveRegistrationModal({
                 </button>
               )}
 
-              {step < 4 ? (
+              {step < 5 ? (
                 <motion.button
                   whileHover={!isSubmitting ? { scale: 1.02 } : {}}
                   whileTap={!isSubmitting ? { scale: 0.98 } : {}}
-                  onClick={handleNextStep}
+                  onClick={() => void handleNextStep()}
                   disabled={isSubmitting || isPreparing}
                   className="px-6 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white font-medium rounded-xl hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -1989,19 +2265,8 @@ export function ApproveRegistrationModal({
                 </motion.button>
               )}
             </div>
-            </motion.div>
-          </div>
-          <ActionResultModal
-            isOpen={Boolean(successMessage)}
-            type="success"
-            title="Approve Berhasil"
-            message={successMessage || ""}
-            onClose={() => {
-              setSuccessMessage(null);
-              onSuccess();
-            }}
-          />
-        </>
+          </motion.div>
+        </div>
       )}
     </AnimatePresence>
   );

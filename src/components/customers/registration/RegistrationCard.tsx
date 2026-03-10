@@ -3,33 +3,32 @@
 import React from "react";
 import { motion } from "framer-motion";
 import type { CustomerRegistration } from "@/types/customerRegistration";
-import { FaBuilding, FaUser, FaMapMarkerAlt, FaEye } from "react-icons/fa";
+import { FaBuilding, FaUser, FaMapMarkerAlt, FaEye, FaSyncAlt } from "react-icons/fa";
 
 interface RegistrationCardProps {
   registration: CustomerRegistration;
   onViewDetails: () => void;
+  onSync?: () => void;
+  isSyncing?: boolean;
+  syncLabel?: string;
+  syncReadOnly?: boolean;
 }
 
 export function RegistrationCard({
   registration,
   onViewDetails,
+  onSync,
+  isSyncing = false,
+  syncLabel = "Sync",
+  syncReadOnly = false,
 }: RegistrationCardProps) {
-  const getStatusBadgeClass = (status: string) => {
-    switch (status.toLowerCase()) {
-      // case "pending":
-      case "draft":
-        return "bg-yellow-100 text-yellow-700 border-yellow-200";
-      case "approved":
-        return "bg-green-100 text-green-700 border-green-200";
-      case "rejected":
-        return "bg-red-100 text-red-700 border-red-200";
-      default:
-        return "bg-gray-100 text-gray-700 border-gray-200";
-    }
+  const getStatusBadgeClass = (docstatus?: number) => {
+    if (docstatus === 1) return "bg-green-100 text-green-700 border-green-200";
+    if (docstatus === 2) return "bg-red-100 text-red-700 border-red-200";
+    return "bg-yellow-100 text-yellow-700 border-yellow-200";
   };
 
   const getStatusLabel = (status: string) => {
-    if (status.toLowerCase() === "draft") return "Draft";
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
@@ -45,6 +44,10 @@ export function RegistrationCard({
       return dateString;
     }
   };
+  const sagaStatus = (registration.sync_info?.saga_status || "").toLowerCase();
+  const hasSagaStatus = Boolean(sagaStatus);
+  const canShowSyncButton =
+    Boolean(onSync) && hasSagaStatus && sagaStatus !== "completed";
 
   return (
     <motion.div
@@ -68,12 +71,39 @@ export function RegistrationCard({
               {registration.company.name}
             </h3>
           </div>
-          <div
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 ${getStatusBadgeClass(
-              registration.status,
-            )} flex-shrink-0`}
-          >
-            {getStatusLabel(registration.status)}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {!canShowSyncButton && (
+              <div
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 ${getStatusBadgeClass(
+                  registration.docstatus,
+                )}`}
+              >
+                {getStatusLabel(registration.status)}
+              </div>
+            )}
+            {canShowSyncButton && onSync && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!syncReadOnly && !isSyncing) onSync();
+                }}
+                disabled={syncReadOnly || isSyncing}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                  syncReadOnly
+                    ? "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed"
+                    : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                }`}
+                title={
+                  syncReadOnly
+                    ? "Sinkronisasi sudah berhasil"
+                    : `${syncLabel} ke ERP/CRM/Ekaplus`
+                }
+              >
+                <FaSyncAlt className={isSyncing ? "animate-spin" : ""} />
+                <span>{isSyncing ? "Syncing..." : syncLabel}</span>
+              </button>
+            )}
           </div>
         </div>
         <div className="flex items-center justify-between gap-2">
@@ -107,6 +137,12 @@ export function RegistrationCard({
 
         {/* Submission Date */}
         <div className="pt-2 border-t border-gray-100">
+          <p className="text-xs text-gray-500 mb-1">
+            No Reg:{" "}
+            <span className="font-medium text-gray-700">
+              {registration.registration_number || registration.id}
+            </span>
+          </p>
           <p className="text-xs text-gray-500">
             Submitted:{" "}
             <span className="font-medium text-gray-700">
@@ -132,3 +168,6 @@ export function RegistrationCard({
     </motion.div>
   );
 }
+
+
+

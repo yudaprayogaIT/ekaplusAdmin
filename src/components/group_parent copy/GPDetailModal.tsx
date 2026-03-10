@@ -16,10 +16,11 @@ import {
   FaChevronRight,
   FaUsers,
   FaStore,
+  FaTags,
 } from "react-icons/fa";
 import { HiXMark } from "react-icons/hi2";
 import type {
-  GroupParty,
+  GroupParent,
   GroupCustomer,
   BranchCustomer,
 } from "@/types/customer";
@@ -34,8 +35,8 @@ import { useAuth } from "@/contexts/AuthContext";
 interface GPDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
-  gp: GroupParty | null;
-  onGPUpdate?: (updatedGP: GroupParty) => void;
+  gp: GroupParent | null;
+  onGPUpdate?: (updatedGP: GroupParent) => void;
   onViewGC?: (gc: GroupCustomer) => void;
   onViewBC?: (bc: BranchCustomer) => void;
 }
@@ -80,6 +81,17 @@ interface BranchLookupRow {
   city?: string | null;
 }
 
+interface GroupParentMetaRow {
+  id: number;
+  nbid?: number | { id?: number | string; name?: string; nb_name?: string } | null;
+}
+
+interface NationalBrandRow {
+  id: number;
+  name?: string | null;
+  nb_name?: string | null;
+}
+
 function toNumber(value: unknown): number | undefined {
   if (typeof value === "number") return value;
   if (typeof value === "string") {
@@ -116,6 +128,11 @@ export function GPDetailModal({
   const [loadingChildren, setLoadingChildren] = useState(false);
   const [childGCs, setChildGCs] = useState<GroupCustomer[]>([]);
   const [childBCs, setChildBCs] = useState<BranchCustomer[]>([]);
+  const [linkedNB, setLinkedNB] = useState<{
+    id: number;
+    code: string;
+    name: string;
+  } | null>(null);
 
   useEffect(() => {
     if (isOpen && gp) {
@@ -138,6 +155,52 @@ export function GPDetailModal({
 
     setLoadingChildren(true);
     try {
+      const gpMetaRes = await apiFetch(
+        getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, {
+          fields: ["id", "nbid"],
+          filters: [["id", "=", gp.id]],
+          limit: 1,
+        }),
+        { method: "GET", cache: "no-store" },
+        token,
+      );
+      const gpMetaJson = gpMetaRes.ok ? await gpMetaRes.json() : { data: [] };
+      const gpMeta: GroupParentMetaRow | undefined = Array.isArray(gpMetaJson?.data)
+        ? gpMetaJson.data[0]
+        : undefined;
+      const nbId =
+        gpMeta && typeof gpMeta.nbid === "number"
+          ? gpMeta.nbid
+          : gpMeta?.nbid && typeof gpMeta.nbid === "object"
+            ? toNumber(gpMeta.nbid.id)
+            : undefined;
+      if (!nbId) {
+        setLinkedNB(null);
+      } else {
+        const nbRes = await apiFetch(
+          getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, {
+            fields: ["id", "name", "nb_name"],
+            filters: [["id", "=", nbId]],
+            limit: 1,
+          }),
+          { method: "GET", cache: "no-store" },
+          token,
+        );
+        const nbJson = nbRes.ok ? await nbRes.json() : { data: [] };
+        const nbRow: NationalBrandRow | undefined = Array.isArray(nbJson?.data)
+          ? nbJson.data[0]
+          : undefined;
+        if (!nbRow) {
+          setLinkedNB(null);
+        } else {
+          setLinkedNB({
+            id: Number(nbRow.id),
+            code: nbRow.name || `NB${nbRow.id}`,
+            name: nbRow.nb_name || nbRow.name || "-",
+          });
+        }
+      }
+
       const gcSpec = {
         fields: ["*", "created_by.full_name", "updated_by.full_name"],
         filters: [["gpid", "=", gp.id]],
@@ -341,7 +404,7 @@ export function GPDetailModal({
         throw new Error(`Failed to update Group Parent (${res.status})`);
       }
 
-      const updatedGP: GroupParty = {
+      const updatedGP: GroupParent = {
         ...gp,
         name: editedName.trim(),
         updated_at: new Date().toISOString(),
@@ -461,6 +524,23 @@ export function GPDetailModal({
                   </div>
                 )}
               </section>
+
+              {linkedNB && (
+                <section>
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+                    <FaTags className="w-4 h-4" />
+                    National Brand
+                  </h3>
+                  <div className="bg-gradient-to-br from-indigo-50 to-white rounded-xl p-4 border-2 border-indigo-100">
+                    <p className="text-lg font-bold text-gray-900">
+                      {linkedNB.name}
+                    </p>
+                    <p className="text-sm text-indigo-600 mt-1">
+                      NBID: {linkedNB.code}
+                    </p>
+                  </div>
+                </section>
+              )}
 
               {(gp.owner_name || gp.owner_phone || gp.owner_email) && (
                 <section>

@@ -7,11 +7,18 @@ import { HiXMark } from "react-icons/hi2";
 
 type ActionResultType = "success" | "error";
 
+interface ActionResultDetail {
+  label: string;
+  value: string;
+}
+
 interface ActionResultModalProps {
   isOpen: boolean;
   type?: ActionResultType;
   title: string;
   message: string;
+  description?: string;
+  details?: ActionResultDetail[];
   confirmLabel?: string;
   onClose: () => void;
 }
@@ -21,6 +28,8 @@ export default function ActionResultModal({
   type = "success",
   title,
   message,
+  description,
+  details,
   confirmLabel = "OK",
   onClose,
 }: ActionResultModalProps) {
@@ -76,8 +85,46 @@ export default function ActionResultModal({
               </button>
             </div>
 
-            <div className="px-5 py-4">
-              <p className="text-sm text-gray-700 whitespace-pre-line">{message}</p>
+            <div className="px-5 py-6">
+              <div className="w-14 h-14 rounded-full bg-gray-100 mx-auto mb-4 flex items-center justify-center">
+                {isSuccess ? (
+                  <FaCheckCircle className="w-7 h-7 text-green-600" />
+                ) : (
+                  <FaExclamationTriangle className="w-7 h-7 text-red-600" />
+                )}
+              </div>
+
+              <p className="text-xl font-bold text-gray-900 text-center whitespace-pre-line">
+                {message}
+              </p>
+
+              {description && (
+                <p className="text-sm text-gray-500 text-center mt-2">
+                  {description}
+                </p>
+              )}
+
+              {details && details.length > 0 && (
+                <div className="mt-5 rounded-xl border border-gray-200 overflow-hidden">
+                  {details.map((detail, idx) => (
+                    <div
+                      key={`${detail.label}-${idx}`}
+                      className={`px-4 py-3 flex items-start justify-between gap-3 ${
+                        idx !== details.length - 1
+                          ? "border-b border-gray-200"
+                          : ""
+                      }`}
+                    >
+                      <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide">
+                        {detail.label}
+                      </p>
+                      <p className="text-sm text-gray-900 font-semibold text-right whitespace-pre-line">
+                        {detail.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="px-5 pb-5 flex justify-end">
