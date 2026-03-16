@@ -72,30 +72,31 @@ const MAIN_MENU: MenuItem[] = [
     category: "Main",
     requireAuth: true,
   },
-  {
-    label: "Inbox",
-    href: "/inbox",
-    icon: <MdMessage className="w-5 h-5" />,
-    category: "Main",
-    requireAuth: true,
-  },
-  {
-    label: "Order Lists",
-    href: "/orders",
-    icon: <FaClipboardList className="w-5 h-5" />,
-    category: "Main",
-    requireAuth: true,
-  },
+
+  // {
+  //   label: "Inbox",
+  //   href: "/inbox",
+  //   icon: <MdMessage className="w-5 h-5" />,
+  //   category: "Main",
+  //   requireAuth: true,
+  // },
+  // {
+  //   label: "Order Lists",
+  //   href: "/orders",
+  //   icon: <FaClipboardList className="w-5 h-5" />,
+  //   category: "Main",
+  //   requireAuth: true,
+  // },
 ];
 
 const SECONDARY_MENU: MenuItem[] = [
-  {
-    label: "File Management",
-    href: "/files",
-    icon: <FaFolder className="w-5 h-5" />,
-    category: "Tools",
-    requireAuth: true,
-  },
+  //   {
+  //     label: "File Management",
+  //     href: "/files",
+  //     icon: <FaFolder className="w-5 h-5" />,
+  //     category: "Tools",
+  //     requireAuth: true,
+  //   },
   {
     label: "Whatsapp",
     href: "/whatsapp",
@@ -103,13 +104,13 @@ const SECONDARY_MENU: MenuItem[] = [
     category: "Tools",
     requireAuth: true,
   },
-  {
-    label: "To-Do",
-    href: "/todo",
-    icon: <FaClipboardList className="w-5 h-5" />,
-    category: "Tools",
-    requireAuth: true,
-  },
+  //   {
+  //     label: "To-Do",
+  //     href: "/todo",
+  //     icon: <FaClipboardList className="w-5 h-5" />,
+  //     category: "Tools",
+  //     requireAuth: true,
+  //   },
 ];
 
 // DISABLED: Permission checks disabled (migrasi ke SQL) - all menu items visible to authenticated users

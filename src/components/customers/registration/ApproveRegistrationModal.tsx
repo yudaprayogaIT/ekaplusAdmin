@@ -102,14 +102,6 @@ function toUpperInput(value?: string): string {
   return (value || "").toUpperCase();
 }
 
-function extractUserIdFromDisplay(value?: string): number {
-  if (!value) return 0;
-  const m = value.match(/(\d+)\s*$/);
-  if (!m) return 0;
-  const parsed = Number.parseInt(m[1], 10);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 function extractIdFromResourceResponse(json: unknown): number | undefined {
   if (
     json &&
@@ -852,56 +844,6 @@ export function ApproveRegistrationModal({
         throw new Error(
           "Relasi GP/GC belum lengkap. Pastikan step sebelumnya sudah selesai.",
         );
-      }
-
-      const rawEkaplusUserId = registration.ekaplus_user?.id;
-      const ekaplusUserId =
-        typeof rawEkaplusUserId === "number"
-          ? rawEkaplusUserId
-          : Number.parseInt(String(rawEkaplusUserId || ""), 10);
-      const createdById =
-        typeof registration.created_by_id === "number"
-          ? registration.created_by_id
-          : extractUserIdFromDisplay(registration.created_by);
-      const userId =
-        Number.isFinite(ekaplusUserId) && ekaplusUserId > 0
-          ? ekaplusUserId
-          : createdById;
-      if (!Number.isFinite(userId) || userId <= 0) {
-        throw new Error(
-          "User pengaju tidak tersedia (ekaplus_user/created_by).",
-        );
-      }
-
-      try {
-        await apiJsonRequest(
-          "creating member_of owner gpid",
-          getApiUrl(API_CONFIG.ENDPOINTS.MEMBER_OF),
-          "POST",
-          {
-            user: userId,
-            owner: userId,
-            ref_type: "gpid",
-            ref_id: gpid,
-            is_owner: 1,
-          },
-        );
-      } catch (err) {
-        const msg = err instanceof Error ? err.message.toLowerCase() : "";
-        if (
-          !msg.includes("duplicate") &&
-          !msg.includes("unique") &&
-          !msg.includes("already") &&
-          !msg.includes("terdaftar") &&
-          !msg.includes("conflict")
-        ) {
-          throw err;
-        }
-        pushLog({
-          stage: "creating member_of owner gpid",
-          status: "success",
-          message: "Duplicate member_of treated as success",
-        });
       }
 
       const finalResult: ApprovalResult = { nbid, gpid, gcid, bcid };
@@ -2134,8 +2076,7 @@ export function ApproveRegistrationModal({
                     </p>
                     <p className="text-xs text-green-700 mt-1">
                       Klik <span className="font-semibold">Commit Approve</span>{" "}
-                      untuk membuat member_of dan update status customer
-                      register menjadi Syncing.
+                      untuk update status customer register menjadi Syncing.
                     </p>
                   </div>
                   {renderProcessHistory({
