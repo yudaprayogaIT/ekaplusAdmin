@@ -48,6 +48,7 @@ interface CustomerRegisterAddressApiResponse {
   city?: string | null;
   province?: string | null;
   district?: string | null;
+  village?: string | null;
   postal_code?: string | null;
   country?: string | null;
   pic_name?: string | null;
@@ -200,6 +201,7 @@ export function RegistrationDetailModal({
           city: registration.address.city_name,
           province: registration.address.province_name,
           district: registration.address.district_name,
+          village: registration.address.village_name,
           postal_code: registration.address.postal_code,
           pic_name:
             registration.branch_owner?.full_name || registration.user.full_name,
@@ -570,6 +572,63 @@ export function RegistrationDetailModal({
 
               <section className="mb-6">
                 <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
+                    <FaLink className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Data Pendukung
+                  </h3>
+                </div>
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Contact Person
+                      </label>
+                      <p className="text-sm text-gray-900 font-medium">
+                        {displayValue(registration.support_data.contact_person)}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Company Email
+                      </label>
+                      <p className="text-sm text-gray-900 font-medium">
+                        {displayValue(registration.support_data.company_email)}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Payment Method
+                      </label>
+                      <p className="text-sm text-gray-900 font-medium">
+                        {displayValue(registration.support_data.payment_method)}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Payment Account
+                      </label>
+                      <p className="text-sm text-gray-900 font-medium">
+                        {displayValue(registration.support_data.payment_account)}
+                      </p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Notes
+                      </label>
+                      <p className="text-sm text-gray-900 bg-gray-50 border border-gray-200 rounded-lg p-3 whitespace-pre-wrap">
+                        {displayValue(
+                          registration.support_data.more_information,
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="mb-6">
+                <div className="flex items-center gap-2 mb-4">
                   <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
                     <FaMapMarkerAlt className="w-4 h-4 text-green-600" />
                   </div>
@@ -594,6 +653,14 @@ export function RegistrationDetailModal({
                         </label>
                         <p className="text-sm text-gray-900 font-medium">
                           {registration.address.district_name}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                          Kelurahan
+                        </label>
+                        <p className="text-sm text-gray-900 font-medium">
+                          {displayValue(registration.address.village_name)}
                         </p>
                       </div>
                       <div>
@@ -724,6 +791,14 @@ export function RegistrationDetailModal({
                                 </label>
                                 <p className="text-gray-900">
                                   {addr.district || "-"}
+                                </p>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                  Kelurahan
+                                </label>
+                                <p className="text-gray-900">
+                                  {addr.village || "-"}
                                 </p>
                               </div>
                               <div>

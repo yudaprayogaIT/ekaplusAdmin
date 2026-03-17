@@ -36,6 +36,7 @@ interface CustomerRegisterAddressApiResponse {
   city?: string | null;
   province?: string | null;
   district?: string | null;
+  village?: string | null;
   postal_code?: string | null;
   pic_name?: string | null;
   pic_phone?: string | null;
@@ -187,7 +188,6 @@ export function ApproveRegistrationModal({
   const effectiveGpid = existingGpid || selectedGpid || undefined;
   const effectiveGcid = existingGcid || selectedGcid || undefined;
   const effectiveBcid = existingBcid || selectedBcid || undefined;
-  const isGcCreatedInFlow = Boolean(createdGcid || createdGc);
   const isCreatingNewGpFlow = Boolean(
     gpCreatedViaCreateFlow ||
     (!existingGpid && !selectedGpid && gpMode === "create"),
@@ -261,6 +261,7 @@ export function ApproveRegistrationModal({
           city: registration.address.city_name,
           province: registration.address.province_name,
           district: registration.address.district_name,
+          village: registration.address.village_name,
           postal_code: registration.address.postal_code,
           pic_name:
             registration.branch_owner?.full_name || registration.user.full_name,
@@ -624,7 +625,8 @@ export function ApproveRegistrationModal({
         address: addr.address || "",
         city: addr.city || "",
         district: addr.district || "",
-        postal_code: addr.postal_code || "",
+        village: addr.village || "",
+        // postal_code: addr.postal_code || "",
         province: addr.province || "",
         is_default: addr.is_default ? 1 : undefined,
       }));
@@ -645,6 +647,11 @@ export function ApproveRegistrationModal({
         nbid: ids.nbid ?? null,
         ...(gpManualName ? { gp_manual: gpManualName } : {}),
         ...(nbManualName ? { nb_manual: nbManualName } : {}),
+        payment_method: registration?.support_data?.payment_method || undefined,
+        payment_account:
+          registration?.support_data?.payment_account || undefined,
+        notes: registration?.support_data?.more_information || undefined,
+        sales_team: registration?.support_data?.sales_team || undefined,
         customer_shipping_address: shippingPayload,
       };
     },
@@ -653,6 +660,10 @@ export function ApproveRegistrationModal({
       registration?.same_as_company_address,
       registration?.ekaplus_user?.id,
       registration?.created_by_id,
+      registration?.support_data?.payment_method,
+      registration?.support_data?.payment_account,
+      registration?.support_data?.more_information,
+      registration?.support_data?.sales_team,
     ],
   );
 

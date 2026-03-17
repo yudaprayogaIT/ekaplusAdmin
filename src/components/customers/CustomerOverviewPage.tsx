@@ -588,15 +588,15 @@ export default function CustomerOverviewPage() {
 
   const tabOptions = useMemo(
     () => [
-      {
-        key: "all" as const,
-        label: "All Customers",
-        count: tabStats.nb + tabStats.gp + tabStats.gc + tabStats.bc,
-      },
-      { key: "nb" as const, label: "NB Accounts", count: tabStats.nb },
-      { key: "gp" as const, label: "GP Accounts", count: tabStats.gp },
-      { key: "gc" as const, label: "GC Accounts", count: tabStats.gc },
-      { key: "bc" as const, label: "Branch Leads", count: tabStats.bc },
+      // {
+      //   key: "all" as const,
+      //   label: "All Customers",
+      //   count: tabStats.nb + tabStats.gp + tabStats.gc + tabStats.bc,
+      // },
+      { key: "nb" as const, label: "National Brands", count: tabStats.nb },
+      { key: "gp" as const, label: "Group Parents", count: tabStats.gp },
+      { key: "gc" as const, label: "Group Customers", count: tabStats.gc },
+      { key: "bc" as const, label: "Branch Customers", count: tabStats.bc },
     ],
     [tabStats],
   );
@@ -604,7 +604,8 @@ export default function CustomerOverviewPage() {
   const filteredCards = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
     return cards.filter((item) => {
-      const matchesTab = activeTab === "all" || item.type === activeTab;
+      const matchesTab = item.type === activeTab;
+      // const matchesTab = activeTab === "all" || item.type === activeTab;
       if (!matchesTab) return false;
       if (!normalizedSearch) return true;
       return (

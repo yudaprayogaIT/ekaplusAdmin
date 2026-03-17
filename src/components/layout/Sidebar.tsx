@@ -13,28 +13,23 @@ import {
   FaShoppingBag,
   FaBoxes,
   FaTags,
-  FaUsers,
   FaBuilding,
   FaWhatsapp,
   FaEnvelope,
-  FaClipboardList,
   FaUser,
   FaUserShield,
   FaLayerGroup,
-  FaStar,
   FaShieldAlt,
   FaSitemap,
   FaCog,
   FaLock,
   FaDatabase,
   FaCircle,
-  FaFolder,
+  FaKey,
 } from "react-icons/fa";
-import { MdMapsHomeWork, MdMessage } from "react-icons/md";
 import { BiSolidPurchaseTag, BiSolidUserDetail } from "react-icons/bi";
 import { AiFillProduct } from "react-icons/ai";
 import { GiKnightBanner } from "react-icons/gi";
-import { FaUserGroup } from "react-icons/fa6";
 
 export type MenuItem = {
   label: string;
@@ -148,6 +143,13 @@ const ADMIN_MENU: MenuItem[] = [
     requireAuth: true,
   },
   {
+    label: "Integration Token",
+    href: "/integration-token",
+    icon: <FaKey className="w-4 h-4" />,
+    category: "System",
+    requireAuth: true,
+  },
+  {
     label: "Workflows",
     href: "/workflows",
     icon: <FaSitemap className="w-5 h-5" />,
@@ -216,7 +218,7 @@ const CATALOG_SUBMENU: MenuItem[] = [
 
 const CUSTOMER_SUBMENU: MenuItem[] = [
   {
-    label: "Customers (New)",
+    label: "All Customers",
     href: "/customers/company",
     icon: <FaLayerGroup className="w-4 h-4" />,
     category: "Customer",
@@ -257,13 +259,14 @@ const CUSTOMER_SUBMENU: MenuItem[] = [
   //   category: "Customer",
   //   requireAuth: true,
   // },
-  {
-    label: "Members",
-    href: "/members",
-    icon: <MdMapsHomeWork className="w-4 h-4" />,
-    category: "Customer",
-    requireAuth: true,
-  },
+  // {
+  //   label: "Members",
+  //   href: "/members",
+  //   icon: <MdMapsHomeWork className="w-4 h-4" />,
+  //   category: "Customer",
+  //   requireAuth: true,
+  // },
+  
   // {
   //   label: "Tiers",
   //   href: "/member-tiers",
@@ -386,7 +389,8 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
     } else if (
       pathname.startsWith("/roles") ||
       pathname.startsWith("/workflows") ||
-      pathname.startsWith("/emails")
+      pathname.startsWith("/emails") ||
+      pathname.startsWith("/integration-token")
     ) {
       setOpenSubmenu("admin");
     }
