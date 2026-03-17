@@ -177,6 +177,7 @@ export function ApproveRegistrationModal({
   const [createdBcid, setCreatedBcid] = useState<number | null>(null);
   const [gpCreatedViaCreateFlow, setGpCreatedViaCreateFlow] = useState(false);
   const [nbCreatedViaCreateFlow, setNbCreatedViaCreateFlow] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   const existingGpid = registration?.gp_id;
   const existingGcid = registration?.gc_id;
@@ -194,9 +195,7 @@ export function ApproveRegistrationModal({
   const canSearchExistingGc = Boolean(
     !isCreatingNewGpFlow && (existingGpid || selectedGpid),
   );
-  const canSearchExistingBc = Boolean(
-    false,
-  );
+  const canSearchExistingBc = Boolean(false);
 
   // ---- Filtered lists (only meaningful when mode === "search" and query is non-empty) ----
   const filteredGroupParents = useMemo(() => {
@@ -521,6 +520,11 @@ export function ApproveRegistrationModal({
     if (!isOpen || !token || isPreparing) return;
     void refreshReferenceLists();
   }, [isOpen, token, step, isPreparing, refreshReferenceLists]);
+
+  useEffect(() => {
+    if (isOpen) return;
+    setShowCloseConfirm(false);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!selectedGpid) return;
@@ -948,10 +952,7 @@ export function ApproveRegistrationModal({
   const historyGcCode =
     gcDisplayRow?.name || (effectiveGcid ? `GC${effectiveGcid}` : "-");
   const historyBcName =
-    bcDisplayRow?.bcid_name ||
-    registration.bc_name ||
-    previewBcName ||
-    "-";
+    bcDisplayRow?.bcid_name || registration.bc_name || previewBcName || "-";
   const historyBcCode =
     bcDisplayRow?.name || (effectiveBcid ? `BC${effectiveBcid}` : "AUTO");
 
@@ -1144,10 +1145,26 @@ export function ApproveRegistrationModal({
     void handleSubmitApproval();
   };
 
+  const requestCloseModal = () => {
+    if (isSubmitting) return;
+    setShowCloseConfirm(true);
+  };
+
+  const handleConfirmClose = () => {
+    setShowCloseConfirm(false);
+    onClose();
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onMouseDown={(e) => {
+            if (e.target !== e.currentTarget) return;
+            requestCloseModal();
+          }}
+        >
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -1730,6 +1747,29 @@ export function ApproveRegistrationModal({
                               </button>
                             </div>
 
+                            {!gcSearch.trim() && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setGcName(
+                                    normalizeEntityName(
+                                      registration.company.name || "",
+                                    ),
+                                  );
+                                  setSelectedGcid(null);
+                                  setCreatedGcid(null);
+                                  setSelectedBcid(null);
+                                  setCreatedBcid(null);
+                                  setBcMode("idle");
+                                  setGcMode("create");
+                                }}
+                                className="w-full py-2.5 rounded-xl border-2 border-green-300 text-green-700 text-sm font-medium hover:border-green-500 hover:bg-green-50 transition-all flex items-center justify-center gap-2"
+                              >
+                                <FaPlusCircle className="w-4 h-4" />
+                                Buat GC Baru
+                              </button>
+                            )}
+
                             <div className="rounded-xl border border-gray-200 overflow-hidden">
                               <div className="px-3 py-2 text-xs font-bold text-gray-500 bg-gray-50 border-b">
                                 {gcSearch.trim()
@@ -2166,7 +2206,7 @@ export function ApproveRegistrationModal({
                 </button>
               ) : (
                 <button
-                  onClick={onClose}
+                  onClick={requestCloseModal}
                   disabled={isSubmitting}
                   className="px-5 py-2.5 bg-white border-2 border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -2207,6 +2247,54 @@ export function ApproveRegistrationModal({
               )}
             </div>
           </motion.div>
+
+          <AnimatePresence>
+            {showCloseConfirm && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 z-10 flex items-center justify-center bg-black/30 p-4"
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 8 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl"
+                >
+                  <div className="flex items-start gap-3">
+                    <FaExclamationTriangle className="mt-0.5 h-6 w-6 text-amber-500" />
+                    <div className="space-y-2">
+                      <h3 className="text-lg font-bold text-gray-900">
+                        Tutup dialog approval?
+                      </h3>
+                      <p className="text-sm text-gray-600">
+                        Progress yang belum disubmit akan ditutup. Yakin ingin
+                        keluar dari dialog ini?
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowCloseConfirm(false)}
+                      className="px-4 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-all"
+                    >
+                      Tidak
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmClose}
+                      className="px-4 py-2.5 rounded-xl bg-red-500 text-white font-medium hover:bg-red-600 transition-all"
+                    >
+                      Ya, Tutup
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       )}
     </AnimatePresence>
