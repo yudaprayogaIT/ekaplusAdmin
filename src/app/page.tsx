@@ -32,7 +32,6 @@ const quickActions: QuickAction[] = [
     href: "/users",
     icon: <FaUsers className="w-6 h-6" />,
     color: "bg-blue-500",
-    permissions: ["users.view", "users.view_branch",],
   },
   {
     name: "Roles & Permissions",
@@ -40,7 +39,6 @@ const quickActions: QuickAction[] = [
     href: "/roles",
     icon: <FaShieldAlt className="w-6 h-6" />,
     color: "bg-amber-500",
-    permission: "roles.view",
   },
   {
     name: "Workflow",
@@ -48,7 +46,6 @@ const quickActions: QuickAction[] = [
     href: "/workflows",
     icon: <FaProjectDiagram className="w-6 h-6" />,
     color: "bg-purple-500",
-    permission: "workflows.view",
   },
   {
     name: "Branches",
@@ -56,7 +53,6 @@ const quickActions: QuickAction[] = [
     href: "/branches",
     icon: <FaMapMarkerAlt className="w-6 h-6" />,
     color: "bg-green-500",
-    // permission: "branches.view",
   },
 ];
 

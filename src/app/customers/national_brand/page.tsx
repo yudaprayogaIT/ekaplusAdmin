@@ -8,7 +8,7 @@ export const metadata = {
 
 export default function NationalBrandPage() {
   return (
-    <RequireAuth permission="customer.view">
+    <RequireAuth>
       <NBList />
     </RequireAuth>
   );

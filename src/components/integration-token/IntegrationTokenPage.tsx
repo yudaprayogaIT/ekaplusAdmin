@@ -115,8 +115,10 @@ export default function IntegrationTokenPage() {
           ),
         );
       }
-      const rows = Array.isArray(json?.data) ? json.data : [];
-      setItems(rows.map((row) => toTokenRow(row as IntegrationTokenApiRow)));
+      const rows: IntegrationTokenApiRow[] = Array.isArray(json?.data)
+        ? (json.data as IntegrationTokenApiRow[])
+        : [];
+      setItems(rows.map((row) => toTokenRow(row)));
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Gagal memuat integration token",
@@ -450,7 +452,7 @@ export default function IntegrationTokenPage() {
             <div className="space-y-4">
               <div
                 className={`rounded-2xl border px-4 py-4 ${
-                  createFeedback.payload
+                  createFeedback.payload != null
                     ? "border-emerald-200 bg-emerald-50"
                     : "border-amber-200 bg-amber-50"
                 }`}
@@ -458,7 +460,7 @@ export default function IntegrationTokenPage() {
                 <div className="flex items-start gap-3">
                   <div
                     className={`mt-0.5 ${
-                      createFeedback.payload
+                      createFeedback.payload != null
                         ? "text-emerald-600"
                         : "text-amber-500"
                     }`}
@@ -476,7 +478,7 @@ export default function IntegrationTokenPage() {
                 </div>
               </div>
 
-              {createFeedback.payload && (
+              {createFeedback.payload != null && (
                 <pre className="max-h-[360px] overflow-auto rounded-2xl bg-slate-950 p-4 text-xs text-slate-100">
                   {JSON.stringify(createFeedback.payload, null, 2)}
                 </pre>

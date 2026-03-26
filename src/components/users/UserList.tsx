@@ -115,10 +115,10 @@ export default function UserList() {
   const actionRef = useRef<(() => Promise<void>) | null>(null);
 
   // Permission checks
-  const canViewUsers = hasPermission('users.view') || hasPermission('users.view_branch');
-  const canCreateUsers = hasPermission('users.create');
-  const canEditUsers = hasPermission('users.edit');
-  const canDeleteUsers = hasPermission('users.delete');
+  const canViewUsers = hasPermission("user.read");
+  const canCreateUsers = hasPermission("user.create");
+  const canEditUsers = hasPermission("user.update");
+  const canDeleteUsers = hasPermission("user.delete");
 
   // Load users and roles - only if authenticated
   useEffect(() => {

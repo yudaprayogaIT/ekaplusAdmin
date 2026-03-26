@@ -9,7 +9,7 @@ export const metadata = {
 
 export default function UsersPage() {
   return (
-    <RequireAuth permissions={["users.view", "users.view_branch"]}>
+    <RequireAuth>
       <UserList />
     </RequireAuth>
   );

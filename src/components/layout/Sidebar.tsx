@@ -108,14 +108,12 @@ const SECONDARY_MENU: MenuItem[] = [
   //   },
 ];
 
-// DISABLED: Permission checks disabled (migrasi ke SQL) - all menu items visible to authenticated users
 const ADMIN_MENU: MenuItem[] = [
   {
     label: "Email",
     href: "/emails",
     icon: <FaEnvelope className="w-4 h-4" />,
     category: "System",
-    // permission: "emails.view", // DISABLED
     requireAuth: true,
   },
   {
@@ -123,7 +121,6 @@ const ADMIN_MENU: MenuItem[] = [
     href: "/roles",
     icon: <FaUserShield className="w-5 h-5" />,
     category: "System",
-    // permission: "roles.view", // DISABLED
     requireAuth: true,
   },
   {
@@ -131,7 +128,6 @@ const ADMIN_MENU: MenuItem[] = [
     href: "/permissions",
     icon: <FaShieldAlt className="w-5 h-5" />,
     category: "System",
-    // permission: "permissions.view", // DISABLED
     requireAuth: true,
   },
   {
@@ -139,7 +135,6 @@ const ADMIN_MENU: MenuItem[] = [
     href: "/users",
     icon: <FaUser className="w-5 h-5" />,
     category: "System",
-    // permissions: ["users.view", "users.view_branch"], // DISABLED
     requireAuth: true,
   },
   {
@@ -154,15 +149,13 @@ const ADMIN_MENU: MenuItem[] = [
     href: "/workflows",
     icon: <FaSitemap className="w-5 h-5" />,
     category: "System",
-    // permission: "workflows.view", // DISABLED
     requireAuth: true,
   },
   {
     label: "Workflow States",
-    href: "/workflow-state",
+    href: "/workflow-states",
     icon: <FaCircle className="w-4 h-4" />,
     category: "System",
-    // permission: "workflows.view", // DISABLED
     requireAuth: true,
   },
 ];
@@ -173,7 +166,6 @@ const MASTER_MENU: MenuItem[] = [
     href: "/branches",
     icon: <FaBuilding className="w-4 h-4" />,
     category: "Master Data",
-    // permission: "branches.view",
     requireAuth: true,
   },
   {
@@ -389,6 +381,8 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
     } else if (
       pathname.startsWith("/roles") ||
       pathname.startsWith("/workflows") ||
+      pathname.startsWith("/workflow-states") ||
+      pathname.startsWith("/permissions") ||
       pathname.startsWith("/emails") ||
       pathname.startsWith("/integration-token")
     ) {
