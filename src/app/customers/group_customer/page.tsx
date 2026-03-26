@@ -8,7 +8,7 @@ export const metadata = {
 
 export default function GCPage() {
   return (
-    <RequireAuth permission="customer.view">
+    <RequireAuth>
       <GCList />
     </RequireAuth>
   );

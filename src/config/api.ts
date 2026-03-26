@@ -23,6 +23,8 @@ export const API_CONFIG = {
     WISHLIST: "/api/resource/wishlist",
     BANNER: "/api/resource/ekatalog_banner",
     USER: "/api/resource/user",
+    USER_ME: "/api/user/me",
+    INTEGRATION_TOKEN: "/api/user/integration-token",
 
     // Authorization (Authz)
     AUTHZ_ROLE: "/api/authz/roles",

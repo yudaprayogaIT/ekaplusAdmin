@@ -36,6 +36,7 @@ interface CustomerRegisterAddressApiResponse {
   city?: string | null;
   province?: string | null;
   district?: string | null;
+  village?: string | null;
   postal_code?: string | null;
   pic_name?: string | null;
   pic_phone?: string | null;
@@ -100,14 +101,6 @@ function normalizeEntityName(value?: string): string {
 
 function toUpperInput(value?: string): string {
   return (value || "").toUpperCase();
-}
-
-function extractUserIdFromDisplay(value?: string): number {
-  if (!value) return 0;
-  const m = value.match(/(\d+)\s*$/);
-  if (!m) return 0;
-  const parsed = Number.parseInt(m[1], 10);
-  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function extractIdFromResourceResponse(json: unknown): number | undefined {
@@ -185,6 +178,7 @@ export function ApproveRegistrationModal({
   const [createdBcid, setCreatedBcid] = useState<number | null>(null);
   const [gpCreatedViaCreateFlow, setGpCreatedViaCreateFlow] = useState(false);
   const [nbCreatedViaCreateFlow, setNbCreatedViaCreateFlow] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   const existingGpid = registration?.gp_id;
   const existingGcid = registration?.gc_id;
@@ -194,7 +188,6 @@ export function ApproveRegistrationModal({
   const effectiveGpid = existingGpid || selectedGpid || undefined;
   const effectiveGcid = existingGcid || selectedGcid || undefined;
   const effectiveBcid = existingBcid || selectedBcid || undefined;
-  const isGcCreatedInFlow = Boolean(createdGcid || createdGc);
   const isCreatingNewGpFlow = Boolean(
     gpCreatedViaCreateFlow ||
     (!existingGpid && !selectedGpid && gpMode === "create"),
@@ -202,9 +195,7 @@ export function ApproveRegistrationModal({
   const canSearchExistingGc = Boolean(
     !isCreatingNewGpFlow && (existingGpid || selectedGpid),
   );
-  const canSearchExistingBc = Boolean(
-    false,
-  );
+  const canSearchExistingBc = Boolean(false);
 
   // ---- Filtered lists (only meaningful when mode === "search" and query is non-empty) ----
   const filteredGroupParents = useMemo(() => {
@@ -270,6 +261,7 @@ export function ApproveRegistrationModal({
           city: registration.address.city_name,
           province: registration.address.province_name,
           district: registration.address.district_name,
+          village: registration.address.village_name,
           postal_code: registration.address.postal_code,
           pic_name:
             registration.branch_owner?.full_name || registration.user.full_name,
@@ -531,6 +523,11 @@ export function ApproveRegistrationModal({
   }, [isOpen, token, step, isPreparing, refreshReferenceLists]);
 
   useEffect(() => {
+    if (isOpen) return;
+    setShowCloseConfirm(false);
+  }, [isOpen]);
+
+  useEffect(() => {
     if (!selectedGpid) return;
     const selectedGc = groupCustomers.find(
       (row) => Number(row.id) === Number(selectedGcid),
@@ -628,7 +625,8 @@ export function ApproveRegistrationModal({
         address: addr.address || "",
         city: addr.city || "",
         district: addr.district || "",
-        postal_code: addr.postal_code || "",
+        village: addr.village || "",
+        // postal_code: addr.postal_code || "",
         province: addr.province || "",
         is_default: addr.is_default ? 1 : undefined,
       }));
@@ -649,6 +647,11 @@ export function ApproveRegistrationModal({
         nbid: ids.nbid ?? null,
         ...(gpManualName ? { gp_manual: gpManualName } : {}),
         ...(nbManualName ? { nb_manual: nbManualName } : {}),
+        payment_method: registration?.support_data?.payment_method || undefined,
+        payment_account:
+          registration?.support_data?.payment_account || undefined,
+        notes: registration?.support_data?.more_information || undefined,
+        sales_team: registration?.support_data?.sales_team || undefined,
         customer_shipping_address: shippingPayload,
       };
     },
@@ -657,6 +660,10 @@ export function ApproveRegistrationModal({
       registration?.same_as_company_address,
       registration?.ekaplus_user?.id,
       registration?.created_by_id,
+      registration?.support_data?.payment_method,
+      registration?.support_data?.payment_account,
+      registration?.support_data?.more_information,
+      registration?.support_data?.sales_team,
     ],
   );
 
@@ -854,56 +861,6 @@ export function ApproveRegistrationModal({
         );
       }
 
-      const rawEkaplusUserId = registration.ekaplus_user?.id;
-      const ekaplusUserId =
-        typeof rawEkaplusUserId === "number"
-          ? rawEkaplusUserId
-          : Number.parseInt(String(rawEkaplusUserId || ""), 10);
-      const createdById =
-        typeof registration.created_by_id === "number"
-          ? registration.created_by_id
-          : extractUserIdFromDisplay(registration.created_by);
-      const userId =
-        Number.isFinite(ekaplusUserId) && ekaplusUserId > 0
-          ? ekaplusUserId
-          : createdById;
-      if (!Number.isFinite(userId) || userId <= 0) {
-        throw new Error(
-          "User pengaju tidak tersedia (ekaplus_user/created_by).",
-        );
-      }
-
-      try {
-        await apiJsonRequest(
-          "creating member_of owner gpid",
-          getApiUrl(API_CONFIG.ENDPOINTS.MEMBER_OF),
-          "POST",
-          {
-            user: userId,
-            owner: userId,
-            ref_type: "gpid",
-            ref_id: gpid,
-            is_owner: 1,
-          },
-        );
-      } catch (err) {
-        const msg = err instanceof Error ? err.message.toLowerCase() : "";
-        if (
-          !msg.includes("duplicate") &&
-          !msg.includes("unique") &&
-          !msg.includes("already") &&
-          !msg.includes("terdaftar") &&
-          !msg.includes("conflict")
-        ) {
-          throw err;
-        }
-        pushLog({
-          stage: "creating member_of owner gpid",
-          status: "success",
-          message: "Duplicate member_of treated as success",
-        });
-      }
-
       const finalResult: ApprovalResult = { nbid, gpid, gcid, bcid };
       const updatePayload = buildCustomerRegisterApprovePayload(
         finalResult,
@@ -1006,10 +963,7 @@ export function ApproveRegistrationModal({
   const historyGcCode =
     gcDisplayRow?.name || (effectiveGcid ? `GC${effectiveGcid}` : "-");
   const historyBcName =
-    bcDisplayRow?.bcid_name ||
-    registration.bc_name ||
-    previewBcName ||
-    "-";
+    bcDisplayRow?.bcid_name || registration.bc_name || previewBcName || "-";
   const historyBcCode =
     bcDisplayRow?.name || (effectiveBcid ? `BC${effectiveBcid}` : "AUTO");
 
@@ -1202,10 +1156,26 @@ export function ApproveRegistrationModal({
     void handleSubmitApproval();
   };
 
+  const requestCloseModal = () => {
+    if (isSubmitting) return;
+    setShowCloseConfirm(true);
+  };
+
+  const handleConfirmClose = () => {
+    setShowCloseConfirm(false);
+    onClose();
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onMouseDown={(e) => {
+            if (e.target !== e.currentTarget) return;
+            requestCloseModal();
+          }}
+        >
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -1788,6 +1758,29 @@ export function ApproveRegistrationModal({
                               </button>
                             </div>
 
+                            {!gcSearch.trim() && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setGcName(
+                                    normalizeEntityName(
+                                      registration.company.name || "",
+                                    ),
+                                  );
+                                  setSelectedGcid(null);
+                                  setCreatedGcid(null);
+                                  setSelectedBcid(null);
+                                  setCreatedBcid(null);
+                                  setBcMode("idle");
+                                  setGcMode("create");
+                                }}
+                                className="w-full py-2.5 rounded-xl border-2 border-green-300 text-green-700 text-sm font-medium hover:border-green-500 hover:bg-green-50 transition-all flex items-center justify-center gap-2"
+                              >
+                                <FaPlusCircle className="w-4 h-4" />
+                                Buat GC Baru
+                              </button>
+                            )}
+
                             <div className="rounded-xl border border-gray-200 overflow-hidden">
                               <div className="px-3 py-2 text-xs font-bold text-gray-500 bg-gray-50 border-b">
                                 {gcSearch.trim()
@@ -2134,8 +2127,7 @@ export function ApproveRegistrationModal({
                     </p>
                     <p className="text-xs text-green-700 mt-1">
                       Klik <span className="font-semibold">Commit Approve</span>{" "}
-                      untuk membuat member_of dan update status customer
-                      register menjadi Syncing.
+                      untuk update status customer register menjadi Syncing.
                     </p>
                   </div>
                   {renderProcessHistory({
@@ -2225,7 +2217,7 @@ export function ApproveRegistrationModal({
                 </button>
               ) : (
                 <button
-                  onClick={onClose}
+                  onClick={requestCloseModal}
                   disabled={isSubmitting}
                   className="px-5 py-2.5 bg-white border-2 border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -2266,6 +2258,54 @@ export function ApproveRegistrationModal({
               )}
             </div>
           </motion.div>
+
+          <AnimatePresence>
+            {showCloseConfirm && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 z-10 flex items-center justify-center bg-black/30 p-4"
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 8 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl"
+                >
+                  <div className="flex items-start gap-3">
+                    <FaExclamationTriangle className="mt-0.5 h-6 w-6 text-amber-500" />
+                    <div className="space-y-2">
+                      <h3 className="text-lg font-bold text-gray-900">
+                        Tutup dialog approval?
+                      </h3>
+                      <p className="text-sm text-gray-600">
+                        Progress yang belum disubmit akan ditutup. Yakin ingin
+                        keluar dari dialog ini?
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowCloseConfirm(false)}
+                      className="px-4 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-all"
+                    >
+                      Tidak
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmClose}
+                      className="px-4 py-2.5 rounded-xl bg-red-500 text-white font-medium hover:bg-red-600 transition-all"
+                    >
+                      Ya, Tutup
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       )}
     </AnimatePresence>

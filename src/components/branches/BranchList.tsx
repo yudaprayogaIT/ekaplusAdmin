@@ -93,6 +93,7 @@ const SNAP_KEY = "ekatalog_branches_snapshot";
 export default function BranchList() {
   const {
     hasPermission,
+    hasAnyPermission,
     isAuthenticated,
     isLoading: authLoading,
     token,
@@ -118,8 +119,11 @@ export default function BranchList() {
   const actionRef = useRef<(() => Promise<void>) | null>(null);
 
   // Permission checks
-  // const canViewBranches = hasPermission('branches.view');
-  const canManageBranches = hasPermission("branches.manage");
+  const canManageBranches = hasAnyPermission([
+    "branch.create",
+    "branch.update",
+    "branch.delete",
+  ]);
 
   // Extract data loading logic into reusable function
   const loadBranches = async () => {

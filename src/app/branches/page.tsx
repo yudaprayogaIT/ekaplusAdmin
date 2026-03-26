@@ -9,7 +9,7 @@ export const metadata = {
 
 export default function BranchesPage() {
   return (
-    <RequireAuth permission="branches.view">
+    <RequireAuth>
       <BranchList />
     </RequireAuth>
   );

@@ -5,6 +5,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import LoginForm from "./LoginForm";
+import { useRouter } from "next/navigation";
 import {
   FaSignInAlt,
   FaSignOutAlt,
@@ -16,6 +17,7 @@ import {
 
 export default function UserMenu() {
   const { currentUser, currentRole, permissions, isAuthenticated, isLoading, logout } = useAuth();
+  const router = useRouter();
   const [showLoginForm, setShowLoginForm] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   
@@ -200,7 +202,7 @@ export default function UserMenu() {
                 <button
                   onClick={() => {
                     setShowDropdown(false);
-                    // Navigate to profile
+                    router.push("/profile");
                   }}
                   className="w-full flex items-center gap-3 px-4 py-2.5 text-gray-700 hover:bg-gray-50 transition-colors"
                 >

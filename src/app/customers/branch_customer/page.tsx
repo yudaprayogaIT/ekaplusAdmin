@@ -8,7 +8,7 @@ export const metadata = {
 
 export default function BranchCustomerPage() {
   return (
-    <RequireAuth permission="customer.view">
+    <RequireAuth>
       <BranchCustomerList />
     </RequireAuth>
   );

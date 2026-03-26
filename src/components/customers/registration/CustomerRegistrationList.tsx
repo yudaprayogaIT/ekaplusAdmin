@@ -68,8 +68,13 @@ interface CustomerRegistrationApiResponse {
   company_province?: string | null;
   company_city?: string | null;
   company_district?: string | null;
+  company_village?: string | null;
   company_postal_code?: string | null;
   product_need?: string | null;
+  payment_method?: string | null;
+  payment_account?: string | null;
+  notes?: string | null;
+  sales_team?: string | null;
   same_as_company_address?: number | boolean | null;
   nbid?: number | { id?: number; name?: string; nb_name?: string } | null;
   nbid_id?: number | null;
@@ -317,7 +322,7 @@ export function CustomerRegistrationList() {
         province_name: apiData.company_province || "-",
         city_name: apiData.company_city || "-",
         district_name: apiData.company_district || "-",
-        village_name: "-",
+        village_name: apiData.company_village || "-",
         rt: "-",
         rw: "-",
         postal_code: apiData.company_postal_code || "-",
@@ -329,6 +334,10 @@ export function CustomerRegistrationList() {
         company_email: apiData.owner_email || undefined,
         fax: undefined,
         factory_address: undefined,
+        payment_method: apiData.payment_method || undefined,
+        payment_account: apiData.payment_account || undefined,
+        more_information: apiData.notes || undefined,
+        sales_team: apiData.sales_team || undefined,
       },
       branch_owner: {
         full_name: apiData.branch_owner || "-",

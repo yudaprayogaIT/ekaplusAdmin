@@ -1,11 +1,7 @@
 // src/components/whatsapp/WhatsAppDeviceList.tsx
 "use client";
 
-import React, {
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import React, { useEffect, useRef, useState } from "react";
 import WhatsAppDeviceCard from "./WhatsAppDeviceCard";
 import WhatsAppDetailModal from "./WhatsAppDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
@@ -172,7 +168,7 @@ export default function WhatsAppDeviceList() {
   function promptConnect(device: WhatsAppDevice) {
     setConfirmTitle("Connect WhatsApp");
     setConfirmDesc(
-      `Mulai proses koneksi untuk ${device.name} (${device.phone_formatted})?`
+      `Mulai proses koneksi untuk ${device.name} (${device.phone_formatted})?`,
     );
     actionRef.current = async () => {
       const updated = devices.map((d) =>
@@ -182,7 +178,7 @@ export default function WhatsAppDeviceList() {
               status: "connecting" as const,
               updated_at: new Date().toISOString(),
             }
-          : d
+          : d,
       );
       setDevices(updated);
       saveSnapshot(updated);
@@ -196,7 +192,7 @@ export default function WhatsAppDeviceList() {
   function promptDisconnect(device: WhatsAppDevice) {
     setConfirmTitle("Disconnect WhatsApp");
     setConfirmDesc(
-      `Yakin ingin memutuskan koneksi ${device.name} (${device.phone_formatted})?`
+      `Yakin ingin memutuskan koneksi ${device.name} (${device.phone_formatted})?`,
     );
     actionRef.current = async () => {
       const updated = devices.map((d) =>
@@ -207,7 +203,7 @@ export default function WhatsAppDeviceList() {
               session_path: null,
               updated_at: new Date().toISOString(),
             }
-          : d
+          : d,
       );
       setDevices(updated);
       saveSnapshot(updated);
@@ -217,11 +213,13 @@ export default function WhatsAppDeviceList() {
 
   function promptToggleStatus(device: WhatsAppDevice) {
     const newDisabled = device.disabled === 0 ? 1 : 0;
-    setConfirmTitle(newDisabled === 0 ? "Aktifkan Device" : "Nonaktifkan Device");
+    setConfirmTitle(
+      newDisabled === 0 ? "Aktifkan Device" : "Nonaktifkan Device",
+    );
     setConfirmDesc(
       newDisabled === 0
         ? `Aktifkan device ${device.name}?`
-        : `Nonaktifkan device ${device.name}? Device tidak akan bisa mengirim pesan.`
+        : `Nonaktifkan device ${device.name}? Device tidak akan bisa mengirim pesan.`,
     );
     actionRef.current = async () => {
       const updated = devices.map((d) =>
@@ -231,7 +229,7 @@ export default function WhatsAppDeviceList() {
               disabled: newDisabled,
               updated_at: new Date().toISOString(),
             }
-          : d
+          : d,
       );
       setDevices(updated);
       saveSnapshot(updated);
@@ -242,7 +240,7 @@ export default function WhatsAppDeviceList() {
   function promptDelete(device: WhatsAppDevice) {
     setConfirmTitle("Hapus Device");
     setConfirmDesc(
-      `Yakin ingin menghapus device "${device.name}"? Tindakan ini tidak dapat dibatalkan.`
+      `Yakin ingin menghapus device "${device.name}"? Tindakan ini tidak dapat dibatalkan.`,
     );
     actionRef.current = async () => {
       const next = devices.filter((x) => x.id !== device.id);
@@ -276,7 +274,7 @@ export default function WhatsAppDeviceList() {
             status: "connecting" as const,
             updated_at: new Date().toISOString(),
           }
-        : d
+        : d,
     );
     setDevices(updated);
     saveSnapshot(updated);
@@ -343,13 +341,13 @@ export default function WhatsAppDeviceList() {
       (device) =>
         device.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         device.phone.includes(searchQuery) ||
-        device.phone_formatted.includes(searchQuery)
+        device.phone_formatted.includes(searchQuery),
     );
   }
 
   if (selectedStatus) {
     filteredDevices = filteredDevices.filter(
-      (device) => device.status === selectedStatus
+      (device) => device.status === selectedStatus,
     );
   }
 
@@ -434,7 +432,9 @@ export default function WhatsAppDeviceList() {
         <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border-2 border-green-200">
           <div className="flex items-center gap-2 mb-1">
             <FaCheckCircle className="w-4 h-4 text-green-600" />
-            <span className="text-xs text-green-700 font-medium">Connected</span>
+            <span className="text-xs text-green-700 font-medium">
+              Connected
+            </span>
           </div>
           <div className="text-2xl font-bold text-green-900">
             {stats.connected}
@@ -443,7 +443,9 @@ export default function WhatsAppDeviceList() {
         <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 border-2 border-red-200">
           <div className="flex items-center gap-2 mb-1">
             <FaUnlink className="w-4 h-4 text-red-600" />
-            <span className="text-xs text-red-700 font-medium">Disconnected</span>
+            <span className="text-xs text-red-700 font-medium">
+              Disconnected
+            </span>
           </div>
           <div className="text-2xl font-bold text-red-900">
             {stats.disconnected}
@@ -452,7 +454,9 @@ export default function WhatsAppDeviceList() {
         <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl p-4 border-2 border-yellow-200">
           <div className="flex items-center gap-2 mb-1">
             <FaPlug className="w-4 h-4 text-yellow-600" />
-            <span className="text-xs text-yellow-700 font-medium">Connecting</span>
+            <span className="text-xs text-yellow-700 font-medium">
+              Connecting
+            </span>
           </div>
           <div className="text-2xl font-bold text-yellow-900">
             {stats.connecting}
@@ -461,7 +465,9 @@ export default function WhatsAppDeviceList() {
         <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border-2 border-purple-200">
           <div className="flex items-center gap-2 mb-1">
             <FaPaperPlane className="w-4 h-4 text-purple-600" />
-            <span className="text-xs text-purple-700 font-medium">Hari Ini</span>
+            <span className="text-xs text-purple-700 font-medium">
+              Hari Ini
+            </span>
           </div>
           <div className="text-2xl font-bold text-purple-900">
             {stats.messagesToday.toLocaleString()}
@@ -470,7 +476,9 @@ export default function WhatsAppDeviceList() {
         <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl p-4 border-2 border-indigo-200">
           <div className="flex items-center gap-2 mb-1">
             <FaPaperPlane className="w-4 h-4 text-indigo-600" />
-            <span className="text-xs text-indigo-700 font-medium">Total Pesan</span>
+            <span className="text-xs text-indigo-700 font-medium">
+              Total Pesan
+            </span>
           </div>
           <div className="text-2xl font-bold text-indigo-900">
             {stats.totalMessages.toLocaleString()}

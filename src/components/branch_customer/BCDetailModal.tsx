@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -47,6 +47,10 @@ interface BCDetailApi {
   disabled?: number | null;
   docstatus?: number | null;
   status?: string | null;
+  notes?: string | null;
+  payment_account?: string | null;
+  payment_method?: string | null;
+  sales_team?: string | null;
   sync_saga_id?: string | null;
   sync_last_error?: string | null;
   sync_last_rollback_error?: string | null;
@@ -66,6 +70,7 @@ interface AddressRow {
   address?: string | null;
   city?: string | null;
   district?: string | null;
+  village?: string | null;
   province?: string | null;
   postal_code?: string | null;
   pic_name?: string | null;
@@ -157,6 +162,10 @@ function buildEditSnapshot(input: {
   editedOwnerPlaceOfBirth: string;
   editedOwnerDateOfBirth: string;
   editedProductNeed: string;
+  editedNotes: string;
+  editedPaymentAccount: string;
+  editedPaymentMethod: string;
+  editedSalesTeam: string;
   editedRows: AddressRow[];
   deletedRowIds: number[];
 }) {
@@ -167,6 +176,10 @@ function buildEditSnapshot(input: {
     editedOwnerPlaceOfBirth: input.editedOwnerPlaceOfBirth.trim(),
     editedOwnerDateOfBirth: input.editedOwnerDateOfBirth,
     editedProductNeed: input.editedProductNeed.trim(),
+    editedNotes: input.editedNotes.trim(),
+    editedPaymentAccount: input.editedPaymentAccount.trim(),
+    editedPaymentMethod: input.editedPaymentMethod.trim(),
+    editedSalesTeam: input.editedSalesTeam.trim(),
     editedRows: input.editedRows.map((row) => ({
       id: row.id,
       type: row.type || "",
@@ -174,6 +187,7 @@ function buildEditSnapshot(input: {
       address: row.address || "",
       city: row.city || "",
       district: row.district || "",
+      village: row.village || "",
       province: row.province || "",
       postal_code: row.postal_code || "",
       pic_name: row.pic_name || "",
@@ -209,6 +223,10 @@ export function BCDetailModal({
   const [editedOwnerPlaceOfBirth, setEditedOwnerPlaceOfBirth] = useState("");
   const [editedOwnerDateOfBirth, setEditedOwnerDateOfBirth] = useState("");
   const [editedProductNeed, setEditedProductNeed] = useState("");
+  const [editedNotes, setEditedNotes] = useState("");
+  const [editedPaymentAccount, setEditedPaymentAccount] = useState("");
+  const [editedPaymentMethod, setEditedPaymentMethod] = useState("");
+  const [editedSalesTeam, setEditedSalesTeam] = useState("");
   const [editedRows, setEditedRows] = useState<AddressRow[]>([]);
   const [deletedRowIds, setDeletedRowIds] = useState<number[]>([]);
   const [editSnapshot, setEditSnapshot] = useState("");
@@ -414,6 +432,10 @@ export function BCDetailModal({
       detail?.branch_owner_date_of_birth?.split("T")[0] || "",
     );
     setEditedProductNeed((detail?.product_need || "").trim());
+    setEditedNotes((detail?.notes || "").trim());
+    setEditedPaymentAccount((detail?.payment_account || "").trim());
+    setEditedPaymentMethod((detail?.payment_method || "").trim());
+    setEditedSalesTeam((detail?.sales_team || "").trim());
   }, [
     isOpen,
     bc,
@@ -423,6 +445,10 @@ export function BCDetailModal({
     detail?.branch_owner_place_of_birth,
     detail?.branch_owner_date_of_birth,
     detail?.product_need,
+    detail?.notes,
+    detail?.payment_account,
+    detail?.payment_method,
+    detail?.sales_team,
     isEditMode,
   ]);
 
@@ -436,6 +462,10 @@ export function BCDetailModal({
         editedOwnerPlaceOfBirth,
         editedOwnerDateOfBirth,
         editedProductNeed,
+        editedNotes,
+        editedPaymentAccount,
+        editedPaymentMethod,
+        editedSalesTeam,
         editedRows,
         deletedRowIds,
       });
@@ -466,6 +496,10 @@ export function BCDetailModal({
     const ownerPob = (detail?.branch_owner_place_of_birth || "").trim();
     const ownerDob = detail?.branch_owner_date_of_birth?.split("T")[0] || "";
     const productNeed = (detail?.product_need || "").trim();
+    const notes = (detail?.notes || "").trim();
+    const paymentAccount = (detail?.payment_account || "").trim();
+    const paymentMethod = (detail?.payment_method || "").trim();
+    const salesTeam = (detail?.sales_team || "").trim();
     const rowSnapshot = rows.map((row) => ({ ...row }));
     setEditedOwner(owner);
     setEditedOwnerPhone(ownerPhone);
@@ -473,6 +507,10 @@ export function BCDetailModal({
     setEditedOwnerPlaceOfBirth(ownerPob);
     setEditedOwnerDateOfBirth(ownerDob);
     setEditedProductNeed(productNeed);
+    setEditedNotes(notes);
+    setEditedPaymentAccount(paymentAccount);
+    setEditedPaymentMethod(paymentMethod);
+    setEditedSalesTeam(salesTeam);
     setEditedRows(rowSnapshot);
     setDeletedRowIds([]);
     setEditSnapshot(
@@ -483,6 +521,10 @@ export function BCDetailModal({
         editedOwnerPlaceOfBirth: ownerPob,
         editedOwnerDateOfBirth: ownerDob,
         editedProductNeed: productNeed,
+        editedNotes: notes,
+        editedPaymentAccount: paymentAccount,
+        editedPaymentMethod: paymentMethod,
+        editedSalesTeam: salesTeam,
         editedRows: rowSnapshot,
         deletedRowIds: [],
       }),
@@ -627,6 +669,7 @@ export function BCDetailModal({
         address: "",
         city: "",
         district: "",
+        village: "",
         province: "",
         postal_code: "",
         pic_name: "",
@@ -661,6 +704,10 @@ export function BCDetailModal({
           ? `${editedOwnerDateOfBirth}T00:00:00Z`
           : null,
         product_need: editedProductNeed.trim() || null,
+        notes: editedNotes.trim() || null,
+        payment_account: editedPaymentAccount.trim() || null,
+        payment_method: editedPaymentMethod.trim() || null,
+        sales_team: editedSalesTeam.trim() || null,
       };
 
       const res = await apiFetch(
@@ -684,6 +731,7 @@ export function BCDetailModal({
                     address: row.address || null,
                     city: row.city || null,
                     district: row.district || null,
+                    village: row.village || null,
                     province: row.province || null,
                     postal_code: row.postal_code || null,
                     pic_name: row.pic_name || null,
@@ -706,6 +754,7 @@ export function BCDetailModal({
                     address: row.address || null,
                     city: row.city || null,
                     district: row.district || null,
+                    village: row.village || null,
                     province: row.province || null,
                     postal_code: row.postal_code || null,
                     pic_name: row.pic_name || null,
@@ -750,6 +799,10 @@ export function BCDetailModal({
                 ? `${editedOwnerDateOfBirth}T00:00:00Z`
                 : null,
               product_need: editedProductNeed.trim() || null,
+              notes: editedNotes.trim() || null,
+              payment_account: editedPaymentAccount.trim() || null,
+              payment_method: editedPaymentMethod.trim() || null,
+              sales_team: editedSalesTeam.trim() || null,
               updated_at: new Date().toISOString(),
             }
           : prev,
@@ -796,6 +849,10 @@ export function BCDetailModal({
   const branchOwnerPhone = detail?.branch_owner_phone || bc.owner_phone || "-";
   const branchOwnerEmail = detail?.branch_owner_email || bc.owner_email || "-";
   const branchOwnerDob = detail?.branch_owner_date_of_birth?.split("T")[0] || "-";
+  const notes = detail?.notes || "-";
+  const paymentAccount = detail?.payment_account || "-";
+  const paymentMethod = detail?.payment_method || "-";
+  const salesTeam = detail?.sales_team || "-";
   const branchLocation = [bc.branch_name, bc.branch_city].filter(Boolean).join(", ") || "-";
   const displayAddressRows = isEditMode ? editedRows : rows;
   const createdBy = detail?.["created_by.full_name"] || bc.created_by || "System";
@@ -941,17 +998,76 @@ export function BCDetailModal({
                           </p>
                         )}
                       </div>
-                      <div>
+                      {/* <div>
                         <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Sales Type</p>
                         <p className="text-sm font-semibold text-slate-900">-</p>
-                      </div>
+                      </div> */}
                       <div>
+                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-cyan-600">Sales Team</p>
+                        {isEditMode ? (
+                          <input
+                            type="text"
+                            value={editedSalesTeam}
+                            onChange={(e) => setEditedSalesTeam(e.target.value)}
+                            className="w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+                            disabled={isSaving}
+                            placeholder="Sales team"
+                          />
+                        ) : (
+                          <p className="text-sm font-semibold text-slate-900">{salesTeam}</p>
+                        )}
+                      </div>
+                      {/* <div>
                         <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Credit Limit</p>
                         <p className="text-sm font-semibold text-slate-900">-</p>
-                      </div>
+                      </div> */}
                       <div>
                         <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Payment Term</p>
                         <p className="text-sm font-semibold text-slate-900">-</p>
+                      </div>
+                      <div>
+                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-violet-600">Payment Method</p>
+                        {isEditMode ? (
+                          <input
+                            type="text"
+                            value={editedPaymentMethod}
+                            onChange={(e) => setEditedPaymentMethod(e.target.value)}
+                            className="w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+                            disabled={isSaving}
+                            placeholder="Payment method"
+                          />
+                        ) : (
+                          <p className="text-sm font-semibold text-slate-900">{paymentMethod}</p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-indigo-600">Payment Account</p>
+                        {isEditMode ? (
+                          <input
+                            type="text"
+                            value={editedPaymentAccount}
+                            onChange={(e) => setEditedPaymentAccount(e.target.value)}
+                            className="w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+                            disabled={isSaving}
+                            placeholder="Payment account"
+                          />
+                        ) : (
+                          <p className="text-sm font-semibold text-slate-900">{paymentAccount}</p>
+                        )}
+                      </div>
+                      <div className="md:col-span-3">
+                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-fuchsia-600">Notes</p>
+                        {isEditMode ? (
+                          <textarea
+                            value={editedNotes}
+                            onChange={(e) => setEditedNotes(e.target.value)}
+                            className="min-h-[72px] w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+                            disabled={isSaving}
+                            placeholder="Notes"
+                          />
+                        ) : (
+                          <p className="text-sm font-semibold text-slate-900 whitespace-pre-wrap">{notes}</p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1169,6 +1285,21 @@ export function BCDetailModal({
                                   />
                                 ) : (
                                   <span className="font-semibold text-slate-900">{r.postal_code || "-"}</span>
+                                )}
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span>Village</span>
+                                {isEditMode ? (
+                                  <input
+                                    value={r.village || ""}
+                                    onChange={(e) =>
+                                      updateEditedRow(r.id, "village", e.target.value)
+                                    }
+                                    className="w-28 rounded border border-blue-300 px-1 py-0.5 text-xs"
+                                    disabled={isSaving}
+                                  />
+                                ) : (
+                                  <span className="font-semibold text-slate-900">{r.village || "-"}</span>
                                 )}
                               </div>
                               {isEditMode && (

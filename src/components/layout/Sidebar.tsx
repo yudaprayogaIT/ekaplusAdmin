@@ -13,28 +13,23 @@ import {
   FaShoppingBag,
   FaBoxes,
   FaTags,
-  FaUsers,
   FaBuilding,
   FaWhatsapp,
   FaEnvelope,
-  FaClipboardList,
   FaUser,
   FaUserShield,
   FaLayerGroup,
-  FaStar,
   FaShieldAlt,
   FaSitemap,
   FaCog,
   FaLock,
   FaDatabase,
   FaCircle,
-  FaFolder,
+  FaKey,
 } from "react-icons/fa";
-import { MdMapsHomeWork, MdMessage } from "react-icons/md";
 import { BiSolidPurchaseTag, BiSolidUserDetail } from "react-icons/bi";
 import { AiFillProduct } from "react-icons/ai";
 import { GiKnightBanner } from "react-icons/gi";
-import { FaUserGroup } from "react-icons/fa6";
 
 export type MenuItem = {
   label: string;
@@ -72,30 +67,31 @@ const MAIN_MENU: MenuItem[] = [
     category: "Main",
     requireAuth: true,
   },
-  {
-    label: "Inbox",
-    href: "/inbox",
-    icon: <MdMessage className="w-5 h-5" />,
-    category: "Main",
-    requireAuth: true,
-  },
-  {
-    label: "Order Lists",
-    href: "/orders",
-    icon: <FaClipboardList className="w-5 h-5" />,
-    category: "Main",
-    requireAuth: true,
-  },
+
+  // {
+  //   label: "Inbox",
+  //   href: "/inbox",
+  //   icon: <MdMessage className="w-5 h-5" />,
+  //   category: "Main",
+  //   requireAuth: true,
+  // },
+  // {
+  //   label: "Order Lists",
+  //   href: "/orders",
+  //   icon: <FaClipboardList className="w-5 h-5" />,
+  //   category: "Main",
+  //   requireAuth: true,
+  // },
 ];
 
 const SECONDARY_MENU: MenuItem[] = [
-  {
-    label: "File Management",
-    href: "/files",
-    icon: <FaFolder className="w-5 h-5" />,
-    category: "Tools",
-    requireAuth: true,
-  },
+  //   {
+  //     label: "File Management",
+  //     href: "/files",
+  //     icon: <FaFolder className="w-5 h-5" />,
+  //     category: "Tools",
+  //     requireAuth: true,
+  //   },
   {
     label: "Whatsapp",
     href: "/whatsapp",
@@ -103,23 +99,21 @@ const SECONDARY_MENU: MenuItem[] = [
     category: "Tools",
     requireAuth: true,
   },
-  {
-    label: "To-Do",
-    href: "/todo",
-    icon: <FaClipboardList className="w-5 h-5" />,
-    category: "Tools",
-    requireAuth: true,
-  },
+  //   {
+  //     label: "To-Do",
+  //     href: "/todo",
+  //     icon: <FaClipboardList className="w-5 h-5" />,
+  //     category: "Tools",
+  //     requireAuth: true,
+  //   },
 ];
 
-// DISABLED: Permission checks disabled (migrasi ke SQL) - all menu items visible to authenticated users
 const ADMIN_MENU: MenuItem[] = [
   {
     label: "Email",
     href: "/emails",
     icon: <FaEnvelope className="w-4 h-4" />,
     category: "System",
-    // permission: "emails.view", // DISABLED
     requireAuth: true,
   },
   {
@@ -127,7 +121,6 @@ const ADMIN_MENU: MenuItem[] = [
     href: "/roles",
     icon: <FaUserShield className="w-5 h-5" />,
     category: "System",
-    // permission: "roles.view", // DISABLED
     requireAuth: true,
   },
   {
@@ -135,7 +128,6 @@ const ADMIN_MENU: MenuItem[] = [
     href: "/permissions",
     icon: <FaShieldAlt className="w-5 h-5" />,
     category: "System",
-    // permission: "permissions.view", // DISABLED
     requireAuth: true,
   },
   {
@@ -143,7 +135,13 @@ const ADMIN_MENU: MenuItem[] = [
     href: "/users",
     icon: <FaUser className="w-5 h-5" />,
     category: "System",
-    // permissions: ["users.view", "users.view_branch"], // DISABLED
+    requireAuth: true,
+  },
+  {
+    label: "Integration Token",
+    href: "/integration-token",
+    icon: <FaKey className="w-4 h-4" />,
+    category: "System",
     requireAuth: true,
   },
   {
@@ -151,15 +149,13 @@ const ADMIN_MENU: MenuItem[] = [
     href: "/workflows",
     icon: <FaSitemap className="w-5 h-5" />,
     category: "System",
-    // permission: "workflows.view", // DISABLED
     requireAuth: true,
   },
   {
     label: "Workflow States",
-    href: "/workflow-state",
+    href: "/workflow-states",
     icon: <FaCircle className="w-4 h-4" />,
     category: "System",
-    // permission: "workflows.view", // DISABLED
     requireAuth: true,
   },
 ];
@@ -170,7 +166,6 @@ const MASTER_MENU: MenuItem[] = [
     href: "/branches",
     icon: <FaBuilding className="w-4 h-4" />,
     category: "Master Data",
-    // permission: "branches.view",
     requireAuth: true,
   },
   {
@@ -215,7 +210,7 @@ const CATALOG_SUBMENU: MenuItem[] = [
 
 const CUSTOMER_SUBMENU: MenuItem[] = [
   {
-    label: "Customers (New)",
+    label: "All Customers",
     href: "/customers/company",
     icon: <FaLayerGroup className="w-4 h-4" />,
     category: "Customer",
@@ -256,13 +251,14 @@ const CUSTOMER_SUBMENU: MenuItem[] = [
   //   category: "Customer",
   //   requireAuth: true,
   // },
-  {
-    label: "Members",
-    href: "/members",
-    icon: <MdMapsHomeWork className="w-4 h-4" />,
-    category: "Customer",
-    requireAuth: true,
-  },
+  // {
+  //   label: "Members",
+  //   href: "/members",
+  //   icon: <MdMapsHomeWork className="w-4 h-4" />,
+  //   category: "Customer",
+  //   requireAuth: true,
+  // },
+  
   // {
   //   label: "Tiers",
   //   href: "/member-tiers",
@@ -385,7 +381,10 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
     } else if (
       pathname.startsWith("/roles") ||
       pathname.startsWith("/workflows") ||
-      pathname.startsWith("/emails")
+      pathname.startsWith("/workflow-states") ||
+      pathname.startsWith("/permissions") ||
+      pathname.startsWith("/emails") ||
+      pathname.startsWith("/integration-token")
     ) {
       setOpenSubmenu("admin");
     }

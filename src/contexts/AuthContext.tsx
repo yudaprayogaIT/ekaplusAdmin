@@ -1,4 +1,3 @@
-// src/contexts/AuthContext.tsx
 "use client";
 
 import React, {
@@ -14,9 +13,17 @@ import {
   registerSessionExpiredCallback,
   unregisterSessionExpiredCallback,
   apiFetch,
+  API_CONFIG,
+  getApiUrl,
 } from "../config/api";
+import {
+  PermissionRule,
+  dedupePermissionRules,
+  deriveFlatPermissions,
+  expandPermissionCandidates,
+  extractPermissionRules,
+} from "@/lib/authz";
 
-// Types
 export type User = {
   id: string;
   first_name: string;
@@ -56,20 +63,14 @@ export type Role = {
   status: string;
 };
 
-export type RolePermission = {
-  role_id: string;
-  role_name: string;
-  permissions: string[];
-};
-
 export type LoginResult = {
   success: boolean;
   message?: string;
 };
 
 type ApiUser = {
-  ID?: string;
-  id?: string;
+  ID?: string | number;
+  id?: string | number;
   FirstName?: string;
   first_name?: string;
   LastName?: string;
@@ -92,6 +93,8 @@ type ApiUser = {
   date_of_birth?: string;
   BirthPlace?: string;
   birth_place?: string;
+  PlaceOfBirth?: string;
+  place_of_birth?: string;
   ProfilePic?: string | null;
   profile_pic?: string | null;
   ProfileBgColor?: string;
@@ -102,8 +105,8 @@ type ApiUser = {
   role?: string;
   BranchID?: string | number;
   branch_id?: string | number;
-  Status?: string;
-  status?: string;
+  Status?: string | number;
+  status?: string | number;
   WorkflowState?: string | null;
   workflow_state?: string | null;
   IsSystem?: boolean;
@@ -121,12 +124,39 @@ type ApiLoginResponse = {
   data?: {
     access_token?: string;
     user?: ApiUser;
+    permissions?: unknown;
+    permission_rules?: unknown;
+    role_permissions?: unknown;
+    roles?: unknown;
+    current_role?: unknown;
   };
+};
+
+type ApiUserMeResponse = {
+  status?: string;
+  code?: string;
+  message?: string;
+  data?: Record<string, unknown> | null;
 };
 
 type ApiErrorResponse = {
   status?: string;
   message?: string;
+};
+
+type AuthzSnapshot = {
+  currentRole: Role | null;
+  permissions: string[];
+  permissionRules: PermissionRule[];
+};
+
+type ResolvedSessionState = AuthzSnapshot & {
+  user: User;
+};
+
+type JwtPayload = {
+  exp?: number;
+  [key: string]: unknown;
 };
 
 type AuthContextType = {
@@ -150,18 +180,27 @@ const AuthContext = createContext<AuthContextType | null>(null);
 const AUTH_KEY = "ekaplus_current_user";
 const TOKEN_KEY = "ekaplus_auth_token";
 const USER_DATA_KEY = "ekaplus_user_data";
+const AUTHZ_DATA_KEY = "ekaplus_authz_data";
 const API_BASE_URL = "https://api-ekaplus.ekatunggal.com";
 
-// Mapping API response fields to internal User type
 function mapApiUserToUser(apiUser: ApiUser): User {
+  const roleId = apiUser.RoleID ?? apiUser.role_id ?? "";
+  const birthPlace =
+    apiUser.BirthPlace ||
+    apiUser.birth_place ||
+    apiUser.PlaceOfBirth ||
+    apiUser.place_of_birth ||
+    "";
+  const statusValue = apiUser.Status ?? apiUser.status ?? "active";
+
   return {
-    id: String(apiUser.ID || apiUser.id),
+    id: String(apiUser.ID || apiUser.id || ""),
     first_name: apiUser.FirstName || apiUser.first_name || "",
     last_name: apiUser.LastName || apiUser.last_name || "",
     full_name:
       apiUser.FullName ||
       apiUser.full_name ||
-      `${apiUser.FirstName || ""} ${apiUser.LastName || ""}`.trim(),
+      `${apiUser.FirstName || apiUser.first_name || ""} ${apiUser.LastName || apiUser.last_name || ""}`.trim(),
     username: apiUser.Username || apiUser.username || "",
     email: apiUser.Email || apiUser.email || "",
     phone: apiUser.Phone || apiUser.phone || "",
@@ -171,29 +210,27 @@ function mapApiUserToUser(apiUser: ApiUser): User {
       apiUser.IsPhoneVerified || apiUser.is_phone_verified || false,
     gender: apiUser.Gender || apiUser.gender || "",
     date_of_birth: apiUser.DateOfBirth || apiUser.date_of_birth || "",
-    birth_place: apiUser.BirthPlace || apiUser.birth_place || "",
+    birth_place: birthPlace,
     profile_pic: apiUser.ProfilePic || apiUser.profile_pic || null,
     profile_bg_color:
       apiUser.ProfileBgColor || apiUser.profile_bg_color || "#3B82F6",
-    role_id: String(apiUser.RoleID || apiUser.role_id || ""),
+    role_id: String(roleId),
     role: apiUser.Role || apiUser.role || "",
-    branch_id: apiUser.BranchID
-      ? String(apiUser.BranchID)
-      : apiUser.branch_id
-      ? String(apiUser.branch_id)
-      : null,
-    status: apiUser.Status || apiUser.status || "active",
+    branch_id:
+      apiUser.BranchID !== undefined && apiUser.BranchID !== null && apiUser.BranchID !== ""
+        ? String(apiUser.BranchID)
+        : apiUser.branch_id !== undefined &&
+            apiUser.branch_id !== null &&
+            apiUser.branch_id !== ""
+          ? String(apiUser.branch_id)
+          : null,
+    status: String(statusValue),
     workflow_state: apiUser.WorkflowState || apiUser.workflow_state || null,
     is_system: apiUser.IsSystem || apiUser.is_system || false,
     created_at: apiUser.CreatedAt || apiUser.created_at || "",
     updated_at: apiUser.UpdatedAt || apiUser.updated_at || "",
   };
 }
-
-type JwtPayload = {
-  exp?: number;
-  [key: string]: unknown;
-};
 
 function decodeJwtPayload(token: string): JwtPayload | null {
   const parts = token.split(".");
@@ -227,7 +264,8 @@ async function isForbiddenAuth(response: Response): Promise<boolean> {
       const data = (await cloned.json().catch(() => null)) as
         | { message?: string; error?: string; detail?: string }
         | null;
-      message = `${data?.message || ""} ${data?.error || ""} ${data?.detail || ""}`.toLowerCase();
+      message =
+        `${data?.message || ""} ${data?.error || ""} ${data?.detail || ""}`.toLowerCase();
     } else {
       message = (await cloned.text().catch(() => "")).toLowerCase();
     }
@@ -244,32 +282,278 @@ async function isForbiddenAuth(response: Response): Promise<boolean> {
   }
 }
 
+function normalizeRoleName(value: string): string {
+  return value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+}
+
+function resolveRoleColor(roleName: string, isSystem: boolean): string {
+  if (isSystem) return "#DC2626";
+  if (roleName.includes("admin")) return "#DC2626";
+  if (roleName.includes("manager")) return "#D97706";
+  if (roleName.includes("sales")) return "#2563EB";
+  return "#6B7280";
+}
+
+function createRoleFromRecord(record: Record<string, unknown>): Role | null {
+  const displayName =
+    (typeof record.display_name === "string" && record.display_name) ||
+    (typeof record.displayName === "string" && record.displayName) ||
+    (typeof record.Name === "string" && record.Name) ||
+    (typeof record.name === "string" && record.name) ||
+    (typeof record.role_name === "string" && record.role_name) ||
+    (typeof record.roleName === "string" && record.roleName) ||
+    "";
+  const roleSlug =
+    (typeof record.slug === "string" && record.slug) ||
+    (typeof record.Slug === "string" && record.Slug) ||
+    normalizeRoleName(displayName);
+
+  if (!displayName && !roleSlug) return null;
+
+  const isSystem = Boolean(
+    record.is_system ?? record.IsSystem ?? roleSlug.includes("admin"),
+  );
+
+  return {
+    id: String(record.id ?? record.ID ?? (roleSlug || displayName)),
+    name: normalizeRoleName(roleSlug || displayName),
+    display_name: displayName || roleSlug,
+    description:
+      (typeof record.description === "string" && record.description) ||
+      (typeof record.Description === "string" && record.Description) ||
+      "",
+    level: Number(record.level ?? 0),
+    color:
+      (typeof record.color === "string" && record.color) ||
+      resolveRoleColor(roleSlug || displayName, isSystem),
+    icon: (typeof record.icon === "string" && record.icon) || "",
+    is_system: isSystem,
+    can_be_deleted: !isSystem,
+    status: String(record.status ?? "active"),
+  };
+}
+
+function resolveCurrentRole(user: User, sources: unknown[]): Role | null {
+  for (const source of sources) {
+    if (!source || typeof source !== "object") continue;
+    const record = source as Record<string, unknown>;
+
+    const directRoleKeys = [
+      record.current_role,
+      record.currentRole,
+      record.primary_role,
+      record.primaryRole,
+      record.role_details,
+      record.roleDetails,
+    ];
+
+    for (const candidate of directRoleKeys) {
+      if (candidate && typeof candidate === "object") {
+        const role = createRoleFromRecord(candidate as Record<string, unknown>);
+        if (role) return role;
+      }
+    }
+
+    if (Array.isArray(record.roles)) {
+      for (const item of record.roles) {
+        if (typeof item === "object" && item) {
+          const role = createRoleFromRecord(item as Record<string, unknown>);
+          if (role) return role;
+        }
+        if (typeof item === "string" && item.trim()) {
+          const name = item.trim();
+          return {
+            id: normalizeRoleName(name),
+            name: normalizeRoleName(name),
+            display_name: name,
+            description: "",
+            level: 0,
+            color: resolveRoleColor(name, false),
+            icon: "",
+            is_system: false,
+            can_be_deleted: true,
+            status: "active",
+          };
+        }
+      }
+    }
+
+    if (typeof record.role === "object" && record.role) {
+      const role = createRoleFromRecord(record.role as Record<string, unknown>);
+      if (role) return role;
+    }
+  }
+
+  if (!user.role && !user.role_id) return null;
+
+  const displayName = user.role || user.role_id;
+  const roleName = normalizeRoleName(displayName);
+  const isSystem = Boolean(user.is_system || roleName.includes("admin"));
+
+  return {
+    id: user.role_id || roleName,
+    name: roleName,
+    display_name: displayName,
+    description: "",
+    level: 0,
+    color: resolveRoleColor(roleName, isSystem),
+    icon: "",
+    is_system: isSystem,
+    can_be_deleted: !isSystem,
+    status: user.status || "active",
+  };
+}
+
+function mergeUser(baseUser: User, nextUser: User): User {
+  return {
+    ...baseUser,
+    ...nextUser,
+    id: nextUser.id || baseUser.id,
+    full_name: nextUser.full_name || baseUser.full_name,
+    username: nextUser.username || baseUser.username,
+    email: nextUser.email || baseUser.email,
+    role: nextUser.role || baseUser.role,
+    role_id: nextUser.role_id || baseUser.role_id,
+    branch_id: nextUser.branch_id || baseUser.branch_id,
+    status: nextUser.status || baseUser.status,
+  };
+}
+
+function safeParseAuthzSnapshot(rawValue: string | null): AuthzSnapshot | null {
+  if (!rawValue) return null;
+
+  try {
+    const parsed = JSON.parse(rawValue) as Partial<AuthzSnapshot>;
+    return {
+      currentRole:
+        parsed.currentRole && typeof parsed.currentRole === "object"
+          ? parsed.currentRole
+          : null,
+      permissions: Array.isArray(parsed.permissions)
+        ? parsed.permissions.filter(
+            (permission): permission is string => typeof permission === "string",
+          )
+        : [],
+      permissionRules: Array.isArray(parsed.permissionRules)
+        ? dedupePermissionRules(
+            parsed.permissionRules.filter(
+              (rule): rule is PermissionRule =>
+                Boolean(rule) &&
+                typeof rule.slug === "string" &&
+                typeof rule.effect === "string" &&
+                typeof rule.scopeType === "string",
+            ),
+          )
+        : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+function hasElevatedAccess(
+  user: User | null,
+  role: Role | null,
+  currentPermissions: string[],
+): boolean {
+  if (!user) return false;
+  if (user.is_system || role?.is_system) return true;
+  if (role && ["administrator", "admin"].includes(role.name)) return true;
+  return currentPermissions.includes("*") || currentPermissions.includes("*.*");
+}
+
+async function fetchLatestUserPayload(token: string): Promise<Record<string, unknown> | null> {
+  try {
+    const response = await apiFetch(
+      getApiUrl(API_CONFIG.ENDPOINTS.USER_ME),
+      { method: "GET", cache: "no-store" },
+      token,
+    );
+
+    if (!response.ok) return null;
+
+    const data = (await response.json().catch(() => null)) as ApiUserMeResponse | null;
+    return data?.data && typeof data.data === "object" ? data.data : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveSessionState(
+  token: string,
+  baseUser: User,
+  sources: unknown[],
+): Promise<ResolvedSessionState> {
+  const latestUserPayload = await fetchLatestUserPayload(token);
+  const effectiveSources = latestUserPayload
+    ? [...sources, latestUserPayload]
+    : sources;
+
+  const latestUser =
+    latestUserPayload && Object.keys(latestUserPayload).length > 0
+      ? mapApiUserToUser(latestUserPayload as ApiUser)
+      : null;
+  const user = latestUser ? mergeUser(baseUser, latestUser) : baseUser;
+  const permissionRules = dedupePermissionRules(
+    extractPermissionRules([user, ...effectiveSources]),
+  );
+  const permissions = deriveFlatPermissions(permissionRules);
+  const currentRole = resolveCurrentRole(user, effectiveSources);
+
+  return {
+    user,
+    currentRole,
+    permissions,
+    permissionRules,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentRole, setCurrentRole] = useState<Role | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
+  const [permissionRules, setPermissionRules] = useState<PermissionRule[]>([]);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [rolePermissions, setRolePermissions] = useState<RolePermission[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
   const originalFetchRef = useRef<typeof fetch | null>(null);
 
-  // Handle session expiration - logout and reload page
+  const applyResolvedSession = useCallback(
+    (session: ResolvedSessionState, tokenValue: string) => {
+      setCurrentUser(session.user);
+      setCurrentRole(session.currentRole);
+      setPermissions(session.permissions);
+      setPermissionRules(session.permissionRules);
+      setToken(tokenValue);
+
+      localStorage.setItem(AUTH_KEY, session.user.id);
+      localStorage.setItem(TOKEN_KEY, tokenValue);
+      localStorage.setItem(USER_DATA_KEY, JSON.stringify(session.user));
+      localStorage.setItem(
+        AUTHZ_DATA_KEY,
+        JSON.stringify({
+          currentRole: session.currentRole,
+          permissions: session.permissions,
+          permissionRules: session.permissionRules,
+        } satisfies AuthzSnapshot),
+      );
+    },
+    [],
+  );
+
   const handleSessionExpired = useCallback(() => {
-    // console.log("⏰ Session expired, logging out...");
     setCurrentUser(null);
     setCurrentRole(null);
     setPermissions([]);
+    setPermissionRules([]);
     setToken(null);
     localStorage.removeItem(AUTH_KEY);
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_DATA_KEY);
-    // Reload the page to redirect to login
+    localStorage.removeItem(AUTHZ_DATA_KEY);
     window.location.reload();
   }, []);
 
-  // Register session expired callback
   useEffect(() => {
     registerSessionExpiredCallback(handleSessionExpired);
     return () => {
@@ -277,7 +561,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [handleSessionExpired]);
 
-  // Global fetch guard for expired/invalid sessions (covers direct fetch usage)
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (originalFetchRef.current) return;
@@ -313,129 +596,81 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [handleSessionExpired]);
 
-  // Load roles and permissions data - DISABLED FOR NOW (migrasi ke SQL)
   useEffect(() => {
-    // async function loadData() {
-    //   try {
-    //     // Load roles
-    //     const rolesRes = await apiFetch("/data/roles.json");
-    //     if (rolesRes.ok) {
-    //       const data = await rolesRes.json();
-    //       setRoles(data.roles || []);
-    //     } else {
-    //       console.error("Failed to load roles:", rolesRes.status);
-    //     }
-
-    //     // Load role permissions
-    //     const rpRes = await apiFetch("/data/role_permissions.json");
-    //     if (rpRes.ok) {
-    //       const data = await rpRes.json();
-    //       setRolePermissions(data.role_permissions || []);
-    //     } else {
-    //       console.error("Failed to load role_permissions:", rpRes.status);
-    //     }
-    //   } catch (error) {
-    //     console.error("Failed to load auth data:", error);
-    //   } finally {
-    //     setDataLoaded(true);
-    //   }
-    // }
-    // loadData();
-
-    // Just mark as loaded without loading JSON files
     setDataLoaded(true);
   }, []);
 
-  // Restore session from saved user data
   const restoreSession = useCallback(
     async (savedToken: string): Promise<boolean> => {
       try {
-        // Try to get user data from localStorage first
         const savedUserData = localStorage.getItem(USER_DATA_KEY);
+        if (!savedUserData) return false;
 
-        if (savedUserData) {
-          const userData = JSON.parse(savedUserData) as User;
+        const savedUser = JSON.parse(savedUserData) as User;
+        const savedAuthz = safeParseAuthzSnapshot(localStorage.getItem(AUTHZ_DATA_KEY));
 
-          // DISABLED: Find role and permissions (migrasi ke SQL)
-          // const role = roles.find(
-          //   (r) => r.id === userData.role_id || r.name === userData.role
-          // );
+        setCurrentUser(savedUser);
+        setCurrentRole(savedAuthz?.currentRole || resolveCurrentRole(savedUser, []));
+        setPermissions(savedAuthz?.permissions || []);
+        setPermissionRules(savedAuthz?.permissionRules || []);
+        setToken(savedToken);
 
-          // const rp = rolePermissions.find(
-          //   (r) =>
-          //     r.role_id === userData.role_id || r.role_name === userData.role
-          // );
-          // const userPermissions = rp?.permissions || [];
-
-          setCurrentUser(userData);
-          setCurrentRole(null); // No role checking for now
-          setPermissions([]); // No permissions for now
-          setToken(savedToken);
-
-          // console.log("✅ Session restored from localStorage");
-          return true;
-        }
-
-        // console.log("⚠️ No saved user data found");
-        return false;
-      } catch (error) {
-        // console.error("❌ Session restore failed:", error);
+        const resolved = await resolveSessionState(savedToken, savedUser, [
+          savedUser,
+          savedAuthz,
+        ]);
+        applyResolvedSession(resolved, savedToken);
+        return true;
+      } catch {
         return false;
       }
     },
-    [] // DISABLED: removed roles, rolePermissions dependency
+    [applyResolvedSession],
   );
 
-  // Check for existing session on mount
   useEffect(() => {
     async function checkSession() {
       try {
         const savedToken = localStorage.getItem(TOKEN_KEY);
 
-        // DISABLED: removed roles and rolePermissions check (migrasi ke SQL)
         if (savedToken) {
           if (isJwtExpired(savedToken)) {
             localStorage.removeItem(TOKEN_KEY);
             localStorage.removeItem(AUTH_KEY);
             localStorage.removeItem(USER_DATA_KEY);
+            localStorage.removeItem(AUTHZ_DATA_KEY);
             return;
           }
-          // console.log("🔍 Found saved token, restoring session...");
-          const restored = await restoreSession(savedToken);
 
+          const restored = await restoreSession(savedToken);
           if (!restored) {
-            // console.log("🧹 Session restore failed, clearing storage...");
             localStorage.removeItem(TOKEN_KEY);
             localStorage.removeItem(AUTH_KEY);
             localStorage.removeItem(USER_DATA_KEY);
+            localStorage.removeItem(AUTHZ_DATA_KEY);
           }
-        } else {
-          // console.log("ℹ️ No saved session found");
         }
       } catch (error) {
-        console.error("❌ Session check failed:", error);
-        // Clear invalid session
+        console.error("Session check failed:", error);
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(AUTH_KEY);
         localStorage.removeItem(USER_DATA_KEY);
+        localStorage.removeItem(AUTHZ_DATA_KEY);
       } finally {
         setIsLoading(false);
       }
     }
 
     if (dataLoaded) {
-      checkSession();
+      void checkSession();
     }
-  }, [dataLoaded, restoreSession]); // DISABLED: removed roles, rolePermissions
+  }, [dataLoaded, restoreSession]);
 
-  // Login with email/username + password via API
   async function login(
     identifier: string,
-    password: string
+    password: string,
   ): Promise<LoginResult> {
     try {
-      // console.log("🔐 Attempting login...");
-
       const response = await apiFetch(`${API_BASE_URL}/api/user/login`, {
         method: "POST",
         headers: {
@@ -451,7 +686,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const errorData = (await response
           .json()
           .catch(() => ({}))) as ApiErrorResponse;
-        // console.log("❌ Login failed:", errorData.message);
         return {
           success: false,
           message:
@@ -461,24 +695,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const responseData = (await response.json()) as ApiLoginResponse;
-      // console.log("📦 Login API Response:", responseData);
-
-      // Check response structure based on your API
       if (responseData.status !== "success" || !responseData.data) {
-        // console.log("❌ Invalid response structure");
         return {
           success: false,
           message: responseData.message || "Login gagal",
         };
       }
 
-      // Extract token and user from data object
       const authToken = responseData.data.access_token;
       const apiUserData = responseData.data.user;
-      console.log(responseData);
-
       if (!authToken) {
-        console.log("❌ Token not found in response");
         return {
           success: false,
           message: "Token tidak ditemukan dalam response",
@@ -486,44 +712,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!apiUserData) {
-        console.log("❌ User data not found in response");
         return {
           success: false,
           message: "Data user tidak ditemukan dalam response",
         };
       }
 
-      // Save token
-      setToken(authToken);
-      localStorage.setItem(TOKEN_KEY, authToken);
-      // console.log("💾 Token saved to localStorage");
-
-      // Map API user data to internal User type
       const userData = mapApiUserToUser(apiUserData);
+      const resolved = await resolveSessionState(authToken, userData, [
+        responseData.data,
+        apiUserData,
+      ]);
 
-      // DISABLED: Find role and permissions (migrasi ke SQL)
-      // const role = roles.find(
-      //   (r) => r.id === userData.role_id || r.name === userData.role
-      // );
-
-      // const rp = rolePermissions.find(
-      //   (r) => r.role_id === userData.role_id || r.role_name === userData.role
-      // );
-      // const userPermissions = rp?.permissions || [];
-
-      setCurrentUser(userData);
-      setCurrentRole(null); // No role checking for now
-      setPermissions([]); // No permissions for now
-
-      // Save session - Save both user ID and complete user data
-      localStorage.setItem(AUTH_KEY, userData.id);
-      localStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
-      // console.log("💾 User data saved to localStorage");
-      // console.log("✅ Login successful, session saved");
-
+      applyResolvedSession(resolved, authToken);
       return { success: true };
     } catch (error) {
-      console.error("❌ Login error:", error);
+      console.error("Login error:", error);
       return {
         success: false,
         message:
@@ -535,71 +739,77 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function logout() {
-    // console.log("🚪 Logging out...");
     setCurrentUser(null);
     setCurrentRole(null);
     setPermissions([]);
+    setPermissionRules([]);
     setToken(null);
     localStorage.removeItem(AUTH_KEY);
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_DATA_KEY);
-    // console.log("✅ Logged out, session cleared");
+    localStorage.removeItem(AUTHZ_DATA_KEY);
   }
 
   function hasPermission(permission: string): boolean {
-    // DISABLED: Permission checking disabled (migrasi ke SQL)
-    // Allow all users to access all features for now
-    return true;
+    if (!currentUser) return false;
+    if (hasElevatedAccess(currentUser, currentRole, permissions)) return true;
 
-    // // Administrator has all permissions
-    // if (currentRole?.name === "administrator") {
-    //   return true;
-    // }
-    // return permissions.includes(permission);
+    const candidates = expandPermissionCandidates(permission);
+    if (permissionRules.length > 0) {
+      const matchingRules = permissionRules.filter((rule) =>
+        candidates.includes(rule.slug),
+      );
+
+      if (
+        matchingRules.some(
+          (rule) => rule.effect === "deny" && rule.scopeType === "all",
+        )
+      ) {
+        return false;
+      }
+
+      if (matchingRules.some((rule) => rule.effect === "allow")) {
+        return true;
+      }
+    }
+
+    return candidates.some((candidate) => permissions.includes(candidate));
   }
 
-  function hasAnyPermission(perms: string[]): boolean {
-    // DISABLED: Permission checking disabled (migrasi ke SQL)
-    // Allow all users to access all features for now
-    return true;
-
-    // if (currentRole?.name === "administrator") {
-    //   return true;
-    // }
-    // return perms.some((p) => permissions.includes(p));
+  function hasAnyPermission(requestedPermissions: string[]): boolean {
+    return requestedPermissions.some((permission) => hasPermission(permission));
   }
 
-  function hasAllPermissions(perms: string[]): boolean {
-    // DISABLED: Permission checking disabled (migrasi ke SQL)
-    // Allow all users to access all features for now
-    return true;
-
-    // if (currentRole?.name === "administrator") {
-    //   return true;
-    // }
-    // return perms.every((p) => permissions.includes(p));
+  function hasAllPermissions(requestedPermissions: string[]): boolean {
+    return requestedPermissions.every((permission) => hasPermission(permission));
   }
 
   function canAccessBranch(branchId?: string | null): boolean {
-    // DISABLED: Branch access control disabled (migrasi ke SQL)
-    // Allow all users to access all branches for now
-    return true;
+    if (branchId === undefined || branchId === null || branchId === "") {
+      return true;
+    }
 
-    // // if no branch specified, allow (permission check not applicable)
-    // if (branchId === undefined || branchId === null || branchId === "") {
-    //   return true;
-    // }
+    if (!currentUser) return false;
+    if (hasElevatedAccess(currentUser, currentRole, permissions)) return true;
 
-    // // if not logged in, deny
-    // if (!currentUser) return false;
+    const branchToken = String(branchId);
+    const branchDenied = permissionRules.some(
+      (rule) =>
+        rule.effect === "deny" &&
+        rule.scopeType === "branch" &&
+        rule.scopeValue === branchToken,
+    );
+    if (branchDenied) return false;
 
-    // // admins and system users can access any branch
-    // if (currentRole?.name === "administrator" || currentUser.is_system) {
-    //   return true;
-    // }
+    const branchAllowed = permissionRules.some(
+      (rule) =>
+        rule.effect === "allow" &&
+        rule.scopeType === "branch" &&
+        (!rule.scopeValue || rule.scopeValue === branchToken),
+    );
+    if (branchAllowed) return true;
 
-    // // otherwise only allow if user's branch matches requested branch
-    // return currentUser.branch_id === branchId;
+    return currentUser.branch_id === branchToken;
   }
 
   const value: AuthContextType = {

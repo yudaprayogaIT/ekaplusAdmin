@@ -1,6 +1,11 @@
 // src/app/workflows/page.tsx
+import RequireAuth from "@/components/auth/RequireAuth";
 import WorkflowList from "@/components/workflows/WorkflowList";
 
 export default function WorkflowsPage() {
-  return <WorkflowList />;
+  return (
+    <RequireAuth>
+      <WorkflowList />
+    </RequireAuth>
+  );
 }

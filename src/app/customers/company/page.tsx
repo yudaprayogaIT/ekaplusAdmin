@@ -8,7 +8,7 @@ export const metadata = {
 
 export default function CustomersPage() {
   return (
-    <RequireAuth permission="customer.view">
+    <RequireAuth>
       <CustomerOverviewPage />
     </RequireAuth>
   );

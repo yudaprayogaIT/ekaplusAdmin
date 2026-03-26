@@ -50,6 +50,10 @@ export interface CustomerRegistration {
     company_email?: string;
     fax?: string;
     factory_address?: string;
+    payment_method?: string;
+    payment_account?: string;
+    more_information?: string;
+    sales_team?: string;
   };
 
   // 4a. Identitas Penanggung Jawab Cabang
@@ -135,6 +139,7 @@ export interface CustomerRegistrationShippingAddress {
   city: string;
   province: string;
   district?: string;
+  village?: string;
   postal_code?: string;
   country?: string;
   pic_name?: string;

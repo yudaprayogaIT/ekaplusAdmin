@@ -33,6 +33,8 @@ import {
   FaTrash,
   FaEdit,
 } from "react-icons/fa";
+import { useSocket } from "@/utils/socket";
+import WhatsAppQR from "./WhatsAppQR";
 
 type WhatsAppDevice = {
   id: number;
@@ -64,6 +66,14 @@ type WhatsAppDevice = {
     name: string;
   };
 };
+
+
+type WhatsAppStatusEvent = {
+  phone: string
+  status: string
+  message: string
+  qr?: string
+}
 
 const statusConfig = {
   connected: {
@@ -113,31 +123,30 @@ function getPlatformIcon(platform: string | undefined) {
 }
 
 // Simulated QR Code component (in real app, get from API)
-function QRCodePlaceholder() {
-  return (
-    <div className="relative w-64 h-64 bg-white p-4 rounded-2xl shadow-lg">
-      <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl flex items-center justify-center relative overflow-hidden">
-        {/* Simulated QR pattern */}
-        <div className="grid grid-cols-8 gap-1 p-4">
-          {Array.from({ length: 64 }).map((_, i) => (
-            <div
-              key={i}
-              className={`w-4 h-4 rounded-sm ${
-                Math.random() > 0.5 ? "bg-gray-900" : "bg-white"
-              }`}
-            />
-          ))}
-        </div>
-        {/* WhatsApp logo in center */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-lg">
-            <FaWhatsapp className="w-8 h-8 text-green-500" />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+// function QRCodePlaceholder() {
+//   return (
+//     <div className="relative w-64 h-64 bg-white p-4 rounded-2xl shadow-lg">
+//       <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl flex items-center justify-center relative overflow-hidden">
+//         {/* Simulated QR pattern */}
+//         <div className="grid grid-cols-8 gap-1 p-4">
+//           {Array.from({ length: 64 }).map((_, i) => (
+//             <div
+//               key={i}
+//               className={`w-4 h-4 rounded-sm ${Math.random() > 0.5 ? "bg-gray-900" : "bg-white"
+//                 }`}
+//             />
+//           ))}
+//         </div>
+//         {/* WhatsApp logo in center */}
+//         <div className="absolute inset-0 flex items-center justify-center">
+//           <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-lg">
+//             <FaWhatsapp className="w-8 h-8 text-green-500" />
+//           </div>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
 
 export default function WhatsAppDetailModal({
   open,
@@ -158,12 +167,27 @@ export default function WhatsAppDetailModal({
   onDelete?: (device: WhatsAppDevice) => void;
   onEdit?: (device: WhatsAppDevice) => void;
 }) {
+  const { on } = useSocket();
+  const [qr, setQr] = useState("");
+  const [status, setStatus] = useState("");
+  const [message, setMessage] = useState("Loading status...");
   const [activeTab, setActiveTab] = useState<"info" | "qrcode" | "settings">(
     "info"
   );
   const [copied, setCopied] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
   const [countdown, setCountdown] = useState(60);
+
+  useEffect(() => {
+    on<WhatsAppStatusEvent>(`whatsapp_status_${device?.phone}`, (data) => {
+      console.log(data)
+      if (data) {
+        setQr(data.qr ?? "")
+        setStatus(data.status)  
+        setMessage(data.message)
+      } 
+    })
+  }, [device?.phone]);
 
   useEffect(() => {
     if (activeTab === "qrcode" && device?.status !== "connected") {
@@ -201,6 +225,8 @@ export default function WhatsAppDetailModal({
     setCopied(field);
     setTimeout(() => setCopied(null), 2000);
   };
+
+
 
   return (
     <AnimatePresence>
@@ -277,33 +303,30 @@ export default function WhatsAppDetailModal({
               <div className="flex gap-1 p-2">
                 <button
                   onClick={() => setActiveTab("info")}
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all ${
-                    activeTab === "info"
-                      ? "bg-green-500 text-white shadow-lg"
-                      : "text-gray-600 hover:bg-gray-100"
-                  }`}
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all ${activeTab === "info"
+                    ? "bg-green-500 text-white shadow-lg"
+                    : "text-gray-600 hover:bg-gray-100"
+                    }`}
                 >
                   <FaInfoCircle className="w-4 h-4" />
                   Informasi
                 </button>
                 <button
                   onClick={() => setActiveTab("qrcode")}
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all ${
-                    activeTab === "qrcode"
-                      ? "bg-green-500 text-white shadow-lg"
-                      : "text-gray-600 hover:bg-gray-100"
-                  }`}
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all ${activeTab === "qrcode"
+                    ? "bg-green-500 text-white shadow-lg"
+                    : "text-gray-600 hover:bg-gray-100"
+                    }`}
                 >
                   <FaQrcode className="w-4 h-4" />
                   QR Code
                 </button>
                 <button
                   onClick={() => setActiveTab("settings")}
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all ${
-                    activeTab === "settings"
-                      ? "bg-green-500 text-white shadow-lg"
-                      : "text-gray-600 hover:bg-gray-100"
-                  }`}
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all ${activeTab === "settings"
+                    ? "bg-green-500 text-white shadow-lg"
+                    : "text-gray-600 hover:bg-gray-100"
+                    }`}
                 >
                   <FaCog className="w-4 h-4" />
                   Pengaturan
@@ -375,13 +398,12 @@ export default function WhatsAppDetailModal({
                     </div>
                     <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all ${
-                          usagePercent >= 90
-                            ? "bg-red-500"
-                            : usagePercent >= 70
+                        className={`h-full rounded-full transition-all ${usagePercent >= 90
+                          ? "bg-red-500"
+                          : usagePercent >= 70
                             ? "bg-yellow-500"
                             : "bg-green-500"
-                        }`}
+                          }`}
                         style={{ width: `${Math.min(usagePercent, 100)}%` }}
                       />
                     </div>
@@ -500,7 +522,7 @@ export default function WhatsAppDetailModal({
 
               {activeTab === "qrcode" && (
                 <div className="flex flex-col items-center justify-center py-8">
-                  {device.status === "connected" ? (
+                  {status == "connected" ? (
                     <div className="text-center">
                       <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <FaCheckCircle className="w-12 h-12 text-green-500" />
@@ -522,16 +544,17 @@ export default function WhatsAppDetailModal({
                         Disconnect
                       </motion.button>
                     </div>
-                  ) : qrLoading ? (
+                  ) : qr == "" ? (
                     <div className="text-center">
                       <div className="w-64 h-64 bg-gray-100 rounded-2xl flex items-center justify-center mb-4">
                         <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
                       </div>
-                      <p className="text-gray-600">Generating QR Code...</p>
+                      <p className="text-gray-600">{message}</p>
                     </div>
                   ) : (
                     <div className="text-center">
-                      <QRCodePlaceholder />
+                      {/* <QRCodePlaceholder /> */}
+                      <WhatsAppQR qr={qr}  msg={message} />
                       <div className="mt-6 space-y-4">
                         <h3 className="text-xl font-bold text-gray-800">
                           Scan QR Code dengan WhatsApp
@@ -594,11 +617,10 @@ export default function WhatsAppDetailModal({
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={() => onToggleStatus?.(device)}
-                      className={`px-4 py-2 rounded-xl font-semibold transition-colors ${
-                        device.disabled === 0
-                          ? "bg-red-100 text-red-700 hover:bg-red-200"
-                          : "bg-green-100 text-green-700 hover:bg-green-200"
-                      }`}
+                      className={`px-4 py-2 rounded-xl font-semibold transition-colors ${device.disabled === 0
+                        ? "bg-red-100 text-red-700 hover:bg-red-200"
+                        : "bg-green-100 text-green-700 hover:bg-green-200"
+                        }`}
                     >
                       {device.disabled === 0 ? "Nonaktifkan" : "Aktifkan"}
                     </motion.button>
@@ -608,9 +630,8 @@ export default function WhatsAppDetailModal({
                   <div className="flex items-center justify-between p-5 bg-gray-50 rounded-2xl border-2 border-gray-200">
                     <div className="flex items-center gap-4">
                       <FaStar
-                        className={`w-6 h-6 ${
-                          device.is_default ? "text-yellow-500" : "text-gray-400"
-                        }`}
+                        className={`w-6 h-6 ${device.is_default ? "text-yellow-500" : "text-gray-400"
+                          }`}
                       />
                       <div>
                         <h4 className="font-semibold text-gray-800">
