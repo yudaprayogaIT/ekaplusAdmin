@@ -103,6 +103,22 @@ function toUpperInput(value?: string): string {
   return (value || "").toUpperCase();
 }
 
+function getInitialNbName(registration: CustomerRegistration): string {
+  return normalizeEntityName(
+    registration.master_links?.nb_manual ||
+      registration.user.full_name ||
+      registration.company.name ||
+      "",
+  );
+}
+
+function getInitialGpName(registration: CustomerRegistration): string {
+  return normalizeEntityName(
+    registration.master_links?.gp_manual ||
+      `${registration.user.full_name || registration.company.name} GP`,
+  );
+}
+
 function extractIdFromResourceResponse(json: unknown): number | undefined {
   if (
     json &&
@@ -252,20 +268,19 @@ export function ApproveRegistrationModal({
       if (shippingAddresses.length > 0) {
         return shippingAddresses;
       }
-      return [
-        {
-          id: -1,
-          parent_id: Number(registration.id),
-          label: "Alamat Perusahaan",
-          address: registration.address.full_address,
-          city: registration.address.city_name,
-          province: registration.address.province_name,
-          district: registration.address.district_name,
-          village: registration.address.village_name,
-          postal_code: registration.address.postal_code,
-          pic_name:
-            registration.branch_owner?.full_name || registration.user.full_name,
-          pic_phone:
+        return [
+          {
+            id: -1,
+            parent_id: Number(registration.id),
+            label: "Alamat Perusahaan",
+            address: registration.address.full_address,
+            city: registration.address.city_name,
+            province: registration.address.province_name,
+            district: registration.address.district_name,
+            village: registration.address.village_name,
+            pic_name:
+              registration.branch_owner?.full_name || registration.user.full_name,
+            pic_phone:
             registration.branch_owner?.phone || registration.user.phone,
           is_default: 1,
         },
@@ -276,7 +291,6 @@ export function ApproveRegistrationModal({
 
   const pushLog = useCallback((log: ApprovalOperationLog) => {
     setOperationLogs((prev) => [...prev, log]);
-    console.log("[ApproveFlow]", log);
   }, []);
 
   const apiJsonRequest = useCallback(
@@ -411,13 +425,18 @@ export function ApproveRegistrationModal({
       if (!isOpen || !registration || !token) return;
 
       setStep(1);
-      setCreateNationalBrand(false);
-      setNbName(normalizeEntityName(registration.user.full_name || ""));
-      setGpName(
-        normalizeEntityName(
-          `${registration.user.full_name || registration.company.name} GP`,
-        ),
+      const initialNbName = getInitialNbName(registration);
+      const initialGpName = getInitialGpName(registration);
+      const shouldCreateNationalBrand = Boolean(
+        !existingNbid && registration.master_links?.nb_manual,
       );
+      const shouldCreateGroupParent = Boolean(
+        !registration.gp_id && registration.master_links?.gp_manual,
+      );
+
+      setCreateNationalBrand(shouldCreateNationalBrand);
+      setNbName(initialNbName);
+      setGpName(initialGpName);
       setGcName(normalizeEntityName(registration.company.name || ""));
       setIsSubmitting(false);
       setError(null);
@@ -444,7 +463,7 @@ export function ApproveRegistrationModal({
       setNbCreatedViaCreateFlow(false);
 
       // Reset all modes & searches
-      setGpMode("search");
+      setGpMode(shouldCreateGroupParent ? "create" : "search");
       setGpSearch("");
       setSelectedGpid(null);
       setGcMode("idle");
@@ -650,6 +669,13 @@ export function ApproveRegistrationModal({
         payment_method: registration?.support_data?.payment_method || undefined,
         payment_account:
           registration?.support_data?.payment_account || undefined,
+        tax_status: registration?.company.tax_status ?? 0,
+        npwp:
+          registration?.company.tax_status === 1
+            ? registration?.company.npwp || undefined
+            : undefined,
+        erp_customer_group:
+          registration?.support_data?.erp_customer_group || undefined,
         notes: registration?.support_data?.more_information || undefined,
         sales_team: registration?.support_data?.sales_team || undefined,
         customer_shipping_address: shippingPayload,
@@ -662,6 +688,9 @@ export function ApproveRegistrationModal({
       registration?.created_by_id,
       registration?.support_data?.payment_method,
       registration?.support_data?.payment_account,
+      registration?.company.tax_status,
+      registration?.company.npwp,
+      registration?.support_data?.erp_customer_group,
       registration?.support_data?.more_information,
       registration?.support_data?.sales_team,
     ],
@@ -944,6 +973,7 @@ export function ApproveRegistrationModal({
   const historyNbName =
     nbDisplayRow?.nb_name ||
     registration.master_links?.nb_name ||
+    registration.master_links?.nb_manual ||
     (nbCreatedViaCreateFlow ? normalizeEntityName(nbName) : "") ||
     "-";
   const historyNbCode =
@@ -951,6 +981,7 @@ export function ApproveRegistrationModal({
   const historyGpName =
     gpResolvedRow?.gp_name ||
     registration.gp_name ||
+    registration.master_links?.gp_manual ||
     (gpCreatedViaCreateFlow ? normalizeEntityName(gpName) : "") ||
     "-";
   const historyGpCode =

@@ -1,26 +1,12 @@
 // src/components/permissions/AddPermissionModal.tsx
 "use client";
 
-import React, {
-  useState,
-  useEffect,
-} from "react";
-import {
-  AnimatePresence,
-  motion,
-} from "framer-motion";
-import {
-  FaTimes,
-  FaSave,
-  FaShieldAlt,
-} from "react-icons/fa";
+import React, { useState, useEffect } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { FaTimes, FaSave, FaShieldAlt } from "react-icons/fa";
 import { Permission } from "./PermissionList";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  API_CONFIG,
-  getAuthHeadersFormData,
-  apiFetch,
-} from "@/config/api";
+import { API_CONFIG, getAuthHeadersFormData, apiFetch } from "@/config/api";
 
 export default function AddPermissionModal({
   open,
@@ -87,7 +73,6 @@ export default function AddPermissionModal({
       if (isEditMode && initialData) {
         // Update existing permission
         const UPDATE_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_PERMISSION}/${initialData.ID}`;
-        console.log("[AddPermissionModal] Updating permission at:", UPDATE_URL);
         response = await apiFetch(UPDATE_URL, {
           method: "PUT",
           headers,
@@ -96,19 +81,13 @@ export default function AddPermissionModal({
       } else {
         // Create new permission
         const CREATE_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_PERMISSION}`;
-        console.log("[AddPermissionModal] Creating permission at:", CREATE_URL);
-        console.log("[AddPermissionModal] FormData fields:", {
-          Name: name.trim(),
-          Slug: slug.trim(),
-        });
+
         response = await apiFetch(CREATE_URL, {
           method: "POST",
           headers,
           body: formData,
         });
       }
-
-      console.log("[AddPermissionModal] Response status:", response.status);
 
       if (response.ok) {
         window.dispatchEvent(new Event("ekatalog:permissions_update"));
@@ -117,17 +96,16 @@ export default function AddPermissionModal({
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
           errorData.message ||
-            `Failed to ${isEditMode ? "update" : "create"} permission`
+            `Failed to ${isEditMode ? "update" : "create"} permission`,
         );
       }
     } catch (error) {
-      console.error("Failed to save permission:", error);
       alert(
         error instanceof Error
           ? error.message
           : `Gagal ${
               isEditMode ? "mengupdate" : "membuat"
-            } permission. Silakan coba lagi.`
+            } permission. Silakan coba lagi.`,
       );
     } finally {
       setLoading(false);

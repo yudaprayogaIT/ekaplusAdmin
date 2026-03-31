@@ -158,12 +158,10 @@ export default function TypeList() {
                     : undefined,
             }));
 
-            console.log("Loaded types:", mappedTypes);
             setTypes(mappedTypes);
             try {
               localStorage.setItem(SNAP_KEY, JSON.stringify(mappedTypes));
             } catch (e) {
-              console.error("Failed to save snapshot:", e);
             }
           }
         } else {
@@ -249,7 +247,6 @@ export default function TypeList() {
           localStorage.setItem(SNAP_KEY, JSON.stringify(mappedTypes));
         }
       } catch (error) {
-        console.error("Failed to reload types:", error);
       }
     }
 
@@ -290,14 +287,12 @@ export default function TypeList() {
           );
         }
 
-        console.log("Type deleted successfully");
 
         // Remove from local state
         const next = types.filter((x) => x.id !== t.id);
         setTypes(next);
         saveSnapshot(next);
       } catch (err: unknown) {
-        console.error("Failed to delete type:", err);
         const errorMessage = err instanceof Error ? err.message : String(err);
         setError(errorMessage);
       }

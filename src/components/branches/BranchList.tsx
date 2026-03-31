@@ -1,19 +1,13 @@
 // src/components/branches/BranchList.tsx
 "use client";
 
-import React, {
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import React, { useEffect, useRef, useState } from "react";
 import BranchCard from "./BranchCard";
 import AddBranchModal from "./AddBranchModal";
 import BranchDetailModal from "./BranchDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import ErrorMessage from "@/components/ui/ErrorMessage";
-import {
-  useAuth,
-} from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   getQueryUrl,
   getResourceUrl,
@@ -100,7 +94,9 @@ export default function BranchList() {
   } = useAuth();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<{ code?: number; message: string } | null>(null);
+  const [error, setError] = useState<{ code?: number; message: string } | null>(
+    null,
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
   const [selectedIsland, setSelectedIsland] = useState<string | null>(null);
@@ -184,12 +180,11 @@ export default function BranchList() {
               : item.owner,
         }));
 
-        console.log("Loaded branches:", mappedBranches);
         setBranches(mappedBranches);
         try {
           localStorage.setItem(SNAP_KEY, JSON.stringify(mappedBranches));
         } catch (e) {
-          console.error("Failed to save snapshot:", e);
+          // console.error("Failed to save snapshot:", e);
         }
       } else {
         const errorCode = res.status;
@@ -209,7 +204,8 @@ export default function BranchList() {
       const errorMessage = err instanceof Error ? err.message : String(err);
       if (errorMessage.includes("Failed to fetch")) {
         setError({
-          message: "Tidak dapat terhubung ke server. Periksa koneksi Anda atau pastikan backend berjalan."
+          message:
+            "Tidak dapat terhubung ke server. Periksa koneksi Anda atau pastikan backend berjalan.",
         });
       } else {
         setError({ message: errorMessage });
@@ -282,7 +278,7 @@ export default function BranchList() {
           localStorage.setItem(SNAP_KEY, JSON.stringify(mappedBranches));
         }
       } catch (error) {
-        console.error("Failed to reload branches:", error);
+        // console.error("Failed to reload branches:", error);
       }
     }
 
@@ -314,26 +310,24 @@ export default function BranchList() {
           {
             method: "DELETE",
             headers,
-          }
+          },
         );
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.message || `Failed to delete branch (${response.status})`
+            errorData.message || `Failed to delete branch (${response.status})`,
           );
         }
-
-        console.log("Branch deleted successfully");
 
         // Remove from local state
         const next = branches.filter((x) => x.id !== branch.id);
         setBranches(next);
         saveSnapshot(next);
       } catch (err: unknown) {
-        console.error("Failed to delete branch:", err);
+        // console.error("Failed to delete branch:", err);
         const errorMessage = err instanceof Error ? err.message : String(err);
-        setError({message: errorMessage});
+        setError({ message: errorMessage });
       }
     };
     setConfirmOpen(true);
@@ -471,7 +465,7 @@ export default function BranchList() {
       (b) =>
         b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         b.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        b.address.toLowerCase().includes(searchQuery.toLowerCase())
+        b.address.toLowerCase().includes(searchQuery.toLowerCase()),
     );
   }
 
@@ -481,7 +475,7 @@ export default function BranchList() {
 
   if (selectedIsland) {
     filteredBranches = filteredBranches.filter(
-      (b) => b.island === selectedIsland
+      (b) => b.island === selectedIsland,
     );
   }
 

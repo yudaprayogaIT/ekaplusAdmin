@@ -154,15 +154,10 @@ export default function BulkProductCreationModal({
 
     setSaving(true);
 
-    try {
-      if (mode === "existing") {
-        // Add variants to existing product
-        console.log(
-          "[BulkProductCreationModal] Adding variants to existing product:",
-          selectedProductId
-        );
-
-        // Create variants one by one
+      try {
+        if (mode === "existing") {
+          // Add variants to existing product
+          // Create variants one by one
         const promises = items.map((item) =>
           createVariant(
             token,
@@ -199,13 +194,7 @@ export default function BulkProductCreationModal({
         const headers = getAuthHeaders(token);
         const url = getResourceUrl(API_CONFIG.ENDPOINTS.PRODUCT);
 
-        console.log("[BulkProductCreationModal] Creating product:", url);
-        console.log(
-          "[BulkProductCreationModal] Payload:",
-          JSON.stringify(payload, null, 2)
-        );
-
-        const response = await apiFetch(url, {
+          const response = await apiFetch(url, {
           method: "POST",
           headers,
           body: JSON.stringify(payload),
@@ -213,13 +202,8 @@ export default function BulkProductCreationModal({
 
         if (response.ok) {
           const responseData = await response.json();
-          console.log("[BulkProductCreationModal] ✅ Product created successfully!");
-          console.log("[BulkProductCreationModal] Response:", responseData);
-          console.log("[BulkProductCreationModal] Product ID:", responseData.data?.id);
-          console.log("[BulkProductCreationModal] Expected variants:", items.length);
 
           // Dispatch events to trigger reload
-          console.log("[BulkProductCreationModal] Dispatching events...");
           window.dispatchEvent(new Event("ekatalog:products_update"));
           window.dispatchEvent(new Event("ekatalog:variants_update"));
 
@@ -231,11 +215,6 @@ export default function BulkProductCreationModal({
           onClose();
         } else {
           const errorText = await response.text();
-          console.error(
-            "[BulkProductCreationModal] Product creation failed:",
-            response.status,
-            errorText
-          );
 
           let errorMessage = "Unknown error";
           try {
@@ -260,7 +239,6 @@ export default function BulkProductCreationModal({
         }
       }
     } catch (error) {
-      console.error("[BulkProductCreationModal] Error:", error);
       alert(
         `Gagal menyimpan. Silakan coba lagi.\n\nError: ${
           error instanceof Error ? error.message : String(error)

@@ -8,10 +8,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
-import {
-  useRouter,
-  useSearchParams,
-} from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import ProductCard from "./ProductCard";
 import AddProductModal from "./AddProductModal";
 import ProductDetailModal from "./ProductDetailModal";
@@ -28,16 +25,8 @@ import {
   FaSortAmountDown,
   FaChevronDown,
 } from "react-icons/fa";
-import {
-  motion,
-  AnimatePresence,
-} from "framer-motion";
-import type {
-  Item,
-  Product,
-  ProductFormData,
-  Category,
-} from "@/types";
+import { motion, AnimatePresence } from "framer-motion";
+import type { Item, Product, ProductFormData, Category } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   API_CONFIG,
@@ -51,10 +40,7 @@ import FilterBuilder from "@/components/filters/FilterBuilder";
 import { useFilters } from "@/hooks/useFilters";
 import { PRODUCT_FILTER_FIELDS } from "@/config/filterFields";
 import { FilterTriple } from "@/types/filter";
-import {
-  buildSearchParams,
-  parseSearchParams,
-} from "@/utils/urlSync";
+import { buildSearchParams, parseSearchParams } from "@/utils/urlSync";
 
 type SortField =
   | "product_name"
@@ -121,19 +107,19 @@ export default function ProductList() {
   const [staticDataLoaded, setStaticDataLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ code?: number; message: string } | null>(
-    null
+    null,
   );
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortField, setSortField] = useState<SortField>(
-    (urlState.sortField as SortField) || "product_name"
+    (urlState.sortField as SortField) || "product_name",
   );
   const [sortDirection, setSortDirection] = useState<SortDirection>(
-    urlState.sortDirection || "asc"
+    urlState.sortDirection || "asc",
   );
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState(urlState.searchQuery);
   const [showHotDealsOnly, setShowHotDealsOnly] = useState(
-    urlState.showHotDealsOnly
+    urlState.showHotDealsOnly,
   );
 
   // Server-side pagination state
@@ -144,7 +130,7 @@ export default function ProductList() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<ProductFormData | null>(
-    null
+    null,
   );
 
   const [detailOpen, setDetailOpen] = useState(false);
@@ -163,7 +149,7 @@ export default function ProductList() {
     filterTriples: FilterTriple[] = [],
     sort_by?: SortField,
     sort_order?: SortDirection,
-    page: number = 1
+    page: number = 1,
   ): Promise<{
     productsWithVariants: Product[];
     totalItems: number;
@@ -222,11 +208,7 @@ export default function ProductList() {
       productSpec.order_by = [[sort_by, sort_order]];
     }
 
-    // console.log("[ProductList] Filter Triples:", filterTriples);
-    // console.log("[ProductList] Product Spec:", productSpec);
-
     const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, productSpec);
-    // console.log("[ProductList] Request URL:", productsUrl);
     const productsRes = await apiFetch(productsUrl, {
       method: "GET",
       cache: "no-store",
@@ -239,238 +221,178 @@ export default function ProductList() {
     if (productsRes.ok) {
       const response = await productsRes.json();
 
-      // console.log("[ProductList] Full API Response:", response);
-
-      // Parse pagination metadata - check multiple possible field names
       totalItems =
         response.total || response.count || response.total_count || 0;
 
       if (totalItems > 0) {
-        // API returned total count
         totalPages = Math.ceil(totalItems / 20);
-        // console.log("[ProductList] Using API total count");
       } else if (response.data.length > 0) {
-        // API didn't return total count, use optimistic pagination
-        console.warn(
-          "[ProductList] API did not return total count, using optimistic pagination"
-        );
-
         if (response.data.length < 20) {
-          // Less than page size means this is the last page
           totalPages = page;
           totalItems = (page - 1) * 20 + response.data.length;
-          // console.log("[ProductList] Last page detected (less than 20 items)");
         } else {
-          // Full page (exactly 20 items), assume there might be more pages
           totalPages = page + 1; // Show "next" button
           totalItems = (page + 1) * 20; // Approximate total to show pagination
-          // console.log("[ProductList] Full page detected, showing next page button");
         }
       } else {
         totalPages = 1;
         totalItems = 0;
-        // console.log("[ProductList] No data");
       }
 
-      console.log("[ProductList] Pagination metadata:", {
-        totalItems,
-        totalPages,
-        currentPage: page,
-        dataLength: response.data.length,
-        responseKeys: Object.keys(response),
-        usingOptimisticPagination: !response.total,
-      });
-
-      // console.log("=== PRODUCT LIST - VARIANT LOADING DEBUG ===");
-      // console.log("Total products loaded:", response.data.length);
-
-      // // Debug first product
-      // if (response.data.length > 0) {
-      //   console.log("First product raw:", response.data[0]);
-      //   console.log("First product variants:", response.data[0].variants);
-      // }
-
-      productsWithVariants = response.data.map(
-        (
-          prod: ProductApiResponse & {
-            variants?: Array<{
-              item: {
-                id: number | string;
-                item_code: string;
-                item_name: string;
-                image?: string;
-              };
-            }>;
-            item_category:
-              | number
-              | string
-              | { id?: number | string; category_name?: string };
-            item_category_id?: number | string;
-          }
-        ) => {
-          const productId = toNumber(prod.id);
-          if (productId === null) {
-            console.warn(
-              `[ProductList] Invalid product id received: ${prod.id}. Product skipped.`
-            );
-            return null;
-          }
-
-          // Use nested category data from API if available, otherwise fallback to lookup
-          let finalCategory: { id: number; name: string };
-
-          // Type guard to check if item_category is an object with category_name
-          const categoryObj =
-            typeof prod.item_category === "object" &&
-            prod.item_category !== null
-              ? (prod.item_category as {
-                  id?: number | string;
-                  category_name?: string;
-                })
-              : null;
-
-          if (categoryObj && categoryObj.category_name) {
-            // Category name fetched directly from API (nested object)
-            finalCategory = {
-              id: toNumber(categoryObj.id) ?? toNumber(prod.item_category_id) ?? 0,
-              name: categoryObj.category_name,
-            };
-            console.log(
-              `[ProductList] Using nested category from API: ${finalCategory.name} (ID: ${finalCategory.id})`
-            );
-          } else {
-            // Fallback: lookup from categories array
-            const categoryId =
-              typeof prod.item_category === "number"
-                ? prod.item_category
-                : typeof prod.item_category === "string"
-                  ? prod.item_category
-                  : prod.item_category_id;
-            const normalizedCategoryId = toNumber(categoryId);
-            console.log(
-              `[ProductList] Looking for category ID ${normalizedCategoryId} in ${categories.length} categories`
-            );
-            const category = categories.find(
-              (c) => c.id === normalizedCategoryId
-            );
-
-            if (!category) {
-              console.warn(
-                `[ProductList] Category ${normalizedCategoryId} not found! Using fallback. Available categories:`,
-                categories.map((c) => ({ id: c.id, name: c.name }))
-              );
+      productsWithVariants = response.data
+        .map(
+          (
+            prod: ProductApiResponse & {
+              variants?: Array<{
+                item: {
+                  id: number | string;
+                  item_code: string;
+                  item_name: string;
+                  image?: string;
+                };
+              }>;
+              item_category:
+                | number
+                | string
+                | { id?: number | string; category_name?: string };
+              item_category_id?: number | string;
+            },
+          ) => {
+            const productId = toNumber(prod.id);
+            if (productId === null) {
+              return null;
             }
 
-            finalCategory = category || {
-              id: normalizedCategoryId || 0,
-              name: `Category ${normalizedCategoryId}`,
-            };
-          }
+            // Use nested category data from API if available, otherwise fallback to lookup
+            let finalCategory: { id: number; name: string };
 
-          // Transform variants from API response
-          const rawVariants = (prod.variants || []).map((v) => {
-            const itemId = toNumber(v.item.id);
-            if (itemId === null) return null;
+            // Type guard to check if item_category is an object with category_name
+            const categoryObj =
+              typeof prod.item_category === "object" &&
+              prod.item_category !== null
+                ? (prod.item_category as {
+                    id?: number | string;
+                    category_name?: string;
+                  })
+                : null;
 
-            // Find full item data from availableItems state
-            const fullItem = availableItems.find(
-              (item) => item.id === itemId
+            if (categoryObj && categoryObj.category_name) {
+              // Category name fetched directly from API (nested object)
+              finalCategory = {
+                id:
+                  toNumber(categoryObj.id) ??
+                  toNumber(prod.item_category_id) ??
+                  0,
+                name: categoryObj.category_name,
+              };
+            } else {
+              // Fallback: lookup from categories array
+              const categoryId =
+                typeof prod.item_category === "number"
+                  ? prod.item_category
+                  : typeof prod.item_category === "string"
+                    ? prod.item_category
+                    : prod.item_category_id;
+              const normalizedCategoryId = toNumber(categoryId);
+
+              const category = categories.find(
+                (c) => c.id === normalizedCategoryId,
+              );
+
+              finalCategory = category || {
+                id: normalizedCategoryId || 0,
+                name: `Category ${normalizedCategoryId}`,
+              };
+            }
+
+            // Transform variants from API response
+            const rawVariants = (prod.variants || [])
+              .map((v) => {
+                const itemId = toNumber(v.item.id);
+                if (itemId === null) return null;
+
+                // Find full item data from availableItems state
+                const fullItem = availableItems.find(
+                  (item) => item.id === itemId,
+                );
+
+                return {
+                  id: itemId, // Use item ID as variant ID for now
+                  item: fullItem || {
+                    id: itemId,
+                    code: v.item.item_code,
+                    name: v.item.item_name,
+                    color: "",
+                    type: "",
+                    uom: "",
+                    image: v.item.image ? getFileUrl(v.item.image) : undefined,
+                    disabled: 0,
+                  },
+                  productid: productId,
+                  displayOrder: 0,
+                };
+              })
+              .filter(
+                (variant): variant is NonNullable<typeof variant> =>
+                  variant !== null,
+              );
+
+            // Deduplicate variants by item.id to prevent duplicate entries
+            const productVariants = rawVariants.filter(
+              (v, index, self) =>
+                index === self.findIndex((t) => t.item.id === v.item.id),
             );
 
             return {
-              id: itemId, // Use item ID as variant ID for now
-              item: fullItem || {
-                id: itemId,
-                code: v.item.item_code,
-                name: v.item.item_name,
-                color: "",
-                type: "",
-                uom: "",
-                image: v.item.image ? getFileUrl(v.item.image) : undefined,
-                disabled: 0,
-              },
-              productid: productId,
-              displayOrder: 0,
+              id: productId,
+              name: prod.product_name,
+              itemCategory: finalCategory,
+              disabled: prod.disabled,
+              isHotDeals: Boolean(prod.hot_deals),
+              variants: productVariants, // Variants from childs API
+              // Catatan Aktivitas - extract name from nested object if available
+              created_at: prod.created_at,
+              created_by:
+                typeof prod.created_by === "object" &&
+                prod.created_by?.full_name
+                  ? prod.created_by.full_name
+                  : prod.created_by,
+              updated_at: prod.updated_at,
+              updated_by:
+                typeof prod.updated_by === "object" &&
+                prod.updated_by?.full_name
+                  ? prod.updated_by.full_name
+                  : prod.updated_by,
+              owner:
+                typeof prod.owner === "object" && prod.owner?.full_name
+                  ? prod.owner.full_name
+                  : prod.owner,
             };
-          }).filter((variant): variant is NonNullable<typeof variant> => variant !== null);
-
-          // Deduplicate variants by item.id to prevent duplicate entries
-          const productVariants = rawVariants.filter(
-            (v, index, self) => index === self.findIndex((t) => t.item.id === v.item.id)
-          );
-
-          // Log warning if duplicates found
-          if (rawVariants.length !== productVariants.length) {
-            console.warn(
-              `[ProductList] Product ${prod.id} (${prod.product_name}) has duplicate variants!`,
-              `Raw: ${rawVariants.length}, Unique: ${productVariants.length}`
-            );
-          }
-
-          // Debug: Log first product with details
-          if (prod.id === response.data[0]?.id) {
-            console.log("=== FIRST PRODUCT DETAILS ===");
-            console.log("Product ID:", productId);
-            console.log("Product Name:", prod.product_name);
-            console.log("Raw variants from API:", prod.variants);
-            console.log("Transformed variants:", productVariants);
-          }
-
-          return {
-            id: productId,
-            name: prod.product_name,
-            itemCategory: finalCategory,
-            disabled: prod.disabled,
-            isHotDeals: Boolean(prod.hot_deals),
-            variants: productVariants, // Variants from childs API
-            // Catatan Aktivitas - extract name from nested object if available
-            created_at: prod.created_at,
-            created_by:
-              typeof prod.created_by === "object" && prod.created_by?.full_name
-                ? prod.created_by.full_name
-                : prod.created_by,
-            updated_at: prod.updated_at,
-            updated_by:
-              typeof prod.updated_by === "object" && prod.updated_by?.full_name
-                ? prod.updated_by.full_name
-                : prod.updated_by,
-            owner:
-              typeof prod.owner === "object" && prod.owner?.full_name
-                ? prod.owner.full_name
-                : prod.owner,
-          };
-        }
-      ).filter((product: Product | null): product is Product => product !== null);
-
-      console.log("=== FINAL PRODUCTS WITH VARIANTS ===");
-      productsWithVariants.forEach((p) => {
-        console.log(
-          `Product ID ${p.id}: "${p.name}" - ${p.variants.length} variants`
+          },
+        )
+        .filter(
+          (product: Product | null): product is Product => product !== null,
         );
-      });
     } else {
       // Log error details for debugging
       let errorDetail = `HTTP ${productsRes.status}`;
       try {
         const errorBody = await productsRes.json();
-        console.error("[ProductList] API Error Response:", errorBody);
         errorDetail = errorBody.message || errorBody.error || errorDetail;
       } catch {
-        console.error(
-          "[ProductList] API Error (no JSON body):",
-          productsRes.status,
-          productsRes.statusText
-        );
+        // console.error(
+        //   "[ProductList] API Error (no JSON body):",
+        //   productsRes.status,
+        //   productsRes.statusText,
+        // );
       }
 
-      // For filter/query errors (400/500), just log and return empty array
-      // This allows UI to show "No data found" instead of error message
-      if (productsRes.status === 400 || productsRes.status === 500) {
-        console.warn(
-          "[ProductList] Filter query failed, returning empty results:",
-          errorDetail
-        );
-      }
+      // if (productsRes.status === 400 || productsRes.status === 500) {
+      //   console.warn(
+      //     "[ProductList] Filter query failed, returning empty results:",
+      //     errorDetail,
+      //   );
+      // }
     }
 
     return { productsWithVariants, totalItems, totalPages };
@@ -511,13 +433,13 @@ export default function ProductList() {
       setLoading(true);
       setError(null);
       try {
-        console.log(
-          "[ProductList] Loading data with server-side sort and pagination:",
-          sortField,
-          sortDirection,
-          "page:",
-          page
-        );
+        // console.log(
+        //   "[ProductList] Loading data with server-side sort and pagination:",
+        //   sortField,
+        //   sortDirection,
+        //   "page:",
+        //   page,
+        // );
         const { productsWithVariants, totalItems, totalPages } =
           await loadProducts(filterTriples, sortField, sortDirection, page);
 
@@ -538,7 +460,7 @@ export default function ProductList() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [token, sortField, sortDirection]
+    [token, sortField, sortDirection],
   );
 
   // Handle filter apply
@@ -554,8 +476,6 @@ export default function ProductList() {
     if (!token) return;
 
     async function loadStatic() {
-      console.log("[ProductList] Loading static data (categories & items)...");
-      // Inline load to avoid dependency issues
       if (!token) return;
       const headers = getAuthHeaders(token);
 
@@ -571,14 +491,16 @@ export default function ProductList() {
       });
       if (categoriesRes.ok) {
         const response = await categoriesRes.json();
-        const categoriesData = response.data.map(
-          (cat: { id: number | string; category_name: string }) => {
+        const categoriesData = response.data
+          .map((cat: { id: number | string; category_name: string }) => {
             const id = toNumber(cat.id);
             return id !== null ? { id, name: cat.category_name } : null;
-          }
-        ).filter((category: Category | null): category is Category => category !== null);
+          })
+          .filter(
+            (category: Category | null): category is Category =>
+              category !== null,
+          );
         setCategories(categoriesData);
-        console.log("[ProductList] Categories loaded:", categoriesData.length);
       }
 
       // Load items (including disabled) so mapped variants can still be resolved
@@ -613,19 +535,16 @@ export default function ProductList() {
           })
           .filter((item: Item | null): item is Item => item !== null);
         setAvailableItems(itemsData);
-        console.log("[ProductList] Items loaded:", itemsData.length);
       }
 
       // Mark static data as loaded
       setStaticDataLoaded(true);
-      console.log("[ProductList] Static data loading complete");
     }
 
     loadStatic();
 
     // Reload items when they're updated
     const handleItemsUpdate = () => {
-      console.log("[ProductList] Items updated, reloading static data...");
       loadStatic();
     };
 
@@ -644,7 +563,6 @@ export default function ProductList() {
 
     async function load() {
       if (!cancelled) {
-        console.log("[ProductList] Static data ready, loading products...");
         await loadDataWithFilters(filters, currentPage);
       }
     }
@@ -662,11 +580,11 @@ export default function ProductList() {
   // Reload data when sort changes (only after static data is loaded, but not on initial mount)
   useEffect(() => {
     if (staticDataLoaded && token && !isInitialMount.current) {
-      console.log(
-        "[ProductList] Sort changed, reloading data with:",
-        sortField,
-        sortDirection
-      );
+      // console.log(
+      //   "[ProductList] Sort changed, reloading data with:",
+      //   sortField,
+      //   sortDirection,
+      // );
       setCurrentPage(1); // Reset to first page when sort changes
       loadDataWithFilters(filters, 1);
     }
@@ -678,29 +596,16 @@ export default function ProductList() {
     if (!staticDataLoaded) return;
 
     async function handler() {
-      console.log(
-        "[ProductList] 🔄 Event triggered: products_update or variants_update"
-      );
-      console.log("[ProductList] Reloading data with filters:", filters);
-      console.log(
-        "[ProductList] Reloading data with sort:",
-        sortField,
-        sortDirection
-      );
-      console.log("[ProductList] Reloading data with page:", currentPage);
       try {
         const { productsWithVariants, totalItems, totalPages } =
           await loadProducts(filters, sortField, sortDirection, currentPage);
-        console.log(
-          "[ProductList] ✅ Reload complete. Total products:",
-          productsWithVariants.length
-        );
+
         setProducts(productsWithVariants);
         setTotalItems(totalItems);
         setTotalPages(totalPages);
         localStorage.setItem(SNAP_KEY, JSON.stringify(productsWithVariants));
       } catch (error) {
-        console.error("[ProductList] ❌ Reload failed:", error);
+        // console.error("[ProductList] ❌ Reload failed:", error);
       }
     }
 
@@ -738,11 +643,10 @@ export default function ProductList() {
         } else {
           const errorData = await response.json();
           alert(
-            `Gagal menghapus produk: ${errorData.message || "Unknown error"}`
+            `Gagal menghapus produk: ${errorData.message || "Unknown error"}`,
           );
         }
       } catch (error) {
-        console.error("Error deleting product:", error);
         alert("Gagal menghapus produk. Silakan coba lagi.");
       }
     };
@@ -809,7 +713,7 @@ export default function ProductList() {
   let displayedProducts = products;
   const selectableItems = useMemo(
     () => availableItems.filter((item) => item.disabled !== 1),
-    [availableItems]
+    [availableItems],
   );
 
   // Quick search filter (client-side for better UX, limited to current page)
@@ -818,7 +722,7 @@ export default function ProductList() {
     displayedProducts = displayedProducts.filter(
       (p) =>
         p.name.toLowerCase().includes(query) ||
-        p.variants.some((v) => v.item.name.toLowerCase().includes(query))
+        p.variants.some((v) => v.item.name.toLowerCase().includes(query)),
     );
   }
 
@@ -956,12 +860,7 @@ export default function ProductList() {
               <button
                 onClick={() => {
                   const newDirection = sortDirection === "asc" ? "desc" : "asc";
-                  console.log(
-                    "[ProductList] Sort direction changed:",
-                    sortDirection,
-                    "->",
-                    newDirection
-                  );
+
                   setSortDirection(newDirection);
                 }}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
@@ -1039,12 +938,6 @@ export default function ProductList() {
                           <button
                             key={option.value}
                             onClick={() => {
-                              console.log(
-                                "[ProductList] Sort field changed:",
-                                sortField,
-                                "->",
-                                option.value
-                              );
                               setSortField(option.value);
                               setSortFieldDropdownOpen(false);
                             }}

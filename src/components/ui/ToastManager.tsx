@@ -61,7 +61,6 @@ export default function ConfirmActionModal({
       setProcessing(true);
       await Promise.resolve(onConfirm(action === "reject" ? (reasonTrimmed === "" ? null : reasonTrimmed) : undefined));
     } catch (e) {
-      console.error("confirm action error", e);
     } finally {
       setProcessing(false);
     }

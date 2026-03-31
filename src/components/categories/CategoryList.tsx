@@ -175,12 +175,6 @@ async function fetchAllCategories(
             ? mappedTypes.find((t) => t.id === typeId)
             : undefined;
 
-        // if (!typeObj) {
-        //   console.warn(
-        //     `Category ${item.name} (ID: ${item.id}) has invalid item_type: ${item.item_type}`,
-        //   );
-        // }
-
         return {
           id: toNumber(item.id) ?? 0,
           name: item.name,
@@ -226,7 +220,10 @@ async function fetchAllCategories(
                 : undefined,
           owner:
             typeof item.owner === "object"
-              ? { id: item.owner.id || 0, name: item.owner.full_name || "Unknown" }
+              ? {
+                  id: item.owner.id || 0,
+                  name: item.owner.full_name || "Unknown",
+                }
               : item.owner
                 ? { id: item.owner, name: `User #${item.owner}` }
                 : undefined,
@@ -357,7 +354,7 @@ export default function CategoryList() {
         setCategories(mappedCategories);
         localStorage.setItem(SNAP_KEY, JSON.stringify(mappedCategories));
       } catch (error) {
-        console.error("Failed to reload categories:", error);
+        // console.error("Failed to reload categories:", error);
       }
     }
 
@@ -405,7 +402,7 @@ export default function CategoryList() {
         setCategories(next);
         saveSnapshot(next);
       } catch (err: unknown) {
-        console.error("Failed to delete category:", err);
+        // console.error("Failed to delete category:", err);
         const errorMessage = err instanceof Error ? err.message : String(err);
         setError(errorMessage);
       }
@@ -577,8 +574,6 @@ export default function CategoryList() {
       return a.type.name.localeCompare(b.type.name);
     });
   })();
-
-  // console.log(groupedByType);
 
   return (
     <div>

@@ -131,48 +131,48 @@ export default function NBList() {
       }
 
       const [nbRes, memberRes, gpRes, gcRes, bcRes] = await Promise.all([
-          apiFetch(
-            getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, {
-              fields: ["*"],
-              limit: 10000000,
-            }),
-            { method: "GET", cache: "no-store" },
-            token,
-          ),
-          apiFetch(
-            getQueryUrl(API_CONFIG.ENDPOINTS.MEMBER_OF, {
-              fields: ["*"],
-              filters: [["ref_type", "=", "nbid"]],
-              limit: 10000000,
-            }),
-            { method: "GET", cache: "no-store" },
-            token,
-          ),
-          apiFetch(
-            getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, {
-              fields: ["*"],
-              limit: 10000000,
-            }),
-            { method: "GET", cache: "no-store" },
-            token,
-          ),
-          apiFetch(
-            getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, {
-              fields: ["*"],
-              limit: 10000000,
-            }),
-            { method: "GET", cache: "no-store" },
-            token,
-          ),
-          apiFetch(
-            getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, {
-              fields: ["*"],
-              limit: 10000000,
-            }),
-            { method: "GET", cache: "no-store" },
-            token,
-          ),
-        ]);
+        apiFetch(
+          getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, {
+            fields: ["*"],
+            limit: 10000000,
+          }),
+          { method: "GET", cache: "no-store" },
+          token,
+        ),
+        apiFetch(
+          getQueryUrl(API_CONFIG.ENDPOINTS.MEMBER_OF, {
+            fields: ["*"],
+            filters: [["ref_type", "=", "nbid"]],
+            limit: 10000000,
+          }),
+          { method: "GET", cache: "no-store" },
+          token,
+        ),
+        apiFetch(
+          getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, {
+            fields: ["*"],
+            limit: 10000000,
+          }),
+          { method: "GET", cache: "no-store" },
+          token,
+        ),
+        apiFetch(
+          getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, {
+            fields: ["*"],
+            limit: 10000000,
+          }),
+          { method: "GET", cache: "no-store" },
+          token,
+        ),
+        apiFetch(
+          getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, {
+            fields: ["*"],
+            limit: 10000000,
+          }),
+          { method: "GET", cache: "no-store" },
+          token,
+        ),
+      ]);
 
       if (!nbRes.ok)
         throw new Error(`Failed to fetch national brands (${nbRes.status})`);
@@ -223,15 +223,15 @@ export default function NBList() {
             ? customerJson.data
             : [];
         } else {
-          console.warn(
-            `Failed to fetch customer register (${customerRes.status}), using owner fallback from member_of only.`,
-          );
+          // console.warn(
+          //   `Failed to fetch customer register (${customerRes.status}), using owner fallback from member_of only.`,
+          // );
         }
       } catch (customerErr) {
-        console.warn(
-          "Failed to fetch customer register, using owner fallback from member_of only.",
-          customerErr,
-        );
+        // console.warn(
+        //   "Failed to fetch customer register, using owner fallback from member_of only.",
+        //   customerErr,
+        // );
       }
 
       const ownersByNb = new Map<number, string[]>();

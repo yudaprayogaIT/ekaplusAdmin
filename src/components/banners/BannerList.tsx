@@ -1,11 +1,7 @@
 // src/components/banners/BannerList.tsx
 "use client";
 
-import React, {
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import React, { useEffect, useRef, useState } from "react";
 import BannerCard from "./BannerCard";
 import AddBannerModal from "./AddBannerModal";
 import BannerDetailModal from "./BannerDetailModal";
@@ -29,11 +25,7 @@ import {
   API_CONFIG,
   apiFetch,
 } from "@/config/api";
-import type {
-  Banner,
-  BannerAPIResponse,
-  ScheduleStatus,
-} from "@/types/banner";
+import type { Banner, BannerAPIResponse, ScheduleStatus } from "@/types/banner";
 
 type SortOption =
   | "display_order-asc"
@@ -67,7 +59,7 @@ export default function BannerList() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortBy, setSortBy] = useState<SortOption>("display_order-asc");
   const [filterSchedule, setFilterSchedule] = useState<ScheduleStatus | "all">(
-    "all"
+    "all",
   );
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -109,7 +101,7 @@ export default function BannerList() {
             method: "GET",
             cache: "no-store",
           },
-          token
+          token,
         );
 
         if (bannersRes.ok) {
@@ -150,10 +142,9 @@ export default function BannerList() {
                   typeof item.owner === "object"
                     ? { id: item.owner.id, name: item.owner.full_name }
                     : item.owner,
-              })
+              }),
             );
 
-            console.log("Loaded banners:", mappedBanners);
             setBanners(mappedBanners);
             try {
               localStorage.setItem(SNAP_KEY, JSON.stringify(mappedBanners));
@@ -198,7 +189,7 @@ export default function BannerList() {
             method: "GET",
             cache: "no-store",
           },
-          token
+          token,
         );
 
         if (res.ok) {
@@ -236,7 +227,7 @@ export default function BannerList() {
           localStorage.setItem(SNAP_KEY, JSON.stringify(mappedBanners));
         }
       } catch (error) {
-        console.error("Failed to reload banners:", error);
+        // console.error("Failed to reload banners:", error);
       }
     }
 
@@ -288,27 +279,25 @@ export default function BannerList() {
           method: "PUT",
           headers,
           body: formData,
-        }
+        },
       );
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
           errorData.message ||
-            `Failed to toggle banner status (${response.status})`
+            `Failed to toggle banner status (${response.status})`,
         );
       }
 
-      console.log("Banner status toggled successfully");
-
       // Update local state
       const next = banners.map((b) =>
-        b.id === banner.id ? { ...b, disabled: newDisabled as 0 | 1 } : b
+        b.id === banner.id ? { ...b, disabled: newDisabled as 0 | 1 } : b,
       );
       setBanners(next);
       saveSnapshot(next);
     } catch (err: unknown) {
-      console.error("Failed to toggle banner status:", err);
+      // console.error("Failed to toggle banner status:", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
       setError(errorMessage);
     }
@@ -328,24 +317,22 @@ export default function BannerList() {
           {
             method: "DELETE",
           },
-          token
+          token,
         );
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.message || `Failed to delete banner (${response.status})`
+            errorData.message || `Failed to delete banner (${response.status})`,
           );
         }
-
-        console.log("Banner deleted successfully");
 
         // Remove from local state
         const next = banners.filter((b) => b.id !== banner.id);
         setBanners(next);
         saveSnapshot(next);
       } catch (err: unknown) {
-        console.error("Failed to delete banner:", err);
+        // console.error("Failed to delete banner:", err);
         const errorMessage = err instanceof Error ? err.message : String(err);
         setError(errorMessage);
       }
@@ -453,13 +440,13 @@ export default function BannerList() {
 
   if (searchQuery.trim()) {
     filteredBanners = filteredBanners.filter((b) =>
-      b.banner_name.toLowerCase().includes(searchQuery.toLowerCase())
+      b.banner_name.toLowerCase().includes(searchQuery.toLowerCase()),
     );
   }
 
   if (filterSchedule !== "all") {
     filteredBanners = filteredBanners.filter(
-      (b) => getScheduleStatus(b) === filterSchedule
+      (b) => getScheduleStatus(b) === filterSchedule,
     );
   }
 
@@ -488,13 +475,13 @@ export default function BannerList() {
   const enabledCount = banners.filter((b) => b.disabled === 0).length;
   const disabledCount = banners.filter((b) => b.disabled === 1).length;
   const activeCount = banners.filter(
-    (b) => getScheduleStatus(b) === "active"
+    (b) => getScheduleStatus(b) === "active",
   ).length;
   const scheduledCount = banners.filter(
-    (b) => getScheduleStatus(b) === "scheduled"
+    (b) => getScheduleStatus(b) === "scheduled",
   ).length;
   const expiredCount = banners.filter(
-    (b) => getScheduleStatus(b) === "expired"
+    (b) => getScheduleStatus(b) === "expired",
   ).length;
 
   return (

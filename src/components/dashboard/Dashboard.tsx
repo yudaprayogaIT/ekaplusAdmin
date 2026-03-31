@@ -1,13 +1,8 @@
 // src/components/dashboard/Dashboard.tsx
 "use client";
 
-import React, {
-  useEffect,
-  useState,
-} from "react";
-import {
-  motion,
-} from "framer-motion";
+import React, { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import {
   FaBox,
   FaLayerGroup,
@@ -21,13 +16,7 @@ import {
 } from "react-icons/fa";
 import Link from "next/link";
 import Image from "next/image";
-import type {
-  Item,
-  ItemVariant,
-  Product,
-  Category,
-  Branch,
-} from "@/types";
+import type { Item, ItemVariant, Product, Category, Branch } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   API_CONFIG,
@@ -436,8 +425,8 @@ function HotDealsSection({ products }: { products: Product[] }) {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {hotDeals.map((product, idx) => {
             const firstVariant = product.variants?.[0]?.item;
-            const countVariant = product.variants.length;
-            console.log(countVariant);
+            // const countVariant = product.variants.length;
+            // console.log(countVariant);
             return (
               <motion.div
                 key={product.id}
@@ -604,7 +593,7 @@ export default function Dashboard() {
               icon: getFileUrl(cat.icon),
               image: getFileUrl(cat.image),
               type: cat.ekatalog_type,
-            })
+            }),
           );
         }
 
@@ -639,7 +628,7 @@ export default function Dashboard() {
               },
               disabled: p.disabled,
               isHotDeals: Boolean(p.hot_deals),
-            })
+            }),
           );
         }
 
@@ -681,7 +670,7 @@ export default function Dashboard() {
               category: i.item_category,
               group: i.item_group,
               disabled: i.disabled,
-            })
+            }),
           );
         }
 
@@ -716,20 +705,10 @@ export default function Dashboard() {
                   } as Item),
                 productid: v.product,
               };
-            }
+            },
           );
         }
 
-        // Load Branches from JSON (fallback - user will implement later)
-        // let branchesData: Branch[] = [];
-        // try {
-        //   const branchesRes = await apiFetch(BRANCHES_DATA_URL, {
-        //     cache: "no-store",
-        //   });
-        //   if (branchesRes.ok) branchesData = await branchesRes.json();
-        // } catch {
-        //   console.log("Branches data not available (will be implemented later)");
-        // }
         const branchesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH, {
           fields: ["*"],
           limit: 100000000,
@@ -742,7 +721,6 @@ export default function Dashboard() {
         let branchesData: Branch[] = [];
         if (branchesRes.ok) {
           const json = await branchesRes.json();
-          console.log(json);
           branchesData = json.data.map(
             (b: {
               id: number;
@@ -754,7 +732,7 @@ export default function Dashboard() {
               name: b.branch_name,
               city: b.city,
               address: b.address,
-            })
+            }),
           );
           // branchesData = json.data.map(
           //   (p: {
@@ -781,7 +759,7 @@ export default function Dashboard() {
         // Merge products with variants
         const productsWithVariants: Product[] = productsData.map((product) => {
           const productVariants = variantsData.filter(
-            (v) => v.productid === product.id
+            (v) => v.productid === product.id,
           );
           return {
             ...product,
@@ -792,7 +770,7 @@ export default function Dashboard() {
         // Calculate stats
         const mappedItemIds = new Set(variantsData.map((v) => v.item.id));
         const unmappedItems = itemsData.filter(
-          (item) => !mappedItemIds.has(item.id)
+          (item) => !mappedItemIds.has(item.id),
         );
 
         setStats({
@@ -809,8 +787,7 @@ export default function Dashboard() {
         setProducts(productsWithVariants);
         setCategories(categoriesData);
         setBranches(branchesData);
-      } catch (error) {
-        console.error("Error loading dashboard data:", error);
+      } catch {
       } finally {
         setLoading(false);
       }

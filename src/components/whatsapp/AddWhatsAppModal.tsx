@@ -149,7 +149,6 @@ export default function AddWhatsAppModal({
       localStorage.setItem(SNAP_KEY, JSON.stringify(list));
       window.dispatchEvent(new Event("ekatalog:whatsapp_devices_update"));
     } catch (error) {
-      console.error("Failed to save device:", error);
     }
 
     setSaving(false);

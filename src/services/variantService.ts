@@ -21,14 +21,8 @@ function transformVariantResponse(
   apiData: ItemVariantApiResponse,
   items: Item[]
 ): ItemVariant {
-  // Debug: Log if parent_id is missing
-  if (!apiData.parent_id) {
-    console.warn(`⚠️ Variant ${apiData.id} has no parent_id!`, apiData);
-  }
-
   const item = items.find((i) => i.id === apiData.item);
   if (!item) {
-    console.warn(`Item ${apiData.item} not found in items list`);
     // Return placeholder if item not found
     return {
       id: apiData.id,
@@ -47,10 +41,9 @@ function transformVariantResponse(
 
   return {
     id: apiData.id,
-    item: item,
-    productid: apiData.parent_id || 0, // From parent_id (fallback to 0 if missing)
-    displayOrder: apiData.idx || 0, // From idx (fallback to 0 if missing)
-    // Audit trail
+    item,
+    productid: apiData.parent_id || 0,
+    displayOrder: apiData.idx || 0,
     created_at: apiData.created_at,
     created_by: apiData.created_by,
     updated_at: apiData.updated_at,
@@ -67,7 +60,6 @@ export async function fetchVariants(
   items: Item[]
 ): Promise<ItemVariant[]> {
   if (!token) {
-    console.error("fetchVariants: No token provided");
     throw new Error("Authentication required");
   }
 
@@ -88,15 +80,12 @@ export async function fetchVariants(
     ],
   });
 
-  console.log("fetchVariants: Fetching from", url);
-
   const response = await apiFetch(url, {
     headers: getAuthHeaders(token),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("fetchVariants failed:", response.status, errorText);
 
     if (response.status === 401) {
       throw new Error("Unauthorized - Please login again");
@@ -108,31 +97,12 @@ export async function fetchVariants(
   const json = await response.json();
 
   if (!json.data || !Array.isArray(json.data)) {
-    console.error("Invalid API response:", json);
     throw new Error("Invalid API response format");
   }
 
-  // Debug: Log first variant to check structure
-  if (json.data.length > 0) {
-    console.log("=== FETCH VARIANTS - FIRST VARIANT RAW ===");
-    console.log("First variant raw data:", json.data[0]);
-    console.log("Has parent_id:", json.data[0].parent_id);
-    console.log("Has item:", json.data[0].item);
-  }
-
-  const transformedVariants = json.data.map((v: ItemVariantApiResponse) =>
+  return json.data.map((v: ItemVariantApiResponse) =>
     transformVariantResponse(v, items)
   );
-
-  // Debug: Log first transformed variant
-  if (transformedVariants.length > 0) {
-    console.log("=== FETCH VARIANTS - FIRST TRANSFORMED ===");
-    console.log("First transformed variant:", transformedVariants[0]);
-    console.log("productid:", transformedVariants[0].productid);
-    console.log("item:", transformedVariants[0].item);
-  }
-
-  return transformedVariants;
 }
 
 /**

@@ -1,14 +1,8 @@
 // src/components/products/AddProductModal.tsx
 "use client";
 
-import React, {
-  useEffect,
-  useState,
-} from "react";
-import {
-  AnimatePresence,
-  motion,
-} from "framer-motion";
+import React, { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   FaTimes,
   FaPlus,
@@ -23,12 +17,7 @@ import {
   FaExclamationTriangle,
 } from "react-icons/fa";
 import Image from "next/image";
-import type {
-  Item,
-  Category,
-  ItemVariant,
-  ProductFormData,
-} from "@/types";
+import type { Item, Category, ItemVariant, ProductFormData } from "@/types";
 import { DraggableVariantList } from "./DraggableVariantList";
 import { VariantSuggestions } from "./VariantSuggestions";
 import { useAuth } from "@/contexts/AuthContext";
@@ -148,13 +137,9 @@ function ItemSelectorModal({
   const handleConfirm = () => {
     // Deduplicate selected items before passing back
     const unique = selected.filter(
-      (v, index, self) => index === self.findIndex((t) => t.id === v.id)
+      (v, index, self) => index === self.findIndex((t) => t.id === v.id),
     );
-    console.log('[ItemSelectorModal] Selected items:', selected.length);
-    console.log('[ItemSelectorModal] After dedup:', unique.length);
-    if (selected.length !== unique.length) {
-      console.warn('[ItemSelectorModal] Found duplicate items in selection!');
-    }
+
     onSelect(unique);
     onClose();
   };
@@ -223,7 +208,7 @@ function ItemSelectorModal({
                 setSelected([
                   ...selected,
                   ...filteredItems.filter(
-                    (f) => !selected.some((s) => s.id === f.id)
+                    (f) => !selected.some((s) => s.id === f.id),
                   ),
                 ])
               }
@@ -437,35 +422,23 @@ export default function AddProductModal({
           const variants = initialVariants.filter(isItemVariant);
           const variantItems = variants.map((v) => v.item);
 
-          console.log('[AddProductModal] Initial variants (ItemVariant[]):', initialVariants.length);
-          console.log('[AddProductModal] Initial variant IDs:', variants.map((v) => ({ variantId: v.id, itemId: v.item.id })));
-
           // Deduplicate by item.id
           items = variantItems.filter(
-            (item, index, self) => index === self.findIndex((t) => t.id === item.id)
+            (item, index, self) =>
+              index === self.findIndex((t) => t.id === item.id),
           );
 
-          if (variantItems.length !== items.length) {
-            console.warn('[AddProductModal] Found duplicate item IDs in variants!');
-            console.warn('[AddProductModal] Duplicate item IDs:',
-              variantItems.map((item) => item.id).filter((id, idx, arr) => arr.indexOf(id) !== idx)
-            );
-          }
+          // if (variantItems.length !== items.length) {
+          //   console.warn('[AddProductModal] Duplicate item IDs:',
+          //     variantItems.map((item) => item.id).filter((id, idx, arr) => arr.indexOf(id) !== idx)
+          //   );
+          // }
         } else {
-          // It's already Item[]
-          console.log('[AddProductModal] Initial variants (Item[]):', initialVariants.length);
-
           // Deduplicate by id
           items = (initialVariants as Item[]).filter(
-            (v, index, self) => index === self.findIndex((t) => t.id === v.id)
+            (v, index, self) => index === self.findIndex((t) => t.id === v.id),
           );
-
-          if (initialVariants.length !== items.length) {
-            console.warn('[AddProductModal] Found duplicate items!');
-          }
         }
-
-        console.log('[AddProductModal] Unique items after dedup:', items.length);
 
         setName(initial.name);
         setCategoryId(initial.itemCategory.id);
@@ -531,25 +504,20 @@ export default function AddProductModal({
     setSaving(true);
 
     try {
-      console.log("=== SAVE PRODUCT DEBUG ===");
-      console.log("Selected variants before save:", selectedVariants.length);
-      console.log("Selected variants IDs:", selectedVariants.map(v => v.id));
-      console.log("Initial variants count:", initial ? initial.variants.length : 0);
-
       // Deduplicate selectedVariants one more time before saving (by id)
       const uniqueSelectedVariants = selectedVariants.filter(
-        (v, index, self) => index === self.findIndex((t) => t.id === v.id)
+        (v, index, self) => index === self.findIndex((t) => t.id === v.id),
       );
 
-      if (selectedVariants.length !== uniqueSelectedVariants.length) {
-        console.warn(
-          "[AddProductModal] Found duplicates before save!",
-          `Original: ${selectedVariants.length}, Unique: ${uniqueSelectedVariants.length}`
-        );
-        console.warn('[AddProductModal] Duplicate item IDs:',
-          selectedVariants.map(v => v.id).filter((id, idx, arr) => arr.indexOf(id) !== idx)
-        );
-      }
+      // if (selectedVariants.length !== uniqueSelectedVariants.length) {
+
+      //   console.warn(
+      //     "[AddProductModal] Duplicate item IDs:",
+      //     selectedVariants
+      //       .map((v) => v.id)
+      //       .filter((id, idx, arr) => arr.indexOf(id) !== idx),
+      //   );
+      // }
 
       // Prepare variants - SIMPLE format: just {item: id}
       const variantsData = uniqueSelectedVariants.map((item) => ({
@@ -571,10 +539,6 @@ export default function AddProductModal({
         ? getResourceUrl(API_CONFIG.ENDPOINTS.PRODUCT, initial.id)
         : getResourceUrl(API_CONFIG.ENDPOINTS.PRODUCT);
 
-      console.log("Saving product to:", url, "Method:", method);
-      console.log("Variants count in payload:", variantsData.length);
-      console.log("Payload:", JSON.stringify(payload, null, 2));
-
       const response = await apiFetch(url, {
         method,
         headers,
@@ -587,7 +551,6 @@ export default function AddProductModal({
         onClose();
       } else {
         const errorText = await response.text();
-        console.error("Product save failed:", response.status, errorText);
 
         let errorMessage = "Unknown error";
         try {
@@ -604,11 +567,10 @@ export default function AddProductModal({
         }
       }
     } catch (error) {
-      console.error("Error saving product:", error);
       alert(
         `Gagal menyimpan produk. Silakan coba lagi.\n\nError: ${
           error instanceof Error ? error.message : String(error)
-        }`
+        }`,
       );
     } finally {
       setSaving(false);
@@ -687,11 +649,13 @@ export default function AddProductModal({
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all bg-white"
                 >
                   <option value="">Pilih kategori...</option>
-                  {[...categories].sort((a, b) => a.name.localeCompare(b.name)).map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
+                  {[...categories]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
                 </select>
               </div>
 
@@ -768,10 +732,10 @@ export default function AddProductModal({
                       // Deduplicate: merge new items with existing, remove duplicates by ID
                       const merged = [...selectedVariants, ...items];
                       const unique = merged.filter(
-                        (v, index, self) => index === self.findIndex((t) => t.id === v.id)
+                        (v, index, self) =>
+                          index === self.findIndex((t) => t.id === v.id),
                       );
-                      console.log('[AddProductModal] Adding variants from suggestions:', items.length);
-                      console.log('[AddProductModal] After dedup:', unique.length);
+
                       setSelectedVariants(unique);
                     }}
                   />
@@ -823,15 +787,13 @@ export default function AddProductModal({
                   <DraggableVariantList
                     variants={selectedVariants}
                     onReorder={(newOrder) => {
-                      console.log('[AddProductModal] Reordering variants:', newOrder.length);
                       setSelectedVariants(newOrder);
                     }}
                     onRemove={(id) => {
-                      console.log('[AddProductModal] Removing variant ID:', id);
-                      console.log('[AddProductModal] Current variants before remove:', selectedVariants.length);
-                      const filtered = selectedVariants.filter((v) => v.id !== id);
-                      console.log('[AddProductModal] Variants after remove:', filtered.length);
-                      console.log('[AddProductModal] Filtered IDs:', filtered.map(v => v.id));
+                      const filtered = selectedVariants.filter(
+                        (v) => v.id !== id,
+                      );
+
                       setSelectedVariants(filtered);
                     }}
                   />
@@ -859,8 +821,8 @@ export default function AddProductModal({
               {saving
                 ? "Menyimpan..."
                 : initial
-                ? "Simpan Perubahan"
-                : "Simpan Produk"}
+                  ? "Simpan Perubahan"
+                  : "Simpan Produk"}
             </motion.button>
           </div>
         </motion.div>

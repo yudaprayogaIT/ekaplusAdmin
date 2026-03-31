@@ -177,7 +177,7 @@ export default function AddBannerModal({
             );
           }
         } catch (err) {
-          console.error("Failed to load products:", err);
+          // console.error("Failed to load products:", err);
         } finally {
           setLoadingProducts(false);
         }
@@ -213,7 +213,7 @@ export default function AddBannerModal({
             );
           }
         } catch (err) {
-          console.error("Failed to load categories:", err);
+          // console.error("Failed to load categories:", err);
         } finally {
           setLoadingCategories(false);
         }
@@ -371,7 +371,7 @@ export default function AddBannerModal({
       }
 
       const result = await response.json();
-      console.log("Banner saved successfully:", result);
+      // console.log("Banner saved successfully:", result);
 
       // Trigger reload in BannerList
       window.dispatchEvent(new Event("ekatalog:banners_update"));
@@ -379,7 +379,7 @@ export default function AddBannerModal({
       setSaving(false);
       onClose();
     } catch (err: unknown) {
-      console.error("Failed to save banner:", err);
+      // console.error("Failed to save banner:", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
      setError(errorMessage);
       setSaving(false);

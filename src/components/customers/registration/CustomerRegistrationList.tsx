@@ -25,6 +25,7 @@ import { useFilters } from "@/hooks/useFilters";
 import { CUSTOMER_REGISTER_FILTER_FIELDS } from "@/config/filterFields";
 import { FilterTriple } from "@/types/filter";
 import Pagination, { usePagination } from "@/components/ui/Pagination";
+import { getTaxStatusLabel } from "@/utils/paymentAccount";
 
 type SortField =
   | "company_name"
@@ -41,6 +42,7 @@ interface CustomerRegistrationApiResponse {
   id: number;
   name: string;
   source?: string | null;
+  crm_user?: number | string | null;
   ekaplus_user?:
     | number
     | { id: number; full_name?: string; email?: string }
@@ -57,10 +59,14 @@ interface CustomerRegistrationApiResponse {
   branch_owner_place_of_birth?: string | null;
   branch_owner_date_of_birth?: string | null;
   branch_id_id?: number | null;
-  branch_id?: {
-    branch_name: string;
-    city: string;
-  } | null;
+  branch_id?:
+    | number
+    | {
+        id?: number;
+        branch_name?: string;
+        city?: string;
+      }
+    | null;
   company_type?: string | null;
   company_title?: string | null;
   company_name?: string | null;
@@ -75,11 +81,15 @@ interface CustomerRegistrationApiResponse {
   payment_account?: string | null;
   notes?: string | null;
   sales_team?: string | null;
+  tax_status?: number | boolean | null;
+  npwp?: string | null;
+  erp_customer_group?: string | null;
   same_as_company_address?: number | boolean | null;
   nbid?: number | { id?: number; name?: string; nb_name?: string } | null;
   nbid_id?: number | null;
   nbid_name?: string | null;
   nbid_link?: { id?: number; name?: string; nb_name?: string } | null;
+  nb_manual?: string | null;
   status: string;
   docstatus: number;
   created_at: string;
@@ -92,6 +102,7 @@ interface CustomerRegistrationApiResponse {
   gpid_id?: number | null;
   gpid_name?: string | null;
   gpid_link?: { id?: number; name?: string; gp_name?: string } | null;
+  gp_manual?: string | null;
   gcid?: number | { id?: number; name?: string; gc_name?: string } | null;
   gcid_id?: number | null;
   gcid_name?: string | null;
@@ -110,6 +121,33 @@ interface CustomerRegistrationApiResponse {
   reject_notes?: string | null;
   rejection_reason?: string | null;
   rejection_notes?: string | null;
+}
+
+function resolveDisplayName(
+  value: number | string | null | undefined,
+): string | undefined {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "number") return `User ${value}`;
+  return undefined;
+}
+
+function resolveBranchId(
+  value:
+    | number
+    | {
+        id?: number;
+      }
+    | null
+    | undefined,
+  fallback?: number | null,
+): number {
+  if (typeof fallback === "number" && Number.isFinite(fallback))
+    return fallback;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (value && typeof value === "object" && typeof value.id === "number") {
+    return value.id;
+  }
+  return 0;
 }
 
 async function fetchNameMap(
@@ -307,12 +345,21 @@ export function CustomerRegistrationList() {
             .join(" - ") || "-",
         name: apiData.company_name || apiData.name,
         nik: "-",
-        npwp: undefined,
-        branch_id: apiData.branch_id_id || 0,
+        npwp: apiData.npwp || undefined,
+        tax_status: Number(apiData.tax_status || 0),
+        tax_status_label: getTaxStatusLabel(apiData.tax_status),
+        branch_id: resolveBranchId(apiData.branch_id, apiData.branch_id_id),
         branch_name:
-          apiData.branch_id?.branch_name ||
-          (apiData.branch_id_id ? `Branch ${apiData.branch_id_id}` : "-"),
-        branch_city: apiData.branch_id?.city || "-",
+          (apiData.branch_id && typeof apiData.branch_id === "object"
+            ? apiData.branch_id.branch_name
+            : undefined) ||
+          (resolveBranchId(apiData.branch_id, apiData.branch_id_id)
+            ? `Branch ${resolveBranchId(apiData.branch_id, apiData.branch_id_id)}`
+            : "-"),
+        branch_city:
+          (apiData.branch_id && typeof apiData.branch_id === "object"
+            ? apiData.branch_id.city
+            : undefined) || "-",
         product_need: apiData.product_need || undefined,
       },
 
@@ -338,6 +385,7 @@ export function CustomerRegistrationList() {
         payment_account: apiData.payment_account || undefined,
         more_information: apiData.notes || undefined,
         sales_team: apiData.sales_team || undefined,
+        erp_customer_group: apiData.erp_customer_group || undefined,
       },
       branch_owner: {
         full_name: apiData.branch_owner || "-",
@@ -362,6 +410,7 @@ export function CustomerRegistrationList() {
           apiData.nbid_link?.name ??
           (typeof apiData.nbid === "object" ? apiData.nbid?.name : undefined) ??
           undefined,
+        nb_manual: apiData.nb_manual || undefined,
         gp_id:
           apiData.gpid_link?.id ??
           (typeof apiData.gpid === "object" ? apiData.gpid?.id : undefined) ??
@@ -377,6 +426,7 @@ export function CustomerRegistrationList() {
           apiData.gpid_link?.name ??
           (typeof apiData.gpid === "object" ? apiData.gpid?.name : undefined) ??
           undefined,
+        gp_manual: apiData.gp_manual || undefined,
         gc_id:
           apiData.gcid_link?.id ??
           (typeof apiData.gcid === "object" ? apiData.gcid?.id : undefined) ??
@@ -445,13 +495,24 @@ export function CustomerRegistrationList() {
             ? apiData.created_by.id
             : undefined,
       created_by:
-        typeof apiData.created_by === "object" && apiData.created_by?.full_name
-          ? apiData.created_by.full_name
-          : apiData["created_by.full_name"]
-            ? apiData["created_by.full_name"]
-            : typeof apiData.created_by === "number"
-              ? `User ${apiData.created_by}`
-              : undefined,
+        (apiData.source || "").toLowerCase() === "crm"
+          ? resolveDisplayName(apiData.crm_user) ||
+            (typeof apiData.created_by === "object" &&
+            apiData.created_by?.full_name
+              ? apiData.created_by.full_name
+              : apiData["created_by.full_name"]
+                ? apiData["created_by.full_name"]
+                : typeof apiData.created_by === "number"
+                  ? `User ${apiData.created_by}`
+                  : undefined)
+          : typeof apiData.created_by === "object" &&
+              apiData.created_by?.full_name
+            ? apiData.created_by.full_name
+            : apiData["created_by.full_name"]
+              ? apiData["created_by.full_name"]
+              : typeof apiData.created_by === "number"
+                ? `User ${apiData.created_by}`
+                : undefined,
       updated_at: apiData.updated_at,
       updated_by_id:
         typeof apiData.updated_by === "number"
@@ -579,7 +640,6 @@ export function CustomerRegistrationList() {
             response.data || [];
           const mapped = apiData.map((item) => mapToFrontendType(item));
           const enriched = await enrichMasterLinkNames(mapped, token);
-          console.log("Loaded registrations:", enriched);
           setRegistrations(enriched);
           try {
             localStorage.setItem(SNAP_KEY, JSON.stringify(enriched));
@@ -626,7 +686,6 @@ export function CustomerRegistrationList() {
   // Handle filter apply
   const handleApplyFilters = useCallback(
     (newFilters: FilterTriple[]) => {
-      console.log("[CustomerRegistrationList] Applying filters:", newFilters);
       setFilters(newFilters);
     },
     [setFilters],

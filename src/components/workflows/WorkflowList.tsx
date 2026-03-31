@@ -178,9 +178,6 @@ export default function WorkflowList() {
           }),
         ]);
 
-        console.log("[WorkflowList] Workflows response:", workflowsRes.status);
-        console.log("[WorkflowList] Roles response:", rolesRes.status);
-        console.log("[WorkflowList] States response:", statesRes.status);
 
         if (workflowsRes.ok && rolesRes.ok && statesRes.ok) {
           const workflowsData = (await workflowsRes.json()) as WorkflowAPIResponse;
@@ -191,11 +188,6 @@ export default function WorkflowList() {
             setWorkflows(workflowsData.data || []);
             setRoles(rolesData.data || []);
             setGlobalStates(statesData.data || []);
-            console.log("[WorkflowList] Loaded:", {
-              workflows: workflowsData.data?.length || 0,
-              roles: rolesData.data?.length || 0,
-              states: statesData.data?.length || 0,
-            });
           }
         } else {
           throw new Error("Failed to load data");
@@ -242,8 +234,7 @@ export default function WorkflowList() {
           const response = (await res.json()) as WorkflowAPIResponse;
           setWorkflows(response.data || []);
         }
-      } catch (error) {
-        console.error("Failed to reload workflows:", error);
+      } catch {
       }
     }
 
@@ -289,8 +280,6 @@ export default function WorkflowList() {
       const headers = getAuthHeaders(token);
       const DELETE_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW}/${workflow.workflow.id}`;
 
-      console.log("[WorkflowList] Deleting workflow at:", DELETE_URL);
-
       const res = await apiFetch(DELETE_URL, {
         method: "DELETE",
         headers,
@@ -304,7 +293,6 @@ export default function WorkflowList() {
         throw new Error(errorData.message || "Failed to delete workflow");
       }
     } catch (error) {
-      console.error("Failed to delete workflow:", error);
       alert(
         error instanceof Error ? error.message : "Gagal menghapus workflow. Silakan coba lagi."
       );

@@ -201,7 +201,6 @@ export default function AddTypeModal({
       }
 
       const result = await response.json();
-      console.log("Type saved successfully:", result);
 
       // Trigger reload in TypeList
       window.dispatchEvent(new Event("ekatalog:types_update"));
@@ -209,7 +208,6 @@ export default function AddTypeModal({
       setSaving(false);
       onClose();
     } catch (err: unknown) {
-      console.error("Failed to save type:", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
       setError(errorMessage);
       setSaving(false);

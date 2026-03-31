@@ -1,10 +1,7 @@
 // src/components/permissions/PermissionList.tsx
 "use client";
 
-import {
-  useEffect,
-  useState,
-} from "react";
+import { useEffect, useState } from "react";
 import PermissionCard from "./PermissionCard";
 import AddPermissionModal from "./AddPermissionModal";
 import PermissionDetailModal from "./PermissionDetailModal";
@@ -19,11 +16,7 @@ import {
 } from "react-icons/fa";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  getAuthHeaders,
-  API_CONFIG,
-  apiFetch,
-} from "@/config/api";
+import { getAuthHeaders, API_CONFIG, apiFetch } from "@/config/api";
 
 export type Permission = {
   ID: number;
@@ -57,12 +50,16 @@ export default function PermissionList() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<Permission | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [detailPermission, setDetailPermission] = useState<Permission | null>(null);
+  const [detailPermission, setDetailPermission] = useState<Permission | null>(
+    null,
+  );
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
-  const [confirmAction, setConfirmAction] = useState<(() => Promise<void>) | null>(null);
+  const [confirmAction, setConfirmAction] = useState<
+    (() => Promise<void>) | null
+  >(null);
 
   // Load permissions from API
   useEffect(() => {
@@ -81,27 +78,22 @@ export default function PermissionList() {
         const headers = getAuthHeaders(token);
         const DATA_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_PERMISSION}`;
 
-        console.log("[PermissionList] Fetching permissions from:", DATA_URL);
-
         const res = await apiFetch(DATA_URL, {
           method: "GET",
           cache: "no-store",
           headers,
         });
 
-        console.log("[PermissionList] Response status:", res.status);
-        console.log("[PermissionList] Response content-type:", res.headers.get("content-type"));
-
         if (res.ok) {
           const contentType = res.headers.get("content-type");
           if (!contentType || !contentType.includes("application/json")) {
             const text = await res.text();
-            console.error("[PermissionList] Non-JSON response:", text.substring(0, 200));
-            throw new Error("Server returned non-JSON response. Please check the API endpoint.");
+            throw new Error(
+              "Server returned non-JSON response. Please check the API endpoint.",
+            );
           }
 
           const response = (await res.json()) as PermissionAPIResponse;
-          console.log("[PermissionList] Permissions loaded:", response.data?.length || 0);
           const mappedPermissions: Permission[] = response.data;
 
           if (!cancelled) {
@@ -109,7 +101,6 @@ export default function PermissionList() {
           }
         } else {
           const errorText = await res.text();
-          console.error("[PermissionList] Error response:", errorText.substring(0, 200));
           throw new Error(`HTTP ${res.status}: ${errorText}`);
         }
       } catch (err: unknown) {
@@ -117,7 +108,7 @@ export default function PermissionList() {
           const errorMessage = err instanceof Error ? err.message : String(err);
           if (errorMessage.includes("Failed to fetch")) {
             setError(
-              "Tidak dapat terhubung ke server. Periksa koneksi Anda atau pastikan backend berjalan."
+              "Tidak dapat terhubung ke server. Periksa koneksi Anda atau pastikan backend berjalan.",
             );
           } else if (errorMessage.includes("401")) {
             setError("Session expired. Silakan login kembali.");
@@ -148,8 +139,6 @@ export default function PermissionList() {
         const headers = getAuthHeaders(token);
         const DATA_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_PERMISSION}`;
 
-        console.log("[PermissionList] Auto-reloading permissions from:", DATA_URL);
-
         const res = await apiFetch(DATA_URL, {
           method: "GET",
           cache: "no-store",
@@ -158,16 +147,16 @@ export default function PermissionList() {
 
         if (res.ok) {
           const response = (await res.json()) as PermissionAPIResponse;
-          console.log("[PermissionList] Permissions reloaded successfully:", response.data?.length || 0);
           setPermissions(response.data);
         }
       } catch (error) {
-        console.error("Failed to reload permissions:", error);
+        // console.error("Failed to reload permissions:", error);
       }
     }
 
     window.addEventListener("ekatalog:permissions_update", handler);
-    return () => window.removeEventListener("ekatalog:permissions_update", handler);
+    return () =>
+      window.removeEventListener("ekatalog:permissions_update", handler);
   }, [isAuthenticated, token]);
 
   // Filter permissions based on search
@@ -176,7 +165,7 @@ export default function PermissionList() {
     displayedPermissions = displayedPermissions.filter(
       (permission) =>
         permission.Name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        permission.Slug.toLowerCase().includes(searchQuery.toLowerCase())
+        permission.Slug.toLowerCase().includes(searchQuery.toLowerCase()),
     );
   }
 
@@ -206,8 +195,6 @@ export default function PermissionList() {
       const headers = getAuthHeaders(token);
       const DELETE_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_PERMISSION}/${permission.ID}`;
 
-      console.log("[PermissionList] Deleting permission at:", DELETE_URL);
-
       const res = await apiFetch(DELETE_URL, {
         method: "DELETE",
         headers,
@@ -221,9 +208,10 @@ export default function PermissionList() {
         throw new Error(errorData.message || "Failed to delete permission");
       }
     } catch (error) {
-      console.error("Failed to delete permission:", error);
       alert(
-        error instanceof Error ? error.message : "Gagal menghapus permission. Silakan coba lagi."
+        error instanceof Error
+          ? error.message
+          : "Gagal menghapus permission. Silakan coba lagi.",
       );
     }
   }
@@ -336,7 +324,9 @@ export default function PermissionList() {
                 <p className="text-blue-100 text-sm font-medium mb-1">
                   Active Permissions
                 </p>
-                <p className="text-3xl font-bold">{displayedPermissions.length}</p>
+                <p className="text-3xl font-bold">
+                  {displayedPermissions.length}
+                </p>
               </div>
               <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
                 <FaKey className="w-7 h-7" />

@@ -88,15 +88,11 @@ export default function WorkflowStateList() {
 
         if (res.ok) {
           const response = (await res.json()) as WorkflowStateAPIResponse;
-          console.log(response);
-
           if (!cancelled) {
-            console.log("Loaded workflow states:", response);
             setStates(response);
             try {
               localStorage.setItem(SNAP_KEY, JSON.stringify(response));
-            } catch (e) {
-              console.error("Failed to save snapshot:", e);
+            } catch {
             }
           }
         } else {
@@ -153,8 +149,7 @@ export default function WorkflowStateList() {
           setStates(response);
           localStorage.setItem(SNAP_KEY, JSON.stringify(response));
         }
-      } catch (error) {
-        console.error("Failed to reload workflow states:", error);
+      } catch {
       }
     }
 
@@ -196,14 +191,11 @@ export default function WorkflowStateList() {
           );
         }
 
-        console.log("Workflow state deleted successfully");
-
         // Remove from local state
         const next = states.filter((x) => x.id !== state.id);
         setStates(next);
         saveSnapshot(next);
       } catch (err: unknown) {
-        console.error("Failed to delete workflow state:", err);
         const errorMessage = err instanceof Error ? err.message : String(err);
         setError(errorMessage);
       }

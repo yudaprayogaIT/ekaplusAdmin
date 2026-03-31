@@ -7,17 +7,22 @@ import { API_CONFIG, apiFetch, getApiUrl, getQueryUrl } from "@/config/api";
 import {
   FaBolt,
   FaCheckCircle,
+  FaCopy,
   FaClock,
+  FaEye,
   FaKey,
   FaPlus,
   FaSearch,
   FaSyncAlt,
   FaUser,
+  FaTimes,
 } from "react-icons/fa";
 
 type IntegrationTokenApiRow = {
   ID?: number;
   Name?: string;
+  Token?: string;
+  TokenPreview?: string;
   UserID?: number;
   IsActive?: boolean;
   LastUsedAt?: string | null;
@@ -28,6 +33,8 @@ type IntegrationTokenApiRow = {
 type IntegrationTokenRow = {
   id: number;
   name: string;
+  token?: string;
+  tokenPreview?: string;
   userId: number;
   isActive: boolean;
   lastUsedAt: string | null;
@@ -46,12 +53,270 @@ function toTokenRow(row: IntegrationTokenApiRow): IntegrationTokenRow {
   return {
     id: Number(row.ID || 0),
     name: row.Name || `Token ${row.ID || "-"}`,
+    token: row.Token || "",
+    tokenPreview: row.TokenPreview || "",
     userId: Number(row.UserID || 0),
     isActive: Boolean(row.IsActive),
     lastUsedAt: row.LastUsedAt || null,
     createdAt: row.CreatedAt || "",
     updatedAt: row.UpdatedAt || "",
   };
+}
+
+async function copyToClipboard(value: string): Promise<void> {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  if (typeof document === "undefined") {
+    throw new Error("Clipboard tidak tersedia");
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  try {
+    const success = document.execCommand("copy");
+    if (!success) {
+      throw new Error("Gagal menyalin token");
+    }
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
+type IntegrationTokenDetailResponse = {
+  ID?: number;
+  Name?: string;
+  Token?: string;
+  TokenPreview?: string;
+  UserID?: number;
+  IsActive?: boolean;
+  LastUsedAt?: string | null;
+  CreatedAt?: string;
+  UpdatedAt?: string;
+};
+
+function IntegrationTokenDetailModal({
+  open,
+  onClose,
+  item,
+  authToken,
+}: {
+  open: boolean;
+  onClose: () => void;
+  item: IntegrationTokenRow | null;
+  authToken: string | null;
+}) {
+  const [detail, setDetail] = useState<IntegrationTokenDetailResponse | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDetail() {
+      if (!open || !item || !authToken) return;
+      setLoading(true);
+      setError(null);
+      setCopyFeedback(null);
+      try {
+        const res = await apiFetch(
+          getApiUrl(`${API_CONFIG.ENDPOINTS.INTEGRATION_TOKEN}/${item.id}`),
+          { method: "GET", cache: "no-store" },
+          authToken,
+        );
+        const json = await res.json().catch(() => null);
+        if (!res.ok) {
+          throw new Error(
+            extractServerMessage(
+              json,
+              `Gagal memuat detail integration token (${res.status})`,
+            ),
+          );
+        }
+        if (!cancelled) {
+          setDetail((json?.data as IntegrationTokenDetailResponse) || null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Gagal memuat detail integration token",
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void loadDetail();
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, item, open]);
+
+  const handleCopyToken = useCallback(async () => {
+    const tokenValue = detail?.Token || item?.token || "";
+    if (!tokenValue) return;
+
+    try {
+      await copyToClipboard(tokenValue);
+      setCopyFeedback("Token berhasil disalin");
+    } catch (copyError) {
+      setCopyFeedback(
+        copyError instanceof Error ? copyError.message : "Gagal menyalin token",
+      );
+    }
+  }, [detail?.Token, item?.token]);
+
+  useEffect(() => {
+    if (!open) {
+      setDetail(null);
+      setError(null);
+      setLoading(false);
+    }
+  }, [open]);
+
+  if (!open || !item) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-2xl overflow-hidden rounded-[28px] bg-white shadow-2xl">
+        <div className="flex items-center justify-between bg-gradient-to-r from-red-600 to-orange-500 px-6 py-5 text-white">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-100">
+              Integration Token
+            </p>
+            <h2 className="mt-1 text-2xl font-bold">{detail?.Name || item.name}</h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl bg-white/15 p-2 transition hover:bg-white/25"
+          >
+            <FaTimes className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-5 bg-slate-50 p-6">
+          {loading && (
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
+              Memuat detail integration token...
+            </div>
+          )}
+          {error && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                Token ID
+              </div>
+              <div className="mt-1 text-sm font-semibold text-slate-900">
+                #{detail?.ID || item.id}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                Status
+              </div>
+              <div className="mt-1 text-sm font-semibold text-slate-900">
+                {(detail?.IsActive ?? item.isActive) ? "Active" : "Inactive"}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                User ID
+              </div>
+              <div className="mt-1 text-sm font-semibold text-slate-900">
+                {detail?.UserID || item.userId}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                Last Used
+              </div>
+              <div className="mt-1 text-sm font-semibold text-slate-900">
+                {dt(detail?.LastUsedAt || item.lastUsedAt)}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Token Preview
+            </div>
+            <div className="mt-2 rounded-xl bg-slate-100 px-4 py-3 font-mono text-sm text-slate-900">
+              {detail?.TokenPreview || item.tokenPreview || "-"}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                Full Token
+              </div>
+              {detail?.Token ? (
+                <button
+                  type="button"
+                  onClick={() => void handleCopyToken()}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  <FaCopy className="h-3 w-3" />
+                  Copy
+                </button>
+              ) : null}
+            </div>
+            <div className="break-all rounded-xl bg-slate-950 px-4 py-3 font-mono text-sm text-slate-100">
+              {detail?.Token || item.token || "-"}
+            </div>
+            {copyFeedback ? (
+              <div className="mt-2 text-xs text-slate-500">{copyFeedback}</div>
+            ) : null}
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                Created At
+              </div>
+              <div className="mt-1 text-sm font-semibold text-slate-900">
+                {dt(detail?.CreatedAt || item.createdAt)}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                Updated At
+              </div>
+              <div className="mt-1 text-sm font-semibold text-slate-900">
+                {dt(detail?.UpdatedAt || item.updatedAt)}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function dt(value?: string | null) {
@@ -82,6 +347,9 @@ export default function IntegrationTokenPage() {
   const [usersError, setUsersError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [search, setSearch] = useState("");
+  const [selectedItem, setSelectedItem] = useState<IntegrationTokenRow | null>(
+    null,
+  );
   const [name, setName] = useState("CRM Sales SPV");
   const [selectedUserId, setSelectedUserId] = useState("");
   const [manualUserId, setManualUserId] = useState("");
@@ -633,12 +901,30 @@ export default function IntegrationTokenPage() {
 
                     <div className="rounded-2xl bg-slate-900 px-4 py-3 text-slate-100">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Token Preview
+                      </div>
+                      <div className="mt-1 truncate text-sm font-semibold">
+                        {item.tokenPreview || "-"}
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl bg-slate-900 px-4 py-3 text-slate-100">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                         Created At
                       </div>
                       <div className="mt-1 text-sm font-semibold">
                         {dt(item.createdAt)}
                       </div>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedItem(item)}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600 transition hover:bg-red-100"
+                    >
+                      <FaEye className="h-4 w-4" />
+                      Buka Detail
+                    </button>
                   </div>
                 </div>
               );
@@ -646,6 +932,13 @@ export default function IntegrationTokenPage() {
           </div>
         )}
       </section>
+
+      <IntegrationTokenDetailModal
+        open={selectedItem !== null}
+        onClose={() => setSelectedItem(null)}
+        item={selectedItem}
+        authToken={token}
+      />
     </div>
   );
 }

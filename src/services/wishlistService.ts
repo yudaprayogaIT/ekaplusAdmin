@@ -39,7 +39,6 @@ function transformWishlistResponse(
 
   const item = items.find((i) => i.id === apiData.item);
   if (!item) {
-    console.warn(`Item ${apiData.item} not found in items list`);
     // Return placeholder if item not found
     return {
       id: apiData.id,
@@ -80,7 +79,6 @@ export async function fetchWishlist(
   items: Item[]
 ): Promise<WishlistItem[]> {
   if (!token) {
-    console.error("fetchWishlist: No token provided");
     throw new Error("Authentication required");
   }
 
@@ -94,16 +92,12 @@ export async function fetchWishlist(
     ],
   });
 
-  console.log("fetchWishlist: Fetching from", url);
-
   const response = await apiFetch(url, {
     headers: getAuthHeaders(token),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("fetchWishlist failed:", response.status, errorText);
-
     if (response.status === 401) {
       throw new Error("Unauthorized - Please login again");
     }
@@ -116,7 +110,6 @@ export async function fetchWishlist(
   const json = await response.json();
 
   if (!json.data || !Array.isArray(json.data)) {
-    console.error("Invalid API response:", json);
     throw new Error("Invalid API response format");
   }
 

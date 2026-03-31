@@ -134,7 +134,6 @@ export default function VariantList() {
   function handleApplyFilters(newFilters: FilterTriple[]) {
     setFilters(newFilters);
     setCurrentPage(1); // Reset to first page when filters change
-    console.log("[VariantList] Filters applied:", newFilters);
   }
 
   // Helper function to load variants only (for pagination/sorting)
@@ -181,14 +180,11 @@ export default function VariantList() {
         variantSpec.order_by = [[sort_by, sort_order]];
       }
 
-      console.log("[VariantList] Filter Triples:", filterTriples);
-      console.log("[VariantList] Variant Spec:", variantSpec);
 
       const variantsUrl = getQueryUrl(
         API_CONFIG.ENDPOINTS.PRODUCT_VARIANT,
         variantSpec
       );
-      console.log("[VariantList] Request URL:", variantsUrl);
 
       const variantsRes = await apiFetch(variantsUrl, { headers });
 
@@ -199,7 +195,6 @@ export default function VariantList() {
       if (variantsRes.ok) {
         const json = await variantsRes.json();
 
-        console.log("[VariantList] Full API Response:", json);
 
         // Parse pagination metadata - check multiple possible field names
         totalItems = json.total || json.count || json.total_count || 0;
@@ -207,36 +202,22 @@ export default function VariantList() {
         if (totalItems > 0) {
           // API returned total count
           totalPages = Math.ceil(totalItems / 20);
-          console.log("[VariantList] Using API total count");
         } else if (json.data.length > 0) {
           // API didn't return total count, use optimistic pagination
-          console.warn("[VariantList] API did not return total count, using optimistic pagination");
 
           if (json.data.length < 20) {
             // Less than page size means this is the last page
             totalPages = page;
             totalItems = (page - 1) * 20 + json.data.length;
-            console.log("[VariantList] Last page detected (less than 20 items)");
           } else {
             // Full page (exactly 20 items), assume there might be more pages
             totalPages = page + 1; // Show "next" button
             totalItems = (page + 1) * 20; // Approximate total to show pagination
-            console.log("[VariantList] Full page detected, showing next page button");
           }
         } else {
           totalPages = 1;
           totalItems = 0;
-          console.log("[VariantList] No data");
         }
-
-        console.log("[VariantList] Pagination metadata:", {
-          totalItems,
-          totalPages,
-          currentPage: page,
-          dataLength: json.data.length,
-          responseKeys: Object.keys(json),
-          usingOptimisticPagination: !json.total
-        });
 
         variantsData = json.data.map(
           (v: {
@@ -249,7 +230,6 @@ export default function VariantList() {
           }) => {
             const item = items.find((i) => i.id === v.item);
             if (!item) {
-              console.warn(`Item ${v.item} not found in items list`);
               return {
                 id: v.id,
                 item: {
@@ -290,11 +270,9 @@ export default function VariantList() {
 
     async function loadStatic() {
       if (!token) {
-        console.warn("[VariantList] No token available");
         return;
       }
 
-      console.log("[VariantList] Loading static data (categories, products, items)...");
       const headers = getAuthHeaders(token);
 
       try {
@@ -313,7 +291,6 @@ export default function VariantList() {
             })
           );
           setCategories(categoriesData);
-          console.log("[VariantList] Categories loaded:", categoriesData.length);
         }
 
         // Load products (all products, including disabled ones for variant mapping view)
@@ -358,7 +335,6 @@ export default function VariantList() {
             }
           );
           setProducts(productsData);
-          console.log("[VariantList] Products loaded:", productsData.length);
         }
 
         // Load items (including disabled) so mapped variants still resolve correctly
@@ -397,13 +373,10 @@ export default function VariantList() {
             })
           );
           setItems(itemsData);
-          console.log("[VariantList] Items loaded:", itemsData.length);
         }
 
         setStaticDataLoaded(true);
-        console.log("[VariantList] Static data loading complete");
       } catch (error) {
-        console.error("[VariantList] Failed to load static data:", error);
       }
     }
 
@@ -411,7 +384,6 @@ export default function VariantList() {
 
     // Reload items when they're updated
     const handleItemsUpdate = () => {
-      console.log("[VariantList] Items updated, reloading static data...");
       loadStatic();
     };
 
@@ -425,11 +397,6 @@ export default function VariantList() {
   // Reset to first page when sort changes (but not on initial mount)
   useEffect(() => {
     if (staticDataLoaded && !isInitialMount.current) {
-      console.log(
-        "[VariantList] Sort changed, resetting to first page:",
-        sortField,
-        sortDirection
-      );
       setCurrentPage(1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -446,14 +413,6 @@ export default function VariantList() {
       setError(null);
 
       try {
-        console.log(
-          "[VariantList] Loading variants with server-side sort and pagination:",
-          sortField,
-          sortDirection,
-          "page:",
-          currentPage
-        );
-
         const { variantsData, totalItems, totalPages } =
           await loadVariants(filters, sortField, sortDirection, currentPage);
 
@@ -488,7 +447,6 @@ export default function VariantList() {
     async function handler() {
       if (!token) return;
       try {
-        console.log("[VariantList] Refreshing variants after update...");
 
         // Reload variants only
         const { variantsData, totalItems, totalPages } =
@@ -498,9 +456,7 @@ export default function VariantList() {
         setTotalItems(totalItems);
         setTotalPages(totalPages);
 
-        console.log("[VariantList] Variants refreshed successfully");
       } catch (err) {
-        console.error("Failed to refresh variants:", err);
       }
     }
     window.addEventListener("ekatalog:variants_update", handler);
@@ -520,7 +476,6 @@ export default function VariantList() {
       setVariants(variantsData);
       window.dispatchEvent(new Event("ekatalog:variants_update"));
     } catch (err) {
-      console.error("Failed to refresh variants:", err);
     }
   }
 
@@ -534,7 +489,6 @@ export default function VariantList() {
         await refreshVariants();
         window.dispatchEvent(new Event("ekatalog:products_update"));
       } catch (err) {
-        console.error("Failed to delete variant:", err);
         alert("Gagal menghapus variant. Silakan coba lagi.");
       }
     };
@@ -575,7 +529,6 @@ export default function VariantList() {
 
   // Group by product
   const groupedByProduct = useMemo(() => {
-    console.log("[VariantList] Grouping variants by product...");
     const startTime = performance.now();
 
     // Optimize: Group variants by productid first
@@ -596,7 +549,6 @@ export default function VariantList() {
       .filter((group) => group.items.length > 0);
 
     const endTime = performance.now();
-    console.log("[VariantList] Created", result.length, "product groups in", Math.round(endTime - startTime), "ms");
     return result;
   }, [products, filteredVariants]);
 
@@ -726,12 +678,6 @@ export default function VariantList() {
             <button
               onClick={() => {
                 const newDirection = sortDirection === "asc" ? "desc" : "asc";
-                console.log(
-                  "[VariantList] Sort direction changed:",
-                  sortDirection,
-                  "->",
-                  newDirection
-                );
                 setSortDirection(newDirection);
               }}
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
@@ -799,12 +745,6 @@ export default function VariantList() {
                         <button
                           key={option.value}
                           onClick={() => {
-                            console.log(
-                              "[VariantList] Sort field changed:",
-                              sortField,
-                              "->",
-                              option.value
-                            );
                             setSortField(option.value);
                             setSortFieldDropdownOpen(false);
                           }}

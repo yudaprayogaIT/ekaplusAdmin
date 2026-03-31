@@ -1,16 +1,8 @@
 // src/components/items/ItemList.tsx
 "use client";
 
-import React, {
-  useEffect,
-  useRef,
-  useState,
-  useMemo,
-} from "react";
-import {
-  useRouter,
-  useSearchParams,
-} from "next/navigation";
+import React, { useEffect, useRef, useState, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import ItemCard from "./ItemCard";
 import AddItemModal from "./AddItemModal";
 import ItemDetailModal from "./ItemDetailModal";
@@ -32,10 +24,7 @@ import {
   FaFilter,
   FaExclamationTriangle,
 } from "react-icons/fa";
-import {
-  motion,
-  AnimatePresence,
-} from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getQueryUrl,
@@ -49,19 +38,13 @@ import FilterBuilder from "@/components/filters/FilterBuilder";
 import { useFilters } from "@/hooks/useFilters";
 import { ITEM_FILTER_FIELDS } from "@/config/filterFields";
 import { FilterTriple } from "@/types/filter";
-import {
-  Product,
-  Category,
-} from "@/types";
+import { Product, Category } from "@/types";
 import type {
   EntityFilterConfig,
   FieldType,
   GobackOperator,
 } from "@/types/filter";
-import {
-  buildSearchParams,
-  parseSearchParams,
-} from "@/utils/urlSync";
+import { buildSearchParams, parseSearchParams } from "@/utils/urlSync";
 
 export type Item = {
   id: number;
@@ -167,14 +150,14 @@ export default function ItemList() {
   const [searchQuery, setSearchQuery] = useState(urlState.searchQuery);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortField, setSortField] = useState<SortField>(
-    (urlState.sortField as SortField) || "created_at"
+    (urlState.sortField as SortField) || "created_at",
   );
   const [sortDirection, setSortDirection] = useState<SortDirection>(
-    urlState.sortDirection || "desc"
+    urlState.sortDirection || "desc",
   );
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
   const [showOnlyUnmapped, setShowOnlyUnmapped] = useState(
-    urlState.showOnlyUnmapped
+    urlState.showOnlyUnmapped,
   );
 
   // Server-side pagination state
@@ -197,7 +180,7 @@ export default function ItemList() {
   // Multi-select state for mapping to products
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<number>>(
-    new Set()
+    new Set(),
   );
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
 
@@ -216,8 +199,8 @@ export default function ItemList() {
       new Set(
         categoriesData
           .map((c) => c.name)
-          .filter((name) => typeof name === "string" && name.trim() !== "")
-      )
+          .filter((name) => typeof name === "string" && name.trim() !== ""),
+      ),
     ).map((name) => ({ value: name, label: name }));
 
     return {
@@ -238,14 +221,11 @@ export default function ItemList() {
   useEffect(() => {
     const newUrlState = parseSearchParams(searchParams);
 
-    console.log("[ItemList] 🔄 URL changed, new state:", newUrlState);
-
     // Only update if filters actually changed
     const filtersChanged =
       JSON.stringify(filters) !== JSON.stringify(newUrlState.filters);
 
     if (filtersChanged && newUrlState.filters.length > 0) {
-      console.log("[ItemList] ⚡ Updating filters from URL");
       setFilters(newUrlState.filters);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -256,7 +236,7 @@ export default function ItemList() {
     filterTriples: FilterTriple[] = [],
     sort_by?: SortField,
     sort_order?: SortDirection,
-    page: number = 1
+    page: number = 1,
   ): Promise<{ items: Item[]; totalItems: number; totalPages: number }> {
     if (!token) return { items: [], totalItems: 0, totalPages: 0 };
 
@@ -306,11 +286,7 @@ export default function ItemList() {
       itemSpec.order_by = [[sort_by, sort_order]];
     }
 
-    console.log("[ItemList] Filter Triples:", filterTriples);
-    console.log("[ItemList] Item Spec:", itemSpec);
-
     const DATA_URL = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, itemSpec);
-    console.log("[ItemList] Request URL:", DATA_URL);
 
     const res = await apiFetch(DATA_URL, {
       method: "GET",
@@ -321,8 +297,6 @@ export default function ItemList() {
     if (res.ok) {
       const response = (await res.json()) as ItemAPIResponse;
 
-      console.log("[ItemList] Full API Response:", response);
-
       // Parse pagination metadata - check multiple possible field names
       let totalItems =
         response.total || response.count || response.total_count || 0;
@@ -331,40 +305,29 @@ export default function ItemList() {
       if (totalItems > 0) {
         // API returned total count
         totalPages = Math.ceil(totalItems / 20);
-        console.log("[ItemList] Using API total count");
       } else if (response.data.length > 0) {
-        // API didn't return total count, use optimistic pagination
-        console.warn(
-          "[ItemList] API did not return total count, using optimistic pagination"
-        );
-
         if (response.data.length < 20) {
           // Less than page size means this is the last page
           totalPages = page;
           totalItems = (page - 1) * 20 + response.data.length;
-          console.log("[ItemList] Last page detected (less than 20 items)");
         } else {
           // Full page (exactly 20 items), assume there might be more pages
           totalPages = page + 1; // Show "next" button
           totalItems = (page + 1) * 20; // Approximate total to show pagination
-          console.log(
-            "[ItemList] Full page detected, showing next page button"
-          );
         }
       } else {
         totalPages = 1;
         totalItems = 0;
-        console.log("[ItemList] No data");
       }
 
-      console.log("[ItemList] Pagination metadata:", {
-        totalItems,
-        totalPages,
-        currentPage: page,
-        dataLength: response.data.length,
-        responseKeys: Object.keys(response),
-        usingOptimisticPagination: !response.total,
-      });
+      // console.log("[ItemList] Pagination metadata:", {
+      //   totalItems,
+      //   totalPages,
+      //   currentPage: page,
+      //   dataLength: response.data.length,
+      //   responseKeys: Object.keys(response),
+      //   usingOptimisticPagination: !response.total,
+      // });
 
       const mappedItems: Item[] = response.data.map((item) => ({
         id: item.id,
@@ -408,24 +371,14 @@ export default function ItemList() {
     let errorDetail = `HTTP ${res.status}`;
     try {
       const errorBody = await res.json();
-      console.error("[ItemList] API Error Response:", errorBody);
+      // console.error("[ItemList] API Error Response:", errorBody);
       errorDetail = errorBody.message || errorBody.error || errorDetail;
     } catch {
-      console.error(
-        "[ItemList] API Error (no JSON body):",
-        res.status,
-        res.statusText
-      );
-    }
-
-    // For filter/query errors (400/500), return empty object instead of throwing
-    // This allows UI to show "No data found" instead of error message
-    if (res.status === 400 || res.status === 500) {
-      console.warn(
-        "[ItemList] Filter query failed, returning empty results:",
-        errorDetail
-      );
-      return { items: [], totalItems: 0, totalPages: 0 };
+      // console.error(
+      //   "[ItemList] API Error (no JSON body):",
+      //   res.status,
+      //   res.statusText
+      // );
     }
 
     throw new Error(`Failed to fetch items (${res.status}): ${errorDetail}`);
@@ -473,12 +426,6 @@ export default function ItemList() {
           return;
         }
 
-        console.log("[ItemList] 📊 Loading data with:");
-        console.log("  - Filters:", JSON.stringify(filters, null, 2));
-        console.log("  - Sort:", sortField, sortDirection);
-        console.log("  - Page:", currentPage);
-        console.log("  - URL State Filters:", JSON.stringify(urlState.filters, null, 2));
-
         const {
           items: mappedItems,
           totalItems,
@@ -492,7 +439,7 @@ export default function ItemList() {
           try {
             localStorage.setItem(SNAP_KEY, JSON.stringify(mappedItems));
           } catch (e) {
-            console.error("Failed to save snapshot:", e);
+            // console.error("Failed to save snapshot:", e);
           }
         }
       } catch (err: unknown) {
@@ -500,7 +447,7 @@ export default function ItemList() {
           const errorMessage = err instanceof Error ? err.message : String(err);
           if (errorMessage.includes("Failed to fetch")) {
             setError(
-              "Tidak dapat terhubung ke server. Periksa koneksi Anda atau pastikan backend berjalan."
+              "Tidak dapat terhubung ke server. Periksa koneksi Anda atau pastikan backend berjalan.",
             );
           } else if (errorMessage.includes("401")) {
             setError("Session expired. Silakan login kembali.");
@@ -526,8 +473,6 @@ export default function ItemList() {
     async function handler(eventName: string) {
       if (!isAuthenticated || !token) return;
 
-      console.log(`[ItemList] 🔄 Event triggered: ${eventName}, reloading items...`);
-
       try {
         const {
           items: mappedItems,
@@ -538,9 +483,8 @@ export default function ItemList() {
         setTotalItems(totalItems);
         setTotalPages(totalPages);
         localStorage.setItem(SNAP_KEY, JSON.stringify(mappedItems));
-        console.log(`[ItemList] ✅ Reload complete. Total items: ${mappedItems.length}`);
       } catch (error) {
-        console.error("[ItemList] ❌ Failed to reload items:", error);
+        // console.error("[ItemList] ❌ Failed to reload items:", error);
       }
     }
 
@@ -583,24 +527,21 @@ export default function ItemList() {
           {
             method: "DELETE",
             headers,
-          }
+          },
         );
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.message || `Failed to delete item (${response.status})`
+            errorData.message || `Failed to delete item (${response.status})`,
           );
         }
-
-        console.log("Item deleted successfully");
 
         // Remove from local state
         const next = items.filter((x) => x.id !== item.id);
         setItems(next);
         saveSnapshot(next);
       } catch (err: unknown) {
-        console.error("Failed to delete item:", err);
         const errorMessage = err instanceof Error ? err.message : String(err);
         setError(errorMessage);
       }
@@ -632,7 +573,7 @@ export default function ItemList() {
               fields: ["branch", "branch.id", "branch.branch_name"],
             },
           ],
-        }
+        },
       );
 
       const itemRes = await apiFetch(itemDetailUrl, {
@@ -653,10 +594,8 @@ export default function ItemList() {
             (b: { branch: { id?: number; branch_name: string } }) => ({
               id: b.branch.id || 0,
               name: b.branch.branch_name,
-            })
+            }),
           );
-
-          console.log("Mapped branches with names:", mappedBranches);
         }
 
         const itemWithBranches: Item = {
@@ -668,13 +607,11 @@ export default function ItemList() {
           diameter: detailItem.diameter,
         };
 
-        console.log("Item with branches:", itemWithBranches);
-
         setModalInitial(itemWithBranches);
         setModalOpen(true);
       }
     } catch (error) {
-      console.error("Failed to fetch item detail:", error);
+      // console.error("Failed to fetch item detail:", error);
       // Fallback: buka modal dengan data yang ada
       setModalInitial(item);
       setModalOpen(true);
@@ -704,7 +641,7 @@ export default function ItemList() {
               fields: ["branch", "branch.id", "branch.branch_name"],
             },
           ],
-        }
+        },
       );
 
       const itemRes = await apiFetch(itemDetailUrl, {
@@ -725,10 +662,8 @@ export default function ItemList() {
             (b: { branch: { id?: number; branch_name: string } }) => ({
               id: b.branch.id || 0,
               name: b.branch.branch_name,
-            })
+            }),
           );
-
-          console.log("Mapped branches with names:", mappedBranches);
         }
 
         const itemWithBranches: Item = {
@@ -740,8 +675,6 @@ export default function ItemList() {
           diameter: detailItem.diameter,
         };
 
-        console.log("Item with branches for detail view:", itemWithBranches);
-
         setDetailItem(itemWithBranches);
         setDetailOpen(true);
       } else {
@@ -750,7 +683,7 @@ export default function ItemList() {
         setDetailOpen(true);
       }
     } catch (error) {
-      console.error("Failed to fetch item detail:", error);
+      // console.error("Failed to fetch item detail:", error);
       // Fallback: buka modal dengan data yang ada
       setDetailItem(item);
       setDetailOpen(true);
@@ -835,7 +768,7 @@ export default function ItemList() {
           (cat: { id: number; category_name: string }) => ({
             id: cat.id,
             name: cat.category_name,
-          })
+          }),
         );
         setCategoriesData(categoriesData);
       }
@@ -865,12 +798,12 @@ export default function ItemList() {
             },
             disabled: p.disabled,
             isHotDeals: Boolean(p.hot_deals),
-          })
+          }),
         );
         setProducts(productsData);
       }
     } catch (error) {
-      console.error("Failed to load products and categories:", error);
+      // console.error("Failed to load products and categories:", error);
     }
   }, [token]);
 
@@ -881,7 +814,6 @@ export default function ItemList() {
   // Listen for product updates
   React.useEffect(() => {
     const handleProductsUpdate = () => {
-      console.log("[ItemList] Products updated, refreshing products list...");
       loadProductsAndCategories();
     };
 
@@ -890,7 +822,7 @@ export default function ItemList() {
     return () => {
       window.removeEventListener(
         "ekatalog:products_update",
-        handleProductsUpdate
+        handleProductsUpdate,
       );
     };
   }, [loadProductsAndCategories]);
@@ -910,14 +842,14 @@ export default function ItemList() {
         item.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.group.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (item.description &&
-          item.description.toLowerCase().includes(searchQuery.toLowerCase()))
+          item.description.toLowerCase().includes(searchQuery.toLowerCase())),
     );
   }
 
   // Filter for unmapped items
   if (showOnlyUnmapped) {
     displayedItems = displayedItems.filter(
-      (item) => !item.variantCount || item.variantCount === 0
+      (item) => !item.variantCount || item.variantCount === 0,
     );
   }
 
@@ -1210,12 +1142,12 @@ export default function ItemList() {
                           <button
                             key={option.value}
                             onClick={() => {
-                              console.log(
-                                "[ItemList] Sort field changed:",
-                                sortField,
-                                "->",
-                                option.value
-                              );
+                              // console.log(
+                              //   "[ItemList] Sort field changed:",
+                              //   sortField,
+                              //   "->",
+                              //   option.value
+                              // );
                               setSortField(option.value);
                               setSortFieldDropdownOpen(false);
                             }}
@@ -1282,12 +1214,12 @@ export default function ItemList() {
           {/* Pagination */}
           {totalItems > 0 && (
             <>
-              {console.log("[ItemList] Rendering Pagination with:", {
+              {/* {console.log("[ItemList] Rendering Pagination with:", {
                 currentPage,
                 totalPages,
                 totalItems,
                 itemsPerPage,
-              })}
+              })} */}
               <Pagination
                 currentPage={currentPage}
                 totalPages={totalPages}

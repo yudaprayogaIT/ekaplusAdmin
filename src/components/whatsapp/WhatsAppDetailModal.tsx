@@ -180,7 +180,6 @@ export default function WhatsAppDetailModal({
 
   useEffect(() => {
     on<WhatsAppStatusEvent>(`whatsapp_status_${device?.phone}`, (data) => {
-      console.log(data)
       if (data) {
         setQr(data.qr ?? "")
         setStatus(data.status)  
