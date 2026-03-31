@@ -34,17 +34,17 @@ export function useFilters(options: UseFiltersOptions): UseFiltersReturn {
   const { entity, onFiltersChange, initialFilters } = options;
   // Initialize with initialFilters if provided to avoid timing issues on page refresh
   const [filters, setFiltersInternal] = useState<FilterTriple[]>(
-    initialFilters || []
+    initialFilters || [],
   );
   const [initialized, setInitialized] = useState(false);
   const onFiltersChangeRef = useRef(onFiltersChange);
 
-  // Debug logging
-  useEffect(() => {
-    console.log(`[useFilters:${entity}] 🔍 Initialized:`, initialized);
-    console.log(`[useFilters:${entity}] 🔍 Initial filters:`, initialFilters);
-    console.log(`[useFilters:${entity}] 🔍 Current filters:`, filters);
-  }, [entity, initialized, initialFilters, filters]);
+  // // Debug logging
+  // useEffect(() => {
+  //   console.log(`[useFilters:${entity}] 🔍 Initialized:`, initialized);
+  //   console.log(`[useFilters:${entity}] 🔍 Initial filters:`, initialFilters);
+  //   console.log(`[useFilters:${entity}] 🔍 Current filters:`, filters);
+  // }, [entity, initialized, initialFilters, filters]);
 
   // Update ref when callback changes
   useEffect(() => {
@@ -110,7 +110,7 @@ export function useFilters(options: UseFiltersOptions): UseFiltersReturn {
         onFiltersChangeRef.current(newFilters);
       }
     },
-    [entity]
+    [entity],
   );
 
   // Clear all filters

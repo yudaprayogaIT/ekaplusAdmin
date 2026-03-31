@@ -26,6 +26,8 @@ export interface CustomerRegistration {
     name: string;
     nik: string;
     npwp?: string;
+    tax_status?: number;
+    tax_status_label?: string;
     branch_id: number;
     branch_name: string;
     branch_city: string;
@@ -52,8 +54,15 @@ export interface CustomerRegistration {
     factory_address?: string;
     payment_method?: string;
     payment_account?: string;
+    payment_account_details?: {
+      name: string;
+      nomor_rekening?: string;
+      nama_rekening?: string;
+      bank?: string;
+    };
     more_information?: string;
     sales_team?: string;
+    erp_customer_group?: string;
   };
 
   // 4a. Identitas Penanggung Jawab Cabang
@@ -69,8 +78,10 @@ export interface CustomerRegistration {
   master_links?: {
     nb_id?: number;
     nb_name?: string;
+    nb_manual?: string;
     gp_id?: number;
     gp_name?: string;
+    gp_manual?: string;
     gc_id?: number;
     gc_name?: string;
     bc_id?: number;

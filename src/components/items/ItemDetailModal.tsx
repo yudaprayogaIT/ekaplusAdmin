@@ -1,14 +1,8 @@
 // src/components/items/ItemDetailModal.tsx
 "use client";
 
-import React, {
-  useState,
-  useEffect,
-} from "react";
-import {
-  AnimatePresence,
-  motion,
-} from "framer-motion";
+import React, { useState, useEffect } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   FaTimes,
   FaEdit,
@@ -87,20 +81,24 @@ export default function ItemDetailModal({
 
         if (res.ok) {
           const response = await res.json();
-          const allBranches: Branch[] = response.data.map((b: { id: number; branch_name: string }) => ({
-            id: b.id,
-            name: b.branch_name,
-          }));
+          const allBranches: Branch[] = response.data.map(
+            (b: { id: number; branch_name: string }) => ({
+              id: b.id,
+              name: b.branch_name,
+            }),
+          );
 
           // Filter hanya branches yang ada di item
           if (item && item.branches) {
-            const itemBranchIds = item.branches.map(b => b.id);
-            const filteredBranches = allBranches.filter(b => itemBranchIds.includes(b.id));
+            const itemBranchIds = item.branches.map((b) => b.id);
+            const filteredBranches = allBranches.filter((b) =>
+              itemBranchIds.includes(b.id),
+            );
             setBranches(filteredBranches);
           }
         }
       } catch (error) {
-        console.error("Failed to load branches:", error);
+        // console.error("Failed to load branches:", error);
       } finally {
         setLoadingBranches(false);
       }
@@ -150,7 +148,7 @@ export default function ItemDetailModal({
             // Fetch product names for each variant
             if (variantsData.length > 0) {
               const productIds = Array.from(
-                new Set(variantsData.map((v: Variant) => v.parent_id))
+                new Set(variantsData.map((v: Variant) => v.parent_id)),
               );
 
               // Load products to get their names
@@ -158,42 +156,51 @@ export default function ItemDetailModal({
                 fields: ["id", "product_name"],
                 filters: [["id", "in", productIds]],
               };
-              const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, productsSpec);
+              const productsUrl = getQueryUrl(
+                API_CONFIG.ENDPOINTS.PRODUCT,
+                productsSpec,
+              );
               const productsRes = await apiFetch(productsUrl, {
                 method: "GET",
                 cache: "no-store",
-                headers
+                headers,
               });
 
               if (productsRes.ok) {
                 const productsJson = await productsRes.json();
                 const productsMap = new Map<number, string>(
-                  productsJson.data.map((p: { id: number; product_name: string }) => [
-                    p.id,
-                    p.product_name,
-                  ])
+                  productsJson.data.map(
+                    (p: { id: number; product_name: string }) => [
+                      p.id,
+                      p.product_name,
+                    ],
+                  ),
                 );
 
                 // Merge product names into variants
-                const enrichedVariants: Variant[] = variantsData.map((v: Variant): Variant => {
-                  const productName = productsMap.get(v.parent_id);
-                  return {
-                    id: v.id,
-                    idx: v.idx,
-                    parent_id: v.parent_id,
-                    product_name: productName || `Product ${v.parent_id}`,
-                  };
-                });
+                const enrichedVariants: Variant[] = variantsData.map(
+                  (v: Variant): Variant => {
+                    const productName = productsMap.get(v.parent_id);
+                    return {
+                      id: v.id,
+                      idx: v.idx,
+                      parent_id: v.parent_id,
+                      product_name: productName || `Product ${v.parent_id}`,
+                    };
+                  },
+                );
 
                 setVariants(enrichedVariants);
               } else {
                 // Set variants without product names
-                const basicVariants: Variant[] = variantsData.map((v: Variant): Variant => ({
-                  id: v.id,
-                  idx: v.idx,
-                  parent_id: v.parent_id,
-                  product_name: `Product ${v.parent_id}`,
-                }));
+                const basicVariants: Variant[] = variantsData.map(
+                  (v: Variant): Variant => ({
+                    id: v.id,
+                    idx: v.idx,
+                    parent_id: v.parent_id,
+                    product_name: `Product ${v.parent_id}`,
+                  }),
+                );
                 setVariants(basicVariants);
               }
             } else {
@@ -202,7 +209,7 @@ export default function ItemDetailModal({
           }
         }
       } catch (error) {
-        console.error("Failed to load variants:", error);
+        // console.error("Failed to load variants:", error);
       } finally {
         setLoadingVariants(false);
       }
@@ -414,7 +421,8 @@ export default function ItemDetailModal({
                   <div className="flex items-center gap-3 mb-4">
                     <FaMapMarkerAlt className="w-5 h-5 text-green-600" />
                     <label className="text-lg font-bold text-gray-800">
-                      Tersedia di {loadingBranches ? '...' : branches.length} Cabang
+                      Tersedia di {loadingBranches ? "..." : branches.length}{" "}
+                      Cabang
                     </label>
                   </div>
                   {loadingBranches ? (
@@ -430,7 +438,9 @@ export default function ItemDetailModal({
                           className="flex items-center gap-2 px-4 py-3 bg-gradient-to-br from-green-50 to-green-100 rounded-xl border-2 border-green-200"
                         >
                           <FaCheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
-                          <span className="text-sm font-medium text-green-900">{branch.name}</span>
+                          <span className="text-sm font-medium text-green-900">
+                            {branch.name}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -461,7 +471,8 @@ export default function ItemDetailModal({
                         <FaBox className="w-4 h-4 text-blue-600 flex-shrink-0" />
                         <div className="flex-1 min-w-0">
                           <span className="text-sm font-medium text-blue-900 block truncate">
-                            {variant.product_name || `Product #${variant.parent_id}`}
+                            {variant.product_name ||
+                              `Product #${variant.parent_id}`}
                           </span>
                           <span className="text-xs text-blue-700">
                             Urutan: {variant.idx}

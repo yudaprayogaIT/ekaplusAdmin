@@ -39,6 +39,7 @@ export const API_CONFIG = {
 
     CUSTOMER_REGISTER: "/api/resource/customer_register",
     CUSTOMER_REGISTER_ADDRESS: "/api/resource/customer_register_address",
+    CUSTOMER_LIMIT: "/api/resource/customer_limit",
     NATIONAL_BRAND: "/api/resource/national_brand",
     GROUP_PARENT: "/api/resource/group_parent",
     GROUP_CUSTOMER: "/api/resource/group_customer",

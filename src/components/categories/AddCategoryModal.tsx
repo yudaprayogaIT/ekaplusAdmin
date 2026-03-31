@@ -1,20 +1,9 @@
 // src/components/categories/AddCategoryModal.tsx
 "use client";
 
-import React, {
-  useEffect,
-  useState,
-} from "react";
-import {
-  motion,
-  AnimatePresence,
-} from "framer-motion";
-import {
-  FaTimes,
-  FaUpload,
-  FaImage,
-  FaCheckCircle,
-} from "react-icons/fa";
+import React, { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { FaTimes, FaUpload, FaImage, FaCheckCircle } from "react-icons/fa";
 import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -246,26 +235,29 @@ export default function AddCategoryModal({
             method: "PUT",
             headers,
             body: formData,
-          }
+          },
         );
       } else {
         // CREATE new category
-        response = await apiFetch(getResourceUrl(API_CONFIG.ENDPOINTS.CATEGORY), {
-          method: "POST",
-          headers,
-          body: formData,
-        });
+        response = await apiFetch(
+          getResourceUrl(API_CONFIG.ENDPOINTS.CATEGORY),
+          {
+            method: "POST",
+            headers,
+            body: formData,
+          },
+        );
       }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
-          errorData.message || `Failed to save category (${response.status})`
+          errorData.message || `Failed to save category (${response.status})`,
         );
       }
 
-      const result = await response.json();
-      console.log("Category saved successfully:", result);
+      // const result = await response.json();
+      // console.log("Category saved successfully:", result);
 
       // Trigger reload in CategoryList
       window.dispatchEvent(new Event("ekatalog:categories_update"));
@@ -273,7 +265,7 @@ export default function AddCategoryModal({
       setSaving(false);
       onClose();
     } catch (err: unknown) {
-      console.error("Failed to save category:", err);
+      // console.error("Failed to save category:", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
       setError(errorMessage);
       setSaving(false);
@@ -460,7 +452,7 @@ export default function AddCategoryModal({
                             // Validate file size (5MB)
                             if (file.size > 5 * 1024 * 1024) {
                               setError(
-                                "Ukuran icon terlalu besar. Maksimal 5MB"
+                                "Ukuran icon terlalu besar. Maksimal 5MB",
                               );
                               return;
                             }
@@ -525,7 +517,7 @@ export default function AddCategoryModal({
                             // Validate file size (5MB)
                             if (file.size > 5 * 1024 * 1024) {
                               setError(
-                                "Ukuran gambar terlalu besar. Maksimal 5MB"
+                                "Ukuran gambar terlalu besar. Maksimal 5MB",
                               );
                               return;
                             }

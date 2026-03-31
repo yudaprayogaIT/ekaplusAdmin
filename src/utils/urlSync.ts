@@ -42,8 +42,7 @@ export function deserializeFilters(filterString: string): FilterTriple[] {
 
       return [field, operator, parsedValue] as FilterTriple;
     });
-  } catch (error) {
-    console.error("Failed to deserialize filters:", error);
+  } catch {
     return [];
   }
 }

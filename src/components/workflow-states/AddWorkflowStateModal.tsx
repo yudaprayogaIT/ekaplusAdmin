@@ -173,10 +173,6 @@ export default function AddWorkflowStateModal({
         );
       }
 
-      console.log(
-        `Workflow state ${initial ? "updated" : "created"} successfully`
-      );
-
       // Dispatch update event
       window.dispatchEvent(new Event("ekaplus:workflow_states_update"));
 
@@ -194,7 +190,6 @@ export default function AddWorkflowStateModal({
 
       onClose();
     } catch (err: unknown) {
-      console.error("Failed to save workflow state:", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
       alert(`Error: ${errorMessage}`);
     } finally {

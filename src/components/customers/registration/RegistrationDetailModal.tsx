@@ -22,6 +22,10 @@ import {
 } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
+import {
+  fetchPaymentAccountInfo,
+  type PaymentAccountInfo,
+} from "@/utils/paymentAccount";
 
 interface RegistrationDetailModalProps {
   isOpen: boolean;
@@ -79,6 +83,11 @@ export function RegistrationDetailModal({
   >([]);
   const [shippingLoading, setShippingLoading] = useState(false);
   const [shippingError, setShippingError] = useState<string | null>(null);
+  const [paymentAccountInfo, setPaymentAccountInfo] =
+    useState<PaymentAccountInfo | null>(null);
+  const [paymentAccountError, setPaymentAccountError] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -134,6 +143,53 @@ export function RegistrationDetailModal({
       cancelled = true;
     };
   }, [isOpen, registration?.id, token]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPaymentAccount() {
+      if (
+        !isOpen ||
+        !token ||
+        !registration?.company.branch_id ||
+        !registration.support_data.payment_account
+      ) {
+        setPaymentAccountInfo(null);
+        setPaymentAccountError(null);
+        return;
+      }
+
+      try {
+        setPaymentAccountError(null);
+        const info = await fetchPaymentAccountInfo({
+          branchId: registration.company.branch_id,
+          paymentAccount: registration.support_data.payment_account,
+          authToken: token,
+        });
+        if (!cancelled) {
+          setPaymentAccountInfo(info);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setPaymentAccountInfo(null);
+          setPaymentAccountError(
+            error instanceof Error ? error.message : "Gagal memuat rekening",
+          );
+        }
+      }
+    }
+
+    void loadPaymentAccount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isOpen,
+    registration?.company.branch_id,
+    registration?.support_data.payment_account,
+    token,
+  ]);
 
   const formatPhoneNumber = (phone: string) => {
     if (!phone || phone === "-") return "-";
@@ -329,6 +385,14 @@ export function RegistrationDetailModal({
                       </label>
                       <p className="text-sm text-gray-900 font-medium uppercase">
                         {displayValue(registration.source)}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Created By
+                      </label>
+                      <p className="text-sm text-gray-900 font-medium">
+                        {displayValue(registration.created_by)}
                       </p>
                     </div>
                     <div>
@@ -607,12 +671,67 @@ export function RegistrationDetailModal({
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                        Payment Account
+                        Sales Area CRM
                       </label>
                       <p className="text-sm text-gray-900 font-medium">
-                        {displayValue(registration.support_data.payment_account)}
+                        {displayValue(registration.support_data.sales_team)}
                       </p>
                     </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Tax Status
+                      </label>
+                      <p className="text-sm text-gray-900 font-medium">
+                        {displayValue(registration.company.tax_status_label)}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        ERP Customer Group
+                      </label>
+                      <p className="text-sm text-gray-900 font-medium">
+                        {displayValue(registration.support_data.erp_customer_group)}
+                      </p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Payment Account
+                      </label>
+                      <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-1 text-sm">
+                        <p className="font-medium text-gray-900">
+                          {displayValue(
+                            paymentAccountInfo?.nama_rekening ||
+                              registration.support_data.payment_account,
+                          )}
+                        </p>
+                        <p className="text-gray-600">
+                          No. Rekening:{" "}
+                          {displayValue(
+                            paymentAccountInfo?.nomor_rekening ||
+                              registration.support_data.payment_account,
+                          )}
+                        </p>
+                        <p className="text-gray-600">
+                          Bank: {displayValue(paymentAccountInfo?.bank)}
+                        </p>
+                        {paymentAccountError ? (
+                          <p className="text-xs text-amber-700">
+                            Detail rekening belum bisa dimuat. Tetap menampilkan
+                            kode rekening dari customer register.
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                    {registration.company.tax_status === 1 && (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                          NPWP
+                        </label>
+                        <p className="text-sm text-gray-900 font-medium">
+                          {displayValue(registration.company.npwp)}
+                        </p>
+                      </div>
+                    )}
                     <div className="md:col-span-2">
                       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                         Notes
@@ -677,14 +796,6 @@ export function RegistrationDetailModal({
                         </label>
                         <p className="text-sm text-gray-900 font-medium">
                           {registration.address.province_name}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Kode Pos
-                        </label>
-                        <p className="text-sm text-gray-900 font-medium">
-                          {registration.address.postal_code}
                         </p>
                       </div>
                     </div>
@@ -799,14 +910,6 @@ export function RegistrationDetailModal({
                                 </label>
                                 <p className="text-gray-900">
                                   {addr.village || "-"}
-                                </p>
-                              </div>
-                              <div>
-                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                  Kode Pos
-                                </label>
-                                <p className="text-gray-900">
-                                  {addr.postal_code || "-"}
                                 </p>
                               </div>
                               <div>

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -21,6 +21,11 @@ import { HiXMark } from "react-icons/hi2";
 import type { BranchCustomer, GroupCustomer, GroupParent } from "@/types/customer";
 import { API_CONFIG, apiFetch, getQueryUrl, getResourceUrl } from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  fetchPaymentAccountInfo,
+  getTaxStatusLabel,
+  type PaymentAccountInfo,
+} from "@/utils/paymentAccount";
 
 interface BCDetailModalProps {
   isOpen: boolean;
@@ -51,6 +56,8 @@ interface BCDetailApi {
   payment_account?: string | null;
   payment_method?: string | null;
   sales_team?: string | null;
+  tax_status?: number | null;
+  npwp?: string | null;
   sync_saga_id?: string | null;
   sync_last_error?: string | null;
   sync_last_rollback_error?: string | null;
@@ -233,6 +240,11 @@ export function BCDetailModal({
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [provinces, setProvinces] = useState<WilayahOption[]>([]);
   const [shippingAreaStates, setShippingAreaStates] = useState<ShippingAreaState[]>([]);
+  const [paymentAccountInfo, setPaymentAccountInfo] =
+    useState<PaymentAccountInfo | null>(null);
+  const [paymentAccountError, setPaymentAccountError] = useState<string | null>(
+    null,
+  );
   const regencyCache = useRef<Record<string, WilayahOption[]>>({});
   const districtCache = useRef<Record<string, WilayahOption[]>>({});
 
@@ -349,6 +361,45 @@ export function BCDetailModal({
     setDeletedRowIds([]);
     setEditSnapshot("");
   }, [isOpen]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPaymentAccount() {
+      const branchId = toNum(detail?.branch) ?? bc?.branch_id;
+      const paymentAccount = detail?.payment_account || "";
+      if (!isOpen || !token || !branchId || !paymentAccount) {
+        setPaymentAccountInfo(null);
+        setPaymentAccountError(null);
+        return;
+      }
+
+      try {
+        setPaymentAccountError(null);
+        const info = await fetchPaymentAccountInfo({
+          branchId,
+          paymentAccount,
+          authToken: token,
+        });
+        if (!cancelled) {
+          setPaymentAccountInfo(info);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setPaymentAccountInfo(null);
+          setPaymentAccountError(
+            error instanceof Error ? error.message : "Gagal memuat rekening",
+          );
+        }
+      }
+    }
+
+    void loadPaymentAccount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bc?.branch_id, detail?.branch, detail?.payment_account, isOpen, token]);
 
   const getRegencies = useCallback(async (provinceCode: string) => {
     if (!provinceCode) return [];
@@ -822,7 +873,6 @@ export function BCDetailModal({
       setShowExitConfirm(false);
       setIsEditMode(false);
     } catch (error) {
-      console.error(error);
       alert(
         error instanceof Error ? error.message : "Gagal update Branch Customer",
       );
@@ -850,9 +900,14 @@ export function BCDetailModal({
   const branchOwnerEmail = detail?.branch_owner_email || bc.owner_email || "-";
   const branchOwnerDob = detail?.branch_owner_date_of_birth?.split("T")[0] || "-";
   const notes = detail?.notes || "-";
-  const paymentAccount = detail?.payment_account || "-";
+  const paymentAccount =
+    paymentAccountInfo?.nama_rekening || detail?.payment_account || "-";
+  const paymentAccountNumber =
+    paymentAccountInfo?.nomor_rekening || detail?.payment_account || "-";
   const paymentMethod = detail?.payment_method || "-";
   const salesTeam = detail?.sales_team || "-";
+  const taxStatusLabel = getTaxStatusLabel(detail?.tax_status);
+  const npwpValue = detail?.npwp || "-";
   const branchLocation = [bc.branch_name, bc.branch_city].filter(Boolean).join(", ") || "-";
   const displayAddressRows = isEditMode ? editedRows : rows;
   const createdBy = detail?.["created_by.full_name"] || bc.created_by || "System";
@@ -1003,7 +1058,7 @@ export function BCDetailModal({
                         <p className="text-sm font-semibold text-slate-900">-</p>
                       </div> */}
                       <div>
-                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-cyan-600">Sales Team</p>
+                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-cyan-600">Sales Area CRM</p>
                         {isEditMode ? (
                           <input
                             type="text"
@@ -1011,7 +1066,7 @@ export function BCDetailModal({
                             onChange={(e) => setEditedSalesTeam(e.target.value)}
                             className="w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
                             disabled={isSaving}
-                            placeholder="Sales team"
+                            placeholder="Sales area CRM"
                           />
                         ) : (
                           <p className="text-sm font-semibold text-slate-900">{salesTeam}</p>
@@ -1041,6 +1096,10 @@ export function BCDetailModal({
                         )}
                       </div>
                       <div>
+                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-emerald-600">Tax Status</p>
+                        <p className="text-sm font-semibold text-slate-900">{taxStatusLabel}</p>
+                      </div>
+                      <div>
                         <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-indigo-600">Payment Account</p>
                         {isEditMode ? (
                           <input
@@ -1052,9 +1111,24 @@ export function BCDetailModal({
                             placeholder="Payment account"
                           />
                         ) : (
-                          <p className="text-sm font-semibold text-slate-900">{paymentAccount}</p>
+                          <div className="space-y-1 text-sm">
+                            <p className="font-semibold text-slate-900">{paymentAccount}</p>
+                            <p className="text-slate-600">{paymentAccountNumber}</p>
+                            <p className="text-slate-500">{paymentAccountInfo?.bank || "-"}</p>
+                            {paymentAccountError ? (
+                              <p className="text-xs text-amber-700">
+                                Detail rekening belum bisa dimuat.
+                              </p>
+                            ) : null}
+                          </div>
                         )}
                       </div>
+                      {Number(detail?.tax_status || 0) === 1 && (
+                        <div>
+                          <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-rose-600">NPWP</p>
+                          <p className="text-sm font-semibold text-slate-900">{npwpValue}</p>
+                        </div>
+                      )}
                       <div className="md:col-span-3">
                         <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-fuchsia-600">Notes</p>
                         {isEditMode ? (
@@ -1273,22 +1347,7 @@ export function BCDetailModal({
                                 )}
                               </div>
                               <div className="flex items-center justify-between">
-                                <span>Postal Code</span>
-                                {isEditMode ? (
-                                  <input
-                                    value={r.postal_code || ""}
-                                    onChange={(e) =>
-                                      updateEditedRow(r.id, "postal_code", e.target.value)
-                                    }
-                                    className="w-28 rounded border border-blue-300 px-1 py-0.5 text-xs"
-                                    disabled={isSaving}
-                                  />
-                                ) : (
-                                  <span className="font-semibold text-slate-900">{r.postal_code || "-"}</span>
-                                )}
-                              </div>
-                              <div className="flex items-center justify-between">
-                                <span>Village</span>
+                                <span>Kelurahan</span>
                                 {isEditMode ? (
                                   <input
                                     value={r.village || ""}
@@ -1461,8 +1520,8 @@ export function BCDetailModal({
                 {!isEditMode && (
                 <div className="text-xs text-slate-500">
                   {nb ? `NBID: ${nb.code} (${nb.name})` : null}
-                  {detail?.sync_saga_id ? ` • Sync Saga: ${detail.sync_saga_id}` : null}
-                  {detail?.status ? ` • Status: ${detail.status}` : null}
+                  {detail?.sync_saga_id ? ` - Sync Saga: ${detail.sync_saga_id}` : null}
+                  {detail?.status ? ` - Status: ${detail.status}` : null}
                   {!isActive ? (
                     <span className="ml-2 inline-flex items-center gap-1 rounded bg-red-100 px-2 py-0.5 font-semibold text-red-700">
                       <FaBan className="text-[10px]" /> Disabled

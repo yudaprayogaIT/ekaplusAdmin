@@ -1,14 +1,8 @@
 // src/components/auth/LoginSelector.tsx
 "use client";
 
-import React, {
-  useEffect,
-  useState,
-} from "react";
-import {
-  motion,
-  AnimatePresence,
-} from "framer-motion";
+import React, { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   FaShieldAlt,
   FaUserTie,
@@ -69,7 +63,15 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 export default function LoginSelector() {
-  const { currentUser, currentRole, permissions, login, logout, isLoading, isAuthenticated } = useAuth();
+  const {
+    currentUser,
+    currentRole,
+    permissions,
+    login,
+    logout,
+    isLoading,
+    isAuthenticated,
+  } = useAuth();
   const [users, setUsers] = useState<UserOption[]>([]);
   const [showSelector, setShowSelector] = useState(false);
   const [loggingIn, setLoggingIn] = useState<string | null>(null);
@@ -81,7 +83,7 @@ export default function LoginSelector() {
         // Try localStorage first
         const snap = localStorage.getItem("ekaplus_users_snapshot");
         let usersList: UserData[] = [];
-        
+
         if (snap) {
           usersList = JSON.parse(snap);
         } else {
@@ -101,9 +103,11 @@ export default function LoginSelector() {
         }
 
         const options: UserOption[] = usersList
-          .filter((u: UserData) => u.status === 'active')
+          .filter((u: UserData) => u.status === "active")
           .map((u: UserData) => {
-            const role = roles.find(r => r.name === u.role || r.id === u.role_id);
+            const role = roles.find(
+              (r) => r.name === u.role || r.id === u.role_id,
+            );
             return {
               id: u.id,
               username: u.username,
@@ -117,12 +121,19 @@ export default function LoginSelector() {
           });
 
         // Sort by role level (admin first)
-        const roleOrder = ['administrator', 'admin_pusat', 'admin_cabang', 'customer'];
-        options.sort((a, b) => roleOrder.indexOf(a.role) - roleOrder.indexOf(b.role));
+        const roleOrder = [
+          "administrator",
+          "admin_pusat",
+          "admin_cabang",
+          "customer",
+        ];
+        options.sort(
+          (a, b) => roleOrder.indexOf(a.role) - roleOrder.indexOf(b.role),
+        );
 
         setUsers(options);
       } catch (error) {
-        console.error("Failed to load users:", error);
+        // console.error("Failed to load users:", error);
       }
     }
     loadUsers();
@@ -131,19 +142,19 @@ export default function LoginSelector() {
   async function handleLogin(user: UserOption) {
     setLoggingIn(user.id);
     setLoginError(null);
-    
+
     try {
       // Login menggunakan username dan demo password
       const result = await login(user.username, DEMO_PASSWORD);
-      
+
       // Handle both boolean and LoginResult return types
-      if (typeof result === 'boolean') {
+      if (typeof result === "boolean") {
         if (result) {
           setShowSelector(false);
         } else {
           setLoginError("Login gagal. Pastikan password benar.");
         }
-      } else if (typeof result === 'object' && result !== null) {
+      } else if (typeof result === "object" && result !== null) {
         if (result.success) {
           setShowSelector(false);
         } else {
@@ -151,7 +162,7 @@ export default function LoginSelector() {
         }
       }
     } catch (error) {
-      console.error("Login error:", error);
+      // console.error("Login error:", error);
       setLoginError("Terjadi kesalahan saat login");
     } finally {
       setLoggingIn(null);
@@ -160,9 +171,9 @@ export default function LoginSelector() {
 
   function getInitials(name: string): string {
     return name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
       .toUpperCase()
       .slice(0, 2);
   }
@@ -187,24 +198,33 @@ export default function LoginSelector() {
               animate={{ opacity: 1, x: 0 }}
               className="bg-white rounded-xl shadow-lg border border-gray-100 px-4 py-3 flex items-center gap-3"
             >
-              <div 
+              <div
                 className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-sm"
-                style={{ backgroundColor: currentUser.profile_bg_color || currentRole?.color || '#6B7280' }}
+                style={{
+                  backgroundColor:
+                    currentUser.profile_bg_color ||
+                    currentRole?.color ||
+                    "#6B7280",
+                }}
               >
                 {getInitials(currentUser.full_name)}
               </div>
               <div className="hidden md:block">
-                <p className="text-sm font-semibold text-gray-800">{currentUser.full_name}</p>
-                <p 
+                <p className="text-sm font-semibold text-gray-800">
+                  {currentUser.full_name}
+                </p>
+                <p
                   className="text-xs font-medium"
-                  style={{ color: currentRole?.color || '#6B7280' }}
+                  style={{ color: currentRole?.color || "#6B7280" }}
                 >
                   {currentRole?.display_name}
                 </p>
               </div>
               <div className="hidden lg:flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-lg">
                 <FaKey className="w-3 h-3 text-gray-500" />
-                <span className="text-xs font-medium text-gray-600">{permissions.length} perms</span>
+                <span className="text-xs font-medium text-gray-600">
+                  {permissions.length} perms
+                </span>
               </div>
             </motion.div>
 
@@ -250,11 +270,11 @@ export default function LoginSelector() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
           >
-            <div 
-              className="absolute inset-0 bg-black/50 backdrop-blur-sm" 
-              onClick={() => setShowSelector(false)} 
+            <div
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+              onClick={() => setShowSelector(false)}
             />
-            
+
             <motion.div
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -263,9 +283,12 @@ export default function LoginSelector() {
             >
               {/* Header */}
               <div className="bg-gradient-to-r from-red-500 to-red-600 px-6 py-6 text-white">
-                <h3 className="text-2xl font-bold mb-1">Pilih Akun untuk Login</h3>
+                <h3 className="text-2xl font-bold mb-1">
+                  Pilih Akun untuk Login
+                </h3>
                 <p className="text-red-100 text-sm">
-                  Pilih user dengan role berbeda untuk testing permission (password: {DEMO_PASSWORD})
+                  Pilih user dengan role berbeda untuk testing permission
+                  (password: {DEMO_PASSWORD})
                 </p>
               </div>
 
@@ -288,22 +311,29 @@ export default function LoginSelector() {
                       disabled={loggingIn !== null}
                       className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-all text-left ${
                         currentUser?.id === user.id
-                          ? 'border-green-500 bg-green-50'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                      } ${loggingIn === user.id ? 'opacity-50' : ''}`}
+                          ? "border-green-500 bg-green-50"
+                          : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                      } ${loggingIn === user.id ? "opacity-50" : ""}`}
                     >
                       {/* Avatar */}
-                      <div 
+                      <div
                         className="w-14 h-14 rounded-xl flex items-center justify-center text-white flex-shrink-0"
-                        style={{ backgroundColor: user.profile_bg_color || user.role_color }}
+                        style={{
+                          backgroundColor:
+                            user.profile_bg_color || user.role_color,
+                        }}
                       >
-                        {ROLE_ICONS[user.role] || <FaUser className="w-6 h-6" />}
+                        {ROLE_ICONS[user.role] || (
+                          <FaUser className="w-6 h-6" />
+                        )}
                       </div>
 
                       {/* Info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-bold text-gray-900">{user.full_name}</h4>
+                          <h4 className="font-bold text-gray-900">
+                            {user.full_name}
+                          </h4>
                           {currentUser?.id === user.id && (
                             <FaCheckCircle className="w-4 h-4 text-green-500" />
                           )}
@@ -311,7 +341,7 @@ export default function LoginSelector() {
                         <p className="text-sm text-gray-500 truncate">
                           @{user.username} • {user.email}
                         </p>
-                        <span 
+                        <span
                           className="inline-block mt-1 px-3 py-1 rounded-full text-xs font-semibold text-white"
                           style={{ backgroundColor: user.role_color }}
                         >
@@ -324,8 +354,18 @@ export default function LoginSelector() {
                         {loggingIn === user.id ? (
                           <div className="w-6 h-6 border-2 border-gray-300 border-t-red-500 rounded-full animate-spin" />
                         ) : (
-                          <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          <svg
+                            className="w-6 h-6 text-gray-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 5l7 7-7 7"
+                            />
                           </svg>
                         )}
                       </div>

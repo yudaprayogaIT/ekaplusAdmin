@@ -1,26 +1,12 @@
 // src/components/roles/AddRoleModal.tsx
 "use client";
 
-import React, {
-  useState,
-  useEffect,
-} from "react";
-import {
-  AnimatePresence,
-  motion,
-} from "framer-motion";
-import {
-  FaTimes,
-  FaSave,
-  FaUserShield,
-} from "react-icons/fa";
+import React, { useState, useEffect } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { FaTimes, FaSave, FaUserShield } from "react-icons/fa";
 import { Role } from "./RoleList";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  API_CONFIG,
-  getAuthHeadersFormData,
-  apiFetch,
-} from "@/config/api";
+import { API_CONFIG, getAuthHeadersFormData, apiFetch } from "@/config/api";
 
 export default function AddRoleModal({
   open,
@@ -95,7 +81,6 @@ export default function AddRoleModal({
       if (isEditMode && initialData) {
         // Update existing role
         const UPDATE_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_ROLE}/${initialData.ID}`;
-        console.log("[AddRoleModal] Updating role at:", UPDATE_URL);
         response = await apiFetch(UPDATE_URL, {
           method: "PUT",
           headers,
@@ -104,21 +89,13 @@ export default function AddRoleModal({
       } else {
         // Create new role
         const CREATE_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_ROLE}`;
-        console.log("[AddRoleModal] Creating role at:", CREATE_URL);
-        console.log("[AddRoleModal] FormData fields:", {
-          Name: name.trim(),
-          Slug: slug.trim(),
-          Description: description.trim(),
-          IsSystem: is_system ? "1" : "0",
-        });
+
         response = await apiFetch(CREATE_URL, {
           method: "POST",
           headers,
           body: formData,
         });
       }
-
-      console.log("[AddRoleModal] Response status:", response.status);
 
       if (response.ok) {
         window.dispatchEvent(new Event("ekatalog:roles_update"));
@@ -127,17 +104,16 @@ export default function AddRoleModal({
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
           errorData.message ||
-            `Failed to ${isEditMode ? "update" : "create"} role`
+            `Failed to ${isEditMode ? "update" : "create"} role`,
         );
       }
     } catch (error) {
-      console.error("Failed to save role:", error);
       alert(
         error instanceof Error
           ? error.message
           : `Gagal ${
               isEditMode ? "mengupdate" : "membuat"
-            } role. Silakan coba lagi.`
+            } role. Silakan coba lagi.`,
       );
     } finally {
       setLoading(false);

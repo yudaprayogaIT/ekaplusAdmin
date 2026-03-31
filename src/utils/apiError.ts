@@ -24,10 +24,7 @@ export async function handleApiError(response: Response): Promise<ApiError> {
       errorData.msg ||
       errorData.detail ||
       errorMessage;
-  } catch {
-    // If response body is not JSON, use status text
-    console.warn("[API Error] Response body is not JSON");
-  }
+  } catch {}
 
   return {
     code: errorCode,

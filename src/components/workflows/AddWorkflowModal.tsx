@@ -218,7 +218,6 @@ export default function AddWorkflowModal({
       onClose();
       resetForm();
     } catch (error) {
-      console.error("Error saving workflow:", error);
       alert(
         error instanceof Error
           ? error.message

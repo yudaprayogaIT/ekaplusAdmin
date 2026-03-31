@@ -175,7 +175,6 @@ export default function AddUserModal({
       localStorage.setItem(SNAP_KEY, JSON.stringify(list));
       window.dispatchEvent(new Event("ekaplus:users_update"));
     } catch (error) {
-      console.error("Failed to save user:", error);
     }
 
     setSaving(false);

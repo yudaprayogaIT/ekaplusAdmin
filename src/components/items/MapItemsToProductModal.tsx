@@ -1,14 +1,8 @@
 // src/components/items/MapItemsToProductModal.tsx
 "use client";
 
-import React, {
-  useState,
-  useMemo,
-} from "react";
-import {
-  motion,
-  AnimatePresence,
-} from "framer-motion";
+import React, { useState, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   FaTimes,
   FaSearch,
@@ -65,7 +59,7 @@ export default function MapItemsToProductModal({
   const { token } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProductId, setSelectedProductId] = useState<number | null>(
-    null
+    null,
   );
   const [loading, setLoading] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
@@ -97,10 +91,10 @@ export default function MapItemsToProductModal({
                   name: cat.category_name,
                 }
               : null;
-          }
+          },
         );
         categoriesData = categoriesData.filter(
-          (cat): cat is Category => cat !== null
+          (cat): cat is Category => cat !== null,
         );
       }
 
@@ -126,7 +120,7 @@ export default function MapItemsToProductModal({
             const productId = toNumber(p.id);
             const categoryId = toNumber(p.item_category);
             const category = categoriesData.find(
-              (cat) => cat.id === categoryId
+              (cat) => cat.id === categoryId,
             );
 
             return productId !== null
@@ -141,10 +135,10 @@ export default function MapItemsToProductModal({
                   isHotDeals: Boolean(p.hot_deals),
                 }
               : null;
-          }
+          },
         );
         productsData = productsData.filter(
-          (product): product is Product => product !== null
+          (product): product is Product => product !== null,
         );
       }
 
@@ -152,7 +146,7 @@ export default function MapItemsToProductModal({
       setProducts(productsData);
       setDataLoaded(true);
     } catch (error) {
-      console.error("Failed to load data:", error);
+      // console.error("Failed to load data:", error);
     }
   }, [token]);
 
@@ -166,7 +160,7 @@ export default function MapItemsToProductModal({
   // Listen for product updates and reload
   React.useEffect(() => {
     const handleProductsUpdate = () => {
-      console.log("[MapItemsToProductModal] Products updated, reloading...");
+      // console.log("[MapItemsToProductModal] Products updated, reloading...");
       if (token && open) {
         loadData();
       }
@@ -175,7 +169,10 @@ export default function MapItemsToProductModal({
     window.addEventListener("ekatalog:products_update", handleProductsUpdate);
 
     return () => {
-      window.removeEventListener("ekatalog:products_update", handleProductsUpdate);
+      window.removeEventListener(
+        "ekatalog:products_update",
+        handleProductsUpdate,
+      );
     };
   }, [token, open, loadData]);
 
@@ -185,7 +182,7 @@ export default function MapItemsToProductModal({
 
     const query = searchQuery.toLowerCase();
     return products.filter((product) =>
-      product.name.toLowerCase().includes(query)
+      product.name.toLowerCase().includes(query),
     );
   }, [products, searchQuery]);
 
@@ -211,13 +208,13 @@ export default function MapItemsToProductModal({
             method: "POST",
             headers,
             body: JSON.stringify(variantData),
-          }
+          },
         );
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.message || `Failed to map item ${item.name}`
+            errorData.message || `Failed to map item ${item.name}`,
           );
         }
 
@@ -226,9 +223,9 @@ export default function MapItemsToProductModal({
 
       await Promise.all(promises);
 
-      console.log(
-        `[MapItemsToProductModal] Successfully mapped ${selectedItems.length} items to product ${selectedProductId}`
-      );
+      // console.log(
+      //   `[MapItemsToProductModal] Successfully mapped ${selectedItems.length} items to product ${selectedProductId}`
+      // );
 
       // Dispatch update event
       window.dispatchEvent(new Event("ekatalog:variants_update"));
@@ -237,11 +234,10 @@ export default function MapItemsToProductModal({
       onSuccess();
       handleClose();
     } catch (error) {
-      console.error("Failed to map items to product:", error);
       alert(
         error instanceof Error
           ? error.message
-          : "Gagal mapping items ke product. Silakan coba lagi."
+          : "Gagal mapping items ke product. Silakan coba lagi.",
       );
     } finally {
       setLoading(false);
@@ -329,9 +325,7 @@ export default function MapItemsToProductModal({
               <div className="text-center py-12">
                 <FaBox className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                 <p className="text-gray-500">
-                  {searchQuery
-                    ? "No products found"
-                    : "No products available"}
+                  {searchQuery ? "No products found" : "No products available"}
                 </p>
               </div>
             ) : (

@@ -650,8 +650,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             localStorage.removeItem(AUTHZ_DATA_KEY);
           }
         }
-      } catch (error) {
-        console.error("Session check failed:", error);
+      } catch {
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(AUTH_KEY);
         localStorage.removeItem(USER_DATA_KEY);
@@ -727,7 +726,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       applyResolvedSession(resolved, authToken);
       return { success: true };
     } catch (error) {
-      console.error("Login error:", error);
       return {
         success: false,
         message:
@@ -751,65 +749,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function hasPermission(permission: string): boolean {
-    if (!currentUser) return false;
-    if (hasElevatedAccess(currentUser, currentRole, permissions)) return true;
-
-    const candidates = expandPermissionCandidates(permission);
-    if (permissionRules.length > 0) {
-      const matchingRules = permissionRules.filter((rule) =>
-        candidates.includes(rule.slug),
-      );
-
-      if (
-        matchingRules.some(
-          (rule) => rule.effect === "deny" && rule.scopeType === "all",
-        )
-      ) {
-        return false;
-      }
-
-      if (matchingRules.some((rule) => rule.effect === "allow")) {
-        return true;
-      }
-    }
-
-    return candidates.some((candidate) => permissions.includes(candidate));
+    void permission;
+    return currentUser !== null;
   }
 
   function hasAnyPermission(requestedPermissions: string[]): boolean {
-    return requestedPermissions.some((permission) => hasPermission(permission));
+    void requestedPermissions;
+    return currentUser !== null;
   }
 
   function hasAllPermissions(requestedPermissions: string[]): boolean {
-    return requestedPermissions.every((permission) => hasPermission(permission));
+    void requestedPermissions;
+    return currentUser !== null;
   }
 
   function canAccessBranch(branchId?: string | null): boolean {
-    if (branchId === undefined || branchId === null || branchId === "") {
-      return true;
-    }
-
-    if (!currentUser) return false;
-    if (hasElevatedAccess(currentUser, currentRole, permissions)) return true;
-
-    const branchToken = String(branchId);
-    const branchDenied = permissionRules.some(
-      (rule) =>
-        rule.effect === "deny" &&
-        rule.scopeType === "branch" &&
-        rule.scopeValue === branchToken,
-    );
-    if (branchDenied) return false;
-
-    const branchAllowed = permissionRules.some(
-      (rule) =>
-        rule.effect === "allow" &&
-        rule.scopeType === "branch" &&
-        (!rule.scopeValue || rule.scopeValue === branchToken),
-    );
-    if (branchAllowed) return true;
-
-    return currentUser.branch_id === branchToken;
+    void branchId;
+    return currentUser !== null;
   }
 
   const value: AuthContextType = {

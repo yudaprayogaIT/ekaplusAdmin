@@ -29,6 +29,7 @@ interface ShippingApiRow {
   city?: string | null;
   province?: string | null;
   district?: string | null;
+  village?: string | null;
   postal_code?: string | null;
   country?: string | null;
   pic_name?: string | null;
@@ -70,7 +71,7 @@ interface FormState {
   company_province: string;
   company_city: string;
   company_district: string;
-  company_postal_code: string;
+  company_village: string;
   same_as_company_address: boolean;
   shipping_addresses: CustomerRegistrationShippingAddress[];
 }
@@ -105,7 +106,7 @@ function emptyShipping(): CustomerRegistrationShippingAddress {
     city: "",
     province: "",
     district: "",
-    postal_code: "",
+    village: "",
     pic_name: "",
     pic_phone: "",
     is_default: 0,
@@ -120,7 +121,7 @@ function payloadShipping(addr: CustomerRegistrationShippingAddress) {
     address: addr.address || "",
     city: addr.city || "",
     district: addr.district || "",
-    postal_code: addr.postal_code || "",
+    village: addr.village || "",
     province: addr.province || "",
     is_default: addr.is_default ? 1 : 0,
   };
@@ -304,7 +305,7 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
           city: x.city || "",
           province: x.province || "",
           district: x.district || "",
-          postal_code: x.postal_code || "",
+          village: x.village || "",
           country: x.country || "",
           pic_name: x.pic_name || "",
           pic_phone: x.pic_phone || "",
@@ -334,7 +335,7 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
           company_province: registration.address.province_name || "",
           company_city: registration.address.city_name || "",
           company_district: registration.address.district_name || "",
-          company_postal_code: registration.address.postal_code || "",
+          company_village: registration.address.village_name || "",
           same_as_company_address: Boolean(registration.same_as_company_address),
           shipping_addresses: shipping,
         };
@@ -638,7 +639,7 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
     if (!form.company_province.trim()) return "Provinsi perusahaan wajib diisi";
     if (!form.company_city.trim()) return "Kota perusahaan wajib diisi";
     if (!form.company_district.trim()) return "Kecamatan perusahaan wajib diisi";
-    if (!form.company_postal_code.trim()) return "Kode pos perusahaan wajib diisi";
+    if (!form.company_village.trim()) return "Kelurahan perusahaan wajib diisi";
     if (!form.same_as_company_address) {
       for (let i = 0; i < form.shipping_addresses.length; i += 1) {
         const s = form.shipping_addresses[i];
@@ -697,7 +698,7 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
         company_province: form.company_province,
         company_city: form.company_city,
         company_district: form.company_district,
-        company_postal_code: form.company_postal_code,
+        company_village: form.company_village,
         same_as_company_address: form.same_as_company_address ? 1 : 0,
         customer_shipping_address: form.same_as_company_address ? [] : form.shipping_addresses.map(payloadShipping),
       };
@@ -985,8 +986,8 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
                     )}
                   </div>
                   <div>
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">Kode Pos *</label>
-                    <input value={form.company_postal_code} onChange={(e) => setField("company_postal_code", e.target.value)} className="w-full px-3 py-2.5 border rounded-lg" />
+                    <label className="text-sm font-semibold text-gray-700 block mb-1">Kelurahan *</label>
+                    <input value={form.company_village} onChange={(e) => setField("company_village", e.target.value)} className="w-full px-3 py-2.5 border rounded-lg" />
                   </div>
                 </div>
               </div>
@@ -1025,8 +1026,8 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
                         <div className="font-medium text-gray-900">{form.company_district || "-"}</div>
                       </div>
                       <div>
-                        <div className="text-xs font-semibold text-gray-500 uppercase">Kode Pos</div>
-                        <div className="font-medium text-gray-900">{form.company_postal_code || "-"}</div>
+                        <div className="text-xs font-semibold text-gray-500 uppercase">Kelurahan</div>
+                        <div className="font-medium text-gray-900">{form.company_village || "-"}</div>
                       </div>
                     </div>
                   </div>
@@ -1060,8 +1061,8 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
                             <input value={s.pic_phone || ""} onChange={(e) => updateShip(i, { pic_phone: e.target.value })} className="w-full px-3 py-2 border rounded" />
                           </div>
                           <div>
-                            <label className="text-xs font-semibold text-gray-600 block mb-1">Kode Pos</label>
-                            <input value={s.postal_code || ""} onChange={(e) => updateShip(i, { postal_code: e.target.value })} className="w-full px-3 py-2 border rounded" />
+                            <label className="text-xs font-semibold text-gray-600 block mb-1">Kelurahan</label>
+                            <input value={s.village || ""} onChange={(e) => updateShip(i, { village: e.target.value })} className="w-full px-3 py-2 border rounded" />
                           </div>
                           <div>
                             <label className="text-xs font-semibold text-gray-600 block mb-1">Provinsi</label>

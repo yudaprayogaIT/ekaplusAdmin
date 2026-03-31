@@ -1,14 +1,8 @@
 // src/components/items/AddItemModal.tsx
 "use client";
 
-import React, {
-  useEffect,
-  useState,
-} from "react";
-import {
-  motion,
-  AnimatePresence,
-} from "framer-motion";
+import React, { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   FaTimes,
   FaUpload,
@@ -33,7 +27,26 @@ import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
 import MapItemsToProductModal from "./MapItemsToProductModal";
 
-const UOM_OPTIONS = ["PCS", "LBR", "BOX", "MTR", "SET", "ROLL", "KG", "PACK", "UNIT", "DUS", "LTR", "LSN", "PSG", "RIM", "BAL", "BLEK", "KLG", "YARD"];
+const UOM_OPTIONS = [
+  "PCS",
+  "LBR",
+  "BOX",
+  "MTR",
+  "SET",
+  "ROLL",
+  "KG",
+  "PACK",
+  "UNIT",
+  "DUS",
+  "LTR",
+  "LSN",
+  "PSG",
+  "RIM",
+  "BAL",
+  "BLEK",
+  "KLG",
+  "YARD",
+];
 
 type Branch = {
   id: number;
@@ -148,18 +161,18 @@ export default function AddItemModal({
               id: b.id,
               name: b.branch_name,
               branch_name: b.branch_name,
-            })
+            }),
           );
-          console.log("=== LOADED BRANCHES FROM API ===");
-          console.log("Branches:", mappedBranches);
-          console.log(
-            "Branch IDs:",
-            mappedBranches.map((b) => b.id)
-          );
+          // console.log("=== LOADED BRANCHES FROM API ===");
+          // console.log("Branches:", mappedBranches);
+          // console.log(
+          //   "Branch IDs:",
+          //   mappedBranches.map((b) => b.id)
+          // );
           setBranches(mappedBranches);
         }
       } catch (error) {
-        console.error("Failed to load branches:", error);
+        // console.error("Failed to load branches:", error);
       } finally {
         setLoadingBranches(false);
       }
@@ -190,11 +203,7 @@ export default function AddItemModal({
       setLebar(initial.lebar ?? "");
       setDiameter(initial.diameter ?? "");
 
-      // Debug: Log branch data
-      console.log("=== EDIT ITEM MODAL - BRANCH DEBUG ===");
-      console.log("initial.branches:", initial.branches);
       const branchIds = initial.branches?.map((b) => b.id) ?? [];
-      console.log("Extracted branch IDs:", branchIds);
       setSelectedBranches(branchIds);
 
       // Set initial state for dirty checking
@@ -331,7 +340,7 @@ export default function AddItemModal({
             // Fetch product names for each variant
             if (variantsData.length > 0) {
               const productIds = Array.from(
-                new Set(variantsData.map((v: Variant) => v.parent_id))
+                new Set(variantsData.map((v: Variant) => v.parent_id)),
               );
 
               // Load products to get their names
@@ -339,42 +348,51 @@ export default function AddItemModal({
                 fields: ["id", "product_name"],
                 filters: [["id", "in", productIds]],
               };
-              const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, productsSpec);
+              const productsUrl = getQueryUrl(
+                API_CONFIG.ENDPOINTS.PRODUCT,
+                productsSpec,
+              );
               const productsRes = await apiFetch(productsUrl, {
                 method: "GET",
                 cache: "no-store",
-                headers
+                headers,
               });
 
               if (productsRes.ok) {
                 const productsJson = await productsRes.json();
                 const productsMap = new Map<number, string>(
-                  productsJson.data.map((p: { id: number; product_name: string }) => [
-                    p.id,
-                    p.product_name,
-                  ])
+                  productsJson.data.map(
+                    (p: { id: number; product_name: string }) => [
+                      p.id,
+                      p.product_name,
+                    ],
+                  ),
                 );
 
                 // Merge product names into variants
-                const enrichedVariants: Variant[] = variantsData.map((v: Variant): Variant => {
-                  const productName = productsMap.get(v.parent_id);
-                  return {
-                    id: v.id,
-                    idx: v.idx,
-                    parent_id: v.parent_id,
-                    product_name: productName || `Product ${v.parent_id}`,
-                  };
-                });
+                const enrichedVariants: Variant[] = variantsData.map(
+                  (v: Variant): Variant => {
+                    const productName = productsMap.get(v.parent_id);
+                    return {
+                      id: v.id,
+                      idx: v.idx,
+                      parent_id: v.parent_id,
+                      product_name: productName || `Product ${v.parent_id}`,
+                    };
+                  },
+                );
 
                 setVariants(enrichedVariants);
               } else {
                 // Set variants without product names
-                const basicVariants: Variant[] = variantsData.map((v: Variant): Variant => ({
-                  id: v.id,
-                  idx: v.idx,
-                  parent_id: v.parent_id,
-                  product_name: `Product ${v.parent_id}`,
-                }));
+                const basicVariants: Variant[] = variantsData.map(
+                  (v: Variant): Variant => ({
+                    id: v.id,
+                    idx: v.idx,
+                    parent_id: v.parent_id,
+                    product_name: `Product ${v.parent_id}`,
+                  }),
+                );
                 setVariants(basicVariants);
               }
             } else {
@@ -383,7 +401,7 @@ export default function AddItemModal({
           }
         }
       } catch (error) {
-        console.error("Failed to load variants:", error);
+        // console.error("Failed to load variants:", error);
       } finally {
         setLoadingVariants(false);
       }
@@ -396,7 +414,7 @@ export default function AddItemModal({
     setSelectedBranches((prev) =>
       prev.includes(branchId)
         ? prev.filter((id) => id !== branchId)
-        : [...prev, branchId]
+        : [...prev, branchId],
     );
   }
 
@@ -423,7 +441,7 @@ export default function AddItemModal({
       formData.append("item_name", name.trim());
       formData.append(
         "generator_item",
-        generatorItem.trim() || "Inject by master"
+        generatorItem.trim() || "Inject by master",
       );
       formData.append("uom", uom);
       formData.append("item_group", group.trim());
@@ -469,11 +487,7 @@ export default function AddItemModal({
         ? getResourceUrl(API_CONFIG.ENDPOINTS.ITEM, initial.id)
         : getResourceUrl(API_CONFIG.ENDPOINTS.ITEM);
 
-      console.log("Saving item with method:", method);
-      console.log("URL:", url);
-      console.log("FormData contents:");
       for (const [key, value] of formData.entries()) {
-        console.log(`  ${key}:`, value);
       }
 
       const response = await apiFetch(url, {
@@ -484,20 +498,18 @@ export default function AddItemModal({
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error("Error response:", errorData);
+        // console.error("Error response:", errorData);
         throw new Error(
-          errorData.message || `Failed to save item (${response.status})`
+          errorData.message || `Failed to save item (${response.status})`,
         );
       }
-
-      console.log("Item saved successfully");
 
       // Trigger reload
       window.dispatchEvent(new Event("ekatalog:items_update"));
       setSaving(false);
       onClose();
     } catch (error) {
-      console.error("Failed to save item:", error);
+      // console.error("Failed to save item:", error);
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       alert(`Gagal menyimpan item: ${errorMessage}`);
@@ -783,16 +795,16 @@ export default function AddItemModal({
                   ) : (
                     branches.map((branch) => {
                       const isChecked = selectedBranches.includes(branch.id);
-                      // Debug first branch only to avoid spam
-                      if (branch.id === branches[0]?.id) {
-                        console.log(
-                          `Rendering branch ${branch.id} (${branch.name}):`,
-                          "isChecked:",
-                          isChecked,
-                          "selectedBranches:",
-                          selectedBranches
-                        );
-                      }
+                      // // Debug first branch only to avoid spam
+                      // if (branch.id === branches[0]?.id) {
+                      //   console.log(
+                      //     `Rendering branch ${branch.id} (${branch.name}):`,
+                      //     "isChecked:",
+                      //     isChecked,
+                      //     "selectedBranches:",
+                      //     selectedBranches,
+                      //   );
+                      // }
                       return (
                         <label
                           key={branch.id}
@@ -874,7 +886,8 @@ export default function AddItemModal({
                           <FaBox className="w-4 h-4 text-blue-600 flex-shrink-0" />
                           <div className="flex-1 min-w-0">
                             <span className="text-sm font-medium text-blue-900 block truncate">
-                              {variant.product_name || `Product #${variant.parent_id}`}
+                              {variant.product_name ||
+                                `Product #${variant.parent_id}`}
                             </span>
                             <span className="text-xs text-blue-700">
                               Urutan: {variant.idx}
@@ -928,7 +941,9 @@ export default function AddItemModal({
                         <span>Menyimpan...</span>
                       </>
                     ) : (
-                      <span>{initial ? "Simpan Perubahan" : "Tambah Item"}</span>
+                      <span>
+                        {initial ? "Simpan Perubahan" : "Tambah Item"}
+                      </span>
                     )}
                   </button>
                 </div>
@@ -950,7 +965,6 @@ export default function AddItemModal({
               onClose={() => setShowMapModal(false)}
               selectedItems={[initial]}
               onSuccess={() => {
-                console.log("Item successfully mapped to product");
                 // Trigger reload items
                 window.dispatchEvent(new Event("ekatalog:items_update"));
               }}

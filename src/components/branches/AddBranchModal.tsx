@@ -241,7 +241,6 @@ export default function AddBranchModal({
       }
 
       const result = await response.json();
-      console.log("Branch saved successfully:", result);
 
       // Trigger reload in BranchList
       window.dispatchEvent(new Event("ekatalog:branches_update"));
@@ -249,7 +248,7 @@ export default function AddBranchModal({
       setSaving(false);
       onClose();
     } catch (err: unknown) {
-      console.error("Failed to save branch:", err);
+      // console.error("Failed to save branch:", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
       setError(errorMessage);
       setSaving(false);

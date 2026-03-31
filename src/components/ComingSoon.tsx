@@ -51,11 +51,9 @@ export default function ComingSoon() {
 
         // jalankan frame pertama
         frame();
-      } catch (err) {
+      } catch {
         // jangan crash kalau import gagal
         // (mis. package belum terinstall)
-        // eslint-disable-next-line no-console
-        console.warn("Failed to load canvas-confetti:", err);
       }
     })();
 

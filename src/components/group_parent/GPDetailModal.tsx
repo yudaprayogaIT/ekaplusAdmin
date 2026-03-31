@@ -83,7 +83,10 @@ interface BranchLookupRow {
 
 interface GroupParentMetaRow {
   id: number;
-  nbid?: number | { id?: number | string; name?: string; nb_name?: string } | null;
+  nbid?:
+    | number
+    | { id?: number | string; name?: string; nb_name?: string }
+    | null;
 }
 
 interface NationalBrandRow {
@@ -165,7 +168,9 @@ export function GPDetailModal({
         token,
       );
       const gpMetaJson = gpMetaRes.ok ? await gpMetaRes.json() : { data: [] };
-      const gpMeta: GroupParentMetaRow | undefined = Array.isArray(gpMetaJson?.data)
+      const gpMeta: GroupParentMetaRow | undefined = Array.isArray(
+        gpMetaJson?.data,
+      )
         ? gpMetaJson.data[0]
         : undefined;
       const nbId =
@@ -413,7 +418,7 @@ export function GPDetailModal({
       if (onGPUpdate) onGPUpdate(updatedGP);
       setIsEditMode(false);
     } catch (error) {
-      console.error(error);
+      // console.error(error);
       alert(
         error instanceof Error ? error.message : "Gagal update Group Parent",
       );

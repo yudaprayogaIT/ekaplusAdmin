@@ -73,7 +73,6 @@ export default function WishlistList() {
 
       try {
         if (!token) {
-          console.error("No auth token found");
           setError("Session expired. Please login again.");
           setLoading(false);
           return;
@@ -148,8 +147,7 @@ export default function WishlistList() {
       try {
         const wishlistData = await fetchWishlist(token, items);
         setWishlist(wishlistData);
-      } catch (err) {
-        console.error("Failed to refresh wishlist:", err);
+      } catch {
       }
     }
     window.addEventListener("ekatalog:wishlist_update", handler);
@@ -164,8 +162,7 @@ export default function WishlistList() {
       const wishlistData = await fetchWishlist(token, items);
       setWishlist(wishlistData);
       window.dispatchEvent(new Event("ekatalog:wishlist_update"));
-    } catch (err) {
-      console.error("Failed to refresh wishlist:", err);
+    } catch {
     }
   }
 
@@ -182,8 +179,7 @@ export default function WishlistList() {
       try {
         await removeFromWishlist(token, w.id);
         await refreshWishlist();
-      } catch (err) {
-        console.error("Failed to remove from wishlist:", err);
+      } catch {
         alert("Gagal menghapus dari wishlist. Silakan coba lagi.");
       }
     });
@@ -200,8 +196,7 @@ export default function WishlistList() {
       await refreshWishlist();
       setShowAddModal(false);
       setSelectedItemId(null);
-    } catch (err) {
-      console.error("Failed to add to wishlist:", err);
+    } catch {
       alert("Gagal menambahkan ke wishlist. Silakan coba lagi.");
     } finally {
       setAdding(false);

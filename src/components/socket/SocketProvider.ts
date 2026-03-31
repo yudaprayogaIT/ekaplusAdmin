@@ -14,11 +14,9 @@ export default function SocketProvider() {
     });
 
     socket.on("connect", () => {
-      console.log("Socket connected:", socket.id);
     });
 
     socket.on("disconnect", () => {
-      console.log("Socket disconnected");
     });
 
     return () => {

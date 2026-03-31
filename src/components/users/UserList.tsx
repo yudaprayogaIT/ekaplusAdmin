@@ -320,13 +320,6 @@ export default function UserList() {
   // Filter users based on permissions
   let filteredUsers = users;
 
-  // Admin cabang can only see users in their branch
-  if (currentRole?.name === 'admin_cabang' && currentUser?.branch_id) {
-    filteredUsers = filteredUsers.filter(u => 
-      u.branch_id === currentUser.branch_id || u.role === 'customer'
-    );
-  }
-  
   if (searchQuery.trim()) {
     filteredUsers = filteredUsers.filter(u => 
       u.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||

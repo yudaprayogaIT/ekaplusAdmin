@@ -1,10 +1,7 @@
 // src/components/roles/RoleList.tsx
 "use client";
 
-import {
-  useEffect,
-  useState,
-} from "react";
+import { useEffect, useState } from "react";
 import RoleCard from "./RoleCard";
 import AddRoleModal from "./AddRoleModal";
 import RoleDetailModal from "./RoleDetailModal";
@@ -19,11 +16,7 @@ import {
 } from "react-icons/fa";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  getAuthHeaders,
-  API_CONFIG,
-  apiFetch,
-} from "@/config/api";
+import { getAuthHeaders, API_CONFIG, apiFetch } from "@/config/api";
 
 export type Role = {
   ID: number;
@@ -64,7 +57,9 @@ export default function RoleList() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
-  const [confirmAction, setConfirmAction] = useState<(() => Promise<void>) | null>(null);
+  const [confirmAction, setConfirmAction] = useState<
+    (() => Promise<void>) | null
+  >(null);
 
   // Load roles from API
   useEffect(() => {
@@ -83,27 +78,22 @@ export default function RoleList() {
         const headers = getAuthHeaders(token);
         const DATA_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_ROLE}`;
 
-        console.log("[RoleList] Fetching roles from:", DATA_URL);
-
         const res = await apiFetch(DATA_URL, {
           method: "GET",
           cache: "no-store",
           headers,
         });
 
-        console.log("[RoleList] Response status:", res.status);
-        console.log("[RoleList] Response content-type:", res.headers.get("content-type"));
-
         if (res.ok) {
           const contentType = res.headers.get("content-type");
           if (!contentType || !contentType.includes("application/json")) {
             const text = await res.text();
-            console.error("[RoleList] Non-JSON response:", text.substring(0, 200));
-            throw new Error("Server returned non-JSON response. Please check the API endpoint.");
+            throw new Error(
+              "Server returned non-JSON response. Please check the API endpoint.",
+            );
           }
 
           const response = (await res.json()) as RoleAPIResponse;
-          console.log("[RoleList] Roles loaded:", response.data?.length || 0);
           const mappedRoles: Role[] = response.data;
 
           if (!cancelled) {
@@ -111,7 +101,6 @@ export default function RoleList() {
           }
         } else {
           const errorText = await res.text();
-          console.error("[RoleList] Error response:", errorText.substring(0, 200));
           throw new Error(`HTTP ${res.status}: ${errorText}`);
         }
       } catch (err: unknown) {
@@ -119,7 +108,7 @@ export default function RoleList() {
           const errorMessage = err instanceof Error ? err.message : String(err);
           if (errorMessage.includes("Failed to fetch")) {
             setError(
-              "Tidak dapat terhubung ke server. Periksa koneksi Anda atau pastikan backend berjalan."
+              "Tidak dapat terhubung ke server. Periksa koneksi Anda atau pastikan backend berjalan.",
             );
           } else if (errorMessage.includes("401")) {
             setError("Session expired. Silakan login kembali.");
@@ -150,7 +139,6 @@ export default function RoleList() {
         const headers = getAuthHeaders(token);
         const DATA_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_ROLE}`;
 
-        console.log("[RoleList] Auto-reloading roles from:", DATA_URL);
 
         const res = await apiFetch(DATA_URL, {
           method: "GET",
@@ -160,12 +148,9 @@ export default function RoleList() {
 
         if (res.ok) {
           const response = (await res.json()) as RoleAPIResponse;
-          console.log("[RoleList] Roles reloaded successfully:", response.data?.length || 0);
           setRoles(response.data);
         }
-      } catch (error) {
-        console.error("Failed to reload roles:", error);
-      }
+      } catch {}
     }
 
     window.addEventListener("ekatalog:roles_update", handler);
@@ -180,7 +165,7 @@ export default function RoleList() {
         role.Name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         role.Slug.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (role.Description &&
-          role.Description.toLowerCase().includes(searchQuery.toLowerCase()))
+          role.Description.toLowerCase().includes(searchQuery.toLowerCase())),
     );
   }
 
@@ -215,7 +200,6 @@ export default function RoleList() {
       const headers = getAuthHeaders(token);
       const DELETE_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_ROLE}/${role.ID}`;
 
-      console.log("[RoleList] Deleting role at:", DELETE_URL);
 
       const res = await apiFetch(DELETE_URL, {
         method: "DELETE",
@@ -230,9 +214,10 @@ export default function RoleList() {
         throw new Error(errorData.message || "Failed to delete role");
       }
     } catch (error) {
-      console.error("Failed to delete role:", error);
       alert(
-        error instanceof Error ? error.message : "Gagal menghapus role. Silakan coba lagi."
+        error instanceof Error
+          ? error.message
+          : "Gagal menghapus role. Silakan coba lagi.",
       );
     }
   }

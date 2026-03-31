@@ -53,7 +53,6 @@ export default function AddVariantMappingModal({
       fetchVariants(token, items)
         .then((variants) => setExistingVariants(variants))
         .catch((err) => {
-          console.error("Failed to load variants:", err);
           setExistingVariants([]);
         });
     }
@@ -85,7 +84,6 @@ export default function AddVariantMappingModal({
     // Otherwise, return all products (fallback)
     return matchingProducts.length > 0 ? matchingProducts : products;
   }, [selectedItem, products]);
-  console.log(products);
 
   // Auto-select first matching product
   useEffect(() => {
@@ -162,7 +160,6 @@ export default function AddVariantMappingModal({
       if (onSave) onSave();
       onClose();
     } catch (err) {
-      console.error("Error saving mapping:", err);
       alert("Terjadi error saat menyimpan");
     } finally {
       setSaving(false);
