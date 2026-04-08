@@ -1,4 +1,9 @@
-import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
+import {
+  API_CONFIG,
+  apiFetch,
+  getQueryUrl,
+  getResourceUrl,
+} from "@/config/api";
 
 export interface BranchConnectionInfo {
   id: number;
@@ -15,12 +20,29 @@ export interface PaymentAccountInfo {
   bank?: string;
 }
 
+export interface BranchErpListParams {
+  branchId?: number | null;
+  registrationId?: number | string | null;
+  authToken?: string | null;
+  resource: string;
+  fields: string[];
+  limit?: number;
+  start?: number;
+  filters?: unknown[];
+}
+
+
+
 interface BranchRow {
   id?: number | string | null;
   url?: string | null;
   token?: string | null;
   branch_name?: string | null;
   city?: string | null;
+}
+
+interface BranchCustomerRow {
+  branch?: number | string | { id?: number | string | null } | null;
 }
 
 interface RekeningRow {
@@ -82,47 +104,106 @@ export async function fetchBranchConnectionInfo(
   };
 }
 
-export async function fetchPaymentAccountInfo(params: {
+export async function fetchBranchIdFromBranchCustomer(
+  branchCustomerId: number,
+  authToken: string,
+): Promise<number | null> {
+  if (!branchCustomerId || !authToken) return null;
+
+  const response = await apiFetch(
+    getResourceUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, branchCustomerId),
+    { method: "GET", cache: "no-store" },
+    authToken,
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch branch customer connection (${response.status})`,
+    );
+  }
+
+  const json = await response.json();
+  const row = (json?.data ?? null) as BranchCustomerRow | null;
+  const branchValue =
+    row?.branch && typeof row.branch === "object" ? row.branch.id : row?.branch;
+
+  return toNumber(branchValue) ?? null;
+}
+
+export async function resolveBranchConnectionInfo(params: {
   branchId?: number | null;
-  paymentAccount?: string | null;
+  registrationId?: number | string | null;
   authToken?: string | null;
-}): Promise<PaymentAccountInfo | null> {
+}): Promise<BranchConnectionInfo | null> {
   const branchId = params.branchId || 0;
-  const paymentAccount = (params.paymentAccount || "").trim();
+  const registrationId = toNumber(params.registrationId);
   const authToken = params.authToken || "";
 
-  if (!branchId || !paymentAccount || !authToken) return null;
+  if ((!branchId && !registrationId) || !authToken) return null;
 
-  const branch = await fetchBranchConnectionInfo(branchId, authToken);
-  if (!branch?.url || !branch.token) return null;
+  const resolvedBranchId =
+    (registrationId
+      ? await fetchBranchIdFromBranchCustomer(registrationId, authToken)
+      : null) || branchId;
 
-  const rekeningUrl = new URL("/api/resource/Rekening", branch.url);
-  rekeningUrl.searchParams.set(
-    "fields",
-    JSON.stringify(["name", "nomor_rekening", "nama_rekening", "bank"]),
-  );
-  rekeningUrl.searchParams.set(
-    "filters",
-    JSON.stringify([["name", "=", paymentAccount]]),
-  );
+  if (!resolvedBranchId) return null;
 
-  const response = await fetch(rekeningUrl.toString(), {
+  return fetchBranchConnectionInfo(resolvedBranchId, authToken);
+}
+
+export async function fetchBranchErpResourcePage<T extends object = Record<string, unknown>>(
+  params: BranchErpListParams,
+): Promise<T[]> {
+  const branch = await resolveBranchConnectionInfo(params);
+  if (!branch?.url || !branch.token) return [];
+
+  const resourcePath = params.resource.startsWith("/")
+    ? params.resource
+    : `/api/resource/${params.resource}`;
+  const url = new URL(resourcePath, branch.url);
+  url.searchParams.set("fields", JSON.stringify(params.fields));
+  url.searchParams.set("limit_page_length", String(params.limit || 20));
+  url.searchParams.set("limit_start", String(params.start || 0));
+  if (params.filters?.length) {
+    url.searchParams.set("filters", JSON.stringify(params.filters));
+  }
+
+  const response = await fetch(url.toString(), {
     method: "GET",
     cache: "no-store",
     headers: {
-      Authorization: branch.token,
+      Authorization: `token ${branch.token}`,
     },
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch rekening (${response.status})`);
+    throw new Error(`Failed to fetch ${params.resource} (${response.status})`);
   }
 
   const json = await response.json();
-  const row = (Array.isArray(json?.data) ? json.data[0] : null) as
-    | RekeningRow
-    | null;
+  return Array.isArray(json?.data) ? (json.data as T[]) : [];
+}
 
+export async function fetchPaymentAccountInfo(params: {
+  branchId?: number | null;
+  registrationId?: number | string | null;
+  paymentAccount?: string | null;
+  authToken?: string | null;
+}): Promise<PaymentAccountInfo | null> {
+  const paymentAccount = (params.paymentAccount || "").trim();
+
+  if (!paymentAccount) return null;
+
+  const rows = await fetchBranchErpResourcePage<RekeningRow>({
+    ...params,
+    resource: "Rekening",
+    fields: ["name", "nomor_rekening", "nama_rekening", "bank"],
+    limit: 1,
+    start: 0,
+    filters: [["name", "=", paymentAccount]],
+  });
+
+  const row = rows.find((item) => (item?.name || "").trim() === paymentAccount) || null;
   if (!row?.name) return null;
 
   return {

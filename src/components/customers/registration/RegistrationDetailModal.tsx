@@ -148,12 +148,7 @@ export function RegistrationDetailModal({
     let cancelled = false;
 
     async function loadPaymentAccount() {
-      if (
-        !isOpen ||
-        !token ||
-        !registration?.company.branch_id ||
-        !registration.support_data.payment_account
-      ) {
+      if (!isOpen || !token || !registration?.id || !registration.support_data.payment_account) {
         setPaymentAccountInfo(null);
         setPaymentAccountError(null);
         return;
@@ -162,6 +157,7 @@ export function RegistrationDetailModal({
       try {
         setPaymentAccountError(null);
         const info = await fetchPaymentAccountInfo({
+          registrationId: registration.id,
           branchId: registration.company.branch_id,
           paymentAccount: registration.support_data.payment_account,
           authToken: token,
@@ -186,6 +182,7 @@ export function RegistrationDetailModal({
     };
   }, [
     isOpen,
+    registration?.id,
     registration?.company.branch_id,
     registration?.support_data.payment_account,
     token,

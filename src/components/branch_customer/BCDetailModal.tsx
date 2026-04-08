@@ -22,10 +22,12 @@ import type { BranchCustomer, GroupCustomer, GroupParent } from "@/types/custome
 import { API_CONFIG, apiFetch, getQueryUrl, getResourceUrl } from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
 import {
+  fetchBranchErpResourcePage,
   fetchPaymentAccountInfo,
   getTaxStatusLabel,
   type PaymentAccountInfo,
 } from "@/utils/paymentAccount";
+import LoadMoreButton from "@/components/ui/LoadMoreButton";
 
 interface BCDetailModalProps {
   isOpen: boolean;
@@ -55,6 +57,7 @@ interface BCDetailApi {
   notes?: string | null;
   payment_account?: string | null;
   payment_method?: string | null;
+  limit_basis?: string | null;
   sales_team?: string | null;
   tax_status?: number | null;
   npwp?: string | null;
@@ -101,7 +104,23 @@ interface ShippingAreaState {
   districts: WilayahOption[];
 }
 
+interface RekeningOption {
+  name: string;
+  nama_rekening?: string;
+  bank?: string;
+}
+
+interface SalesPersonOption {
+  name: string;
+}
+
 const PRODUCT_NEED_OPTIONS = ["Bahan Baku Springbed & Sofa", "Furniture"];
+const PAYMENT_METHOD_OPTIONS = ["Transfer", "Giro", "Cash"];
+const TAX_STATUS_OPTIONS = [
+  { value: 0, label: "Non PKP" },
+  { value: 1, label: "PKP" },
+];
+const ERP_PAGE_SIZE = 20;
 const WILAYAH_BASE_URL = "https://www.emsifa.com/api-wilayah-indonesia/api";
 
 function normalizeName(value?: string | null) {
@@ -121,6 +140,32 @@ function emptyShippingAreaState(): ShippingAreaState {
     regencies: [],
     districts: [],
   };
+}
+
+function normalizeOptionalEmail(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function normalizeNpwpDigits(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+function mergeUniqueByName<T extends { name: string }>(
+  current: T[],
+  incoming: T[],
+): T[] {
+  const map = new Map<string, T>();
+  for (const item of [...current, ...incoming]) {
+    const key = item.name.trim();
+    if (!key) continue;
+    map.set(key, item);
+  }
+  return Array.from(map.values());
 }
 
 async function fetchWilayah(path: string): Promise<WilayahOption[]> {
@@ -173,6 +218,8 @@ function buildEditSnapshot(input: {
   editedPaymentAccount: string;
   editedPaymentMethod: string;
   editedSalesTeam: string;
+  editedTaxStatus: number;
+  editedNpwp: string;
   editedRows: AddressRow[];
   deletedRowIds: number[];
 }) {
@@ -187,6 +234,8 @@ function buildEditSnapshot(input: {
     editedPaymentAccount: input.editedPaymentAccount.trim(),
     editedPaymentMethod: input.editedPaymentMethod.trim(),
     editedSalesTeam: input.editedSalesTeam.trim(),
+    editedTaxStatus: input.editedTaxStatus,
+    editedNpwp: normalizeNpwpDigits(input.editedNpwp),
     editedRows: input.editedRows.map((row) => ({
       id: row.id,
       type: row.type || "",
@@ -234,6 +283,8 @@ export function BCDetailModal({
   const [editedPaymentAccount, setEditedPaymentAccount] = useState("");
   const [editedPaymentMethod, setEditedPaymentMethod] = useState("");
   const [editedSalesTeam, setEditedSalesTeam] = useState("");
+  const [editedTaxStatus, setEditedTaxStatus] = useState(0);
+  const [editedNpwp, setEditedNpwp] = useState("");
   const [editedRows, setEditedRows] = useState<AddressRow[]>([]);
   const [deletedRowIds, setDeletedRowIds] = useState<number[]>([]);
   const [editSnapshot, setEditSnapshot] = useState("");
@@ -245,8 +296,18 @@ export function BCDetailModal({
   const [paymentAccountError, setPaymentAccountError] = useState<string | null>(
     null,
   );
+  const [optionError, setOptionError] = useState<string | null>(null);
+  const [rekeningOptions, setRekeningOptions] = useState<RekeningOption[]>([]);
+  const [salesPersonOptions, setSalesPersonOptions] = useState<SalesPersonOption[]>([]);
+  const [rekeningLoading, setRekeningLoading] = useState(false);
+  const [salesLoading, setSalesLoading] = useState(false);
+  const [rekeningHasMore, setRekeningHasMore] = useState(false);
+  const [salesHasMore, setSalesHasMore] = useState(false);
+  const [rekeningStart, setRekeningStart] = useState(0);
+  const [salesStart, setSalesStart] = useState(0);
   const regencyCache = useRef<Record<string, WilayahOption[]>>({});
   const districtCache = useRef<Record<string, WilayahOption[]>>({});
+  const branchIdForErp = toNum(detail?.branch) ?? bc?.branch_id;
 
   const load = useCallback(async () => {
     if (!isOpen || !bc || !token || !isAuthenticated) return;
@@ -401,6 +462,86 @@ export function BCDetailModal({
     };
   }, [bc?.branch_id, detail?.branch, detail?.payment_account, isOpen, token]);
 
+  const loadRekeningOptions = useCallback(
+    async (start: number) => {
+      if (!isEditMode || !token || !branchIdForErp) return;
+      if (start === 0) setRekeningLoading(true);
+      else setRekeningLoading(true);
+      try {
+        setOptionError(null);
+        const rows = await fetchBranchErpResourcePage<RekeningOption>({
+          branchId: branchIdForErp,
+          authToken: token,
+          resource: "Rekening",
+          fields: ["name", "nama_rekening", "bank"],
+          limit: ERP_PAGE_SIZE,
+          start,
+        });
+        setRekeningOptions((prev) =>
+          start === 0 ? mergeUniqueByName([], rows) : mergeUniqueByName(prev, rows),
+        );
+        setRekeningStart(start + rows.length);
+        setRekeningHasMore(rows.length === ERP_PAGE_SIZE);
+      } catch (error) {
+        setOptionError(
+          error instanceof Error ? error.message : "Gagal memuat pilihan rekening",
+        );
+      } finally {
+        setRekeningLoading(false);
+      }
+    },
+    [branchIdForErp, isEditMode, token],
+  );
+
+  const loadSalesPersonOptions = useCallback(
+    async (start: number) => {
+      if (!isEditMode || !token || !branchIdForErp) return;
+      setSalesLoading(true);
+      try {
+        setOptionError(null);
+        const rows = await fetchBranchErpResourcePage<SalesPersonOption>({
+          branchId: branchIdForErp,
+          authToken: token,
+          resource: "Sales Person",
+          fields: ["name"],
+          limit: ERP_PAGE_SIZE,
+          start,
+        });
+        setSalesPersonOptions((prev) =>
+          start === 0 ? mergeUniqueByName([], rows) : mergeUniqueByName(prev, rows),
+        );
+        setSalesStart(start + rows.length);
+        setSalesHasMore(rows.length === ERP_PAGE_SIZE);
+      } catch (error) {
+        setOptionError(
+          error instanceof Error ? error.message : "Gagal memuat pilihan sales area",
+        );
+      } finally {
+        setSalesLoading(false);
+      }
+    },
+    [branchIdForErp, isEditMode, token],
+  );
+
+  useEffect(() => {
+    if (!isEditMode) {
+      setOptionError(null);
+      setRekeningOptions([]);
+      setSalesPersonOptions([]);
+      setRekeningHasMore(false);
+      setSalesHasMore(false);
+      setRekeningStart(0);
+      setSalesStart(0);
+      return;
+    }
+    if (!token || !branchIdForErp) {
+      setOptionError("Branch belum tersedia untuk memuat data ERP.");
+      return;
+    }
+    void loadRekeningOptions(0);
+    void loadSalesPersonOptions(0);
+  }, [branchIdForErp, isEditMode, loadRekeningOptions, loadSalesPersonOptions, token]);
+
   const getRegencies = useCallback(async (provinceCode: string) => {
     if (!provinceCode) return [];
     if (regencyCache.current[provinceCode]) return regencyCache.current[provinceCode];
@@ -487,6 +628,9 @@ export function BCDetailModal({
     setEditedPaymentAccount((detail?.payment_account || "").trim());
     setEditedPaymentMethod((detail?.payment_method || "").trim());
     setEditedSalesTeam((detail?.sales_team || "").trim());
+    setEditedTaxStatus(Number(detail?.tax_status || 0));
+    setEditedNpwp((detail?.npwp || "").trim());
+    setOptionError(null);
   }, [
     isOpen,
     bc,
@@ -500,6 +644,8 @@ export function BCDetailModal({
     detail?.payment_account,
     detail?.payment_method,
     detail?.sales_team,
+    detail?.tax_status,
+    detail?.npwp,
     isEditMode,
   ]);
 
@@ -517,6 +663,8 @@ export function BCDetailModal({
         editedPaymentAccount,
         editedPaymentMethod,
         editedSalesTeam,
+        editedTaxStatus,
+        editedNpwp,
         editedRows,
         deletedRowIds,
       });
@@ -551,6 +699,8 @@ export function BCDetailModal({
     const paymentAccount = (detail?.payment_account || "").trim();
     const paymentMethod = (detail?.payment_method || "").trim();
     const salesTeam = (detail?.sales_team || "").trim();
+    const taxStatus = Number(detail?.tax_status || 0);
+    const npwp = (detail?.npwp || "").trim();
     const rowSnapshot = rows.map((row) => ({ ...row }));
     setEditedOwner(owner);
     setEditedOwnerPhone(ownerPhone);
@@ -562,6 +712,8 @@ export function BCDetailModal({
     setEditedPaymentAccount(paymentAccount);
     setEditedPaymentMethod(paymentMethod);
     setEditedSalesTeam(salesTeam);
+    setEditedTaxStatus(taxStatus);
+    setEditedNpwp(npwp);
     setEditedRows(rowSnapshot);
     setDeletedRowIds([]);
     setEditSnapshot(
@@ -576,6 +728,8 @@ export function BCDetailModal({
         editedPaymentAccount: paymentAccount,
         editedPaymentMethod: paymentMethod,
         editedSalesTeam: salesTeam,
+        editedTaxStatus: taxStatus,
+        editedNpwp: npwp,
         editedRows: rowSnapshot,
         deletedRowIds: [],
       }),
@@ -605,6 +759,7 @@ export function BCDetailModal({
     setDeletedRowIds([]);
     setEditSnapshot("");
     setShowExitConfirm(false);
+    setOptionError(null);
     setIsEditMode(false);
   };
 
@@ -744,12 +899,26 @@ export function BCDetailModal({
   const applyEdit = async () => {
     if (!bc || !token || !isAuthenticated) return;
 
+    const normalizedEmail = normalizeOptionalEmail(editedOwnerEmail);
+    if (normalizedEmail && !isValidEmail(normalizedEmail)) {
+      alert("Format email penanggung jawab tidak valid.");
+      return;
+    }
+
+    const normalizedNpwp = normalizeNpwpDigits(editedNpwp);
+    if (editedTaxStatus === 1) {
+      if (!normalizedNpwp || normalizedNpwp.length < 15 || normalizedNpwp.length > 16) {
+        alert("Nomor NPWP wajib 15-16 digit saat Tax Status = PKP.");
+        return;
+      }
+    }
+
     setIsSaving(true);
     try {
       const payload = {
         branch_owner: editedOwner.trim() || null,
         branch_owner_phone: editedOwnerPhone.trim() || null,
-        branch_owner_email: editedOwnerEmail.trim() || null,
+        branch_owner_email: normalizedEmail,
         branch_owner_place_of_birth: editedOwnerPlaceOfBirth.trim() || null,
         branch_owner_date_of_birth: editedOwnerDateOfBirth
           ? `${editedOwnerDateOfBirth}T00:00:00Z`
@@ -759,6 +928,8 @@ export function BCDetailModal({
         payment_account: editedPaymentAccount.trim() || null,
         payment_method: editedPaymentMethod.trim() || null,
         sales_team: editedSalesTeam.trim() || null,
+        tax_status: editedTaxStatus,
+        npwp: editedTaxStatus === 1 ? normalizedNpwp : null,
       };
 
       const res = await apiFetch(
@@ -844,7 +1015,7 @@ export function BCDetailModal({
               ...prev,
               branch_owner: editedOwner.trim() || null,
               branch_owner_phone: editedOwnerPhone.trim() || null,
-              branch_owner_email: editedOwnerEmail.trim() || null,
+              branch_owner_email: normalizedEmail,
               branch_owner_place_of_birth: editedOwnerPlaceOfBirth.trim() || null,
               branch_owner_date_of_birth: editedOwnerDateOfBirth
                 ? `${editedOwnerDateOfBirth}T00:00:00Z`
@@ -854,6 +1025,8 @@ export function BCDetailModal({
               payment_account: editedPaymentAccount.trim() || null,
               payment_method: editedPaymentMethod.trim() || null,
               sales_team: editedSalesTeam.trim() || null,
+              tax_status: editedTaxStatus,
+              npwp: editedTaxStatus === 1 ? normalizedNpwp : null,
               updated_at: new Date().toISOString(),
             }
           : prev,
@@ -864,13 +1037,14 @@ export function BCDetailModal({
         ...bc,
         owner_name: editedOwner.trim() || undefined,
         owner_phone: editedOwnerPhone.trim() || undefined,
-        owner_email: editedOwnerEmail.trim() || undefined,
+        owner_email: normalizedEmail || undefined,
         updated_at: new Date().toISOString(),
       };
       onBCUpdate?.(updatedBC);
       setDeletedRowIds([]);
       setEditSnapshot("");
       setShowExitConfirm(false);
+      setOptionError(null);
       setIsEditMode(false);
     } catch (error) {
       alert(
@@ -909,6 +1083,13 @@ export function BCDetailModal({
   const taxStatusLabel = getTaxStatusLabel(detail?.tax_status);
   const npwpValue = detail?.npwp || "-";
   const branchLocation = [bc.branch_name, bc.branch_city].filter(Boolean).join(", ") || "-";
+  const availableRekeningOptions = editedPaymentAccount && !rekeningOptions.some((item) => item.name === editedPaymentAccount)
+    ? [{ name: editedPaymentAccount }, ...rekeningOptions]
+    : rekeningOptions;
+  const availableSalesOptions = editedSalesTeam && !salesPersonOptions.some((item) => item.name === editedSalesTeam)
+    ? [{ name: editedSalesTeam }, ...salesPersonOptions]
+    : salesPersonOptions;
+  const selectedRekeningOption = availableRekeningOptions.find((item) => item.name === editedPaymentAccount) || null;
   const displayAddressRows = isEditMode ? editedRows : rows;
   const createdBy = detail?.["created_by.full_name"] || bc.created_by || "System";
   const updatedBy = detail?.["updated_by.full_name"] || bc.updated_by || "System";
@@ -1009,6 +1190,11 @@ export function BCDetailModal({
                   </div>
                 )}
                 {loading && <div className="text-sm text-slate-500">Memuat detail branch customer...</div>}
+                {isEditMode && optionError ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
+                    {optionError}
+                  </div>
+                ) : null}
 
                 <div className={`grid grid-cols-1 gap-4 ${isEditMode ? "" : "xl:grid-cols-3"}`}>
                   <div className={`${isEditMode ? "" : "xl:col-span-2"} rounded-xl border border-slate-200 bg-white p-6`}>
@@ -1060,14 +1246,30 @@ export function BCDetailModal({
                       <div>
                         <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-cyan-600">Sales Area CRM</p>
                         {isEditMode ? (
-                          <input
-                            type="text"
-                            value={editedSalesTeam}
-                            onChange={(e) => setEditedSalesTeam(e.target.value)}
-                            className="w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
-                            disabled={isSaving}
-                            placeholder="Sales area CRM"
-                          />
+                          <div className="space-y-2">
+                            <select
+                              value={editedSalesTeam}
+                              onChange={(e) => setEditedSalesTeam(e.target.value)}
+                              className="w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+                              disabled={isSaving || salesLoading}
+                            >
+                              <option value="">Pilih sales area</option>
+                              {availableSalesOptions.map((option) => (
+                                <option key={option.name} value={option.name}>
+                                  {option.name}
+                                </option>
+                              ))}
+                            </select>
+                            {salesHasMore ? (
+                              <LoadMoreButton
+                                onClick={() => void loadSalesPersonOptions(salesStart)}
+                                loading={salesLoading}
+                                hasMore={salesHasMore}
+                                currentCount={availableSalesOptions.length}
+                                totalCount={availableSalesOptions.length + (salesHasMore ? 1 : 0)}
+                              />
+                            ) : null}
+                          </div>
                         ) : (
                           <p className="text-sm font-semibold text-slate-900">{salesTeam}</p>
                         )}
@@ -1076,40 +1278,88 @@ export function BCDetailModal({
                         <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Credit Limit</p>
                         <p className="text-sm font-semibold text-slate-900">-</p>
                       </div> */}
-                      <div>
+                      {/* <div>
                         <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Payment Term</p>
                         <p className="text-sm font-semibold text-slate-900">-</p>
-                      </div>
+                      </div> */}
                       <div>
                         <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-violet-600">Payment Method</p>
                         {isEditMode ? (
-                          <input
-                            type="text"
+                          <select
                             value={editedPaymentMethod}
                             onChange={(e) => setEditedPaymentMethod(e.target.value)}
                             className="w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
                             disabled={isSaving}
-                            placeholder="Payment method"
-                          />
+                          >
+                            <option value="">Pilih payment method</option>
+                            {PAYMENT_METHOD_OPTIONS.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
                         ) : (
                           <p className="text-sm font-semibold text-slate-900">{paymentMethod}</p>
                         )}
                       </div>
                       <div>
+                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-sky-600">Limit Basis</p>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {detail?.limit_basis || "-"}
+                        </p>
+                      </div>
+                      <div>
                         <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-emerald-600">Tax Status</p>
-                        <p className="text-sm font-semibold text-slate-900">{taxStatusLabel}</p>
+                        {isEditMode ? (
+                          <select
+                            value={String(editedTaxStatus)}
+                            onChange={(e) => setEditedTaxStatus(Number(e.target.value))}
+                            className="w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+                            disabled={isSaving}
+                          >
+                            {TAX_STATUS_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <p className="text-sm font-semibold text-slate-900">{taxStatusLabel}</p>
+                        )}
                       </div>
                       <div>
                         <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-indigo-600">Payment Account</p>
                         {isEditMode ? (
-                          <input
-                            type="text"
-                            value={editedPaymentAccount}
-                            onChange={(e) => setEditedPaymentAccount(e.target.value)}
-                            className="w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
-                            disabled={isSaving}
-                            placeholder="Payment account"
-                          />
+                          <div className="space-y-2">
+                            <select
+                              value={editedPaymentAccount}
+                              onChange={(e) => setEditedPaymentAccount(e.target.value)}
+                              className="w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+                              disabled={isSaving || rekeningLoading}
+                            >
+                              <option value="">Pilih payment account</option>
+                              {availableRekeningOptions.map((option) => (
+                                <option key={option.name} value={option.name}>
+                                  {[option.name, option.nama_rekening, option.bank].filter(Boolean).join(" - ")}
+                                </option>
+                              ))}
+                            </select>
+                            {selectedRekeningOption ? (
+                              <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                                <p className="font-semibold text-slate-900">{selectedRekeningOption.nama_rekening || selectedRekeningOption.name}</p>
+                                <p>{selectedRekeningOption.bank || "-"}</p>
+                              </div>
+                            ) : null}
+                            {rekeningHasMore ? (
+                              <LoadMoreButton
+                                onClick={() => void loadRekeningOptions(rekeningStart)}
+                                loading={rekeningLoading}
+                                hasMore={rekeningHasMore}
+                                currentCount={availableRekeningOptions.length}
+                                totalCount={availableRekeningOptions.length + (rekeningHasMore ? 1 : 0)}
+                              />
+                            ) : null}
+                          </div>
                         ) : (
                           <div className="space-y-1 text-sm">
                             <p className="font-semibold text-slate-900">{paymentAccount}</p>
@@ -1123,10 +1373,26 @@ export function BCDetailModal({
                           </div>
                         )}
                       </div>
-                      {Number(detail?.tax_status || 0) === 1 && (
+                      {(isEditMode ? editedTaxStatus === 1 : Number(detail?.tax_status || 0) === 1) && (
                         <div>
                           <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-rose-600">NPWP</p>
-                          <p className="text-sm font-semibold text-slate-900">{npwpValue}</p>
+                          {isEditMode ? (
+                            <>
+                              <input
+                                type="text"
+                                value={editedNpwp}
+                                onChange={(e) => setEditedNpwp(normalizeNpwpDigits(e.target.value))}
+                                inputMode="numeric"
+                                maxLength={16}
+                                className="w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+                                disabled={isSaving}
+                                placeholder="15-16 digit"
+                              />
+                              <p className="mt-1 text-xs text-slate-500">Nomor NPWP harus 15-16 digit.</p>
+                            </>
+                          ) : (
+                            <p className="text-sm font-semibold text-slate-900">{npwpValue}</p>
+                          )}
                         </div>
                       )}
                       <div className="md:col-span-3">
@@ -1173,17 +1439,22 @@ export function BCDetailModal({
                         </div>
                       </div>
                       <div className="space-y-3 border-t border-slate-200 pt-4 text-xs">
-                        <div className="flex items-center gap-2 text-slate-600">
-                          <FaEnvelope className="text-slate-400" />
+                        <div className="flex items-start gap-2 text-slate-600">
+                          <FaEnvelope className="mt-2 text-slate-400" />
                           {isEditMode ? (
-                            <input
-                              type="email"
-                              value={editedOwnerEmail}
-                              onChange={(e) => setEditedOwnerEmail(e.target.value)}
-                              className="w-full rounded-md border border-blue-300 px-2 py-1 text-xs text-slate-700 focus:border-blue-500 focus:outline-none"
-                              placeholder="Email owner"
-                              disabled={isSaving}
-                            />
+                            <div className="w-full">
+                              <input
+                                type="text"
+                                value={editedOwnerEmail}
+                                onChange={(e) => setEditedOwnerEmail(e.target.value)}
+                                className="w-full rounded-md border border-blue-300 px-2 py-1 text-xs text-slate-700 focus:border-blue-500 focus:outline-none"
+                                placeholder="Email owner"
+                                disabled={isSaving}
+                              />
+                              <p className="mt-1 text-[11px] text-slate-500">
+                                Kosongkan jika tidak ada. Saat disimpan akan dikirim sebagai null.
+                              </p>
+                            </div>
                           ) : (
                             <span>{branchOwnerEmail}</span>
                           )}
