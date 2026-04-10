@@ -46,6 +46,12 @@ interface GroupCustomerRow {
   name?: string | null;
   gc_name?: string | null;
   gpid?: number | null;
+  credit_limit_active?: number | null;
+  credit_limit?: number | null;
+  payment_term_active?: number | null;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number | null;
+  limit_customer_overdue?: number | null;
   owner_full_name?: string | null;
   owner_phone?: string | null;
   owner_email?: string | null;
@@ -63,6 +69,12 @@ interface BranchCustomerRow {
   name?: string | null;
   gcid?: number | { id?: number; name?: string; gc_name?: string } | null;
   branch?: number | { id?: number; branch_name?: string; city?: string } | null;
+  credit_limit_active?: number | null;
+  credit_limit?: number | null;
+  payment_term_active?: number | null;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number | null;
+  limit_customer_overdue?: number | null;
   branch_owner?: string | null;
   branch_owner_phone?: string | null;
   branch_owner_email?: string | null;
@@ -229,6 +241,14 @@ export function GPDetailModal({
         gp_id: gp.id,
         gp_name: gp.name,
         gp_code: gp.code,
+        credit_limit_active: Number(row.credit_limit_active || 0),
+        credit_limit: row.credit_limit ?? null,
+        payment_term_active: Number(row.payment_term_active || 0),
+        payment_term: row.payment_term ?? null,
+        limit_customer_overdue_active: Number(
+          row.limit_customer_overdue_active || 0,
+        ),
+        limit_customer_overdue: row.limit_customer_overdue ?? null,
         owner_name: row.owner_full_name || undefined,
         owner_phone: row.owner_phone || undefined,
         owner_email: row.owner_email || undefined,
@@ -349,6 +369,14 @@ export function GPDetailModal({
               : undefined) || gcRef?.code,
           gp_name: gp.name,
           gp_code: gp.code,
+          credit_limit_active: Number(row.credit_limit_active || 0),
+          credit_limit: row.credit_limit ?? null,
+          payment_term_active: Number(row.payment_term_active || 0),
+          payment_term: row.payment_term ?? null,
+          limit_customer_overdue_active: Number(
+            row.limit_customer_overdue_active || 0,
+          ),
+          limit_customer_overdue: row.limit_customer_overdue ?? null,
           branch_id: branchId,
           branch_name: directBranchName || branchRef?.name,
           branch_city: branchCity,
@@ -399,7 +427,17 @@ export function GPDetailModal({
 
     setIsSaving(true);
     try {
-      const payload = { gp_name: editedName.trim() };
+      const payload = {
+        gp_name: editedName.trim(),
+        credit_limit_active: Number(gp.credit_limit_active || 0),
+        credit_limit: gp.credit_limit ?? null,
+        payment_term_active: Number(gp.payment_term_active || 0),
+        payment_term: gp.payment_term ?? null,
+        limit_customer_overdue_active: Number(
+          gp.limit_customer_overdue_active || 0,
+        ),
+        limit_customer_overdue: gp.limit_customer_overdue ?? null,
+      };
       const res = await apiFetch(
         getResourceUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, gp.id),
         { method: "PUT", body: JSON.stringify(payload), cache: "no-store" },

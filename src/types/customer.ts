@@ -5,6 +5,12 @@ export interface GroupParent {
   id: number; // GPID (auto-increment)
   code?: string; // document name/code (e.g. GP00002)
   name: string; // GPName (unique)
+  credit_limit_active?: number;
+  credit_limit?: number | null;
+  payment_term_active?: number;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number;
+  limit_customer_overdue?: number | null;
   owner_name?: string; // Owner full name (from registration)
   owner_phone?: string; // Owner phone number
   owner_email?: string; // Owner email address
@@ -23,6 +29,12 @@ export interface GroupCustomer {
   gp_id: number; // Foreign key to GP
   gp_name?: string; // GP name (for display)
   gp_code?: string; // GP code (for display)
+  credit_limit_active?: number;
+  credit_limit?: number | null;
+  payment_term_active?: number;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number;
+  limit_customer_overdue?: number | null;
   owner_name?: string; // Owner full name (from registration)
   owner_phone?: string; // Owner phone number
   owner_email?: string; // Owner email address
@@ -43,6 +55,12 @@ export interface BranchCustomer {
   gc_code?: string; // GC code (for display)
   gp_name?: string; // GP name (for display)
   gp_code?: string; // GP code (for display)
+  credit_limit_active?: number;
+  credit_limit?: number | null;
+  payment_term_active?: number;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number;
+  limit_customer_overdue?: number | null;
   branch_id: number; // Foreign key to Branch
   branch_name?: string; // Branch name (for display)
   branch_city?: string; // Branch city (for display)
@@ -60,6 +78,12 @@ export interface BranchCustomer {
 export interface GroupParentApiResponse {
   id: number;
   name: string;
+  credit_limit_active?: number | null;
+  credit_limit?: number | null;
+  payment_term_active?: number | null;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number | null;
+  limit_customer_overdue?: number | null;
   owner_name?: string;
   owner_phone?: string;
   owner_email?: string;
@@ -75,6 +99,12 @@ export interface GroupCustomerApiResponse {
   name: string;
   gp_id: number;
   gp?: GroupParentApiResponse;
+  credit_limit_active?: number | null;
+  credit_limit?: number | null;
+  payment_term_active?: number | null;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number | null;
+  limit_customer_overdue?: number | null;
   owner_name?: string;
   owner_phone?: string;
   owner_email?: string;
@@ -90,6 +120,12 @@ export interface BranchCustomerApiResponse {
   name: string;
   gc_id: number;
   gc?: GroupCustomerApiResponse;
+  credit_limit_active?: number | null;
+  credit_limit?: number | null;
+  payment_term_active?: number | null;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number | null;
+  limit_customer_overdue?: number | null;
   branch_id: number;
   branch?: {
     id: number;

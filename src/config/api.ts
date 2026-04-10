@@ -29,6 +29,7 @@ export const API_CONFIG = {
     // Authorization (Authz)
     AUTHZ_ROLE: "/api/authz/roles",
     AUTHZ_PERMISSION: "/api/authz/permissions",
+    AUTHZ_RESOURCE: "/api/authz/resources",
     AUTHZ_ROLE_PERMISSION: "/api/authz/role-permissions",
     EMAIL: "/resource/email",
     WHATSAPP: "/api/resource/whatsapp",
@@ -40,6 +41,8 @@ export const API_CONFIG = {
     CUSTOMER_REGISTER: "/api/resource/customer_register",
     CUSTOMER_REGISTER_ADDRESS: "/api/resource/customer_register_address",
     CUSTOMER_LIMIT: "/api/resource/customer_limit",
+    CREDIT_CHANGE_REQUEST: "/api/resource/credit_change_request",
+    CREDIT_POLICY: "/api/resource/credit_policy",
     NATIONAL_BRAND: "/api/resource/national_brand",
     GROUP_PARENT: "/api/resource/group_parent",
     GROUP_CUSTOMER: "/api/resource/group_customer",

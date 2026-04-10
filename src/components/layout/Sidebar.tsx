@@ -131,6 +131,13 @@ const ADMIN_MENU: MenuItem[] = [
     requireAuth: true,
   },
   {
+    label: "Resources",
+    href: "/resources",
+    icon: <FaBoxes className="w-5 h-5" />,
+    category: "System",
+    requireAuth: true,
+  },
+  {
     label: "Users",
     href: "/users",
     icon: <FaUser className="w-5 h-5" />,
@@ -226,6 +233,20 @@ const CUSTOMER_SUBMENU: MenuItem[] = [
   {
     label: "Customer Limit",
     href: "/customers/limit",
+    icon: <FaDatabase className="w-4 h-4" />,
+    category: "Customer",
+    requireAuth: true,
+  },
+  {
+    label: "Credit Policy",
+    href: "/customers/credit-policy",
+    icon: <FaDatabase className="w-4 h-4" />,
+    category: "Customer",
+    requireAuth: true,
+  },
+  {
+    label: "Credit Change Request",
+    href: "/customers/credit-change-request",
     icon: <FaDatabase className="w-4 h-4" />,
     category: "Customer",
     requireAuth: true,
@@ -390,6 +411,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
       pathname.startsWith("/workflows") ||
       pathname.startsWith("/workflow-states") ||
       pathname.startsWith("/permissions") ||
+      pathname.startsWith("/resources") ||
       pathname.startsWith("/emails") ||
       pathname.startsWith("/integration-token")
     ) {

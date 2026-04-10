@@ -32,6 +32,12 @@ interface GroupCustomerApiResponse {
   name?: string | null;
   gc_name?: string | null;
   gpid?: number | { id?: number; name?: string; gp_name?: string } | null;
+  credit_limit_active?: number | null;
+  credit_limit?: number | null;
+  payment_term_active?: number | null;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number | null;
+  limit_customer_overdue?: number | null;
   owner_full_name?: string | null;
   owner_phone?: string | null;
   owner_email?: string | null;
@@ -175,6 +181,14 @@ export default function GCList() {
             (row.gpid && typeof row.gpid === "object"
               ? row.gpid.name
               : undefined) || gpMap.get(gpId)?.code,
+          credit_limit_active: Number(row.credit_limit_active || 0),
+          credit_limit: row.credit_limit ?? null,
+          payment_term_active: Number(row.payment_term_active || 0),
+          payment_term: row.payment_term ?? null,
+          limit_customer_overdue_active: Number(
+            row.limit_customer_overdue_active || 0,
+          ),
+          limit_customer_overdue: row.limit_customer_overdue ?? null,
           owner_name: row.owner_full_name || undefined,
           owner_phone: row.owner_phone || undefined,
           owner_email: row.owner_email || undefined,

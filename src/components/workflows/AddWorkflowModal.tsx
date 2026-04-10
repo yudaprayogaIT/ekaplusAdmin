@@ -29,6 +29,7 @@ import TransitionManager, {
 import {
   WorkflowWithDetails,
   Role,
+  AuthzResource,
 } from "./WorkflowList";
 
 type Props = {
@@ -37,6 +38,7 @@ type Props = {
   workflow?: WorkflowWithDetails | null;
   globalStates: GlobalState[];
   roles: Role[];
+  resources: AuthzResource[];
 };
 
 export default function AddWorkflowModal({
@@ -45,6 +47,7 @@ export default function AddWorkflowModal({
   workflow,
   globalStates,
   roles,
+  resources,
 }: Props) {
   const isEdit = !!workflow;
 
@@ -232,6 +235,10 @@ export default function AddWorkflowModal({
 
   const validationErrors = validate();
   const canSubmit = validationErrors.length === 0;
+  const sortedResources = [...resources].sort((a, b) =>
+    a.Slug.localeCompare(b.Slug)
+  );
+  const resourceMatch = sortedResources.find((item) => item.Slug === resource.trim());
 
   return (
     <AnimatePresence>
@@ -342,21 +349,37 @@ export default function AddWorkflowModal({
                     {/* Resource */}
                     <div className="mb-4">
                       <label className="block font-medium text-purple-900 mb-2">
-                        Resource (API Name) *
+                        Resource Slug *
                       </label>
                       <input
                         type="text"
                         value={resource}
                         onChange={(e) => setResource(e.target.value)}
-                        placeholder="e.g., /api/product, /api/order"
+                        placeholder="e.g., customer_register"
+                        list="workflow-resource-options"
                         disabled={isEdit}
                         className="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none font-mono disabled:bg-gray-100 disabled:cursor-not-allowed"
                       />
+                      <datalist id="workflow-resource-options">
+                        {sortedResources.map((item) => (
+                          <option key={item.ID} value={item.Slug}>
+                            {item.Module} - {item.Name}
+                          </option>
+                        ))}
+                      </datalist>
                       <p className="text-xs text-purple-700 mt-1">
                         {isEdit
                           ? "Resource tidak bisa diubah saat edit"
-                          : "Resource name untuk workflow ini (biasanya nama endpoint API)"}
+                          : "Pilih slug dari master resources atau ketik manual jika belum tersedia"}
                       </p>
+                      {!isEdit && resourceMatch && (
+                        <div className="mt-2 inline-flex flex-wrap items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs text-purple-800 shadow-sm">
+                          <span className="rounded-full bg-purple-100 px-2 py-1 font-semibold">
+                            Module: {resourceMatch.Module || "-"}
+                          </span>
+                          <span>{resourceMatch.Name}</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Name */}

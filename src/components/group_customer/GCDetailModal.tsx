@@ -48,6 +48,12 @@ interface GroupParentRow {
     | number
     | { id?: number | string; name?: string; nb_name?: string }
     | null;
+  credit_limit_active?: number | null;
+  credit_limit?: number | null;
+  payment_term_active?: number | null;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number | null;
+  limit_customer_overdue?: number | null;
   disabled?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -69,6 +75,12 @@ interface BranchCustomerRow {
   bcid_name?: string | null;
   gcid?: number | { id?: number; name?: string; gc_name?: string } | null;
   branch?: number | { id?: number; branch_name?: string; city?: string } | null;
+  credit_limit_active?: number | null;
+  credit_limit?: number | null;
+  payment_term_active?: number | null;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number | null;
+  limit_customer_overdue?: number | null;
   branch_owner?: string | null;
   branch_owner_phone?: string | null;
   branch_owner_email?: string | null;
@@ -94,6 +106,12 @@ interface GroupCustomerDetailRow {
   company_name?: string | null;
   company_title?: string | null;
   company_type?: string | null;
+  credit_limit_active?: number | null;
+  credit_limit?: number | null;
+  payment_term_active?: number | null;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number | null;
+  limit_customer_overdue?: number | null;
   owner_full_name?: string | null;
   owner_phone?: string | null;
   owner_email?: string | null;
@@ -187,6 +205,14 @@ export function GCDetailModal({
   const [editedOwnerEmail, setEditedOwnerEmail] = useState("");
   const [editedOwnerPlaceOfBirth, setEditedOwnerPlaceOfBirth] = useState("");
   const [editedOwnerDateOfBirth, setEditedOwnerDateOfBirth] = useState("");
+  const [creditPolicyFields, setCreditPolicyFields] = useState({
+    credit_limit_active: 0,
+    credit_limit: null as number | null,
+    payment_term_active: 0,
+    payment_term: null as number | null,
+    limit_customer_overdue_active: 0,
+    limit_customer_overdue: null as number | null,
+  });
   const [isSaving, setIsSaving] = useState(false);
 
   const [parentGP, setParentGP] = useState<GroupParent | null>(null);
@@ -226,6 +252,12 @@ export function GCDetailModal({
           "company_name",
           "company_title",
           "company_type",
+          "credit_limit_active",
+          "credit_limit",
+          "payment_term_active",
+          "payment_term",
+          "limit_customer_overdue_active",
+          "limit_customer_overdue",
           "owner_full_name",
           "owner_phone",
           "owner_email",
@@ -263,6 +295,16 @@ export function GCDetailModal({
     setEditedOwnerDateOfBirth(
       gcDetailRow?.owner_date_of_birth?.split("T")[0] || "",
     );
+    setCreditPolicyFields({
+      credit_limit_active: Number(gcDetailRow?.credit_limit_active || 0),
+      credit_limit: gcDetailRow?.credit_limit ?? null,
+      payment_term_active: Number(gcDetailRow?.payment_term_active || 0),
+      payment_term: gcDetailRow?.payment_term ?? null,
+      limit_customer_overdue_active: Number(
+        gcDetailRow?.limit_customer_overdue_active || 0,
+      ),
+      limit_customer_overdue: gcDetailRow?.limit_customer_overdue ?? null,
+    });
 
     if (gc.gp_id) {
       const gpSpec = {
@@ -286,6 +328,14 @@ export function GCDetailModal({
               id: Number(row.id),
               code: row.name || undefined,
               name: row.gp_name || row.name || "-",
+              credit_limit_active: Number(row.credit_limit_active || 0),
+              credit_limit: row.credit_limit ?? null,
+              payment_term_active: Number(row.payment_term_active || 0),
+              payment_term: row.payment_term ?? null,
+              limit_customer_overdue_active: Number(
+                row.limit_customer_overdue_active || 0,
+              ),
+              limit_customer_overdue: row.limit_customer_overdue ?? null,
               created_at: row.created_at || new Date(0).toISOString(),
               updated_at:
                 row.updated_at || row.created_at || new Date(0).toISOString(),
@@ -418,6 +468,14 @@ export function GCDetailModal({
         gc_code: gc.code,
         gp_name: gc.gp_name,
         gp_code: gc.gp_code,
+        credit_limit_active: Number(row.credit_limit_active || 0),
+        credit_limit: row.credit_limit ?? null,
+        payment_term_active: Number(row.payment_term_active || 0),
+        payment_term: row.payment_term ?? null,
+        limit_customer_overdue_active: Number(
+          row.limit_customer_overdue_active || 0,
+        ),
+        limit_customer_overdue: row.limit_customer_overdue ?? null,
         branch_id: branchId,
         branch_name: directBranchName || branchRef?.name,
         branch_city: directBranchCity || branchRef?.city,
@@ -522,6 +580,13 @@ export function GCDetailModal({
         company_name: finalName,
         company_title: editedCompanyTitle,
         company_type: editedCompanyType,
+        credit_limit_active: creditPolicyFields.credit_limit_active,
+        credit_limit: creditPolicyFields.credit_limit,
+        payment_term_active: creditPolicyFields.payment_term_active,
+        payment_term: creditPolicyFields.payment_term,
+        limit_customer_overdue_active:
+          creditPolicyFields.limit_customer_overdue_active,
+        limit_customer_overdue: creditPolicyFields.limit_customer_overdue,
         owner_full_name: editedOwnerName.trim() || null,
         owner_phone: editedOwnerPhone.trim() || null,
         owner_email: editedOwnerEmail.trim() || null,
@@ -543,6 +608,13 @@ export function GCDetailModal({
       const updatedGC: GroupCustomer = {
         ...gc,
         name: finalName,
+        credit_limit_active: creditPolicyFields.credit_limit_active,
+        credit_limit: creditPolicyFields.credit_limit,
+        payment_term_active: creditPolicyFields.payment_term_active,
+        payment_term: creditPolicyFields.payment_term,
+        limit_customer_overdue_active:
+          creditPolicyFields.limit_customer_overdue_active,
+        limit_customer_overdue: creditPolicyFields.limit_customer_overdue,
         owner_name: editedOwnerName.trim() || undefined,
         owner_phone: editedOwnerPhone.trim() || undefined,
         owner_email: editedOwnerEmail.trim() || undefined,

@@ -31,6 +31,12 @@ interface GroupParentApiResponse {
   id: number;
   name?: string | null;
   gp_name?: string | null;
+  credit_limit_active?: number | null;
+  credit_limit?: number | null;
+  payment_term_active?: number | null;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number | null;
+  limit_customer_overdue?: number | null;
   disabled?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -55,6 +61,14 @@ function mapGpRow(row: GroupParentApiResponse): GroupParent {
     id: Number(row.id),
     code: row.name || undefined,
     name: row.gp_name || row.name || "-",
+    credit_limit_active: Number(row.credit_limit_active || 0),
+    credit_limit: row.credit_limit ?? null,
+    payment_term_active: Number(row.payment_term_active || 0),
+    payment_term: row.payment_term ?? null,
+    limit_customer_overdue_active: Number(
+      row.limit_customer_overdue_active || 0,
+    ),
+    limit_customer_overdue: row.limit_customer_overdue ?? null,
     created_at: row.created_at || new Date(0).toISOString(),
     updated_at: row.updated_at || row.created_at || new Date(0).toISOString(),
     created_by: resolveUserName(row["created_by.full_name"], row.created_by),

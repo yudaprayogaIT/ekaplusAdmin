@@ -5,14 +5,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   FaBan,
   FaBuilding,
-  FaCalendarAlt,
   FaCheckCircle,
   FaChevronRight,
   FaEdit,
-  FaEnvelope,
   FaExclamationTriangle,
   FaMapMarkerAlt,
-  FaPhone,
   FaTrash,
   FaUsers,
   FaWarehouse,
@@ -59,6 +56,12 @@ interface BCDetailApi {
   payment_method?: string | null;
   limit_basis?: string | null;
   sales_team?: string | null;
+  credit_limit_active?: number | null;
+  credit_limit?: number | null;
+  payment_term_active?: number | null;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number | null;
+  limit_customer_overdue?: number | null;
   tax_status?: number | null;
   npwp?: string | null;
   sync_saga_id?: string | null;
@@ -71,6 +74,8 @@ interface BCDetailApi {
   created_by?: number | { full_name?: string } | null;
   updated_by?: number | { full_name?: string } | null;
 }
+
+type DetailTab = "company" | "owner" | "finance" | "address";
 
 interface AddressRow {
   id: number;
@@ -207,6 +212,31 @@ function dt(v?: string | null): string {
   return d.toLocaleString("id-ID", { dateStyle: "long", timeStyle: "short" });
 }
 
+function normalizeDecimalInput(value: string): string {
+  return value.replace(/[^\d.,-]/g, "").replace(",", ".");
+}
+
+function parseNullableFloat(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number.parseFloat(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseNullableInt(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatNullableNumber(value?: number | null): string {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "-";
+  }
+  return new Intl.NumberFormat("id-ID").format(Number(value));
+}
+
 function buildEditSnapshot(input: {
   editedOwner: string;
   editedOwnerPhone: string;
@@ -220,6 +250,12 @@ function buildEditSnapshot(input: {
   editedSalesTeam: string;
   editedTaxStatus: number;
   editedNpwp: string;
+  editedCreditLimitActive: number;
+  editedCreditLimit: string;
+  editedPaymentTermActive: number;
+  editedPaymentTerm: string;
+  editedLimitCustomerOverdueActive: number;
+  editedLimitCustomerOverdue: string;
   editedRows: AddressRow[];
   deletedRowIds: number[];
 }) {
@@ -236,6 +272,12 @@ function buildEditSnapshot(input: {
     editedSalesTeam: input.editedSalesTeam.trim(),
     editedTaxStatus: input.editedTaxStatus,
     editedNpwp: normalizeNpwpDigits(input.editedNpwp),
+    editedCreditLimitActive: input.editedCreditLimitActive,
+    editedCreditLimit: normalizeDecimalInput(input.editedCreditLimit),
+    editedPaymentTermActive: input.editedPaymentTermActive,
+    editedPaymentTerm: input.editedPaymentTerm.trim(),
+    editedLimitCustomerOverdueActive: input.editedLimitCustomerOverdueActive,
+    editedLimitCustomerOverdue: input.editedLimitCustomerOverdue.trim(),
     editedRows: input.editedRows.map((row) => ({
       id: row.id,
       type: row.type || "",
@@ -271,6 +313,7 @@ export function BCDetailModal({
   const [gp, setGp] = useState<GroupParent | null>(null);
   const [gc, setGc] = useState<GroupCustomer | null>(null);
   const [nb, setNb] = useState<{ code: string; name: string } | null>(null);
+  const [activeTab, setActiveTab] = useState<DetailTab>("company");
   const [isEditMode, setIsEditMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editedOwner, setEditedOwner] = useState("");
@@ -285,6 +328,14 @@ export function BCDetailModal({
   const [editedSalesTeam, setEditedSalesTeam] = useState("");
   const [editedTaxStatus, setEditedTaxStatus] = useState(0);
   const [editedNpwp, setEditedNpwp] = useState("");
+  const [editedCreditLimitActive, setEditedCreditLimitActive] = useState(0);
+  const [editedCreditLimit, setEditedCreditLimit] = useState("");
+  const [editedPaymentTermActive, setEditedPaymentTermActive] = useState(0);
+  const [editedPaymentTerm, setEditedPaymentTerm] = useState("");
+  const [editedLimitCustomerOverdueActive, setEditedLimitCustomerOverdueActive] =
+    useState(0);
+  const [editedLimitCustomerOverdue, setEditedLimitCustomerOverdue] =
+    useState("");
   const [editedRows, setEditedRows] = useState<AddressRow[]>([]);
   const [deletedRowIds, setDeletedRowIds] = useState<number[]>([]);
   const [editSnapshot, setEditSnapshot] = useState("");
@@ -422,6 +473,11 @@ export function BCDetailModal({
     setDeletedRowIds([]);
     setEditSnapshot("");
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setActiveTab("company");
+  }, [isOpen, bc?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -630,6 +686,27 @@ export function BCDetailModal({
     setEditedSalesTeam((detail?.sales_team || "").trim());
     setEditedTaxStatus(Number(detail?.tax_status || 0));
     setEditedNpwp((detail?.npwp || "").trim());
+    setEditedCreditLimitActive(Number(detail?.credit_limit_active || 0));
+    setEditedCreditLimit(
+      detail?.credit_limit === null || detail?.credit_limit === undefined
+        ? ""
+        : String(detail.credit_limit),
+    );
+    setEditedPaymentTermActive(Number(detail?.payment_term_active || 0));
+    setEditedPaymentTerm(
+      detail?.payment_term === null || detail?.payment_term === undefined
+        ? ""
+        : String(detail.payment_term),
+    );
+    setEditedLimitCustomerOverdueActive(
+      Number(detail?.limit_customer_overdue_active || 0),
+    );
+    setEditedLimitCustomerOverdue(
+      detail?.limit_customer_overdue === null ||
+        detail?.limit_customer_overdue === undefined
+        ? ""
+        : String(detail.limit_customer_overdue),
+    );
     setOptionError(null);
   }, [
     isOpen,
@@ -646,6 +723,12 @@ export function BCDetailModal({
     detail?.sales_team,
     detail?.tax_status,
     detail?.npwp,
+    detail?.credit_limit_active,
+    detail?.credit_limit,
+    detail?.payment_term_active,
+    detail?.payment_term,
+    detail?.limit_customer_overdue_active,
+    detail?.limit_customer_overdue,
     isEditMode,
   ]);
 
@@ -665,6 +748,12 @@ export function BCDetailModal({
         editedSalesTeam,
         editedTaxStatus,
         editedNpwp,
+        editedCreditLimitActive,
+        editedCreditLimit,
+        editedPaymentTermActive,
+        editedPaymentTerm,
+        editedLimitCustomerOverdueActive,
+        editedLimitCustomerOverdue,
         editedRows,
         deletedRowIds,
       });
@@ -701,6 +790,24 @@ export function BCDetailModal({
     const salesTeam = (detail?.sales_team || "").trim();
     const taxStatus = Number(detail?.tax_status || 0);
     const npwp = (detail?.npwp || "").trim();
+    const creditLimitActive = Number(detail?.credit_limit_active || 0);
+    const creditLimit =
+      detail?.credit_limit === null || detail?.credit_limit === undefined
+        ? ""
+        : String(detail.credit_limit);
+    const paymentTermActive = Number(detail?.payment_term_active || 0);
+    const paymentTerm =
+      detail?.payment_term === null || detail?.payment_term === undefined
+        ? ""
+        : String(detail.payment_term);
+    const limitCustomerOverdueActive = Number(
+      detail?.limit_customer_overdue_active || 0,
+    );
+    const limitCustomerOverdue =
+      detail?.limit_customer_overdue === null ||
+      detail?.limit_customer_overdue === undefined
+        ? ""
+        : String(detail.limit_customer_overdue);
     const rowSnapshot = rows.map((row) => ({ ...row }));
     setEditedOwner(owner);
     setEditedOwnerPhone(ownerPhone);
@@ -714,6 +821,12 @@ export function BCDetailModal({
     setEditedSalesTeam(salesTeam);
     setEditedTaxStatus(taxStatus);
     setEditedNpwp(npwp);
+    setEditedCreditLimitActive(creditLimitActive);
+    setEditedCreditLimit(creditLimit);
+    setEditedPaymentTermActive(paymentTermActive);
+    setEditedPaymentTerm(paymentTerm);
+    setEditedLimitCustomerOverdueActive(limitCustomerOverdueActive);
+    setEditedLimitCustomerOverdue(limitCustomerOverdue);
     setEditedRows(rowSnapshot);
     setDeletedRowIds([]);
     setEditSnapshot(
@@ -730,6 +843,12 @@ export function BCDetailModal({
         editedSalesTeam: salesTeam,
         editedTaxStatus: taxStatus,
         editedNpwp: npwp,
+        editedCreditLimitActive: creditLimitActive,
+        editedCreditLimit: creditLimit,
+        editedPaymentTermActive: paymentTermActive,
+        editedPaymentTerm: paymentTerm,
+        editedLimitCustomerOverdueActive: limitCustomerOverdueActive,
+        editedLimitCustomerOverdue: limitCustomerOverdue,
         editedRows: rowSnapshot,
         deletedRowIds: [],
       }),
@@ -906,6 +1025,9 @@ export function BCDetailModal({
     }
 
     const normalizedNpwp = normalizeNpwpDigits(editedNpwp);
+    const creditLimit = parseNullableFloat(editedCreditLimit);
+    const paymentTerm = parseNullableInt(editedPaymentTerm);
+    const limitCustomerOverdue = parseNullableInt(editedLimitCustomerOverdue);
     if (editedTaxStatus === 1) {
       if (!normalizedNpwp || normalizedNpwp.length < 15 || normalizedNpwp.length > 16) {
         alert("Nomor NPWP wajib 15-16 digit saat Tax Status = PKP.");
@@ -928,6 +1050,12 @@ export function BCDetailModal({
         payment_account: editedPaymentAccount.trim() || null,
         payment_method: editedPaymentMethod.trim() || null,
         sales_team: editedSalesTeam.trim() || null,
+        credit_limit_active: editedCreditLimitActive,
+        credit_limit: creditLimit,
+        payment_term_active: editedPaymentTermActive,
+        payment_term: paymentTerm,
+        limit_customer_overdue_active: editedLimitCustomerOverdueActive,
+        limit_customer_overdue: limitCustomerOverdue,
         tax_status: editedTaxStatus,
         npwp: editedTaxStatus === 1 ? normalizedNpwp : null,
       };
@@ -1025,6 +1153,12 @@ export function BCDetailModal({
               payment_account: editedPaymentAccount.trim() || null,
               payment_method: editedPaymentMethod.trim() || null,
               sales_team: editedSalesTeam.trim() || null,
+              credit_limit_active: editedCreditLimitActive,
+              credit_limit: creditLimit,
+              payment_term_active: editedPaymentTermActive,
+              payment_term: paymentTerm,
+              limit_customer_overdue_active: editedLimitCustomerOverdueActive,
+              limit_customer_overdue: limitCustomerOverdue,
               tax_status: editedTaxStatus,
               npwp: editedTaxStatus === 1 ? normalizedNpwp : null,
               updated_at: new Date().toISOString(),
@@ -1035,6 +1169,12 @@ export function BCDetailModal({
 
       const updatedBC: BranchCustomer = {
         ...bc,
+        credit_limit_active: editedCreditLimitActive,
+        credit_limit: creditLimit,
+        payment_term_active: editedPaymentTermActive,
+        payment_term: paymentTerm,
+        limit_customer_overdue_active: editedLimitCustomerOverdueActive,
+        limit_customer_overdue: limitCustomerOverdue,
         owner_name: editedOwner.trim() || undefined,
         owner_phone: editedOwnerPhone.trim() || undefined,
         owner_email: normalizedEmail || undefined,
@@ -1080,6 +1220,14 @@ export function BCDetailModal({
     paymentAccountInfo?.nomor_rekening || detail?.payment_account || "-";
   const paymentMethod = detail?.payment_method || "-";
   const salesTeam = detail?.sales_team || "-";
+  const creditLimitActiveLabel =
+    Number(detail?.credit_limit_active || 0) === 1 ? "Active" : "Inactive";
+  const paymentTermActiveLabel =
+    Number(detail?.payment_term_active || 0) === 1 ? "Active" : "Inactive";
+  const limitCustomerOverdueActiveLabel =
+    Number(detail?.limit_customer_overdue_active || 0) === 1
+      ? "Active"
+      : "Inactive";
   const taxStatusLabel = getTaxStatusLabel(detail?.tax_status);
   const npwpValue = detail?.npwp || "-";
   const branchLocation = [bc.branch_name, bc.branch_city].filter(Boolean).join(", ") || "-";
@@ -1095,6 +1243,37 @@ export function BCDetailModal({
   const updatedBy = detail?.["updated_by.full_name"] || bc.updated_by || "System";
   const isActive = Number(detail?.disabled ?? bc.disabled ?? 0) !== 1;
   const ownerInitial = branchOwner !== "-" ? branchOwner.charAt(0).toUpperCase() : "B";
+  const detailTabs: Array<{
+    key: DetailTab;
+    label: string;
+    caption: string;
+    icon: React.ReactNode;
+  }> = [
+    {
+      key: "company",
+      label: "Data Perusahaan",
+      caption: "Profil cabang dan relasi",
+      icon: <FaBuilding className="h-4 w-4" />,
+    },
+    {
+      key: "owner",
+      label: "Data Pemilik",
+      caption: "PIC dan identitas owner",
+      icon: <FaUsers className="h-4 w-4" />,
+    },
+    {
+      key: "finance",
+      label: "Data Keuangan",
+      caption: "Limit, term, rekening",
+      icon: <FaWarehouse className="h-4 w-4" />,
+    },
+    {
+      key: "address",
+      label: "Alamat",
+      caption: "Alamat terdaftar saja",
+      icon: <FaMapMarkerAlt className="h-4 w-4" />,
+    },
+  ];
 
   const typeTone = (type?: string | null) => {
     const normalized = (type || "").toLowerCase();
@@ -1196,347 +1375,732 @@ export function BCDetailModal({
                   </div>
                 ) : null}
 
-                <div className={`grid grid-cols-1 gap-4 ${isEditMode ? "" : "xl:grid-cols-3"}`}>
-                  <div className={`${isEditMode ? "" : "xl:col-span-2"} rounded-xl border border-slate-200 bg-white p-6`}>
-                    <div className="mb-6 flex items-start justify-between">
-                      <div>
-                        <h3 className="text-3xl font-bold text-slate-900">{displayName}</h3>
-                        <p className="text-sm text-slate-500">Branch Code: {bcCode}</p>
-                      </div>
-                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white shadow">
-                        <FaBuilding className="text-xl" />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-6 border-t border-slate-100 pt-6 md:grid-cols-3">
-                      <div>
-                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-amber-600">Customer ID</p>
-                        <p className="text-sm font-semibold text-slate-900">{bcCode}</p>
-                      </div>
-                      <div>
-                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-emerald-600">Branch Location</p>
-                        <p className="text-sm font-semibold text-slate-900">{branchLocation}</p>
-                      </div>
-                      <div>
-                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-rose-600">Product Need</p>
-                        {isEditMode ? (
-                          <select
-                            value={editedProductNeed}
-                            onChange={(e) => setEditedProductNeed(e.target.value)}
-                            className="w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
-                            disabled={isSaving}
-                          >
-                            <option value="">Pilih kebutuhan produk</option>
-                            {PRODUCT_NEED_OPTIONS.map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <p className="text-sm font-semibold text-slate-900">
-                            {detail?.product_need || "-"}
-                          </p>
-                        )}
-                      </div>
-                      {/* <div>
-                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Sales Type</p>
-                        <p className="text-sm font-semibold text-slate-900">-</p>
-                      </div> */}
-                      <div>
-                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-cyan-600">Sales Area CRM</p>
-                        {isEditMode ? (
-                          <div className="space-y-2">
-                            <select
-                              value={editedSalesTeam}
-                              onChange={(e) => setEditedSalesTeam(e.target.value)}
-                              className="w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
-                              disabled={isSaving || salesLoading}
-                            >
-                              <option value="">Pilih sales area</option>
-                              {availableSalesOptions.map((option) => (
-                                <option key={option.name} value={option.name}>
-                                  {option.name}
-                                </option>
-                              ))}
-                            </select>
-                            {salesHasMore ? (
-                              <LoadMoreButton
-                                onClick={() => void loadSalesPersonOptions(salesStart)}
-                                loading={salesLoading}
-                                hasMore={salesHasMore}
-                                currentCount={availableSalesOptions.length}
-                                totalCount={availableSalesOptions.length + (salesHasMore ? 1 : 0)}
-                              />
-                            ) : null}
-                          </div>
-                        ) : (
-                          <p className="text-sm font-semibold text-slate-900">{salesTeam}</p>
-                        )}
-                      </div>
-                      {/* <div>
-                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Credit Limit</p>
-                        <p className="text-sm font-semibold text-slate-900">-</p>
-                      </div> */}
-                      {/* <div>
-                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Payment Term</p>
-                        <p className="text-sm font-semibold text-slate-900">-</p>
-                      </div> */}
-                      <div>
-                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-violet-600">Payment Method</p>
-                        {isEditMode ? (
-                          <select
-                            value={editedPaymentMethod}
-                            onChange={(e) => setEditedPaymentMethod(e.target.value)}
-                            className="w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
-                            disabled={isSaving}
-                          >
-                            <option value="">Pilih payment method</option>
-                            {PAYMENT_METHOD_OPTIONS.map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <p className="text-sm font-semibold text-slate-900">{paymentMethod}</p>
-                        )}
-                      </div>
-                      <div>
-                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-sky-600">Limit Basis</p>
-                        <p className="text-sm font-semibold text-slate-900">
-                          {detail?.limit_basis || "-"}
+                <div className="grid gap-6 xl:grid-cols-[260px_minmax(0,1fr)]">
+                  <aside className="xl:sticky xl:top-6 xl:self-start">
+                    <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+                      <div className="border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.16),_transparent_55%),linear-gradient(135deg,#eff6ff,#ffffff_55%,#f8fafc)] px-5 py-5">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-blue-700">
+                          Panel Detail
+                        </p>
+                        <h3 className="mt-2 text-lg font-bold text-slate-900">
+                          Navigasi Data
+                        </h3>
+                        <p className="mt-1 text-sm text-slate-500">
+                          Pilih kategori informasi branch customer.
                         </p>
                       </div>
-                      <div>
-                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-emerald-600">Tax Status</p>
-                        {isEditMode ? (
-                          <select
-                            value={String(editedTaxStatus)}
-                            onChange={(e) => setEditedTaxStatus(Number(e.target.value))}
-                            className="w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
-                            disabled={isSaving}
-                          >
-                            {TAX_STATUS_OPTIONS.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <p className="text-sm font-semibold text-slate-900">{taxStatusLabel}</p>
-                        )}
-                      </div>
-                      <div>
-                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-indigo-600">Payment Account</p>
-                        {isEditMode ? (
-                          <div className="space-y-2">
-                            <select
-                              value={editedPaymentAccount}
-                              onChange={(e) => setEditedPaymentAccount(e.target.value)}
-                              className="w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
-                              disabled={isSaving || rekeningLoading}
+                      <div className="space-y-2 p-3">
+                        {detailTabs.map((tab) => {
+                          const active = activeTab === tab.key;
+                          return (
+                            <button
+                              key={tab.key}
+                              type="button"
+                              onClick={() => setActiveTab(tab.key)}
+                              className={`group flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all ${
+                                active
+                                  ? "border-blue-500 bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-lg shadow-blue-200/70"
+                                  : "border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50/70"
+                              }`}
                             >
-                              <option value="">Pilih payment account</option>
-                              {availableRekeningOptions.map((option) => (
-                                <option key={option.name} value={option.name}>
-                                  {[option.name, option.nama_rekening, option.bank].filter(Boolean).join(" - ")}
-                                </option>
-                              ))}
-                            </select>
-                            {selectedRekeningOption ? (
-                              <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                                <p className="font-semibold text-slate-900">{selectedRekeningOption.nama_rekening || selectedRekeningOption.name}</p>
-                                <p>{selectedRekeningOption.bank || "-"}</p>
+                              <span
+                                className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                                  active
+                                    ? "bg-white/20 text-white"
+                                    : "bg-slate-100 text-slate-500 group-hover:bg-blue-100 group-hover:text-blue-600"
+                                }`}
+                              >
+                                {tab.icon}
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block text-sm font-bold">
+                                  {tab.label}
+                                </span>
+                                <span
+                                  className={`block text-xs ${
+                                    active ? "text-blue-50" : "text-slate-500"
+                                  }`}
+                                >
+                                  {tab.caption}
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </aside>
+
+                  <div className="space-y-5">
+                    {activeTab === "company" && (
+                      <>
+                        <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+                          <div className="bg-[linear-gradient(135deg,#0f172a_0%,#172554_45%,#2563eb_100%)] px-6 py-6 text-white">
+                            <div className="flex items-start justify-between gap-4">
+                              <div>
+                                <p className="text-xs font-bold uppercase tracking-[0.28em] text-blue-200">
+                                  Data Perusahaan
+                                </p>
+                                <h3 className="mt-1 text-2xl font-bold">
+                                  {displayName}
+                                </h3>
+                                <p className="mt-1 text-sm text-blue-100">
+                                  Branch Code: {bcCode}
+                                </p>
                               </div>
-                            ) : null}
-                            {rekeningHasMore ? (
-                              <LoadMoreButton
-                                onClick={() => void loadRekeningOptions(rekeningStart)}
-                                loading={rekeningLoading}
-                                hasMore={rekeningHasMore}
-                                currentCount={availableRekeningOptions.length}
-                                totalCount={availableRekeningOptions.length + (rekeningHasMore ? 1 : 0)}
-                              />
-                            ) : null}
+                              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15 text-white backdrop-blur">
+                                <FaBuilding className="text-2xl" />
+                              </div>
+                            </div>
                           </div>
-                        ) : (
-                          <div className="space-y-1 text-sm">
-                            <p className="font-semibold text-slate-900">{paymentAccount}</p>
-                            <p className="text-slate-600">{paymentAccountNumber}</p>
-                            <p className="text-slate-500">{paymentAccountInfo?.bank || "-"}</p>
-                            {paymentAccountError ? (
-                              <p className="text-xs text-amber-700">
-                                Detail rekening belum bisa dimuat.
-                              </p>
-                            ) : null}
-                          </div>
-                        )}
-                      </div>
-                      {(isEditMode ? editedTaxStatus === 1 : Number(detail?.tax_status || 0) === 1) && (
-                        <div>
-                          <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-rose-600">NPWP</p>
-                          {isEditMode ? (
-                            <>
-                              <input
-                                type="text"
-                                value={editedNpwp}
-                                onChange={(e) => setEditedNpwp(normalizeNpwpDigits(e.target.value))}
-                                inputMode="numeric"
-                                maxLength={16}
-                                className="w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
-                                disabled={isSaving}
-                                placeholder="15-16 digit"
-                              />
-                              <p className="mt-1 text-xs text-slate-500">Nomor NPWP harus 15-16 digit.</p>
-                            </>
-                          ) : (
-                            <p className="text-sm font-semibold text-slate-900">{npwpValue}</p>
-                          )}
-                        </div>
-                      )}
-                      <div className="md:col-span-3">
-                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-fuchsia-600">Notes</p>
-                        {isEditMode ? (
-                          <textarea
-                            value={editedNotes}
-                            onChange={(e) => setEditedNotes(e.target.value)}
-                            className="min-h-[72px] w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
-                            disabled={isSaving}
-                            placeholder="Notes"
-                          />
-                        ) : (
-                          <p className="text-sm font-semibold text-slate-900 whitespace-pre-wrap">{notes}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
 
-                  <div className="rounded-xl border border-slate-200 border-l-4 border-l-blue-600 bg-white p-6">
-                    <h4 className="mb-5 flex items-center gap-2 text-sm font-bold text-slate-900">
-                      <FaUsers className="text-blue-600" />
-                      Branch Owner
-                    </h4>
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 text-sm font-bold text-slate-600">
-                          {ownerInitial}
-                        </div>
-                        <div>
-                          {isEditMode ? (
-                            <input
-                              type="text"
-                              value={editedOwner}
-                              onChange={(e) => setEditedOwner(e.target.value)}
-                              className="rounded-md border border-blue-300 px-2 py-1 text-sm font-bold text-slate-900 focus:border-blue-500 focus:outline-none"
-                              placeholder="Nama owner"
-                              disabled={isSaving}
-                            />
-                          ) : (
-                            <p className="text-sm font-bold text-slate-900">{branchOwner}</p>
-                          )}
-                          <p className="text-xs text-slate-500">Managing Director</p>
-                        </div>
-                      </div>
-                      <div className="space-y-3 border-t border-slate-200 pt-4 text-xs">
-                        <div className="flex items-start gap-2 text-slate-600">
-                          <FaEnvelope className="mt-2 text-slate-400" />
-                          {isEditMode ? (
-                            <div className="w-full">
-                              <input
-                                type="text"
-                                value={editedOwnerEmail}
-                                onChange={(e) => setEditedOwnerEmail(e.target.value)}
-                                className="w-full rounded-md border border-blue-300 px-2 py-1 text-xs text-slate-700 focus:border-blue-500 focus:outline-none"
-                                placeholder="Email owner"
-                                disabled={isSaving}
-                              />
-                              <p className="mt-1 text-[11px] text-slate-500">
-                                Kosongkan jika tidak ada. Saat disimpan akan dikirim sebagai null.
+                          <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-3">
+                            <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4">
+                              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-amber-700">
+                                Customer ID
+                              </p>
+                              <p className="mt-2 text-base font-bold text-slate-900">
+                                {bcCode}
                               </p>
                             </div>
-                          ) : (
-                            <span>{branchOwnerEmail}</span>
-                          )}
+                            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+                              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700">
+                                Branch Location
+                              </p>
+                              <p className="mt-2 text-base font-bold text-slate-900">
+                                {branchLocation}
+                              </p>
+                            </div>
+                            <div className="rounded-2xl border border-rose-100 bg-rose-50/70 p-4">
+                              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-rose-700">
+                                Product Need
+                              </p>
+                              {isEditMode ? (
+                                <select
+                                  value={editedProductNeed}
+                                  onChange={(e) => setEditedProductNeed(e.target.value)}
+                                  className="mt-2 w-full rounded-xl border border-blue-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+                                  disabled={isSaving}
+                                >
+                                  <option value="">Pilih kebutuhan produk</option>
+                                  {PRODUCT_NEED_OPTIONS.map((option) => (
+                                    <option key={option} value={option}>
+                                      {option}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <p className="mt-2 text-base font-bold text-slate-900">
+                                  {detail?.product_need || "-"}
+                                </p>
+                              )}
+                            </div>
+                            <div className="rounded-2xl border border-cyan-100 bg-cyan-50/70 p-4">
+                              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-700">
+                                Sales Area CRM
+                              </p>
+                              {isEditMode ? (
+                                <div className="mt-2 space-y-2">
+                                  <select
+                                    value={editedSalesTeam}
+                                    onChange={(e) => setEditedSalesTeam(e.target.value)}
+                                    className="w-full rounded-xl border border-blue-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+                                    disabled={isSaving || salesLoading}
+                                  >
+                                    <option value="">Pilih sales area</option>
+                                    {availableSalesOptions.map((option) => (
+                                      <option key={option.name} value={option.name}>
+                                        {option.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {salesHasMore ? (
+                                    <LoadMoreButton
+                                      onClick={() => void loadSalesPersonOptions(salesStart)}
+                                      loading={salesLoading}
+                                      hasMore={salesHasMore}
+                                      currentCount={availableSalesOptions.length}
+                                      totalCount={
+                                        availableSalesOptions.length +
+                                        (salesHasMore ? 1 : 0)
+                                      }
+                                    />
+                                  ) : null}
+                                </div>
+                              ) : (
+                                <p className="mt-2 text-base font-bold text-slate-900">
+                                  {salesTeam}
+                                </p>
+                              )}
+                            </div>
+                            <div className="rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
+                              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-sky-700">
+                                Limit Basis
+                              </p>
+                              <p className="mt-2 text-base font-bold text-slate-900">
+                                {detail?.limit_basis || "-"}
+                              </p>
+                            </div>
+                            <div className="rounded-2xl border border-fuchsia-100 bg-fuchsia-50/70 p-4 md:col-span-2 xl:col-span-1">
+                              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-fuchsia-700">
+                                Notes
+                              </p>
+                              {isEditMode ? (
+                                <textarea
+                                  value={editedNotes}
+                                  onChange={(e) => setEditedNotes(e.target.value)}
+                                  className="mt-2 min-h-[88px] w-full rounded-xl border border-blue-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+                                  disabled={isSaving}
+                                  placeholder="Notes"
+                                />
+                              ) : (
+                                <p className="mt-2 whitespace-pre-wrap text-sm font-semibold text-slate-900">
+                                  {notes}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </section>
+
+                        {!isEditMode && (
+                          <>
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                              <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                <div className="rounded-xl bg-amber-50 p-2 text-amber-500">
+                                  <FaCheckCircle />
+                                </div>
+                                <div className="text-xs">
+                                  <p className="mb-1 font-bold uppercase tracking-tight text-slate-500">
+                                    Creation Info
+                                  </p>
+                                  <p className="font-medium text-slate-700">
+                                    <span className="font-bold text-slate-900">
+                                      {createdBy}
+                                    </span>{" "}
+                                    on {dt(detail?.created_at || bc.created_at)}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                <div className="rounded-xl bg-blue-50 p-2 text-blue-500">
+                                  <FaWarehouse />
+                                </div>
+                                <div className="text-xs">
+                                  <p className="mb-1 font-bold uppercase tracking-tight text-slate-500">
+                                    Last Update
+                                  </p>
+                                  <p className="font-medium text-slate-700">
+                                    <span className="font-bold text-slate-900">
+                                      {updatedBy}
+                                    </span>{" "}
+                                    on {dt(detail?.updated_at || bc.updated_at)}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500 shadow-sm">
+                              {nb ? `NBID: ${nb.code} (${nb.name})` : null}
+                              {detail?.sync_saga_id
+                                ? ` - Sync Saga: ${detail.sync_saga_id}`
+                                : null}
+                              {detail?.status ? ` - Status: ${detail.status}` : null}
+                              {!isActive ? (
+                                <span className="ml-2 inline-flex items-center gap-1 rounded bg-red-100 px-2 py-0.5 font-semibold text-red-700">
+                                  <FaBan className="text-[10px]" /> Disabled
+                                </span>
+                              ) : null}
+                            </div>
+                          </>
+                        )}
+                      </>
+                    )}
+
+                    {activeTab === "owner" && (
+                      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                        <div className="mb-6 flex items-center gap-3">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
+                            <FaUsers className="text-lg" />
+                          </div>
+                          <div>
+                            <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-blue-700">
+                              Data Pemilik
+                            </p>
+                            <h3 className="text-2xl font-bold text-slate-900">
+                              Branch Owner
+                            </h3>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 text-slate-600">
-                          <FaPhone className="text-slate-400" />
-                          {isEditMode ? (
-                            <input
-                              type="text"
-                              value={editedOwnerPhone}
-                              onChange={(e) => setEditedOwnerPhone(e.target.value)}
-                              className="w-full rounded-md border border-blue-300 px-2 py-1 text-xs text-slate-700 focus:border-blue-500 focus:outline-none"
-                              placeholder="Phone owner"
-                              disabled={isSaving}
-                            />
-                          ) : (
-                            <span>{branchOwnerPhone}</span>
-                          )}
+
+                        <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+                          <div className="rounded-3xl border border-slate-200 bg-[linear-gradient(135deg,#eff6ff,#ffffff_65%,#f8fafc)] p-6">
+                            <div className="flex items-center gap-4">
+                              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-200 text-lg font-bold text-slate-600">
+                                {ownerInitial}
+                              </div>
+                              <div className="min-w-0">
+                                {isEditMode ? (
+                                  <input
+                                    type="text"
+                                    value={editedOwner}
+                                    onChange={(e) => setEditedOwner(e.target.value)}
+                                    className="w-full rounded-xl border border-blue-300 bg-white px-3 py-2 text-lg font-bold text-slate-900 focus:border-blue-500 focus:outline-none"
+                                    placeholder="Nama owner"
+                                    disabled={isSaving}
+                                  />
+                                ) : (
+                                  <p className="text-xl font-bold text-slate-900">
+                                    {branchOwner}
+                                  </p>
+                                )}
+                                <p className="mt-1 text-sm text-slate-500">
+                                  Managing Director
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-4">
+                            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                              <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-slate-500">
+                                Email
+                              </p>
+                              {isEditMode ? (
+                                <div className="space-y-2">
+                                  <input
+                                    type="text"
+                                    value={editedOwnerEmail}
+                                    onChange={(e) => setEditedOwnerEmail(e.target.value)}
+                                    className="w-full rounded-xl border border-blue-300 px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
+                                    placeholder="Email owner"
+                                    disabled={isSaving}
+                                  />
+                                  <p className="text-[11px] text-slate-500">
+                                    Kosongkan jika tidak ada. Saat disimpan akan dikirim sebagai null.
+                                  </p>
+                                </div>
+                              ) : (
+                                <p className="text-sm font-semibold text-slate-900">
+                                  {branchOwnerEmail}
+                                </p>
+                              )}
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                              <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-slate-500">
+                                Phone
+                              </p>
+                              {isEditMode ? (
+                                <input
+                                  type="text"
+                                  value={editedOwnerPhone}
+                                  onChange={(e) => setEditedOwnerPhone(e.target.value)}
+                                  className="w-full rounded-xl border border-blue-300 px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
+                                  placeholder="Phone owner"
+                                  disabled={isSaving}
+                                />
+                              ) : (
+                                <p className="text-sm font-semibold text-slate-900">
+                                  {branchOwnerPhone}
+                                </p>
+                              )}
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                              <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-slate-500">
+                                Tempat / Tanggal Lahir
+                              </p>
+                              {isEditMode ? (
+                                <div className="grid gap-3 md:grid-cols-2">
+                                  <input
+                                    type="text"
+                                    value={editedOwnerPlaceOfBirth}
+                                    onChange={(e) =>
+                                      setEditedOwnerPlaceOfBirth(e.target.value)
+                                    }
+                                    className="rounded-xl border border-blue-300 px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
+                                    placeholder="Tempat lahir"
+                                    disabled={isSaving}
+                                  />
+                                  <input
+                                    type="date"
+                                    value={editedOwnerDateOfBirth}
+                                    onChange={(e) =>
+                                      setEditedOwnerDateOfBirth(e.target.value)
+                                    }
+                                    className="rounded-xl border border-blue-300 px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
+                                    disabled={isSaving}
+                                  />
+                                </div>
+                              ) : (
+                                <p className="text-sm font-semibold text-slate-900">
+                                  {detail?.branch_owner_place_of_birth || "-"},{" "}
+                                  {branchOwnerDob}
+                                </p>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 text-slate-600">
-                          <FaCalendarAlt className="text-slate-400" />
-                          {isEditMode ? (
-                            <div className="grid w-full grid-cols-2 gap-2">
+                      </section>
+                    )}
+
+                    {activeTab === "finance" && (
+                      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                        <div className="mb-6 flex items-center gap-3">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+                            <FaWarehouse className="text-lg" />
+                          </div>
+                          <div>
+                            <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-amber-700">
+                              Data Keuangan
+                            </p>
+                            <h3 className="text-2xl font-bold text-slate-900">
+                              Credit, Limit, dan Payment
+                            </h3>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                          <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4">
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-700">
+                              Credit Limit Active
+                            </p>
+                            {isEditMode ? (
+                              <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                                <input
+                                  type="checkbox"
+                                  checked={editedCreditLimitActive === 1}
+                                  onChange={(e) =>
+                                    setEditedCreditLimitActive(
+                                      e.target.checked ? 1 : 0,
+                                    )
+                                  }
+                                  disabled={isSaving}
+                                />
+                                Aktif
+                              </label>
+                            ) : (
+                              <p className="text-sm font-semibold text-slate-900">
+                                {creditLimitActiveLabel}
+                              </p>
+                            )}
+                          </div>
+                          <div className="rounded-2xl border border-amber-100 bg-white p-4">
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-600">
+                              Credit Limit
+                            </p>
+                            {isEditMode ? (
                               <input
                                 type="text"
-                                value={editedOwnerPlaceOfBirth}
+                                value={editedCreditLimit}
                                 onChange={(e) =>
-                                  setEditedOwnerPlaceOfBirth(e.target.value)
+                                  setEditedCreditLimit(
+                                    normalizeDecimalInput(e.target.value),
+                                  )
                                 }
-                                className="rounded-md border border-blue-300 px-2 py-1 text-xs text-slate-700 focus:border-blue-500 focus:outline-none"
-                                placeholder="Tempat lahir"
+                                className="w-full rounded-xl border border-blue-300 px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
                                 disabled={isSaving}
+                                placeholder="Nominal credit limit"
                               />
+                            ) : (
+                              <p className="text-sm font-semibold text-slate-900">
+                                {formatNullableNumber(detail?.credit_limit)}
+                              </p>
+                            )}
+                          </div>
+                          <div className="rounded-2xl border border-teal-100 bg-teal-50/70 p-4">
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-teal-700">
+                              Payment Term Active
+                            </p>
+                            {isEditMode ? (
+                              <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                                <input
+                                  type="checkbox"
+                                  checked={editedPaymentTermActive === 1}
+                                  onChange={(e) =>
+                                    setEditedPaymentTermActive(
+                                      e.target.checked ? 1 : 0,
+                                    )
+                                  }
+                                  disabled={isSaving}
+                                />
+                                Aktif
+                              </label>
+                            ) : (
+                              <p className="text-sm font-semibold text-slate-900">
+                                {paymentTermActiveLabel}
+                              </p>
+                            )}
+                          </div>
+                          <div className="rounded-2xl border border-teal-100 bg-white p-4">
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-teal-600">
+                              Payment Term
+                            </p>
+                            {isEditMode ? (
                               <input
-                                type="date"
-                                value={editedOwnerDateOfBirth}
-                                onChange={(e) =>
-                                  setEditedOwnerDateOfBirth(e.target.value)
-                                }
-                                className="rounded-md border border-blue-300 px-2 py-1 text-xs text-slate-700 focus:border-blue-500 focus:outline-none"
+                                type="number"
+                                value={editedPaymentTerm}
+                                onChange={(e) => setEditedPaymentTerm(e.target.value)}
+                                className="w-full rounded-xl border border-blue-300 px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
                                 disabled={isSaving}
+                                placeholder="Hari"
                               />
+                            ) : (
+                              <p className="text-sm font-semibold text-slate-900">
+                                {formatNullableNumber(detail?.payment_term)}
+                              </p>
+                            )}
+                          </div>
+                          <div className="rounded-2xl border border-rose-100 bg-rose-50/70 p-4">
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-rose-700">
+                              Overdue Limit Active
+                            </p>
+                            {isEditMode ? (
+                              <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                                <input
+                                  type="checkbox"
+                                  checked={editedLimitCustomerOverdueActive === 1}
+                                  onChange={(e) =>
+                                    setEditedLimitCustomerOverdueActive(
+                                      e.target.checked ? 1 : 0,
+                                    )
+                                  }
+                                  disabled={isSaving}
+                                />
+                                Aktif
+                              </label>
+                            ) : (
+                              <p className="text-sm font-semibold text-slate-900">
+                                {limitCustomerOverdueActiveLabel}
+                              </p>
+                            )}
+                          </div>
+                          <div className="rounded-2xl border border-rose-100 bg-white p-4">
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-rose-600">
+                              Limit Customer Overdue
+                            </p>
+                            {isEditMode ? (
+                              <input
+                                type="number"
+                                value={editedLimitCustomerOverdue}
+                                onChange={(e) =>
+                                  setEditedLimitCustomerOverdue(e.target.value)
+                                }
+                                className="w-full rounded-xl border border-blue-300 px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+                                disabled={isSaving}
+                                placeholder="Hari overdue"
+                              />
+                            ) : (
+                              <p className="text-sm font-semibold text-slate-900">
+                                {formatNullableNumber(
+                                  detail?.limit_customer_overdue,
+                                )}
+                              </p>
+                            )}
+                          </div>
+                          <div className="rounded-2xl border border-violet-100 bg-violet-50/70 p-4">
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-violet-700">
+                              Payment Method
+                            </p>
+                            {isEditMode ? (
+                              <select
+                                value={editedPaymentMethod}
+                                onChange={(e) => setEditedPaymentMethod(e.target.value)}
+                                className="w-full rounded-xl border border-blue-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+                                disabled={isSaving}
+                              >
+                                <option value="">Pilih payment method</option>
+                                {PAYMENT_METHOD_OPTIONS.map((option) => (
+                                  <option key={option} value={option}>
+                                    {option}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <p className="text-sm font-semibold text-slate-900">
+                                {paymentMethod}
+                              </p>
+                            )}
+                          </div>
+                          <div className="rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-sky-700">
+                              Limit Basis
+                            </p>
+                            <p className="text-sm font-semibold text-slate-900">
+                              {detail?.limit_basis || "-"}
+                            </p>
+                          </div>
+                          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700">
+                              Tax Status
+                            </p>
+                            {isEditMode ? (
+                              <select
+                                value={String(editedTaxStatus)}
+                                onChange={(e) =>
+                                  setEditedTaxStatus(Number(e.target.value))
+                                }
+                                className="w-full rounded-xl border border-blue-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+                                disabled={isSaving}
+                              >
+                                {TAX_STATUS_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <p className="text-sm font-semibold text-slate-900">
+                                {taxStatusLabel}
+                              </p>
+                            )}
+                          </div>
+                          <div className="rounded-2xl border border-indigo-100 bg-white p-4 md:col-span-2 xl:col-span-2">
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-indigo-700">
+                              Payment Account
+                            </p>
+                            {isEditMode ? (
+                              <div className="space-y-2">
+                                <select
+                                  value={editedPaymentAccount}
+                                  onChange={(e) =>
+                                    setEditedPaymentAccount(e.target.value)
+                                  }
+                                  className="w-full rounded-xl border border-blue-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+                                  disabled={isSaving || rekeningLoading}
+                                >
+                                  <option value="">Pilih payment account</option>
+                                  {availableRekeningOptions.map((option) => (
+                                    <option key={option.name} value={option.name}>
+                                      {[option.name, option.nama_rekening, option.bank]
+                                        .filter(Boolean)
+                                        .join(" - ")}
+                                    </option>
+                                  ))}
+                                </select>
+                                {selectedRekeningOption ? (
+                                  <div className="rounded-xl bg-slate-50 px-3 py-3 text-xs text-slate-600">
+                                    <p className="font-semibold text-slate-900">
+                                      {selectedRekeningOption.nama_rekening ||
+                                        selectedRekeningOption.name}
+                                    </p>
+                                    <p>{selectedRekeningOption.bank || "-"}</p>
+                                  </div>
+                                ) : null}
+                                {rekeningHasMore ? (
+                                  <LoadMoreButton
+                                    onClick={() =>
+                                      void loadRekeningOptions(rekeningStart)
+                                    }
+                                    loading={rekeningLoading}
+                                    hasMore={rekeningHasMore}
+                                    currentCount={availableRekeningOptions.length}
+                                    totalCount={
+                                      availableRekeningOptions.length +
+                                      (rekeningHasMore ? 1 : 0)
+                                    }
+                                  />
+                                ) : null}
+                              </div>
+                            ) : (
+                              <div className="space-y-1 text-sm">
+                                <p className="font-semibold text-slate-900">
+                                  {paymentAccount}
+                                </p>
+                                <p className="text-slate-600">
+                                  {paymentAccountNumber}
+                                </p>
+                                <p className="text-slate-500">
+                                  {paymentAccountInfo?.bank || "-"}
+                                </p>
+                                {paymentAccountError ? (
+                                  <p className="text-xs text-amber-700">
+                                    Detail rekening belum bisa dimuat.
+                                  </p>
+                                ) : null}
+                              </div>
+                            )}
+                          </div>
+                          {(isEditMode
+                            ? editedTaxStatus === 1
+                            : Number(detail?.tax_status || 0) === 1) && (
+                            <div className="rounded-2xl border border-rose-100 bg-white p-4">
+                              <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-rose-700">
+                                NPWP
+                              </p>
+                              {isEditMode ? (
+                                <>
+                                  <input
+                                    type="text"
+                                    value={editedNpwp}
+                                    onChange={(e) =>
+                                      setEditedNpwp(
+                                        normalizeNpwpDigits(e.target.value),
+                                      )
+                                    }
+                                    inputMode="numeric"
+                                    maxLength={16}
+                                    className="w-full rounded-xl border border-blue-300 px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+                                    disabled={isSaving}
+                                    placeholder="15-16 digit"
+                                  />
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    Nomor NPWP harus 15-16 digit.
+                                  </p>
+                                </>
+                              ) : (
+                                <p className="text-sm font-semibold text-slate-900">
+                                  {npwpValue}
+                                </p>
+                              )}
                             </div>
-                          ) : (
-                            <span>
-                              {detail?.branch_owner_place_of_birth || "-"},{" "}
-                              {branchOwnerDob}
-                            </span>
                           )}
                         </div>
+                      </section>
+                    )}
+
+                    {addressError && activeTab === "address" && (
+                      <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                        <FaExclamationTriangle className="mt-0.5" />
+                        <span>{addressError}</span>
                       </div>
-                    </div>
-                  </div>
-                </div>
+                    )}
 
-                {addressError && (
-                  <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                    <FaExclamationTriangle className="mt-0.5" />
-                    <span>{addressError}</span>
-                  </div>
-                )}
+                    {activeTab === "address" && (
+                      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                        <div className="mb-5 flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-emerald-700">
+                              Data Alamat
+                            </p>
+                            <h3 className="mt-2 text-2xl font-bold text-slate-900">
+                              Registered Addresses
+                            </h3>
+                            <p className="mt-1 text-sm text-slate-500">
+                              Tab ini hanya menampilkan alamat branch customer.
+                            </p>
+                          </div>
+                          <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                            {displayAddressRows.length} Addresses total
+                          </div>
+                        </div>
 
-                <section>
-                  <div className="mb-3 flex items-center justify-between">
-                    <h4 className="flex items-center gap-2 text-lg font-bold text-slate-900">
-                      <FaMapMarkerAlt className="text-slate-400" />
-                      Registered Addresses
-                    </h4>
-                    <div className="flex items-center gap-3">
-                      {isEditMode && (
-                        <button
-                          type="button"
-                          onClick={addShippingAddress}
-                          className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700"
-                        >
-                          + Alamat Pengiriman
-                        </button>
-                      )}
-                      <span className="text-xs font-medium text-slate-500">{displayAddressRows.length} Addresses total</span>
-                    </div>
-                  </div>
-                  {displayAddressRows.length === 0 ? (
+                        <div className="mb-3 flex items-center justify-between">
+                          <h4 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+                            <FaMapMarkerAlt className="text-slate-400" />
+                            Address List
+                          </h4>
+                          <div className="flex items-center gap-3">
+                            {isEditMode && (
+                              <button
+                                type="button"
+                                onClick={addShippingAddress}
+                                className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"
+                              >
+                                + Alamat Pengiriman
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        {displayAddressRows.length === 0 ? (
                     <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
                       Tidak ada data `customer_address`.
                     </div>
@@ -1759,47 +2323,11 @@ export function BCDetailModal({
                       })}
                     </div>
                   )}
-                </section>
+                    </section>
+                    )}
 
-                {!isEditMode && (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-4">
-                    <div className="rounded-lg bg-amber-50 p-2 text-amber-500">
-                      <FaCheckCircle />
-                    </div>
-                    <div className="text-xs">
-                      <p className="mb-1 font-bold uppercase tracking-tight text-slate-500">Creation Info</p>
-                      <p className="font-medium text-slate-700">
-                        <span className="font-bold text-slate-900">{createdBy}</span> on {dt(detail?.created_at || bc.created_at)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-4">
-                    <div className="rounded-lg bg-blue-50 p-2 text-blue-500">
-                      <FaWarehouse />
-                    </div>
-                    <div className="text-xs">
-                      <p className="mb-1 font-bold uppercase tracking-tight text-slate-500">Last Update</p>
-                      <p className="font-medium text-slate-700">
-                        <span className="font-bold text-slate-900">{updatedBy}</span> on {dt(detail?.updated_at || bc.updated_at)}
-                      </p>
-                    </div>
                   </div>
                 </div>
-                )}
-
-                {!isEditMode && (
-                <div className="text-xs text-slate-500">
-                  {nb ? `NBID: ${nb.code} (${nb.name})` : null}
-                  {detail?.sync_saga_id ? ` - Sync Saga: ${detail.sync_saga_id}` : null}
-                  {detail?.status ? ` - Status: ${detail.status}` : null}
-                  {!isActive ? (
-                    <span className="ml-2 inline-flex items-center gap-1 rounded bg-red-100 px-2 py-0.5 font-semibold text-red-700">
-                      <FaBan className="text-[10px]" /> Disabled
-                    </span>
-                  ) : null}
-                </div>
-                )}
               </div>
             </div>
 

@@ -22,6 +22,12 @@ interface NationalBrandApiResponse {
   id: number;
   name: string;
   nb_name?: string | null;
+  credit_limit_active?: number | null;
+  credit_limit?: number | null;
+  payment_term_active?: number | null;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number | null;
+  limit_customer_overdue?: number | null;
   disabled?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -40,6 +46,12 @@ interface GroupParentApiResponse {
   name?: string | null;
   gp_name?: string | null;
   nbid?: number | { id?: number | string } | null;
+  credit_limit_active?: number | null;
+  credit_limit?: number | null;
+  payment_term_active?: number | null;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number | null;
+  limit_customer_overdue?: number | null;
   disabled?: number | null;
 }
 
@@ -48,6 +60,12 @@ interface GroupCustomerApiResponse {
   name?: string | null;
   gc_name?: string | null;
   gpid?: number | { id?: number | string } | null;
+  credit_limit_active?: number | null;
+  credit_limit?: number | null;
+  payment_term_active?: number | null;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number | null;
+  limit_customer_overdue?: number | null;
   disabled?: number | null;
 }
 
@@ -55,6 +73,12 @@ interface BranchCustomerApiResponse {
   id: number;
   name?: string | null;
   gcid?: number | { id?: number | string } | null;
+  credit_limit_active?: number | null;
+  credit_limit?: number | null;
+  payment_term_active?: number | null;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number | null;
+  limit_customer_overdue?: number | null;
   disabled?: number | null;
 }
 

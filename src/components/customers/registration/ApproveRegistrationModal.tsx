@@ -138,6 +138,36 @@ function extractIdFromResourceResponse(json: unknown): number | undefined {
   return undefined;
 }
 
+function buildCreditPolicyPayload(source?: {
+  credit_limit_active?: unknown;
+  credit_limit?: unknown;
+  payment_term_active?: unknown;
+  payment_term?: unknown;
+  limit_customer_overdue_active?: unknown;
+  limit_customer_overdue?: unknown;
+}) {
+  return {
+    credit_limit_active: Number(source?.credit_limit_active || 0),
+    credit_limit:
+      source?.credit_limit === null || source?.credit_limit === undefined
+        ? null
+        : Number(source.credit_limit),
+    payment_term_active: Number(source?.payment_term_active || 0),
+    payment_term:
+      source?.payment_term === null || source?.payment_term === undefined
+        ? null
+        : Number(source.payment_term),
+    limit_customer_overdue_active: Number(
+      source?.limit_customer_overdue_active || 0,
+    ),
+    limit_customer_overdue:
+      source?.limit_customer_overdue === null ||
+      source?.limit_customer_overdue === undefined
+        ? null
+        : Number(source.limit_customer_overdue),
+  };
+}
+
 export function ApproveRegistrationModal({
   isOpen,
   onClose,
@@ -615,6 +645,14 @@ export function ApproveRegistrationModal({
       return {
         gc_name: normalizeEntityName(gcName),
         gpid,
+        ...buildCreditPolicyPayload(registration as typeof registration & {
+          credit_limit_active?: unknown;
+          credit_limit?: unknown;
+          payment_term_active?: unknown;
+          payment_term?: unknown;
+          limit_customer_overdue_active?: unknown;
+          limit_customer_overdue?: unknown;
+        }),
         owner_full_name: registration.user.full_name,
         owner_phone: normalizePhone(registration.user.phone),
         owner_email: registration.user.email,
@@ -755,7 +793,17 @@ export function ApproveRegistrationModal({
             "creating National Brand",
             getApiUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND),
             "POST",
-            { nb_name: normalizeEntityName(nbName) },
+            {
+              nb_name: normalizeEntityName(nbName),
+              ...buildCreditPolicyPayload(registration as typeof registration & {
+                credit_limit_active?: unknown;
+                credit_limit?: unknown;
+                payment_term_active?: unknown;
+                payment_term?: unknown;
+                limit_customer_overdue_active?: unknown;
+                limit_customer_overdue?: unknown;
+              }),
+            },
           );
           const newNbid = extractIdFromResourceResponse(nbJson);
           if (!newNbid)
@@ -784,6 +832,14 @@ export function ApproveRegistrationModal({
           const gpPayload = {
             gp_name: normalizeEntityName(gpName),
             ...(effectiveNbid ? { nbid: effectiveNbid } : {}),
+            ...buildCreditPolicyPayload(registration as typeof registration & {
+              credit_limit_active?: unknown;
+              credit_limit?: unknown;
+              payment_term_active?: unknown;
+              payment_term?: unknown;
+              limit_customer_overdue_active?: unknown;
+              limit_customer_overdue?: unknown;
+            }),
           };
           const gpJson = await apiJsonRequest(
             "creating Group Parent",

@@ -96,6 +96,16 @@ export type Role = {
   UpdatedAt: string;
 };
 
+export type AuthzResource = {
+  ID: number;
+  Module: string;
+  Name: string;
+  Slug: string;
+  Description: string;
+  CreatedAt: string;
+  UpdatedAt: string;
+};
+
 type WorkflowAPIResponse = {
   status: string;
   code: string;
@@ -123,11 +133,19 @@ type GlobalStateAPIResponse = {
   data: GlobalState[];
 };
 
+type ResourceAPIResponse = {
+  status: string;
+  code: string;
+  message: string;
+  data: AuthzResource[];
+};
+
 export default function WorkflowList() {
   const { token, isAuthenticated } = useAuth();
   const [workflows, setWorkflows] = useState<WorkflowWithDetails[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [globalStates, setGlobalStates] = useState<GlobalState[]>([]);
+  const [resources, setResources] = useState<AuthzResource[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -160,7 +178,7 @@ export default function WorkflowList() {
         const headers = getAuthHeaders(token);
 
         // Fetch all data in parallel
-        const [workflowsRes, rolesRes, statesRes] = await Promise.all([
+        const [workflowsRes, rolesRes, statesRes, resourcesRes] = await Promise.all([
           apiFetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW}`, {
             method: "GET",
             cache: "no-store",
@@ -176,18 +194,25 @@ export default function WorkflowList() {
             cache: "no-store",
             headers,
           }),
+          apiFetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_RESOURCE}`, {
+            method: "GET",
+            cache: "no-store",
+            headers,
+          }),
         ]);
 
 
-        if (workflowsRes.ok && rolesRes.ok && statesRes.ok) {
+        if (workflowsRes.ok && rolesRes.ok && statesRes.ok && resourcesRes.ok) {
           const workflowsData = (await workflowsRes.json()) as WorkflowAPIResponse;
           const rolesData = (await rolesRes.json()) as RoleAPIResponse;
           const statesData = (await statesRes.json()) as GlobalStateAPIResponse;
+          const resourcesData = (await resourcesRes.json()) as ResourceAPIResponse;
 
           if (!cancelled) {
             setWorkflows(workflowsData.data || []);
             setRoles(rolesData.data || []);
             setGlobalStates(statesData.data || []);
+            setResources(resourcesData.data || []);
           }
         } else {
           throw new Error("Failed to load data");
@@ -544,6 +569,7 @@ export default function WorkflowList() {
         workflow={modalInitial}
         roles={roles}
         globalStates={globalStates}
+        resources={resources}
       />
 
       <WorkflowDetailModal
