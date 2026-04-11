@@ -7,7 +7,6 @@ import {
   FaEdit,
   FaTrash,
   FaSitemap,
-  FaClock,
   FaCircle,
   FaArrowRight,
   FaCheckCircle,
@@ -39,6 +38,18 @@ export default function WorkflowDetailModal({
   if (!open || !workflow) return null;
 
   const { workflow: wf, document_states, transitions } = workflow;
+  const getDocstatusLabel = (docstatus: number) => {
+    switch (docstatus) {
+      case 0:
+        return "Draft / Editable";
+      case 1:
+        return "Submitted / Locked";
+      case 2:
+        return "Cancelled / Closed";
+      default:
+        return "Custom";
+    }
+  };
 
   // Sort states by state_id for flow visualization
   const sortedStates = [...document_states].sort(
@@ -81,12 +92,20 @@ export default function WorkflowDetailModal({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            onClose();
+          }
+        }}
+      >
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto"
+          onClick={(event) => event.stopPropagation()}
         >
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-100 sticky top-0 bg-white z-10">
@@ -210,7 +229,7 @@ export default function WorkflowDetailModal({
                           </span>
                         </div>
                         <div className="text-xs text-gray-500 mt-1">
-                          Docstatus: {state.docstatus}
+                          Docstatus: {state.docstatus} • {getDocstatusLabel(state.docstatus)}
                           {state.editable && " • Editable"}
                         </div>
                       </div>
@@ -274,9 +293,14 @@ export default function WorkflowDetailModal({
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-bold">
-                            {state.docstatus}
-                          </span>
+                          <div className="flex flex-col gap-1">
+                            <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-bold w-fit">
+                              {state.docstatus}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {getDocstatusLabel(state.docstatus)}
+                            </span>
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {state.editable ? (

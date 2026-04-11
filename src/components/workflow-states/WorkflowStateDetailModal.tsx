@@ -13,6 +13,10 @@ import {
   FaUser,
 } from "react-icons/fa";
 import { WorkflowState } from "./WorkflowStateList";
+import {
+  getWorkflowStateIconOption,
+  renderWorkflowStateIcon,
+} from "./iconRegistry";
 
 type WorkflowStateDetailModalProps = {
   open: boolean;
@@ -32,6 +36,7 @@ export default function WorkflowStateDetailModal({
   if (!open || !state) return null;
 
   const displayColor = state.color || "#6B7280";
+  const iconOption = getWorkflowStateIconOption(state.icon);
 
   return (
     <AnimatePresence>
@@ -102,7 +107,7 @@ export default function WorkflowStateDetailModal({
                   style={{ backgroundColor: displayColor }}
                 >
                   {state.icon ? (
-                    <span className="text-5xl">{state.icon}</span>
+                    renderWorkflowStateIcon(state.icon, "w-12 h-12")
                   ) : (
                     <FaCircle className="w-12 h-12" />
                   )}
@@ -154,7 +159,17 @@ export default function WorkflowStateDetailModal({
                     </div>
                     <div className="flex items-center justify-center h-24 bg-white rounded-xl">
                       {state.icon ? (
-                        <span className="text-6xl">{state.icon}</span>
+                        <div className="flex flex-col items-center gap-2">
+                          {renderWorkflowStateIcon(state.icon, "w-10 h-10 text-gray-700")}
+                          <span className="font-mono text-xs text-gray-500">
+                            {state.icon}
+                          </span>
+                          {iconOption && (
+                            <span className="text-xs font-medium text-gray-600">
+                              {iconOption.label}
+                            </span>
+                          )}
+                        </div>
                       ) : (
                         <div className="text-gray-400 text-sm">No icon set</div>
                       )}
@@ -200,7 +215,7 @@ export default function WorkflowStateDetailModal({
                       className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-white text-xs font-bold"
                       style={{ backgroundColor: displayColor }}
                     >
-                      {state.icon && <span>{state.icon}</span>}
+                      {state.icon && renderWorkflowStateIcon(state.icon, "w-3 h-3")}
                       <span>{state.name}</span>
                     </div>
 
@@ -209,7 +224,7 @@ export default function WorkflowStateDetailModal({
                       className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold"
                       style={{ backgroundColor: displayColor }}
                     >
-                      {state.icon && <span className="text-lg">{state.icon}</span>}
+                      {state.icon && renderWorkflowStateIcon(state.icon, "w-4 h-4")}
                       <span>{state.name}</span>
                     </div>
 
@@ -218,7 +233,7 @@ export default function WorkflowStateDetailModal({
                       className="inline-flex items-center gap-3 px-6 py-3 rounded-2xl text-white text-base font-bold"
                       style={{ backgroundColor: displayColor }}
                     >
-                      {state.icon && <span className="text-2xl">{state.icon}</span>}
+                      {state.icon && renderWorkflowStateIcon(state.icon, "w-5 h-5")}
                       <span>{state.name}</span>
                     </div>
                   </div>

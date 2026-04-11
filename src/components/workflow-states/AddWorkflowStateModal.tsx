@@ -16,10 +16,15 @@ import {
   FaCircle,
 } from "react-icons/fa";
 import { WorkflowState } from "./WorkflowStateList";
+import {
+  WORKFLOW_STATE_ICON_OPTIONS,
+  getWorkflowStateIconOption,
+  renderWorkflowStateIcon,
+} from "./iconRegistry";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getResourceUrl,
-  getAuthHeadersFormData,
+  getAuthHeaders,
   API_CONFIG,
   apiFetch,
 } from "@/config/api";
@@ -38,20 +43,6 @@ const COLOR_SUGGESTIONS = [
   { name: "Pink (Escalated)", color: "#EC4899" },
   { name: "Teal (Verified)", color: "#14B8A6" },
   { name: "Orange (Warning)", color: "#F97316" },
-];
-
-// Icon suggestions
-const ICON_SUGGESTIONS = [
-  "📝", // Draft
-  "✅", // Approved
-  "❌", // Rejected
-  "⏳", // Pending
-  "🔍", // Review
-  "⚠️", // Warning
-  "✨", // New
-  "🔒", // Locked
-  "🔓", // Unlocked
-  "📋", // Document
 ];
 
 export default function AddWorkflowStateModal({
@@ -88,6 +79,7 @@ export default function AddWorkflowStateModal({
   // Unsaved changes hook
   const { showConfirm, handleClose, handleConfirmClose, handleCancelClose } =
     useUnsavedChanges({ isDirty, onClose });
+  const selectedIconOption = getWorkflowStateIconOption(icon);
 
   useEffect(() => {
     if (initial) {
@@ -132,14 +124,12 @@ export default function AddWorkflowStateModal({
 
     setSaving(true);
     try {
-      const headers = getAuthHeadersFormData(token);
-
-      // Use FormData for API request
-      const formData = new FormData();
-      formData.append("name", name.trim());
-      formData.append("color", color);
-      formData.append("icon", icon.trim());
-      formData.append("docstatus", docstatus.toString());
+      const payload = {
+        name: name.trim(),
+        color,
+        icon: icon.trim(),
+        docstatus,
+      };
 
       let response;
 
@@ -149,8 +139,8 @@ export default function AddWorkflowStateModal({
           getResourceUrl(API_CONFIG.ENDPOINTS.WORKFLOW_STATE, initial.id),
           {
             method: "PUT",
-            headers,
-            body: formData,
+            headers: getAuthHeaders(token),
+            body: JSON.stringify(payload),
           }
         );
       } else {
@@ -159,8 +149,8 @@ export default function AddWorkflowStateModal({
           getResourceUrl(API_CONFIG.ENDPOINTS.WORKFLOW_STATE),
           {
             method: "POST",
-            headers,
-            body: formData,
+            headers: getAuthHeaders(token),
+            body: JSON.stringify(payload),
           }
         );
       }
@@ -316,14 +306,23 @@ export default function AddWorkflowStateModal({
                           className="w-20 h-20 rounded-2xl shadow-lg border-4 border-white flex items-center justify-center text-white text-2xl"
                           style={{ backgroundColor: color }}
                         >
-                          {icon || <FaCircle className="w-8 h-8" />}
+                          {icon ? (
+                            renderWorkflowStateIcon(icon, "w-8 h-8")
+                          ) : (
+                            <FaCircle className="w-8 h-8" />
+                          )}
                         </div>
                         <div className="flex-1">
-                          <div
-                            className="inline-block px-4 py-2 rounded-lg text-white font-semibold"
-                            style={{ backgroundColor: color }}
-                          >
-                            {name || "State Name"}
+                          <div className="flex flex-wrap items-center gap-3">
+                            <div
+                              className="inline-block px-4 py-2 rounded-lg text-white font-semibold"
+                              style={{ backgroundColor: color }}
+                            >
+                              {name || "State Name"}
+                            </div>
+                            <span className="rounded-lg bg-white px-3 py-2 text-xs font-mono text-gray-600 shadow-sm">
+                              {icon || "no-icon"}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -333,37 +332,50 @@ export default function AddWorkflowStateModal({
                   {/* Icon */}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Icon (Emoji)
+                      Icon Key
                     </label>
 
                     {/* Icon Suggestions */}
                     <div className="flex flex-wrap gap-2 mb-3">
-                      {ICON_SUGGESTIONS.map((emoji) => (
-                        <button
-                          key={emoji}
-                          type="button"
-                          onClick={() => setIcon(emoji)}
-                          className={`w-12 h-12 flex items-center justify-center text-2xl rounded-xl border-2 transition-all ${
-                            icon === emoji
+                      {WORKFLOW_STATE_ICON_OPTIONS.map((item) => {
+                        const Icon = item.Icon;
+                        return (
+                          <button
+                            key={item.value}
+                            type="button"
+                            onClick={() => setIcon(item.value)}
+                            className={`min-w-12 h-12 px-3 flex items-center justify-center gap-2 rounded-xl border-2 transition-all ${
+                              icon === item.value
                               ? "border-red-500 bg-red-50"
                               : "border-gray-200 hover:border-gray-300"
-                          }`}
-                        >
-                          {emoji}
-                        </button>
-                      ))}
+                            }`}
+                          >
+                            <Icon className="w-5 h-5" />
+                            <span className="text-xs font-semibold">{item.label}</span>
+                          </button>
+                        );
+                      })}
                     </div>
 
                     <input
                       type="text"
                       value={icon}
                       onChange={(e) => setIcon(e.target.value)}
-                      placeholder="📝 (optional)"
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all text-center text-2xl"
+                      placeholder="e.g. approved, review, locked"
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all text-center font-mono"
                     />
                     <p className="text-xs text-gray-500 mt-2">
-                      Gunakan emoji untuk icon visual state
+                      Nilai ini akan dikirim sebagai string ke API
                     </p>
+                    {selectedIconOption && (
+                      <div className="mt-3 inline-flex items-center gap-2 rounded-xl bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                        {renderWorkflowStateIcon(selectedIconOption.value, "w-4 h-4")}
+                        <span>{selectedIconOption.label}</span>
+                        <span className="font-mono text-xs text-gray-500">
+                          ({selectedIconOption.value})
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Status */}

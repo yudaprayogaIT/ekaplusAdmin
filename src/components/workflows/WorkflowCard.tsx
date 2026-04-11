@@ -36,6 +36,7 @@ export default function WorkflowCard({
 }: Props) {
   const { workflow: wf, document_states, transitions } = workflow;
   const isActive = wf.is_active;
+  void roles;
 
   // Sort states by state_id for flow visualization
   const sortedStates = [...document_states].sort((a, b) => a.state_id - b.state_id);
@@ -73,7 +74,16 @@ export default function WorkflowCard({
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-all"
+        className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-all cursor-pointer"
+        onClick={onView}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onView();
+          }
+        }}
+        role="button"
+        tabIndex={0}
       >
         <div className="flex items-center justify-between gap-4">
           {/* Left: Icon and Info */}
@@ -116,21 +126,30 @@ export default function WorkflowCard({
           {/* Right: Actions */}
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
-              onClick={onView}
+              onClick={(event) => {
+                event.stopPropagation();
+                onView();
+              }}
               className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
               title="View Details"
             >
               <FaEye className="w-4 h-4" />
             </button>
             <button
-              onClick={onEdit}
+              onClick={(event) => {
+                event.stopPropagation();
+                onEdit();
+              }}
               className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-all"
               title="Edit"
             >
               <FaEdit className="w-4 h-4" />
             </button>
             <button
-              onClick={onDelete}
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete();
+              }}
               className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"
               title="Delete"
             >
@@ -147,7 +166,16 @@ export default function WorkflowCard({
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-lg transition-all group"
+      className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-lg transition-all group cursor-pointer"
+      onClick={onView}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onView();
+        }
+      }}
+      role="button"
+      tabIndex={0}
     >
       {/* Header with Icon and Status */}
       <div className="flex items-start justify-between mb-4">
@@ -167,7 +195,10 @@ export default function WorkflowCard({
             </span>
           )}
           <button
-            onClick={onView}
+            onClick={(event) => {
+              event.stopPropagation();
+              onView();
+            }}
             className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
             title="View Details"
           >
@@ -264,14 +295,20 @@ export default function WorkflowCard({
       {/* Actions */}
       <div className="flex gap-2 pt-4 border-t border-gray-100">
         <button
-          onClick={onEdit}
+          onClick={(event) => {
+            event.stopPropagation();
+            onEdit();
+          }}
           className="flex-1 px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 font-medium"
         >
           <FaEdit className="w-3 h-3" />
           <span>Edit</span>
         </button>
         <button
-          onClick={onDelete}
+          onClick={(event) => {
+            event.stopPropagation();
+            onDelete();
+          }}
           className="px-4 py-2 bg-red-100 text-red-600 rounded-xl hover:bg-red-200 transition-all"
           title="Delete"
         >

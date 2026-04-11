@@ -18,7 +18,10 @@ import {
 import {
   API_CONFIG,
   apiFetch,
+  getAuthHeaders,
 } from "@/config/api";
+import { useAuth } from "@/contexts/AuthContext";
+import AddWorkflowStateModal from "@/components/workflow-states/AddWorkflowStateModal";
 import StateManager, {
   GlobalState,
   SelectedState,
@@ -35,6 +38,11 @@ import {
 type Props = {
   open: boolean;
   onClose: () => void;
+  onSuccess?: (payload: {
+    mode: "create" | "update";
+    name: string;
+    resource: string;
+  }) => void;
   workflow?: WorkflowWithDetails | null;
   globalStates: GlobalState[];
   roles: Role[];
@@ -44,12 +52,14 @@ type Props = {
 export default function AddWorkflowModal({
   open,
   onClose,
+  onSuccess,
   workflow,
   globalStates,
   roles,
   resources,
 }: Props) {
   const isEdit = !!workflow;
+  const { token } = useAuth();
 
   // Form state
   const [resource, setResource] = useState("");
@@ -64,6 +74,21 @@ export default function AddWorkflowModal({
   // UI state
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
+  const [stateModalOpen, setStateModalOpen] = useState(false);
+
+  const handleStateDocstatusChange = (stateId: number, docstatus: number) => {
+    setSelectedStates((current) =>
+      current.map((state) =>
+        state.state_id === stateId
+          ? {
+              ...state,
+              docstatus,
+              editable: docstatus === 0,
+            }
+          : state
+      )
+    );
+  };
 
   // Reset form
   const resetForm = () => {
@@ -161,24 +186,20 @@ export default function AddWorkflowModal({
     setLoading(true);
 
     try {
-      const token = localStorage.getItem("authToken");
       if (!token) {
         throw new Error("No auth token found");
       }
 
-      const formData = new FormData();
-
-      // Basic info
-      formData.append("Resource", resource.trim());
-      formData.append("Name", name.trim());
-      formData.append("Description", description.trim());
-      formData.append("IsActive", isActive ? "1" : "0");
-
-      // Document states
-      formData.append("DocumentStates", JSON.stringify(selectedStates));
-
-      // Transitions
-      formData.append("Transitions", JSON.stringify(transitions));
+      const payload = {
+        workflow: {
+          resource: resource.trim(),
+          name: name.trim(),
+          description: description.trim(),
+          is_active: isActive,
+        },
+        document_states: selectedStates,
+        transitions,
+      };
 
       let response;
       if (isEdit) {
@@ -187,11 +208,10 @@ export default function AddWorkflowModal({
           `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW}/${workflow.workflow.resource}`,
           {
             method: "PUT",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-            body: formData,
-          }
+            headers: getAuthHeaders(token),
+            body: JSON.stringify(payload),
+          },
+          token
         );
       } else {
         // POST for create
@@ -199,11 +219,10 @@ export default function AddWorkflowModal({
           `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW}`,
           {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-            body: formData,
-          }
+            headers: getAuthHeaders(token),
+            body: JSON.stringify(payload),
+          },
+          token
         );
       }
 
@@ -218,6 +237,11 @@ export default function AddWorkflowModal({
       window.dispatchEvent(new Event("ekatalog:workflows_update"));
 
       // Close modal
+      onSuccess?.({
+        mode: isEdit ? "update" : "create",
+        name: name.trim(),
+        resource: resource.trim(),
+      });
       onClose();
       resetForm();
     } catch (error) {
@@ -242,13 +266,21 @@ export default function AddWorkflowModal({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
-          className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto"
+      <>
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => {
+            onClose();
+            resetForm();
+          }}
         >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto"
+            onClick={(event) => event.stopPropagation()}
+          >
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-100 sticky top-0 bg-white z-10">
             <div className="flex items-center gap-3">
@@ -459,6 +491,7 @@ export default function AddWorkflowModal({
                     globalStates={globalStates}
                     selectedStates={selectedStates}
                     onChange={setSelectedStates}
+                    onAddState={() => setStateModalOpen(true)}
                   />
 
                   {/* Navigation */}
@@ -490,6 +523,7 @@ export default function AddWorkflowModal({
                     roles={roles}
                     transitions={transitions}
                     onChange={setTransitions}
+                    onStateDocstatusChange={handleStateDocstatusChange}
                   />
 
                   {/* Navigation */}
@@ -537,8 +571,14 @@ export default function AddWorkflowModal({
               </button>
             </div>
           </form>
-        </motion.div>
-      </div>
+          </motion.div>
+        </div>
+
+        <AddWorkflowStateModal
+          open={stateModalOpen}
+          onClose={() => setStateModalOpen(false)}
+        />
+      </>
     </AnimatePresence>
   );
 }

@@ -4,6 +4,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { FaEdit, FaTrash, FaCircle, FaCheckCircle } from "react-icons/fa";
+import { renderWorkflowStateIcon } from "./iconRegistry";
 
 type WorkflowState = {
   id: number;
@@ -89,7 +90,7 @@ function WorkflowStateCard({
           style={{ backgroundColor: displayColor }}
         >
           {state.icon ? (
-            <span className="text-3xl">{state.icon}</span>
+            renderWorkflowStateIcon(state.icon, "w-8 h-8")
           ) : (
             <FaCircle className="w-8 h-8" />
           )}

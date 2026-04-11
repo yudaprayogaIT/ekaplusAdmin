@@ -1,8 +1,15 @@
 // src/components/workflows/StateManager.tsx
 "use client";
 
-import { useState, useEffect } from "react";
-import { FaCircle, FaEdit, FaCheckSquare, FaSquare, FaExternalLinkAlt } from "react-icons/fa";
+import { useState } from "react";
+import {
+  FaCircle,
+  FaEdit,
+  FaCheckSquare,
+  FaSquare,
+  FaExternalLinkAlt,
+  FaPlus,
+} from "react-icons/fa";
 import Link from "next/link";
 
 export type GlobalState = {
@@ -27,14 +34,28 @@ type Props = {
   globalStates: GlobalState[];
   selectedStates: SelectedState[];
   onChange: (states: SelectedState[]) => void;
+  onAddState?: () => void;
 };
 
 export default function StateManager({
   globalStates,
   selectedStates,
   onChange,
+  onAddState,
 }: Props) {
   const [editingStateId, setEditingStateId] = useState<number | null>(null);
+  const getDocstatusLabel = (docstatus: number) => {
+    switch (docstatus) {
+      case 0:
+        return "Draft / Editable";
+      case 1:
+        return "Submitted / Locked";
+      case 2:
+        return "Cancelled / Closed";
+      default:
+        return "Custom";
+    }
+  };
 
   // Check if state is selected
   const isSelected = (stateId: number): boolean => {
@@ -59,7 +80,7 @@ export default function StateManager({
           state_id: globalState.id,
           state_name: globalState.name,
           docstatus: globalState.docstatus,
-          editable: false,
+          editable: globalState.docstatus === 0,
           color: globalState.color,
           icon: globalState.icon,
         },
@@ -89,15 +110,27 @@ export default function StateManager({
             Pilih minimal 2 state untuk workflow ini
           </p>
         </div>
-        {globalStates.length === 0 && (
-          <Link
-            href="/workflow-state"
-            className="px-4 py-2 bg-blue-100 text-blue-700 rounded-xl font-bold hover:bg-blue-200 transition-all flex items-center gap-2"
-          >
-            <FaExternalLinkAlt className="w-3 h-3" />
-            Kelola Global States
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          {onAddState && (
+            <button
+              type="button"
+              onClick={onAddState}
+              className="px-4 py-2 bg-purple-100 text-purple-700 rounded-xl font-bold hover:bg-purple-200 transition-all flex items-center gap-2"
+            >
+              <FaPlus className="w-3 h-3" />
+              Tambah State
+            </button>
+          )}
+          {globalStates.length === 0 && (
+            <Link
+              href="/workflow-states"
+              className="px-4 py-2 bg-blue-100 text-blue-700 rounded-xl font-bold hover:bg-blue-200 transition-all flex items-center gap-2"
+            >
+              <FaExternalLinkAlt className="w-3 h-3" />
+              Kelola Global States
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Validation message */}
@@ -132,12 +165,22 @@ export default function StateManager({
             Anda perlu membuat global states terlebih dahulu sebelum membuat workflow
           </p>
           <Link
-            href="/workflow-state"
+            href="/workflow-states"
             className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all"
           >
             <FaExternalLinkAlt className="w-4 h-4" />
             Buat Global State
           </Link>
+          {onAddState && (
+            <button
+              type="button"
+              onClick={onAddState}
+              className="ml-3 inline-flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition-all"
+            >
+              <FaPlus className="w-4 h-4" />
+              Tambah di Sini
+            </button>
+          )}
         </div>
       )}
 
@@ -191,7 +234,7 @@ export default function StateManager({
                         {globalState.name}
                       </span>
                       <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-bold">
-                        Docstatus: {globalState.docstatus}
+                        Docstatus: {globalState.docstatus} • {getDocstatusLabel(globalState.docstatus)}
                       </span>
                     </div>
                     {globalState.description && (
@@ -225,37 +268,29 @@ export default function StateManager({
                       Customize State untuk Workflow Ini
                     </h4>
 
-                    {/* Editable toggle */}
-                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div>
-                        <label className="font-medium text-gray-900">
-                          Allow Edit
-                        </label>
-                        <p className="text-xs text-gray-600 mt-1">
-                          Apakah dokumen bisa diedit di state ini?
-                        </p>
+                    <div className="p-3 bg-gray-50 rounded-lg space-y-2">
+                      <div className="font-medium text-gray-900">
+                        Status State di Workflow
                       </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          updateState(globalState.id, {
-                            editable: !selectedState.editable,
-                          })
-                        }
-                        className={`relative w-14 h-7 rounded-full transition-all ${
-                          selectedState.editable
-                            ? "bg-green-500"
-                            : "bg-gray-300"
-                        }`}
-                      >
-                        <div
-                          className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-3 py-2 rounded-lg bg-purple-100 text-purple-700 text-sm font-bold">
+                          {getDocstatusLabel(selectedState.docstatus)}
+                        </span>
+                        <span
+                          className={`px-3 py-2 rounded-lg text-sm font-bold ${
                             selectedState.editable
-                              ? "translate-x-7"
-                              : ""
+                              ? "bg-green-100 text-green-700"
+                              : "bg-gray-100 text-gray-700"
                           }`}
-                        />
-                      </button>
+                        >
+                          {selectedState.editable
+                            ? "Editable: Ya"
+                            : "Editable: Tidak"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Atur `docstatus` final di langkah `Transitions` berdasarkan state tujuan.
+                      </p>
                     </div>
 
                     {/* Color picker */}

@@ -10,6 +10,7 @@ import WorkflowCard from "./WorkflowCard";
 import AddWorkflowModal from "./AddWorkflowModal";
 import WorkflowDetailModal from "./WorkflowDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import ActionResultModal from "@/components/ui/ActionResultModal";
 import {
   FaPlus,
   FaSearch,
@@ -106,31 +107,11 @@ export type AuthzResource = {
   UpdatedAt: string;
 };
 
-type WorkflowAPIResponse = {
-  status: string;
-  code: string;
-  message: string;
-  data: WorkflowWithDetails[];
-  meta?: {
-    request_id: string;
-    trace_id: string;
-    timestamp: string;
-    processing_time_ms: number;
-  };
-};
-
 type RoleAPIResponse = {
   status: string;
   code: string;
   message: string;
   data: Role[];
-};
-
-type GlobalStateAPIResponse = {
-  status: string;
-  code: string;
-  message: string;
-  data: GlobalState[];
 };
 
 type ResourceAPIResponse = {
@@ -139,6 +120,40 @@ type ResourceAPIResponse = {
   message: string;
   data: AuthzResource[];
 };
+
+function normalizeWorkflowResponse(payload: unknown): WorkflowWithDetails[] {
+  if (Array.isArray(payload)) {
+    return payload as WorkflowWithDetails[];
+  }
+
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "data" in payload &&
+    Array.isArray((payload as { data?: unknown }).data)
+  ) {
+    return (payload as { data: WorkflowWithDetails[] }).data;
+  }
+
+  return [];
+}
+
+function normalizeGlobalStateResponse(payload: unknown): GlobalState[] {
+  if (Array.isArray(payload)) {
+    return payload as GlobalState[];
+  }
+
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "data" in payload &&
+    Array.isArray((payload as { data?: unknown }).data)
+  ) {
+    return (payload as { data: GlobalState[] }).data;
+  }
+
+  return [];
+}
 
 export default function WorkflowList() {
   const { token, isAuthenticated } = useAuth();
@@ -160,6 +175,38 @@ export default function WorkflowList() {
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
   const [confirmAction, setConfirmAction] = useState<(() => Promise<void>) | null>(null);
+  const [resultModal, setResultModal] = useState<{
+    isOpen: boolean;
+    type: "success" | "error";
+    title: string;
+    message: string;
+    description?: string;
+    details?: { label: string; value: string }[];
+  }>({
+    isOpen: false,
+    type: "success",
+    title: "",
+    message: "",
+  });
+
+  async function fetchGlobalStates(tokenValue: string): Promise<GlobalState[]> {
+    const headers = getAuthHeaders(tokenValue);
+    const response = await apiFetch(
+      `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW_STATE}`,
+      {
+        method: "GET",
+        cache: "no-store",
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch workflow states (${response.status})`);
+    }
+
+    const payload = await response.json();
+    return normalizeGlobalStateResponse(payload);
+  }
 
   // Load data from APIs
   useEffect(() => {
@@ -203,15 +250,15 @@ export default function WorkflowList() {
 
 
         if (workflowsRes.ok && rolesRes.ok && statesRes.ok && resourcesRes.ok) {
-          const workflowsData = (await workflowsRes.json()) as WorkflowAPIResponse;
+          const workflowsData = await workflowsRes.json();
           const rolesData = (await rolesRes.json()) as RoleAPIResponse;
-          const statesData = (await statesRes.json()) as GlobalStateAPIResponse;
+          const statesData = await statesRes.json();
           const resourcesData = (await resourcesRes.json()) as ResourceAPIResponse;
 
           if (!cancelled) {
-            setWorkflows(workflowsData.data || []);
+            setWorkflows(normalizeWorkflowResponse(workflowsData));
             setRoles(rolesData.data || []);
-            setGlobalStates(statesData.data || []);
+            setGlobalStates(normalizeGlobalStateResponse(statesData));
             setResources(resourcesData.data || []);
           }
         } else {
@@ -242,6 +289,22 @@ export default function WorkflowList() {
     };
   }, [isAuthenticated, token]);
 
+  useEffect(() => {
+    async function handler() {
+      if (!isAuthenticated || !token) return;
+
+      try {
+        const nextStates = await fetchGlobalStates(token);
+        setGlobalStates(nextStates);
+      } catch {
+      }
+    }
+
+    window.addEventListener("ekaplus:workflow_states_update", handler);
+    return () =>
+      window.removeEventListener("ekaplus:workflow_states_update", handler);
+  }, [isAuthenticated, token]);
+
   // Listen for updates
   useEffect(() => {
     async function handler() {
@@ -256,8 +319,8 @@ export default function WorkflowList() {
         });
 
         if (res.ok) {
-          const response = (await res.json()) as WorkflowAPIResponse;
-          setWorkflows(response.data || []);
+          const response = await res.json();
+          setWorkflows(normalizeWorkflowResponse(response));
         }
       } catch {
       }
@@ -287,6 +350,27 @@ export default function WorkflowList() {
   function handleEdit(workflow: WorkflowWithDetails) {
     setModalInitial(workflow);
     setModalOpen(true);
+  }
+
+  function handleWorkflowSaved(payload: {
+    mode: "create" | "update";
+    name: string;
+    resource: string;
+  }) {
+    setResultModal({
+      isOpen: true,
+      type: "success",
+      title: payload.mode === "create" ? "Workflow Berhasil Dibuat" : "Workflow Berhasil Diperbarui",
+      message:
+        payload.mode === "create"
+          ? `Workflow "${payload.name}" berhasil dibuat`
+          : `Workflow "${payload.name}" berhasil diperbarui`,
+      description: "Perubahan sudah tersimpan dan daftar workflow akan otomatis diperbarui.",
+      details: [
+        { label: "Resource", value: payload.resource || "-" },
+        { label: "Nama Workflow", value: payload.name || "-" },
+      ],
+    });
   }
 
   function promptDeleteWorkflow(workflow: WorkflowWithDetails) {
@@ -426,7 +510,7 @@ export default function WorkflowList() {
                 (Draft, Submitted, Approved, dll).
               </p>
               <Link
-                href="/workflow-state"
+                href="/workflow-states"
                 className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
               >
                 <FaSitemap className="w-4 h-4" />
@@ -566,6 +650,7 @@ export default function WorkflowList() {
       <AddWorkflowModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
+        onSuccess={handleWorkflowSaved}
         workflow={modalInitial}
         roles={roles}
         globalStates={globalStates}
@@ -587,6 +672,21 @@ export default function WorkflowList() {
         description={confirmDesc}
         onConfirm={executeConfirmAction}
         onCancel={() => setConfirmOpen(false)}
+      />
+
+      <ActionResultModal
+        isOpen={resultModal.isOpen}
+        type={resultModal.type}
+        title={resultModal.title}
+        message={resultModal.message}
+        description={resultModal.description}
+        details={resultModal.details}
+        onClose={() =>
+          setResultModal((current) => ({
+            ...current,
+            isOpen: false,
+          }))
+        }
       />
     </div>
   );

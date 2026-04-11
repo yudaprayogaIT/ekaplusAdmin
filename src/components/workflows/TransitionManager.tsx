@@ -1,7 +1,5 @@
 // src/components/workflows/TransitionManager.tsx
 "use client";
-
-import { useState } from "react";
 import {
   FaArrowRight,
   FaPlus,
@@ -28,6 +26,7 @@ type Props = {
   roles: Role[];
   transitions: TransitionInput[];
   onChange: (transitions: TransitionInput[]) => void;
+  onStateDocstatusChange: (stateId: number, docstatus: number) => void;
 };
 
 export default function TransitionManager({
@@ -35,7 +34,21 @@ export default function TransitionManager({
   roles,
   transitions,
   onChange,
+  onStateDocstatusChange,
 }: Props) {
+  const getDocstatusLabel = (docstatus: number) => {
+    switch (docstatus) {
+      case 0:
+        return "Draft / Editable";
+      case 1:
+        return "Submitted / Locked";
+      case 2:
+        return "Cancelled / Closed";
+      default:
+        return "Custom";
+    }
+  };
+
   // Add new transition
   const addTransition = () => {
     if (selectedStates.length < 2) {
@@ -91,32 +104,9 @@ export default function TransitionManager({
     return state ? state.state_name : `State #${stateId}`;
   };
 
-  // Mode icon
-  const getModeIcon = (mode: string) => {
-    switch (mode) {
-      case "single":
-        return <FaUser className="w-3 h-3" />;
-      case "parallel":
-        return <FaUsers className="w-3 h-3" />;
-      case "sequence":
-        return <FaListOl className="w-3 h-3" />;
-      default:
-        return null;
-    }
-  };
-
-  // Mode color
-  const getModeColor = (mode: string) => {
-    switch (mode) {
-      case "single":
-        return "bg-blue-100 text-blue-700";
-      case "parallel":
-        return "bg-orange-100 text-orange-700";
-      case "sequence":
-        return "bg-purple-100 text-purple-700";
-      default:
-        return "bg-gray-100 text-gray-700";
-    }
+  const getStateDocstatus = (stateId: number): number => {
+    const state = selectedStates.find((s) => s.state_id === stateId);
+    return state?.docstatus ?? 0;
   };
 
   // Validate transition
@@ -162,7 +152,7 @@ export default function TransitionManager({
             Definisikan transisi antar state dan role yang diizinkan
           </p>
         </div>
-        <button
+        {/* <button
           type="button"
           onClick={addTransition}
           disabled={selectedStates.length < 2}
@@ -170,7 +160,7 @@ export default function TransitionManager({
         >
           <FaPlus className="w-3 h-3" />
           Add Transition
-        </button>
+        </button> */}
       </div>
 
       {/* Info when no states */}
@@ -331,6 +321,50 @@ export default function TransitionManager({
                     </div>
                   </div>
 
+                  {/* Result docstatus */}
+                  <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-xl space-y-3">
+                    <div>
+                      <label className="block font-medium text-blue-900 mb-1">
+                        Docstatus Hasil Transition
+                      </label>
+                      <p className="text-xs text-blue-700">
+                        Nilai ini akan diterapkan ke state tujuan dan menentukan apakah dokumen bisa diedit.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-[220px,1fr] gap-3">
+                      <select
+                        value={String(getStateDocstatus(transition.to_state_id))}
+                        onChange={(e) =>
+                          onStateDocstatusChange(
+                            transition.to_state_id,
+                            Number(e.target.value)
+                          )
+                        }
+                        className="w-full px-4 py-2 border-2 border-blue-200 rounded-lg font-mono text-sm focus:border-blue-500 focus:outline-none"
+                      >
+                        <option value="0">0 - Draft / Editable</option>
+                        <option value="1">1 - Submitted / Locked</option>
+                        <option value="2">2 - Cancelled / Closed</option>
+                      </select>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-bold">
+                          {getDocstatusLabel(getStateDocstatus(transition.to_state_id))}
+                        </span>
+                        <span
+                          className={`px-3 py-2 rounded-lg text-sm font-bold ${
+                            getStateDocstatus(transition.to_state_id) === 0
+                              ? "bg-green-100 text-green-700"
+                              : "bg-gray-100 text-gray-700"
+                          }`}
+                        >
+                          {getStateDocstatus(transition.to_state_id) === 0
+                            ? "Editable: Ya"
+                            : "Editable: Tidak"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Action */}
                   <div>
                     <label className="block font-medium text-gray-900 mb-2">
@@ -476,11 +510,22 @@ export default function TransitionManager({
                     </div>
                   )}
                 </div>
+                
               </div>
+              
             );
           })}
         </div>
       )}
+      <button
+          type="button"
+          onClick={addTransition}
+          disabled={selectedStates.length < 2}
+          className="px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-bold hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <FaPlus className="w-3 h-3" />
+          Add Transition
+        </button>
     </div>
   );
 }
