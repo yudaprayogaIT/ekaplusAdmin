@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   FaCalendarAlt,
+  FaCheckCircle,
   FaClock,
   FaExchangeAlt,
   FaInfoCircle,
@@ -14,6 +15,13 @@ import {
 } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
+import ActionResultModal from "@/components/ui/ActionResultModal";
+import WorkflowActionBar from "@/components/workflow-actions/WorkflowActionBar";
+import WorkflowRejectNoteModal from "@/components/workflow-actions/WorkflowRejectNoteModal";
+import {
+  executeWorkflowAction,
+  type WorkflowActionItem,
+} from "@/services/workflowActionService";
 
 export interface CreditChangeRequestListItem {
   id: number;
@@ -63,6 +71,7 @@ interface CreditChangeRequestDetailResponse {
 }
 
 interface DetailApiEnvelope {
+  action?: WorkflowActionItem[] | null;
   data?: CreditChangeRequestDetailResponse | null;
 }
 
@@ -70,6 +79,7 @@ interface CreditChangeRequestDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   item: CreditChangeRequestListItem | null;
+  onActionExecuted?: () => Promise<void> | void;
 }
 
 function resolveUserName(
@@ -115,6 +125,7 @@ export function CreditChangeRequestDetailModal({
   isOpen,
   onClose,
   item,
+  onActionExecuted,
 }: CreditChangeRequestDetailModalProps) {
   const { token, isAuthenticated } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -122,60 +133,68 @@ export function CreditChangeRequestDetailModal({
   const [detail, setDetail] = useState<CreditChangeRequestDetailResponse | null>(
     null,
   );
+  const [actions, setActions] = useState<WorkflowActionItem[]>([]);
+  const [executingActionId, setExecutingActionId] = useState<number | null>(null);
+  const [pendingRejectAction, setPendingRejectAction] = useState<WorkflowActionItem | null>(
+    null,
+  );
+  const [resultModal, setResultModal] = useState<{
+    isOpen: boolean;
+    type: "success" | "error";
+    title: string;
+    message: string;
+    description?: string;
+  }>({
+    isOpen: false,
+    type: "success",
+    title: "",
+    message: "",
+  });
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadDetail = useCallback(async () => {
+    if (!isOpen || !item || !token || !isAuthenticated) return;
 
-    async function loadDetail() {
-      if (!isOpen || !item || !token || !isAuthenticated) return;
+    setLoading(true);
+    setError(null);
 
-      setLoading(true);
-      setError(null);
+    try {
+      const response = await apiFetch(
+        getQueryUrl(
+          `${API_CONFIG.ENDPOINTS.CREDIT_CHANGE_REQUEST}/${item.id}`,
+          { fields: ["*", "created_by.full_name", "updated_by.full_name"] },
+        ),
+        { method: "GET", cache: "no-store" },
+        token,
+      );
 
-      try {
-        const response = await apiFetch(
-          getQueryUrl(
-            `${API_CONFIG.ENDPOINTS.CREDIT_CHANGE_REQUEST}/${item.id}`,
-            { fields: ["*", "created_by.full_name", "updated_by.full_name"] },
-          ),
-          { method: "GET", cache: "no-store" },
-          token,
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch credit change request detail (${response.status})`,
         );
-
-        if (!response.ok) {
-          throw new Error(
-            `Failed to fetch credit change request detail (${response.status})`,
-          );
-        }
-
-        const json = (await response.json()) as DetailApiEnvelope;
-        if (!cancelled) {
-          setDetail(json.data || null);
-        }
-      } catch (loadError) {
-        if (!cancelled) {
-          setDetail(null);
-          setError(
-            loadError instanceof Error
-              ? loadError.message
-              : "Gagal memuat detail credit change request",
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
       }
+
+      const json = (await response.json()) as DetailApiEnvelope;
+      setDetail(json.data || null);
+      setActions(Array.isArray(json.action) ? json.action : []);
+    } catch (loadError) {
+      setDetail(null);
+      setActions([]);
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Gagal memuat detail credit change request",
+      );
+    } finally {
+      setLoading(false);
     }
-
-    void loadDetail();
-
-    return () => {
-      cancelled = true;
-    };
   }, [isAuthenticated, isOpen, item, token]);
 
+  useEffect(() => {
+    void loadDetail();
+  }, [loadDetail]);
+
   const activeDetail = detail || null;
+  const normalizedActions = useMemo(() => actions, [actions]);
 
   const createdBy = useMemo(
     () =>
@@ -194,12 +213,82 @@ export function CreditChangeRequestDetailModal({
     [activeDetail],
   );
 
+  const executeAction = useCallback(
+    async (workflowAction: WorkflowActionItem, payload?: Record<string, unknown>) => {
+      if (!token || !item) {
+        setResultModal({
+          isOpen: true,
+          type: "error",
+          title: "Action Gagal",
+          message: "Token atau dokumen tidak tersedia.",
+        });
+        return;
+      }
+
+      setExecutingActionId(workflowAction.id);
+      setError(null);
+
+      try {
+        await executeWorkflowAction({
+          token,
+          resourceName: "credit_change_request",
+          documentId: item.id,
+          actionId: workflowAction.id,
+          payload,
+        });
+
+        await loadDetail();
+        await onActionExecuted?.();
+        setPendingRejectAction(null);
+        setResultModal({
+          isOpen: true,
+          type: "success",
+          title: "Action Berhasil",
+          message: `${workflowAction.action} berhasil dijalankan`,
+          description: "Status dokumen dan daftar credit change request sudah diperbarui.",
+        });
+      } catch (actionError) {
+        const message =
+          actionError instanceof Error
+            ? actionError.message
+            : "Gagal menjalankan action workflow";
+
+        setError(message);
+        setResultModal({
+          isOpen: true,
+          type: "error",
+          title: "Action Gagal",
+          message,
+        });
+        throw actionError;
+      } finally {
+        setExecutingActionId(null);
+      }
+    },
+    [item, loadDetail, onActionExecuted, token],
+  );
+
+  const handleActionClick = useCallback(
+    async (workflowAction: WorkflowActionItem) => {
+      const normalizedLabel = workflowAction.action.toLowerCase();
+
+      if (normalizedLabel.includes("reject")) {
+        setPendingRejectAction(workflowAction);
+        return;
+      }
+
+      await executeAction(workflowAction);
+    },
+    [executeAction],
+  );
+
   if (!isOpen || !item) return null;
 
   return (
     <AnimatePresence>
       {isOpen && (
         <div
+          key="credit-change-request-detail"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           onClick={(event) =>
             event.target === event.currentTarget ? onClose() : undefined
@@ -480,11 +569,66 @@ export function CreditChangeRequestDetailModal({
                     </div>
                   </div>
                 </section>
+
+                {normalizedActions.length > 0 && (
+                  <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="mb-4 flex items-center gap-2">
+                      <FaCheckCircle className="text-emerald-600" />
+                      <h3 className="text-lg font-bold text-slate-900">
+                        Available Actions
+                      </h3>
+                    </div>
+                    <p className="mb-4 text-sm text-slate-500">
+                      Tombol di bawah ini berasal dari workflow aktif untuk dokumen ini.
+                    </p>
+                    <WorkflowActionBar
+                      actions={normalizedActions}
+                      loadingActionId={executingActionId}
+                      disabled={loading}
+                      onActionClick={(workflowAction) => {
+                        void handleActionClick(workflowAction);
+                      }}
+                    />
+                  </section>
+                )}
               </div>
             </div>
           </motion.div>
         </div>
       )}
+
+      <WorkflowRejectNoteModal
+        key="credit-change-request-reject-note"
+        open={pendingRejectAction !== null}
+        action={pendingRejectAction}
+        loading={
+          pendingRejectAction !== null &&
+          executingActionId === pendingRejectAction.id
+        }
+        onClose={() => {
+          if (executingActionId) return;
+          setPendingRejectAction(null);
+        }}
+        onSubmit={async (note) => {
+          if (!pendingRejectAction) return;
+          await executeAction(pendingRejectAction, { rejected_note: note });
+        }}
+      />
+
+      <ActionResultModal
+        key="credit-change-request-action-result"
+        isOpen={resultModal.isOpen}
+        type={resultModal.type}
+        title={resultModal.title}
+        message={resultModal.message}
+        description={resultModal.description}
+        onClose={() =>
+          setResultModal((current) => ({
+            ...current,
+            isOpen: false,
+          }))
+        }
+      />
     </AnimatePresence>
   );
 }

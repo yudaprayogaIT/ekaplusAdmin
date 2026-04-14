@@ -37,6 +37,7 @@ export const API_CONFIG = {
     // Workflow
     WORKFLOW: "/api/workflow",
     WORKFLOW_STATE: "/api/workflow/state",
+    WORKFLOW_EXECUTE: "/api/workflow/execute",
 
     CUSTOMER_REGISTER: "/api/resource/customer_register",
     CUSTOMER_REGISTER_ADDRESS: "/api/resource/customer_register_address",

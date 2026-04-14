@@ -547,6 +547,7 @@ export function CreditChangeRequestList() {
         isOpen={selectedItem !== null}
         onClose={() => setSelectedItem(null)}
         item={selectedItem}
+        onActionExecuted={loadData}
       />
       <CreditChangeRequestFormModal
         open={modalOpen}
