@@ -101,7 +101,7 @@ export default function BranchDetailModal({
                 </div>
 
                 {/* Title */}
-                <h2 className="text-4xl font-bold mb-3">{branch.name}</h2>
+                <h2 className="text-4xl font-bold mb-3">{branch.branch_name}</h2>
 
                 <div className="flex items-center gap-2 text-lg text-red-100">
                   <FaCity className="w-5 h-5" />
@@ -112,6 +112,15 @@ export default function BranchDetailModal({
 
             {/* Content */}
             <div className="p-8">
+              <div className="mb-8 bg-gradient-to-br from-amber-50 to-white rounded-2xl p-6 border-2 border-amber-100">
+                <div className="flex items-start gap-3 mb-3">
+                  <FaUser className="w-5 h-5 text-amber-500 flex-shrink-0 mt-1" />
+                  <label className="text-sm font-bold text-amber-800 uppercase tracking-wide">
+                    Name
+                  </label>
+                </div>
+                <p className="text-gray-700 leading-relaxed">{branch.name || "-"}</p>
+              </div>
               {/* Map Preview */}
               <div className="mb-8">
                 <label className="block text-sm font-semibold text-gray-700 mb-3">

@@ -27,6 +27,7 @@ import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
 type Branch = {
   id?: number;
   name: string;
+  branch_name: string;
   city: string; // Changed from 'daerah' to match API
   address: string;
   lat: number;
@@ -60,6 +61,7 @@ export default function AddBranchModal({
 }) {
   const { token: authToken } = useAuth();
   const [name, setName] = useState("");
+  const [branchName, setBranchName] = useState("");
   const [city, setCity] = useState("");
   const [address, setAddress] = useState("");
   const [lat, setLat] = useState("");
@@ -75,6 +77,7 @@ export default function AddBranchModal({
   // Track initial state for dirty checking
   const [initialState, setInitialState] = useState({
     name: "",
+    branchName: "",
     city: "",
     address: "",
     lat: "",
@@ -89,6 +92,7 @@ export default function AddBranchModal({
   // Check if form is dirty
   const isDirty =
     name !== initialState.name ||
+    branchName !== initialState.branchName ||
     city !== initialState.city ||
     address !== initialState.address ||
     lat !== initialState.lat ||
@@ -107,6 +111,7 @@ export default function AddBranchModal({
     setError(null);
     if (initial) {
       setName(initial.name ?? "");
+      setBranchName(initial.branch_name ?? "");
       setCity(initial.city ?? "");
       setAddress(initial.address ?? "");
       setLat(String(initial.lat ?? ""));
@@ -120,6 +125,7 @@ export default function AddBranchModal({
       // Set initial state for dirty checking
       setInitialState({
         name: initial.name ?? "",
+        branchName: initial.branch_name ?? "",
         city: initial.city ?? "",
         address: initial.address ?? "",
         lat: String(initial.lat ?? ""),
@@ -132,6 +138,7 @@ export default function AddBranchModal({
       });
     } else {
       setName("");
+      setBranchName("");
       setCity("");
       setAddress("");
       setLat("");
@@ -145,6 +152,7 @@ export default function AddBranchModal({
       // Set initial state for dirty checking
       setInitialState({
         name: "",
+        branchName: "",
         city: "",
         address: "",
         lat: "",
@@ -199,7 +207,8 @@ export default function AddBranchModal({
 
       // Prepare FormData for API
       const formData = new FormData();
-      formData.append("branch_name", name.trim());
+      formData.append("name", name.trim());
+      formData.append("branch_name", branchName.trim());
       formData.append("city", city.trim());
       formData.append("address", address.trim());
       formData.append("lat", lat.trim());
@@ -240,7 +249,7 @@ export default function AddBranchModal({
         );
       }
 
-      const result = await response.json();
+      await response.json();
 
       // Trigger reload in BranchList
       window.dispatchEvent(new Event("ekatalog:branches_update"));
@@ -325,15 +334,28 @@ export default function AddBranchModal({
                 </div>
               )}
 
-              {/* Name & City */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Name, Branch Name & City */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                    placeholder="branch-jakarta"
+                    required
+                  />
+                </div>
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Nama Cabang <span className="text-red-500">*</span>
                   </label>
                   <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    value={branchName}
+                    onChange={(e) => setBranchName(e.target.value)}
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
                     placeholder="Ekatunggal Tunas Mandiri"
                     required

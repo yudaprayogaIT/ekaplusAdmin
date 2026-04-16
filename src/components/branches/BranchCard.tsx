@@ -56,8 +56,13 @@ export default function BranchCard({
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 mb-3">
               <div className="flex-1 min-w-0">
                 <h3 className="text-base md:text-lg font-bold text-gray-900 mb-1.5 group-hover:text-red-600 transition-colors truncate">
-                  {branch.name}
+                  {branch.branch_name}
                 </h3>
+                {branch.name && (
+                  <p className="text-xs md:text-sm text-gray-500 truncate">
+                    Name: {branch.name}
+                  </p>
+                )}
                 <div className="flex flex-wrap items-center gap-2 text-xs md:text-sm text-gray-600">
                   <div className="flex items-center gap-1.5">
                     <FaCity className="w-3 h-3 md:w-3.5 md:h-3.5 text-gray-400" />
@@ -192,8 +197,14 @@ export default function BranchCard({
       {/* Content */}
       <div className="p-5">
         <h3 className="font-bold text-gray-900 text-lg mb-2 line-clamp-1 group-hover:text-red-600 transition-colors">
-          {branch.name}
+          {branch.branch_name}
         </h3>
+
+        {branch.name && (
+          <p className="text-sm text-gray-500 mb-2 line-clamp-1">
+            Name: {branch.name}
+          </p>
+        )}
 
         <div className="flex items-center gap-2 text-sm text-gray-600 mb-3">
           <FaCity className="w-3.5 h-3.5 text-gray-400" />

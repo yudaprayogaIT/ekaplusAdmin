@@ -140,20 +140,16 @@ function buildBranchCustomerLabel(
   gcMap: Map<number, string>,
   branchMap: Map<number, string>,
 ): string {
+  const gcObject = row.gcid && typeof row.gcid === "object" ? row.gcid : null;
+  const branchObject = row.branch && typeof row.branch === "object" ? row.branch : null;
   const gcId =
-    typeof row.gcid === "object" ? Number(row.gcid.id || 0) : Number(row.gcid || 0);
+    gcObject ? Number(gcObject.id || 0) : Number(row.gcid || 0);
   const branchId =
-    typeof row.branch === "object"
-      ? Number(row.branch.id || 0)
-      : Number(row.branch || 0);
+    branchObject ? Number(branchObject.id || 0) : Number(row.branch || 0);
   const gcName =
-    (typeof row.gcid === "object" && (row.gcid.gc_name || row.gcid.name)) ||
-    gcMap.get(gcId) ||
-    "";
+    gcObject?.gc_name || gcObject?.name || gcMap.get(gcId) || "";
   const branchName =
-    (typeof row.branch === "object" && (row.branch.city || row.branch.branch_name)) ||
-    branchMap.get(branchId) ||
-    "";
+    branchObject?.city || branchObject?.branch_name || branchMap.get(branchId) || "";
   const combined = [gcName, branchName].filter(Boolean).join(" - ");
   return combined || row.name || `Branch Customer ${row.id}`;
 }

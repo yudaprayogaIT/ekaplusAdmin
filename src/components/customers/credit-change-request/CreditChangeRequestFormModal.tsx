@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   FaExclamationTriangle,
   FaFileInvoiceDollar,
+  FaImage,
   FaSearch,
   FaSave,
   FaTimes,
@@ -77,6 +78,7 @@ interface CreditChangeRequestFormModalProps {
     requestedPaymentTerm?: number;
     requestedLimitCustomerOverdue?: number;
     reason: string;
+    identityAttachment?: File | null;
   }) => Promise<void>;
 }
 
@@ -364,6 +366,7 @@ export function CreditChangeRequestFormModal({
   const [requestedLimitCustomerOverdue, setRequestedLimitCustomerOverdue] =
     useState("");
   const [reason, setReason] = useState("");
+  const [identityAttachment, setIdentityAttachment] = useState<File | null>(null);
   const [lookups, setLookups] = useState<PolicyLookups>({
     nbid: [],
     gpid: [],
@@ -385,6 +388,7 @@ export function CreditChangeRequestFormModal({
     setRequestedPaymentTerm("");
     setRequestedLimitCustomerOverdue("");
     setReason("");
+    setIdentityAttachment(null);
     setError(null);
     setLookups({
       nbid: [],
@@ -609,6 +613,7 @@ export function CreditChangeRequestFormModal({
         requestedPaymentTerm: parsedPaymentTerm,
         requestedLimitCustomerOverdue: parsedLimitCustomerOverdue,
         reason: trimmedReason,
+        identityAttachment,
       });
     } catch (saveError) {
       setError(
@@ -885,6 +890,36 @@ export function CreditChangeRequestFormModal({
                   placeholder="Jelaskan alasan pengajuan perubahan credit"
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-emerald-300 focus:bg-white"
                 />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-sm font-semibold text-gray-700">
+                  Identity Attachment
+                </label>
+                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-4 text-sm text-gray-600 transition hover:border-emerald-300 hover:bg-white">
+                  <FaImage className="h-4 w-4 text-emerald-600" />
+                  <span className="flex-1">
+                    {identityAttachment
+                      ? identityAttachment.name
+                      : "Pilih gambar attachment untuk pengajuan credit"}
+                  </span>
+                  <span className="rounded-lg bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                    Upload
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={saving}
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] || null;
+                      setIdentityAttachment(file);
+                    }}
+                  />
+                </label>
+                <p className="mt-1 text-xs text-gray-500">
+                  Attachment ini akan dikirim sebagai `identity_attachment`.
+                </p>
               </div>
             </div>
 

@@ -1,12 +1,15 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   FaCalendarAlt,
   FaCheckCircle,
   FaClock,
   FaExchangeAlt,
+  FaExternalLinkAlt,
+  FaFileAlt,
   FaInfoCircle,
   FaMoneyBillWave,
   FaStickyNote,
@@ -14,7 +17,7 @@ import {
   FaUser,
 } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
+import { API_CONFIG, apiFetch, getFileUrl, getQueryUrl } from "@/config/api";
 import ActionResultModal from "@/components/ui/ActionResultModal";
 import WorkflowActionBar from "@/components/workflow-actions/WorkflowActionBar";
 import WorkflowRejectNoteModal from "@/components/workflow-actions/WorkflowRejectNoteModal";
@@ -28,6 +31,7 @@ export interface CreditChangeRequestListItem {
   code: string;
   policyType: string;
   policyTypeLabel: string;
+  identityAttachment?: string | null;
   currentCreditLimit?: number | null;
   requestedCreditLimit?: number | null;
   currentPaymentTerm?: number | null;
@@ -54,6 +58,7 @@ interface CreditChangeRequestDetailResponse {
   requested_credit_limit?: number | null;
   requested_payment_term?: number | null;
   requested_limit_customer_overdue?: number | null;
+  identity_attachment?: string | null;
   reason?: string | null;
   rejected_note?: string | null;
   saga_status?: string | null;
@@ -119,6 +124,170 @@ function displayText(value?: string | number | null): string {
 function formatDays(value?: number | null): string {
   if (typeof value !== "number" || Number.isNaN(value)) return "-";
   return `${value} hari`;
+}
+
+function getPreviewType(params: {
+  url?: string | null;
+  contentType?: string | null;
+}): "image" | "pdf" | "file" | "none" {
+  const { url, contentType } = params;
+  if (contentType) {
+    const normalizedType = contentType.toLowerCase();
+    if (normalizedType.startsWith("image/")) return "image";
+    if (normalizedType.includes("pdf")) return "pdf";
+    return "file";
+  }
+
+  if (!url) return "none";
+  const normalized = url.toLowerCase();
+  if (
+    normalized.endsWith(".png") ||
+    normalized.endsWith(".jpg") ||
+    normalized.endsWith(".jpeg") ||
+    normalized.endsWith(".webp") ||
+    normalized.endsWith(".gif")
+  ) {
+    return "image";
+  }
+  if (normalized.endsWith(".pdf")) {
+    return "pdf";
+  }
+  return "file";
+}
+
+function AttachmentPreview({
+  label,
+  url,
+  token,
+}: {
+  label: string;
+  url?: string | null;
+  token?: string | null;
+}) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [contentType, setContentType] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    async function loadPreview() {
+      if (!url || !token) {
+        setBlobUrl(null);
+        setContentType(null);
+        setError(null);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await apiFetch(
+          url,
+          { method: "GET", cache: "no-store" },
+          token,
+        );
+
+        if (!response.ok) {
+          throw new Error(`Gagal memuat lampiran (${response.status})`);
+        }
+
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+
+        if (!cancelled) {
+          setBlobUrl(objectUrl);
+          setContentType(blob.type || response.headers.get("Content-Type"));
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setBlobUrl(null);
+          setContentType(null);
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Gagal memuat preview lampiran",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadPreview();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [token, url]);
+
+  const previewType = useMemo(
+    () => getPreviewType({ url, contentType }),
+    [contentType, url],
+  );
+  const previewUrl = blobUrl || url || "";
+
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      {!url ? (
+        <p className="mt-1 text-sm text-slate-700">-</p>
+      ) : (
+        <div className="mt-2 space-y-3">
+          {loading && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+              Memuat preview lampiran...
+            </div>
+          )}
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+          {!loading && !error && previewType === "image" && (
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+              <div className="relative h-72 w-full bg-white">
+                <Image
+                  src={previewUrl}
+                  alt={label}
+                  fill
+                  unoptimized
+                  className="object-contain"
+                />
+              </div>
+            </div>
+          )}
+          {!loading && !error && previewType === "pdf" && (
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <iframe src={previewUrl} title={label} className="h-72 w-full" />
+            </div>
+          )}
+          {!loading && !error && previewType === "file" && (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+              Preview tidak tersedia untuk tipe file ini.
+            </div>
+          )}
+          <a
+            href={previewUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 hover:bg-sky-100"
+          >
+            <FaExternalLinkAlt className="h-3 w-3" />
+            Buka Lampiran
+          </a>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function CreditChangeRequestDetailModal({
@@ -195,6 +364,7 @@ export function CreditChangeRequestDetailModal({
 
   const activeDetail = detail || null;
   const normalizedActions = useMemo(() => actions, [actions]);
+  const attachmentUrl = getFileUrl(activeDetail?.identity_attachment);
 
   const createdBy = useMemo(
     () =>
@@ -486,6 +656,20 @@ export function CreditChangeRequestDetailModal({
                       </p>
                     </div>
                   </div>
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <div className="mb-4 flex items-center gap-2">
+                    <FaFileAlt className="text-sky-500" />
+                    <h3 className="text-lg font-bold text-slate-900">
+                      Identity Attachment
+                    </h3>
+                  </div>
+                  <AttachmentPreview
+                    label="Identity Attachment"
+                    url={attachmentUrl}
+                    token={token}
+                  />
                 </section>
 
                 <section className="rounded-2xl border border-slate-200 bg-white p-5">

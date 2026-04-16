@@ -1,13 +1,16 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import {
   FaCalendarAlt,
   FaCheckCircle,
   FaClock,
   FaEye,
+  FaFileAlt,
   FaFileInvoiceDollar,
+  FaImage,
   FaPlus,
   FaSearch,
   FaSortAmountDown,
@@ -15,7 +18,14 @@ import {
   FaTimesCircle,
 } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_CONFIG, apiFetch, getQueryUrl, getResourceUrl } from "@/config/api";
+import {
+  API_CONFIG,
+  apiFetch,
+  getAuthHeadersFormData,
+  getFileUrl,
+  getQueryUrl,
+  getResourceUrl,
+} from "@/config/api";
 import Pagination, { usePagination } from "@/components/ui/Pagination";
 import {
   CreditChangeRequestDetailModal,
@@ -36,6 +46,7 @@ interface CreditChangeRequestApiResponse {
   requested_credit_limit?: number | null;
   requested_payment_term?: number | null;
   requested_limit_customer_overdue?: number | null;
+  identity_attachment?: string | null;
   reason?: string | null;
   rejected_note?: string | null;
   status?: string | null;
@@ -111,6 +122,18 @@ function getStatusTone(status: string) {
   return "bg-slate-100 text-slate-700 border-slate-200";
 }
 
+function isImageAttachment(url?: string | null): boolean {
+  if (!url) return false;
+  const normalized = url.toLowerCase();
+  return (
+    normalized.endsWith(".png") ||
+    normalized.endsWith(".jpg") ||
+    normalized.endsWith(".jpeg") ||
+    normalized.endsWith(".webp") ||
+    normalized.endsWith(".gif")
+  );
+}
+
 export function CreditChangeRequestList() {
   const { token, isAuthenticated } = useAuth();
   const [items, setItems] = useState<CreditChangeRequestListItem[]>([]);
@@ -165,6 +188,7 @@ export function CreditChangeRequestList() {
         currentLimitCustomerOverdue: row.current_limit_customer_overdue ?? null,
         requestedLimitCustomerOverdue:
           row.requested_limit_customer_overdue ?? null,
+        identityAttachment: row.identity_attachment || null,
         reason: row.reason || null,
         rejectedNote: row.rejected_note || null,
         status: row.status || "Draft",
@@ -257,24 +281,45 @@ export function CreditChangeRequestList() {
       requestedPaymentTerm?: number;
       requestedLimitCustomerOverdue?: number;
       reason: string;
+      identityAttachment?: File | null;
     }) => {
       if (!token) throw new Error("Not authenticated");
 
       setSaving(true);
       try {
+        const formData = new FormData();
+        formData.append("policy_type", payload.policyType);
+        formData.append("policy_id", String(payload.policyId));
+        formData.append("reason", payload.reason);
+
+        if (payload.requestedCreditLimit !== undefined) {
+          formData.append(
+            "requested_credit_limit",
+            String(payload.requestedCreditLimit),
+          );
+        }
+        if (payload.requestedPaymentTerm !== undefined) {
+          formData.append(
+            "requested_payment_term",
+            String(payload.requestedPaymentTerm),
+          );
+        }
+        if (payload.requestedLimitCustomerOverdue !== undefined) {
+          formData.append(
+            "requested_limit_customer_overdue",
+            String(payload.requestedLimitCustomerOverdue),
+          );
+        }
+        if (payload.identityAttachment) {
+          formData.append("identity_attachment", payload.identityAttachment);
+        }
+
         const response = await apiFetch(
           getResourceUrl(API_CONFIG.ENDPOINTS.CREDIT_CHANGE_REQUEST),
           {
             method: "POST",
-            body: JSON.stringify({
-              policy_type: payload.policyType,
-              policy_id: payload.policyId,
-              requested_credit_limit: payload.requestedCreditLimit,
-              requested_payment_term: payload.requestedPaymentTerm,
-              requested_limit_customer_overdue:
-                payload.requestedLimitCustomerOverdue,
-              reason: payload.reason,
-            }),
+            headers: getAuthHeadersFormData(token),
+            body: formData,
             cache: "no-store",
           },
           token,
@@ -439,8 +484,14 @@ export function CreditChangeRequestList() {
                 }}
                 className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm"
               >
+                {(() => {
+                  const attachmentUrl = getFileUrl(item.identityAttachment);
+                  const hasImageAttachment = isImageAttachment(attachmentUrl);
+
+                  return (
+                    <>
                 <div className="border-b border-gray-100 bg-gradient-to-br from-white via-emerald-50/30 to-white p-5">
-                  <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="mb-4 flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">
                         {item.code}
@@ -456,6 +507,40 @@ export function CreditChangeRequestList() {
                     >
                       {item.status}
                     </span>
+                  </div>
+
+                  <div className="mb-4 flex items-center gap-3 rounded-xl border border-slate-200 bg-white/80 p-3">
+                    <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                      {hasImageAttachment && attachmentUrl ? (
+                        <Image
+                          src={attachmentUrl}
+                          alt={`Attachment ${item.code}`}
+                          fill
+                          unoptimized
+                          className="object-cover"
+                        />
+                      ) : (
+                        <span className="text-slate-400">
+                          {attachmentUrl ? (
+                            <FaFileAlt className="h-6 w-6" />
+                          ) : (
+                            <FaImage className="h-6 w-6" />
+                          )}
+                        </span>
+                      )}
+                    </div>
+                    {/* <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Identity Attachment
+                      </p>
+                      <p className="mt-1 truncate text-sm font-medium text-slate-800">
+                        {attachmentUrl
+                          ? hasImageAttachment
+                            ? "Lampiran gambar tersedia"
+                            : "Lampiran file tersedia"
+                          : "Belum ada lampiran"}
+                      </p>
+                    </div> */}
                   </div>
 
                   <div className="grid grid-cols-1 gap-3">
@@ -524,6 +609,9 @@ export function CreditChangeRequestList() {
                     View Details
                   </button>
                 </div>
+                    </>
+                  );
+                })()}
               </motion.div>
             ))}
           </div>

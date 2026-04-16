@@ -30,6 +30,7 @@ import { motion } from "framer-motion";
 export type Branch = {
   id: number;
   name: string;
+  branch_name: string;
   city: string;
   address: string;
   lat: number;
@@ -53,6 +54,7 @@ type BranchAPIResponse = {
   message: string;
   data: Array<{
     id: number;
+    name?: string;
     branch_name: string; // API uses branch_name, we map to name
     city: string;
     address: string;
@@ -86,7 +88,6 @@ const SNAP_KEY = "ekatalog_branches_snapshot";
 
 export default function BranchList() {
   const {
-    hasPermission,
     hasAnyPermission,
     isAuthenticated,
     isLoading: authLoading,
@@ -154,7 +155,8 @@ export default function BranchList() {
         // Map API response to Branch type
         const mappedBranches: Branch[] = response.data.map((item) => ({
           id: item.id,
-          name: item.branch_name, // Map branch_name to name
+          name: item.name || "",
+          branch_name: item.branch_name,
           city: item.city,
           address: item.address,
           lat: parseFloat(item.lat) || 0, // Convert string to number
@@ -183,7 +185,7 @@ export default function BranchList() {
         setBranches(mappedBranches);
         try {
           localStorage.setItem(SNAP_KEY, JSON.stringify(mappedBranches));
-        } catch (e) {
+        } catch {
           // console.error("Failed to save snapshot:", e);
         }
       } else {
@@ -248,7 +250,8 @@ export default function BranchList() {
 
           const mappedBranches: Branch[] = response.data.map((item) => ({
             id: item.id,
-            name: item.branch_name,
+            name: item.name || "",
+            branch_name: item.branch_name,
             city: item.city,
             address: item.address,
             lat: parseFloat(item.lat) || 0,
@@ -277,7 +280,7 @@ export default function BranchList() {
           setBranches(mappedBranches);
           localStorage.setItem(SNAP_KEY, JSON.stringify(mappedBranches));
         }
-      } catch (error) {
+      } catch {
         // console.error("Failed to reload branches:", error);
       }
     }
@@ -296,7 +299,7 @@ export default function BranchList() {
 
   function promptDeleteBranch(branch: Branch) {
     setConfirmTitle("Hapus Cabang");
-    setConfirmDesc(`Yakin ingin menghapus cabang "${branch.name}"?`);
+    setConfirmDesc(`Yakin ingin menghapus cabang "${branch.branch_name}"?`);
     actionRef.current = async () => {
       try {
         if (!token) {
@@ -464,6 +467,7 @@ export default function BranchList() {
     filteredBranches = filteredBranches.filter(
       (b) =>
         b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        b.branch_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         b.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
         b.address.toLowerCase().includes(searchQuery.toLowerCase()),
     );
@@ -483,9 +487,9 @@ export default function BranchList() {
   const sortedBranches = [...filteredBranches].sort((a, b) => {
     switch (sortBy) {
       case "name-asc":
-        return a.name.localeCompare(b.name);
+        return a.branch_name.localeCompare(b.branch_name);
       case "name-desc":
-        return b.name.localeCompare(a.name);
+        return b.branch_name.localeCompare(a.branch_name);
       case "kota-asc":
         return a.city.localeCompare(b.city);
       case "kota-desc":
