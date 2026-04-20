@@ -176,6 +176,13 @@ const MASTER_MENU: MenuItem[] = [
     requireAuth: true,
   },
   {
+    label: "Sales Team",
+    href: "/sales-teams",
+    icon: <FaLayerGroup className="w-4 h-4" />,
+    category: "Master Data",
+    requireAuth: true,
+  },
+  {
     label: "Items",
     href: "/items",
     icon: <BiSolidPurchaseTag className="w-4 h-4" />,
@@ -390,7 +397,11 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
 
   // Auto-open submenu based on current path
   useEffect(() => {
-    if (pathname.startsWith("/branches") || pathname.startsWith("/items")) {
+    if (
+      pathname.startsWith("/branches") ||
+      pathname.startsWith("/sales-teams") ||
+      pathname.startsWith("/items")
+    ) {
       setOpenSubmenu("master");
     } else if (
       pathname.startsWith("/products") ||

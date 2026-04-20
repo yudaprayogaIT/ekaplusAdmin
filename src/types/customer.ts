@@ -5,6 +5,7 @@ export interface GroupParent {
   id: number; // GPID (auto-increment)
   code?: string; // document name/code (e.g. GP00002)
   name: string; // GPName (unique)
+  description?: string;
   credit_limit_active?: number;
   credit_limit?: number | null;
   payment_term_active?: number;
@@ -26,9 +27,13 @@ export interface GroupCustomer {
   id: number; // GCID (auto-increment)
   code?: string; // document name/code (e.g. GC00002)
   name: string; // GCName (from company name)
+  description?: string;
   gp_id: number; // Foreign key to GP
   gp_name?: string; // GP name (for display)
   gp_code?: string; // GP code (for display)
+  company_name?: string;
+  company_title?: string;
+  company_type?: string;
   credit_limit_active?: number;
   credit_limit?: number | null;
   payment_term_active?: number;
@@ -38,6 +43,10 @@ export interface GroupCustomer {
   owner_name?: string; // Owner full name (from registration)
   owner_phone?: string; // Owner phone number
   owner_email?: string; // Owner email address
+  owner_place_of_birth?: string;
+  owner_date_of_birth?: string;
+  tax_status?: number;
+  npwp?: string;
   created_at: string;
   created_by?: string;
   updated_at: string;
@@ -50,6 +59,7 @@ export interface BranchCustomer {
   id: number; // BCID (auto-increment)
   code?: string; // document name/code (e.g. BC00002)
   name: string; // BCName (GCName + Branch.city)
+  description?: string;
   gc_id: number; // Foreign key to GC
   gc_name?: string; // GC name (for display)
   gc_code?: string; // GC code (for display)
@@ -67,6 +77,16 @@ export interface BranchCustomer {
   owner_name?: string; // Owner full name (from registration)
   owner_phone?: string; // Owner phone number
   owner_email?: string; // Owner email address
+  owner_place_of_birth?: string;
+  owner_date_of_birth?: string;
+  payment_method?: string;
+  payment_account?: string;
+  sales_team?: string;
+  change_reason?: string;
+  customer_register?: number;
+  notes?: string;
+  tax_status?: number;
+  npwp?: string;
   created_at: string;
   created_by?: string;
   updated_at: string;

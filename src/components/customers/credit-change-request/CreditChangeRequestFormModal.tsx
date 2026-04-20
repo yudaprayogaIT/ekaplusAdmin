@@ -5,13 +5,19 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   FaExclamationTriangle,
   FaFileInvoiceDollar,
+  FaInfoCircle,
   FaImage,
   FaSearch,
   FaSave,
   FaTimes,
 } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
+import {
+  API_CONFIG,
+  apiFetch,
+  getQueryUrl,
+  getResourceUrl,
+} from "@/config/api";
 
 type PolicyType = "nbid" | "gpid" | "gcid" | "bcid";
 
@@ -67,6 +73,13 @@ interface BranchRow {
   city?: string | null;
 }
 
+interface PolicyCurrentProfile {
+  creditLimit: number | null;
+  paymentTerm: number | null;
+  limitCustomerOverdue: number | null;
+  createdBy: string;
+}
+
 interface CreditChangeRequestFormModalProps {
   open: boolean;
   onClose: () => void;
@@ -74,19 +87,21 @@ interface CreditChangeRequestFormModalProps {
   onSave: (payload: {
     policyType: PolicyType;
     policyId: number;
+    applyToChilds: boolean;
     requestedCreditLimit?: number;
     requestedPaymentTerm?: number;
     requestedLimitCustomerOverdue?: number;
     reason: string;
     identityAttachment?: File | null;
+    customerApprovalAttachment?: File | null;
   }) => Promise<void>;
 }
 
 const POLICY_TYPE_OPTIONS: Array<{ value: PolicyType; label: string }> = [
   { value: "nbid", label: "National Brand" },
   { value: "gpid", label: "Group Parent" },
-  { value: "gcid", label: "Group Customer" },
-  { value: "bcid", label: "Branch Customer" },
+  // { value: "gcid", label: "Group Customer" },
+  // { value: "bcid", label: "Branch Customer" },
 ];
 
 const LOOKUP_PAGE_SIZE = 20;
@@ -348,6 +363,52 @@ function parseIntegerInput(value: string): number | undefined {
   return Number.isInteger(parsed) ? parsed : Number.NaN;
 }
 
+function formatCurrency(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "-";
+  return new Intl.NumberFormat("id-ID").format(value);
+}
+
+function formatDays(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "-";
+  return `${new Intl.NumberFormat("id-ID").format(value)} hari`;
+}
+
+function resolveUserName(value: unknown): string {
+  if (!value) return "-";
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return `User #${value}`;
+  if (typeof value === "object") {
+    const candidate = value as {
+      full_name?: string | null;
+      name?: string | null;
+      email?: string | null;
+      id?: number | string | null;
+    };
+    return (
+      candidate.full_name ||
+      candidate.name ||
+      candidate.email ||
+      (candidate.id ? `User #${candidate.id}` : "-")
+    );
+  }
+  return "-";
+}
+
+function endpointForPolicyType(policyType: PolicyType): string {
+  switch (policyType) {
+    case "nbid":
+      return API_CONFIG.ENDPOINTS.NATIONAL_BRAND;
+    case "gpid":
+      return API_CONFIG.ENDPOINTS.GROUP_PARENT;
+    case "gcid":
+      return API_CONFIG.ENDPOINTS.GROUP_CUSTOMER;
+    case "bcid":
+      return API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2;
+    default:
+      return API_CONFIG.ENDPOINTS.NATIONAL_BRAND;
+  }
+}
+
 export function CreditChangeRequestFormModal({
   open,
   onClose,
@@ -365,8 +426,11 @@ export function CreditChangeRequestFormModal({
   const [requestedPaymentTerm, setRequestedPaymentTerm] = useState("");
   const [requestedLimitCustomerOverdue, setRequestedLimitCustomerOverdue] =
     useState("");
+  const [applyToChilds, setApplyToChilds] = useState(false);
   const [reason, setReason] = useState("");
   const [identityAttachment, setIdentityAttachment] = useState<File | null>(null);
+  const [customerApprovalAttachment, setCustomerApprovalAttachment] =
+    useState<File | null>(null);
   const [lookups, setLookups] = useState<PolicyLookups>({
     nbid: [],
     gpid: [],
@@ -375,6 +439,10 @@ export function CreditChangeRequestFormModal({
   });
   const [lookupMeta, setLookupMeta] = useState<PolicyLookupMetaMap>(EMPTY_LOOKUP_META);
   const [lookupLoading, setLookupLoading] = useState(false);
+  const [currentProfile, setCurrentProfile] = useState<PolicyCurrentProfile | null>(
+    null,
+  );
+  const [currentProfileLoading, setCurrentProfileLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -387,9 +455,13 @@ export function CreditChangeRequestFormModal({
     setRequestedCreditLimit("");
     setRequestedPaymentTerm("");
     setRequestedLimitCustomerOverdue("");
+    setApplyToChilds(false);
     setReason("");
     setIdentityAttachment(null);
+    setCustomerApprovalAttachment(null);
     setError(null);
+    setCurrentProfile(null);
+    setCurrentProfileLoading(false);
     setLookups({
       nbid: [],
       gpid: [],
@@ -495,7 +567,78 @@ export function CreditChangeRequestFormModal({
     setPolicySearch("");
     setDebouncedPolicySearch("");
     setPolicyDropdownOpen(false);
+    setCurrentProfile(null);
+    setCurrentProfileLoading(false);
   }, [open, policyType]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchCurrentProfile() {
+      const parsedPolicyId = Number(policyId || 0);
+      if (!open || !token || !isAuthenticated || !parsedPolicyId) {
+        setCurrentProfile(null);
+        setCurrentProfileLoading(false);
+        return;
+      }
+
+      setCurrentProfileLoading(true);
+      try {
+        const response = await apiFetch(
+          getResourceUrl(endpointForPolicyType(policyType), parsedPolicyId),
+          { method: "GET", cache: "no-store" },
+          token,
+        );
+
+        if (!response.ok) {
+          throw new Error(`Gagal memuat profil policy (${response.status})`);
+        }
+
+        const json = await response.json();
+        const data = json?.data as
+          | {
+              credit_limit?: number | null;
+              payment_term?: number | null;
+              limit_customer_overdue?: number | null;
+              created_by?: unknown;
+            }
+          | undefined;
+
+        if (!cancelled) {
+          setCurrentProfile({
+            creditLimit:
+              typeof data?.credit_limit === "number" ? data.credit_limit : null,
+            paymentTerm:
+              typeof data?.payment_term === "number" ? data.payment_term : null,
+            limitCustomerOverdue:
+              typeof data?.limit_customer_overdue === "number"
+                ? data.limit_customer_overdue
+                : null,
+            createdBy: resolveUserName(data?.created_by),
+          });
+        }
+      } catch (fetchError) {
+        if (!cancelled) {
+          setCurrentProfile(null);
+          setError(
+            fetchError instanceof Error
+              ? fetchError.message
+              : "Gagal memuat profil policy saat ini",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setCurrentProfileLoading(false);
+        }
+      }
+    }
+
+    void fetchCurrentProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, open, policyId, policyType, token]);
 
   const policyOptions = useMemo(() => lookups[policyType] || [], [lookups, policyType]);
   const activeLookupMeta = lookupMeta[policyType];
@@ -503,6 +646,7 @@ export function CreditChangeRequestFormModal({
     () => policyOptions.find((option) => String(option.id) === policyId) || null,
     [policyId, policyOptions],
   );
+  const selectedPolicyLabel = selectedPolicyOption?.label || policySearch.trim() || "-";
 
   const handleLoadMore = async () => {
     if (!token || !isAuthenticated || lookupLoading || !activeLookupMeta.hasMore) {
@@ -609,11 +753,13 @@ export function CreditChangeRequestFormModal({
       await onSave({
         policyType,
         policyId: parsedPolicyId,
+        applyToChilds,
         requestedCreditLimit: parsedCreditLimit,
         requestedPaymentTerm: parsedPaymentTerm,
         requestedLimitCustomerOverdue: parsedLimitCustomerOverdue,
         reason: trimmedReason,
         identityAttachment,
+        customerApprovalAttachment,
       });
     } catch (saveError) {
       setError(
@@ -657,7 +803,7 @@ export function CreditChangeRequestFormModal({
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.96 }}
-          className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+          className="flex max-h-[92vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
         >
           <div className="flex items-center justify-between border-b border-gray-100 bg-white px-6 py-5">
             <div className="flex items-center gap-3">
@@ -683,247 +829,396 @@ export function CreditChangeRequestFormModal({
             </button>
           </div>
 
-          <form onSubmit={submit} className="space-y-5 p-6">
-            {error ? (
-              <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                <FaExclamationTriangle className="mt-0.5" />
-                <span>{error}</span>
-              </div>
-            ) : null}
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-semibold text-gray-700">
-                  Policy Type
-                </label>
-                <select
-                  value={policyType}
-                  onChange={(e) => setPolicyType(e.target.value as PolicyType)}
-                  disabled={saving}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-emerald-300 focus:bg-white"
-                >
-                  {POLICY_TYPE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-semibold text-gray-700">
-                  Policy
-                </label>
-                <div className="relative" ref={policyDropdownRef}>
-                  <FaSearch className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    value={policySearch}
-                    onChange={(e) => handlePolicySearchChange(e.target.value)}
-                    onFocus={() => setPolicyDropdownOpen(true)}
-                    disabled={saving}
-                    placeholder="Cari policy..."
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-11 py-3 text-sm text-gray-700 outline-none transition focus:border-emerald-300 focus:bg-white"
-                  />
-
-                  {policyDropdownOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -6, scale: 0.98 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -4, scale: 0.98 }}
-                      transition={{ duration: 0.18, ease: "easeOut" }}
-                      className="absolute left-0 right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl"
-                    >
-                      <motion.div
-                        layout
-                        className="max-h-64 overflow-y-auto py-2"
-                        onScroll={handlePolicyOptionsScroll}
-                      >
-                        <AnimatePresence mode="popLayout" initial={false}>
-                          {policyOptions.length > 0 ? (
-                            policyOptions.map((option) => {
-                              const isSelected = String(option.id) === policyId;
-
-                              return (
-                                <motion.button
-                                  layout
-                                  initial={{ opacity: 0, y: 6 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  exit={{ opacity: 0, y: -4 }}
-                                  transition={{ duration: 0.15, ease: "easeOut" }}
-                                  key={option.id}
-                                  type="button"
-                                  onClick={() => handlePolicySelect(option)}
-                                  className={`flex w-full items-start justify-between gap-3 px-4 py-3 text-left text-sm transition ${
-                                    isSelected
-                                      ? "bg-emerald-50 text-emerald-700"
-                                      : "text-gray-700 hover:bg-gray-50"
-                                  }`}
-                                >
-                                  <span className="line-clamp-2">{option.label}</span>
-                                  <span className="shrink-0 text-xs text-gray-400">
-                                    #{option.id}
-                                  </span>
-                                </motion.button>
-                              );
-                            })
-                          ) : lookupLoading ? (
-                            <motion.div
-                              key="loading"
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              exit={{ opacity: 0 }}
-                              className="px-4 py-4 text-sm text-gray-500"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-                                <span>Memuat policy...</span>
-                              </div>
-                            </motion.div>
-                          ) : (
-                            <motion.div
-                              key="empty"
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              exit={{ opacity: 0 }}
-                              className="px-4 py-4 text-sm text-gray-500"
-                            >
-                              Tidak ada policy yang cocok
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-
-                        {lookupLoading && policyOptions.length > 0 ? (
-                          <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="border-t border-gray-100 px-4 py-3 text-xs text-gray-500"
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
-                              <span>Memuat data tambahan...</span>
-                            </div>
-                          </motion.div>
-                        ) : null}
-                      </motion.div>
-                    </motion.div>
-                  )}
-                </div>
-                <p className="mt-1 text-xs text-gray-500">
-                  Nilai yang dikirim ke database adalah `id` dari policy yang dipilih.
-                </p>
-                <div className="mt-3 flex items-center justify-between gap-3 text-xs text-gray-500">
-                  <p>{policyOptions.length} policy dimuat</p>
-                  <p>
-                    {lookupLoading
-                      ? "Memuat..."
-                      : activeLookupMeta.hasMore
-                        ? "Scroll dropdown untuk memuat data berikutnya"
-                        : activeLookupMeta.loaded
-                          ? "Semua data sudah dimuat"
-                          : ""}
-                  </p>
-                </div>
-                {selectedPolicyOption ? (
-                  <p className="mt-2 text-xs font-medium text-emerald-700">
-                    Policy terpilih: {selectedPolicyOption.label}
-                  </p>
+          <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 overflow-y-auto p-6">
+              <div className="space-y-5">
+                {error ? (
+                  <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                    <FaExclamationTriangle className="mt-0.5" />
+                    <span>{error}</span>
+                  </div>
                 ) : null}
-              </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-semibold text-gray-700">
-                  Requested Credit Limit
-                </label>
-                <input
-                  type="text"
-                  value={requestedCreditLimit}
-                  onChange={(e) =>
-                    setRequestedCreditLimit(normalizeCurrencyInput(e.target.value))
-                  }
-                  disabled={saving}
-                  placeholder="Contoh: 1.000.000"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-emerald-300 focus:bg-white"
-                />
-              </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-gray-700">
+                      Policy Type
+                    </label>
+                    <select
+                      value={policyType}
+                      onChange={(e) => setPolicyType(e.target.value as PolicyType)}
+                      disabled={saving}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-emerald-300 focus:bg-white"
+                    >
+                      {POLICY_TYPE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-semibold text-gray-700">
-                  Requested Payment Term
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={requestedPaymentTerm}
-                  onChange={(e) => setRequestedPaymentTerm(e.target.value)}
-                  disabled={saving}
-                  placeholder="Hari"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-emerald-300 focus:bg-white"
-                />
-              </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-gray-700">
+                      Policy
+                    </label>
+                    <div className="relative" ref={policyDropdownRef}>
+                      <FaSearch className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        value={policySearch}
+                        onChange={(e) => handlePolicySearchChange(e.target.value)}
+                        onFocus={() => setPolicyDropdownOpen(true)}
+                        disabled={saving}
+                        placeholder="Cari policy..."
+                        className="w-full rounded-xl border border-gray-200 bg-gray-50 px-11 py-3 text-sm text-gray-700 outline-none transition focus:border-emerald-300 focus:bg-white"
+                      />
 
-              <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-semibold text-gray-700">
-                  Requested Limit Customer Overdue
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={requestedLimitCustomerOverdue}
-                  onChange={(e) => setRequestedLimitCustomerOverdue(e.target.value)}
-                  disabled={saving}
-                  placeholder="Hari"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-emerald-300 focus:bg-white"
-                />
-              </div>
+                      {policyDropdownOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                          transition={{ duration: 0.18, ease: "easeOut" }}
+                          className="absolute left-0 right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl"
+                        >
+                          <motion.div
+                            layout
+                            className="max-h-64 overflow-y-auto py-2"
+                            onScroll={handlePolicyOptionsScroll}
+                          >
+                            <AnimatePresence mode="popLayout" initial={false}>
+                              {policyOptions.length > 0 ? (
+                                policyOptions.map((option) => {
+                                  const isSelected = String(option.id) === policyId;
 
-              <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-semibold text-gray-700">
-                  Reason
-                </label>
-                <textarea
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  disabled={saving}
-                  rows={5}
-                  placeholder="Jelaskan alasan pengajuan perubahan credit"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-emerald-300 focus:bg-white"
-                />
-              </div>
+                                  return (
+                                    <motion.button
+                                      layout
+                                      initial={{ opacity: 0, y: 6 }}
+                                      animate={{ opacity: 1, y: 0 }}
+                                      exit={{ opacity: 0, y: -4 }}
+                                      transition={{ duration: 0.15, ease: "easeOut" }}
+                                      key={option.id}
+                                      type="button"
+                                      onClick={() => handlePolicySelect(option)}
+                                      className={`flex w-full items-start justify-between gap-3 px-4 py-3 text-left text-sm transition ${
+                                        isSelected
+                                          ? "bg-emerald-50 text-emerald-700"
+                                          : "text-gray-700 hover:bg-gray-50"
+                                      }`}
+                                    >
+                                      <span className="line-clamp-2">{option.label}</span>
+                                      <span className="shrink-0 text-xs text-gray-400">
+                                        #{option.id}
+                                      </span>
+                                    </motion.button>
+                                  );
+                                })
+                              ) : lookupLoading ? (
+                                <motion.div
+                                  key="loading"
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: 1 }}
+                                  exit={{ opacity: 0 }}
+                                  className="px-4 py-4 text-sm text-gray-500"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+                                    <span>Memuat policy...</span>
+                                  </div>
+                                </motion.div>
+                              ) : (
+                                <motion.div
+                                  key="empty"
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: 1 }}
+                                  exit={{ opacity: 0 }}
+                                  className="px-4 py-4 text-sm text-gray-500"
+                                >
+                                  Tidak ada policy yang cocok
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
 
-              <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-semibold text-gray-700">
-                  Identity Attachment
-                </label>
-                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-4 text-sm text-gray-600 transition hover:border-emerald-300 hover:bg-white">
-                  <FaImage className="h-4 w-4 text-emerald-600" />
-                  <span className="flex-1">
-                    {identityAttachment
-                      ? identityAttachment.name
-                      : "Pilih gambar attachment untuk pengajuan credit"}
-                  </span>
-                  <span className="rounded-lg bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                    Upload
-                  </span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    disabled={saving}
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0] || null;
-                      setIdentityAttachment(file);
-                    }}
-                  />
-                </label>
-                <p className="mt-1 text-xs text-gray-500">
-                  Attachment ini akan dikirim sebagai `identity_attachment`.
-                </p>
+                            {lookupLoading && policyOptions.length > 0 ? (
+                              <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="border-t border-gray-100 px-4 py-3 text-xs text-gray-500"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                                  <span>Memuat data tambahan...</span>
+                                </div>
+                              </motion.div>
+                            ) : null}
+                          </motion.div>
+                        </motion.div>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Nilai yang dikirim ke database adalah `id` dari policy yang dipilih.
+                    </p>
+                    <div className="mt-3 flex items-center justify-between gap-3 text-xs text-gray-500">
+                      <p>{policyOptions.length} policy dimuat</p>
+                      <p>
+                        {lookupLoading
+                          ? "Memuat..."
+                          : activeLookupMeta.hasMore
+                            ? "Scroll dropdown untuk memuat data berikutnya"
+                            : activeLookupMeta.loaded
+                              ? "Semua data sudah dimuat"
+                              : ""}
+                      </p>
+                    </div>
+                    {selectedPolicyOption ? (
+                      <p className="mt-2 text-xs font-medium text-emerald-700">
+                        Policy terpilih: {selectedPolicyOption.label}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="md:col-span-2 grid grid-cols-1 gap-4 xl:grid-cols-2">
+                    <section className="rounded-2xl border border-gray-200 bg-gradient-to-br from-slate-50 via-white to-slate-100 p-5">
+                      <div className="mb-4 flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-base font-semibold text-gray-800">
+                            Current Credit Profile
+                          </h3>
+                          <p className="mt-1 text-xs text-gray-500">
+                            Data saat ini dari policy yang dipilih.
+                          </p>
+                        </div>
+                        <span className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
+                          <FaInfoCircle className="h-3 w-3" />
+                          {currentProfileLoading ? "Memuat..." : "Aktif"}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="rounded-xl border border-gray-200 bg-white p-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                            Current Credit Limit
+                          </p>
+                          <p className="mt-2 text-lg font-semibold text-slate-800">
+                            {currentProfileLoading
+                              ? "Memuat..."
+                              : currentProfile
+                                ? `Rp ${formatCurrency(currentProfile.creditLimit)}`
+                                : "-"}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border border-gray-200 bg-white p-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                            Current Payment Term
+                          </p>
+                          <p className="mt-2 text-lg font-semibold text-slate-800">
+                            {currentProfileLoading
+                              ? "Memuat..."
+                              : currentProfile
+                                ? formatDays(currentProfile.paymentTerm)
+                                : "-"}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border border-gray-200 bg-white p-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                            Current Limit Customer Overdue
+                          </p>
+                          <p className="mt-2 text-lg font-semibold text-slate-800">
+                            {currentProfileLoading
+                              ? "Memuat..."
+                              : currentProfile
+                                ? formatDays(currentProfile.limitCustomerOverdue)
+                                : "-"}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border border-gray-200 bg-white p-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                            Created By
+                          </p>
+                          <p className="mt-2 text-sm font-medium text-slate-700">
+                            {currentProfileLoading
+                              ? "Memuat..."
+                              : currentProfile?.createdBy || "-"}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border border-gray-200 bg-white p-4 sm:col-span-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                            Policy
+                          </p>
+                          <p className="mt-2 text-sm font-medium text-slate-700">
+                            {selectedPolicyLabel}
+                          </p>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5">
+                      <div className="mb-4">
+                        <h3 className="text-base font-semibold text-gray-800">
+                          Requested Changes
+                        </h3>
+                        <p className="mt-1 text-xs text-gray-500">
+                          Isi hanya nilai yang ingin diubah.
+                        </p>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div>
+                          <label className="mb-1 block text-sm font-semibold text-gray-700">
+                            Requested Credit Limit
+                          </label>
+                          <input
+                            type="text"
+                            value={requestedCreditLimit}
+                            onChange={(e) =>
+                              setRequestedCreditLimit(
+                                normalizeCurrencyInput(e.target.value),
+                              )
+                            }
+                            disabled={saving}
+                            placeholder="Contoh: 1.000.000"
+                            className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-emerald-300"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          <div>
+                            <label className="mb-1 block text-sm font-semibold text-gray-700">
+                              Requested Payment Term
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={requestedPaymentTerm}
+                              onChange={(e) => setRequestedPaymentTerm(e.target.value)}
+                              disabled={saving}
+                              placeholder="Hari"
+                              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-emerald-300"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-1 block text-sm font-semibold text-gray-700">
+                              Requested Limit Customer Overdue
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={requestedLimitCustomerOverdue}
+                              onChange={(e) =>
+                                setRequestedLimitCustomerOverdue(e.target.value)
+                              }
+                              disabled={saving}
+                              placeholder="Hari"
+                              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-emerald-300"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="mb-1 block text-sm font-semibold text-gray-700">
+                            Reason
+                          </label>
+                          <textarea
+                            value={reason}
+                            onChange={(e) => setReason(e.target.value)}
+                            disabled={saving}
+                            rows={6}
+                            placeholder="Jelaskan alasan pengajuan perubahan credit"
+                            className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-emerald-300"
+                          />
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="mb-1 block text-sm font-semibold text-gray-700">
+                      Apply to Childs
+                    </label>
+                    <label className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={applyToChilds}
+                        onChange={(e) => setApplyToChilds(e.target.checked)}
+                        disabled={saving}
+                        className="h-4 w-4 rounded border-gray-300 text-emerald-600"
+                      />
+                      <span>Terapkan perubahan ini ke child policy terkait</span>
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-gray-700">
+                      Identity Attachment
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-4 text-sm text-gray-600 transition hover:border-emerald-300 hover:bg-white">
+                      <FaImage className="h-4 w-4 text-emerald-600" />
+                      <span className="flex-1">
+                        {identityAttachment
+                          ? identityAttachment.name
+                          : "Pilih gambar attachment untuk pengajuan credit"}
+                      </span>
+                      <span className="rounded-lg bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                        Upload
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={saving}
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0] || null;
+                          setIdentityAttachment(file);
+                        }}
+                      />
+                    </label>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Attachment ini akan dikirim sebagai `identity_attachment`.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-gray-700">
+                      Customer Approval Attachment
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-4 text-sm text-gray-600 transition hover:border-emerald-300 hover:bg-white">
+                      <FaImage className="h-4 w-4 text-emerald-600" />
+                      <span className="flex-1">
+                        {customerApprovalAttachment
+                          ? customerApprovalAttachment.name
+                          : "Pilih gambar approval customer"}
+                      </span>
+                      <span className="rounded-lg bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                        Upload
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={saving}
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0] || null;
+                          setCustomerApprovalAttachment(file);
+                        }}
+                      />
+                    </label>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Attachment ini akan dikirim sebagai `customer_approval_attachment`.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">
+            <div className="flex justify-end gap-3 border-t border-gray-100 bg-white px-6 py-4">
               <button
                 type="button"
                 onClick={onClose}

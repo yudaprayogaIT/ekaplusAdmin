@@ -31,6 +31,7 @@ interface GroupParentApiResponse {
   id: number;
   name?: string | null;
   gp_name?: string | null;
+  description?: string | null;
   credit_limit_active?: number | null;
   credit_limit?: number | null;
   payment_term_active?: number | null;
@@ -61,6 +62,7 @@ function mapGpRow(row: GroupParentApiResponse): GroupParent {
     id: Number(row.id),
     code: row.name || undefined,
     name: row.gp_name || row.name || "-",
+    description: row.description || undefined,
     credit_limit_active: Number(row.credit_limit_active || 0),
     credit_limit: row.credit_limit ?? null,
     payment_term_active: Number(row.payment_term_active || 0),

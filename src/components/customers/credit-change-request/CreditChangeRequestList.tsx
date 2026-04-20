@@ -40,6 +40,8 @@ interface CreditChangeRequestApiResponse {
   id: number;
   name?: string | null;
   policy_type?: string | null;
+  policy_id?: number | null;
+  apply_to_childs?: number | boolean | null;
   current_credit_limit?: number | null;
   current_payment_term?: number | null;
   current_limit_customer_overdue?: number | null;
@@ -47,8 +49,13 @@ interface CreditChangeRequestApiResponse {
   requested_payment_term?: number | null;
   requested_limit_customer_overdue?: number | null;
   identity_attachment?: string | null;
+  customer_approval_attachment?: string | null;
   reason?: string | null;
   rejected_note?: string | null;
+  saga_status?: string | null;
+  sync_saga_id?: string | null;
+  sync_last_error?: string | null;
+  sync_last_rollback_error?: string | null;
   status?: string | null;
   docstatus?: number | null;
   created_at?: string | null;
@@ -181,6 +188,8 @@ export function CreditChangeRequestList() {
         code: row.name || `CCR-${row.id}`,
         policyType: String(row.policy_type || "").trim().toLowerCase(),
         policyTypeLabel: policyTypeLabel(row.policy_type),
+        policyId: Number(row.policy_id || 0),
+        applyToChilds: Boolean(Number(row.apply_to_childs || 0)),
         currentCreditLimit: row.current_credit_limit ?? null,
         requestedCreditLimit: row.requested_credit_limit ?? null,
         currentPaymentTerm: row.current_payment_term ?? null,
@@ -189,8 +198,13 @@ export function CreditChangeRequestList() {
         requestedLimitCustomerOverdue:
           row.requested_limit_customer_overdue ?? null,
         identityAttachment: row.identity_attachment || null,
+        customerApprovalAttachment: row.customer_approval_attachment || null,
         reason: row.reason || null,
         rejectedNote: row.rejected_note || null,
+        sagaStatus: row.saga_status || null,
+        syncSagaId: row.sync_saga_id || null,
+        syncLastError: row.sync_last_error || null,
+        syncLastRollbackError: row.sync_last_rollback_error || null,
         status: row.status || "Draft",
         docstatus: Number(row.docstatus || 0),
         createdAt: row.created_at || new Date(0).toISOString(),
@@ -277,11 +291,13 @@ export function CreditChangeRequestList() {
     async (payload: {
       policyType: "nbid" | "gpid" | "gcid" | "bcid";
       policyId: number;
+      applyToChilds: boolean;
       requestedCreditLimit?: number;
       requestedPaymentTerm?: number;
       requestedLimitCustomerOverdue?: number;
       reason: string;
       identityAttachment?: File | null;
+      customerApprovalAttachment?: File | null;
     }) => {
       if (!token) throw new Error("Not authenticated");
 
@@ -290,6 +306,7 @@ export function CreditChangeRequestList() {
         const formData = new FormData();
         formData.append("policy_type", payload.policyType);
         formData.append("policy_id", String(payload.policyId));
+        formData.append("apply_to_childs", payload.applyToChilds ? "1" : "0");
         formData.append("reason", payload.reason);
 
         if (payload.requestedCreditLimit !== undefined) {
@@ -312,6 +329,12 @@ export function CreditChangeRequestList() {
         }
         if (payload.identityAttachment) {
           formData.append("identity_attachment", payload.identityAttachment);
+        }
+        if (payload.customerApprovalAttachment) {
+          formData.append(
+            "customer_approval_attachment",
+            payload.customerApprovalAttachment,
+          );
         }
 
         const response = await apiFetch(

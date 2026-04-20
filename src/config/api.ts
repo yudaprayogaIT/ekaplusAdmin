@@ -15,6 +15,8 @@ export const API_CONFIG = {
 
     // Resources
     BRANCH: "/api/resource/branch",
+    SALES_TEAM: "/api/resource/sales_team",
+    SALES_TEAM_AREA: "/api/resource/sales_team_area",
     TYPE: "/api/resource/ekatalog_type",
     CATEGORY: "/api/resource/ekatalog_category",
     ITEM: "/api/resource/item",

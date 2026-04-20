@@ -31,6 +31,7 @@ interface GroupCustomerApiResponse {
   id: number;
   name?: string | null;
   gc_name?: string | null;
+  description?: string | null;
   gpid?: number | { id?: number; name?: string; gp_name?: string } | null;
   credit_limit_active?: number | null;
   credit_limit?: number | null;
@@ -175,6 +176,7 @@ export default function GCList() {
           id: Number(row.id),
           code: row.name || undefined,
           name: row.gc_name || row.name || "-",
+          description: row.description || undefined,
           gp_id: gpId,
           gp_name: directGpName || gpMap.get(gpId)?.name,
           gp_code:

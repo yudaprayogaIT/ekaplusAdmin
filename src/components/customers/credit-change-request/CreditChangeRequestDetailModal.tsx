@@ -11,6 +11,7 @@ import {
   FaExternalLinkAlt,
   FaFileAlt,
   FaInfoCircle,
+  FaImage,
   FaMoneyBillWave,
   FaStickyNote,
   FaTimes,
@@ -31,7 +32,10 @@ export interface CreditChangeRequestListItem {
   code: string;
   policyType: string;
   policyTypeLabel: string;
+  policyId?: number;
+  applyToChilds?: boolean;
   identityAttachment?: string | null;
+  customerApprovalAttachment?: string | null;
   currentCreditLimit?: number | null;
   requestedCreditLimit?: number | null;
   currentPaymentTerm?: number | null;
@@ -40,6 +44,10 @@ export interface CreditChangeRequestListItem {
   requestedLimitCustomerOverdue?: number | null;
   reason?: string | null;
   rejectedNote?: string | null;
+  sagaStatus?: string | null;
+  syncSagaId?: string | null;
+  syncLastError?: string | null;
+  syncLastRollbackError?: string | null;
   status: string;
   docstatus: number;
   createdAt: string;
@@ -52,6 +60,8 @@ interface CreditChangeRequestDetailResponse {
   id: number;
   name?: string | null;
   policy_type?: string | null;
+  policy_id?: number | null;
+  apply_to_childs?: number | boolean | null;
   current_credit_limit?: number | null;
   current_payment_term?: number | null;
   current_limit_customer_overdue?: number | null;
@@ -59,6 +69,7 @@ interface CreditChangeRequestDetailResponse {
   requested_payment_term?: number | null;
   requested_limit_customer_overdue?: number | null;
   identity_attachment?: string | null;
+  customer_approval_attachment?: string | null;
   reason?: string | null;
   rejected_note?: string | null;
   saga_status?: string | null;
@@ -365,6 +376,10 @@ export function CreditChangeRequestDetailModal({
   const activeDetail = detail || null;
   const normalizedActions = useMemo(() => actions, [actions]);
   const attachmentUrl = getFileUrl(activeDetail?.identity_attachment);
+  const customerApprovalAttachmentUrl = getFileUrl(
+    activeDetail?.customer_approval_attachment ??
+      item?.customerApprovalAttachment,
+  );
 
   const createdBy = useMemo(
     () =>
@@ -527,6 +542,14 @@ export function CreditChangeRequestDetailModal({
                     </div>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Policy ID
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {displayText(activeDetail?.policy_id ?? item.policyId)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Status
                       </p>
                       <p className="mt-1 text-sm font-semibold text-slate-900">
@@ -539,6 +562,21 @@ export function CreditChangeRequestDetailModal({
                       </p>
                       <p className="mt-1 text-sm font-semibold text-slate-900">
                         {displayText(activeDetail?.docstatus ?? item.docstatus)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Apply to Childs
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {Boolean(
+                          Number(
+                            activeDetail?.apply_to_childs ??
+                              (item.applyToChilds ? 1 : 0),
+                          ),
+                        )
+                          ? "Yes"
+                          : "No"}
                       </p>
                     </div>
                   </div>
@@ -668,6 +706,20 @@ export function CreditChangeRequestDetailModal({
                   <AttachmentPreview
                     label="Identity Attachment"
                     url={attachmentUrl}
+                    token={token}
+                  />
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <div className="mb-4 flex items-center gap-2">
+                    <FaImage className="text-sky-500" />
+                    <h3 className="text-lg font-bold text-slate-900">
+                      Customer Approval Attachment
+                    </h3>
+                  </div>
+                  <AttachmentPreview
+                    label="Customer Approval Attachment"
+                    url={customerApprovalAttachmentUrl}
                     token={token}
                   />
                 </section>

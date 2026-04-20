@@ -55,7 +55,11 @@ interface BCDetailApi {
   payment_account?: string | null;
   payment_method?: string | null;
   limit_basis?: string | null;
-  sales_team?: string | null;
+  sales_team?:
+    | number
+    | string
+    | { id?: number | string; name?: string; sales_team_name?: string }
+    | null;
   credit_limit_active?: number | null;
   credit_limit?: number | null;
   payment_term_active?: number | null;
@@ -115,8 +119,10 @@ interface RekeningOption {
   bank?: string;
 }
 
-interface SalesPersonOption {
-  name: string;
+interface SalesTeamOption {
+  id: number | string;
+  code: string;
+  label: string;
 }
 
 const PRODUCT_NEED_OPTIONS = ["Bahan Baku Springbed & Sofa", "Furniture"];
@@ -349,16 +355,42 @@ export function BCDetailModal({
   );
   const [optionError, setOptionError] = useState<string | null>(null);
   const [rekeningOptions, setRekeningOptions] = useState<RekeningOption[]>([]);
-  const [salesPersonOptions, setSalesPersonOptions] = useState<SalesPersonOption[]>([]);
+  const [salesTeamOptions, setSalesTeamOptions] = useState<SalesTeamOption[]>([]);
   const [rekeningLoading, setRekeningLoading] = useState(false);
-  const [salesLoading, setSalesLoading] = useState(false);
   const [rekeningHasMore, setRekeningHasMore] = useState(false);
-  const [salesHasMore, setSalesHasMore] = useState(false);
   const [rekeningStart, setRekeningStart] = useState(0);
-  const [salesStart, setSalesStart] = useState(0);
   const regencyCache = useRef<Record<string, WilayahOption[]>>({});
   const districtCache = useRef<Record<string, WilayahOption[]>>({});
   const branchIdForErp = toNum(detail?.branch) ?? bc?.branch_id;
+
+  const resolveSalesTeamValue = useCallback(
+    (value: BCDetailApi["sales_team"]): string => {
+      if (typeof value === "object" && value) {
+        if (value.id !== undefined && value.id !== null) return String(value.id);
+        if (value.name) return value.name;
+      }
+      if (typeof value === "number" || typeof value === "string") {
+        return String(value);
+      }
+      return "";
+    },
+    [],
+  );
+
+  const resolveSalesTeamLabel = useCallback(
+    (value: BCDetailApi["sales_team"]): string => {
+      if (typeof value === "object" && value) {
+        return value.sales_team_name || value.name || (value.id ? String(value.id) : "-");
+      }
+      const raw = typeof value === "number" || typeof value === "string" ? String(value) : "";
+      if (!raw) return "-";
+      const match = salesTeamOptions.find(
+        (option) => String(option.id) === raw || option.code === raw,
+      );
+      return match?.label || raw;
+    },
+    [salesTeamOptions],
+  );
 
   const load = useCallback(async () => {
     if (!isOpen || !bc || !token || !isAuthenticated) return;
@@ -549,45 +581,49 @@ export function BCDetailModal({
     [branchIdForErp, isEditMode, token],
   );
 
-  const loadSalesPersonOptions = useCallback(
-    async (start: number) => {
-      if (!isEditMode || !token || !branchIdForErp) return;
-      setSalesLoading(true);
-      try {
-        setOptionError(null);
-        const rows = await fetchBranchErpResourcePage<SalesPersonOption>({
-          branchId: branchIdForErp,
-          authToken: token,
-          resource: "Sales Person",
-          fields: ["name"],
-          limit: ERP_PAGE_SIZE,
-          start,
-        });
-        setSalesPersonOptions((prev) =>
-          start === 0 ? mergeUniqueByName([], rows) : mergeUniqueByName(prev, rows),
-        );
-        setSalesStart(start + rows.length);
-        setSalesHasMore(rows.length === ERP_PAGE_SIZE);
-      } catch (error) {
-        setOptionError(
-          error instanceof Error ? error.message : "Gagal memuat pilihan sales area",
-        );
-      } finally {
-        setSalesLoading(false);
+  const loadSalesTeamOptions = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await apiFetch(
+        getQueryUrl(API_CONFIG.ENDPOINTS.SALES_TEAM, {
+          fields: ["id", "name", "sales_team_name"],
+          limit: 100000,
+        }),
+        { method: "GET", cache: "no-store" },
+        token,
+      );
+      if (!res.ok) {
+        throw new Error(`Gagal memuat sales team (${res.status})`);
       }
-    },
-    [branchIdForErp, isEditMode, token],
-  );
+      const json = await res.json();
+      const rows: Array<{
+        id?: number | string | null;
+        name?: string | null;
+        sales_team_name?: string | null;
+      }> = Array.isArray(json?.data) ? json.data : [];
+      setSalesTeamOptions(
+        rows
+          .filter((row) => row.id !== undefined && row.id !== null)
+          .map((row) => ({
+            id: row.id as number | string,
+            code: row.name || String(row.id),
+            label: row.sales_team_name || row.name || String(row.id),
+          })),
+      );
+    } catch (error) {
+      setOptionError(
+        error instanceof Error ? error.message : "Gagal memuat pilihan sales team",
+      );
+    }
+  }, [token]);
 
   useEffect(() => {
     if (!isEditMode) {
       setOptionError(null);
       setRekeningOptions([]);
-      setSalesPersonOptions([]);
+      setSalesTeamOptions([]);
       setRekeningHasMore(false);
-      setSalesHasMore(false);
       setRekeningStart(0);
-      setSalesStart(0);
       return;
     }
     if (!token || !branchIdForErp) {
@@ -595,8 +631,8 @@ export function BCDetailModal({
       return;
     }
     void loadRekeningOptions(0);
-    void loadSalesPersonOptions(0);
-  }, [branchIdForErp, isEditMode, loadRekeningOptions, loadSalesPersonOptions, token]);
+    void loadSalesTeamOptions();
+  }, [branchIdForErp, isEditMode, loadRekeningOptions, loadSalesTeamOptions, token]);
 
   const getRegencies = useCallback(async (provinceCode: string) => {
     if (!provinceCode) return [];
@@ -683,7 +719,7 @@ export function BCDetailModal({
     setEditedNotes((detail?.notes || "").trim());
     setEditedPaymentAccount((detail?.payment_account || "").trim());
     setEditedPaymentMethod((detail?.payment_method || "").trim());
-    setEditedSalesTeam((detail?.sales_team || "").trim());
+    setEditedSalesTeam(resolveSalesTeamValue(detail?.sales_team));
     setEditedTaxStatus(Number(detail?.tax_status || 0));
     setEditedNpwp((detail?.npwp || "").trim());
     setEditedCreditLimitActive(Number(detail?.credit_limit_active || 0));
@@ -730,6 +766,7 @@ export function BCDetailModal({
     detail?.limit_customer_overdue_active,
     detail?.limit_customer_overdue,
     isEditMode,
+    resolveSalesTeamValue,
   ]);
 
   const hasUnsavedChanges =
@@ -787,7 +824,7 @@ export function BCDetailModal({
     const notes = (detail?.notes || "").trim();
     const paymentAccount = (detail?.payment_account || "").trim();
     const paymentMethod = (detail?.payment_method || "").trim();
-    const salesTeam = (detail?.sales_team || "").trim();
+    const salesTeam = resolveSalesTeamValue(detail?.sales_team).trim();
     const taxStatus = Number(detail?.tax_status || 0);
     const npwp = (detail?.npwp || "").trim();
     const creditLimitActive = Number(detail?.credit_limit_active || 0);
@@ -1219,7 +1256,7 @@ export function BCDetailModal({
   const paymentAccountNumber =
     paymentAccountInfo?.nomor_rekening || detail?.payment_account || "-";
   const paymentMethod = detail?.payment_method || "-";
-  const salesTeam = detail?.sales_team || "-";
+  const salesTeam = resolveSalesTeamLabel(detail?.sales_team);
   const creditLimitActiveLabel =
     Number(detail?.credit_limit_active || 0) === 1 ? "Active" : "Inactive";
   const paymentTermActiveLabel =
@@ -1234,9 +1271,20 @@ export function BCDetailModal({
   const availableRekeningOptions = editedPaymentAccount && !rekeningOptions.some((item) => item.name === editedPaymentAccount)
     ? [{ name: editedPaymentAccount }, ...rekeningOptions]
     : rekeningOptions;
-  const availableSalesOptions = editedSalesTeam && !salesPersonOptions.some((item) => item.name === editedSalesTeam)
-    ? [{ name: editedSalesTeam }, ...salesPersonOptions]
-    : salesPersonOptions;
+  const availableSalesOptions =
+    editedSalesTeam &&
+    !salesTeamOptions.some(
+      (item) => String(item.id) === editedSalesTeam || item.code === editedSalesTeam,
+    )
+      ? [
+          {
+            id: editedSalesTeam,
+            code: editedSalesTeam,
+            label: resolveSalesTeamLabel(detail?.sales_team),
+          },
+          ...salesTeamOptions,
+        ]
+      : salesTeamOptions;
   const selectedRekeningOption = availableRekeningOptions.find((item) => item.name === editedPaymentAccount) || null;
   const displayAddressRows = isEditMode ? editedRows : rows;
   const createdBy = detail?.["created_by.full_name"] || bc.created_by || "System";
@@ -1497,35 +1545,26 @@ export function BCDetailModal({
                             </div>
                             <div className="rounded-2xl border border-cyan-100 bg-cyan-50/70 p-4">
                               <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-700">
-                                Sales Area CRM
+                                Sales Team
                               </p>
                               {isEditMode ? (
-                                <div className="mt-2 space-y-2">
+                                <div className="mt-2">
                                   <select
                                     value={editedSalesTeam}
                                     onChange={(e) => setEditedSalesTeam(e.target.value)}
                                     className="w-full rounded-xl border border-blue-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
-                                    disabled={isSaving || salesLoading}
+                                    disabled={isSaving}
                                   >
-                                    <option value="">Pilih sales area</option>
+                                    <option value="">Pilih sales team</option>
                                     {availableSalesOptions.map((option) => (
-                                      <option key={option.name} value={option.name}>
-                                        {option.name}
+                                      <option
+                                        key={`${option.id}-${option.code}`}
+                                        value={String(option.id)}
+                                      >
+                                        {option.label}
                                       </option>
                                     ))}
                                   </select>
-                                  {salesHasMore ? (
-                                    <LoadMoreButton
-                                      onClick={() => void loadSalesPersonOptions(salesStart)}
-                                      loading={salesLoading}
-                                      hasMore={salesHasMore}
-                                      currentCount={availableSalesOptions.length}
-                                      totalCount={
-                                        availableSalesOptions.length +
-                                        (salesHasMore ? 1 : 0)
-                                      }
-                                    />
-                                  ) : null}
                                 </div>
                               ) : (
                                 <p className="mt-2 text-base font-bold text-slate-900">
