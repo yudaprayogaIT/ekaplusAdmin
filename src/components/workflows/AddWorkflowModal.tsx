@@ -59,7 +59,8 @@ export default function AddWorkflowModal({
   resources,
 }: Props) {
   const isEdit = !!workflow;
-  const { token } = useAuth();
+  const { token, currentUser } = useAuth();
+  const actorId = currentUser?.id ? Number(currentUser.id) || 0 : 0;
 
   // Form state
   const [resource, setResource] = useState("");
@@ -73,8 +74,186 @@ export default function AddWorkflowModal({
 
   // UI state
   const [loading, setLoading] = useState(false);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [stateModalOpen, setStateModalOpen] = useState(false);
+  const [originalWorkflowData, setOriginalWorkflowData] =
+    useState<WorkflowWithDetails | null>(null);
+
+  const normalizeWorkflowDetail = (payload: unknown): WorkflowWithDetails | null => {
+    if (!payload || typeof payload !== "object") {
+      return null;
+    }
+
+    if ("workflow" in payload) {
+      return payload as WorkflowWithDetails;
+    }
+
+    if ("data" in payload) {
+      const nested = (payload as { data?: unknown }).data;
+      if (nested && typeof nested === "object" && "workflow" in nested) {
+        return nested as WorkflowWithDetails;
+      }
+    }
+
+    return null;
+  };
+
+  const applyWorkflowToForm = (workflowData: WorkflowWithDetails) => {
+    setResource(workflowData.workflow.resource);
+    setName(workflowData.workflow.name);
+    setDescription(workflowData.workflow.description || "");
+    setIsActive(workflowData.workflow.is_active);
+
+    setSelectedStates(
+      workflowData.document_states.map((ds) => ({
+        state_id: ds.state_id,
+        state_name: ds.state_name,
+        docstatus: ds.docstatus,
+        editable: ds.editable,
+        color: ds.color,
+        icon: ds.icon,
+      }))
+    );
+
+    setTransitions(
+      workflowData.transitions.map((t) => ({
+        id: t.id,
+        from_state_id: t.from_state_id,
+        to_state_id: t.to_state_id,
+        action: t.action,
+        mode: t.mode,
+        allowed_role_ids: t.allowed_role_ids,
+        min_required: t.min_required,
+      }))
+    );
+  };
+
+  const buildDocumentStatesPayload = () => {
+    if (!isEdit || !originalWorkflowData) {
+      return selectedStates.map((state) => ({
+        ...state,
+        ...(actorId > 0
+          ? {
+              created_by: actorId,
+              updated_by: actorId,
+            }
+          : {}),
+      }));
+    }
+
+    const merged = originalWorkflowData.document_states.map((originalState) => {
+      const editedState = selectedStates.find(
+        (state) =>
+          state.state_id === originalState.state_id ||
+          state.state_name === originalState.state_name
+      );
+
+      return editedState
+        ? {
+            ...originalState,
+            ...editedState,
+            ...(actorId > 0
+              ? {
+                  created_by:
+                    originalState.created_by && originalState.created_by > 0
+                      ? originalState.created_by
+                      : actorId,
+                  updated_by: actorId,
+                }
+              : {}),
+          }
+        : originalState;
+    });
+
+    const appended = selectedStates
+      .filter(
+        (state) =>
+          !originalWorkflowData.document_states.some(
+            (originalState) =>
+              originalState.state_id === state.state_id ||
+              originalState.state_name === state.state_name
+          )
+      )
+      .map((state) => ({
+        ...state,
+        ...(actorId > 0
+          ? {
+              created_by: actorId,
+              updated_by: actorId,
+            }
+          : {}),
+      }));
+
+    return [...merged, ...appended];
+  };
+
+  const buildTransitionsPayload = () => {
+    if (!isEdit || !originalWorkflowData) {
+      return transitions.map((transition) => ({
+        ...transition,
+        ...(actorId > 0
+          ? {
+              created_by: actorId,
+              updated_by: actorId,
+            }
+          : {}),
+      }));
+    }
+
+    const merged = originalWorkflowData.transitions.map((originalTransition) => {
+      const editedTransition = transitions.find(
+        (transition) =>
+          (transition as { id?: number }).id === originalTransition.id ||
+          (
+            transition.from_state_id === originalTransition.from_state_id &&
+            transition.to_state_id === originalTransition.to_state_id &&
+            transition.action === originalTransition.action
+          )
+      );
+
+      return editedTransition
+        ? {
+            ...originalTransition,
+            ...editedTransition,
+            ...(actorId > 0
+              ? {
+                  created_by:
+                    originalTransition.created_by && originalTransition.created_by > 0
+                      ? originalTransition.created_by
+                      : actorId,
+                  updated_by: actorId,
+                }
+              : {}),
+          }
+        : originalTransition;
+    });
+
+    const appended = transitions
+      .filter(
+        (transition) =>
+          !originalWorkflowData.transitions.some(
+            (originalTransition) =>
+              (transition as { id?: number }).id === originalTransition.id ||
+              (
+                transition.from_state_id === originalTransition.from_state_id &&
+                transition.to_state_id === originalTransition.to_state_id &&
+                transition.action === originalTransition.action
+              )
+          )
+      )
+      .map((transition) => ({
+        ...transition,
+        ...(actorId > 0
+          ? {
+              created_by: actorId,
+              updated_by: actorId,
+            }
+          : {}),
+      }));
+
+    return [...merged, ...appended];
+  };
 
   const handleStateDocstatusChange = (stateId: number, docstatus: number) => {
     setSelectedStates((current) =>
@@ -99,43 +278,86 @@ export default function AddWorkflowModal({
     setSelectedStates([]);
     setTransitions([]);
     setCurrentStep(1);
+    setOriginalWorkflowData(null);
   };
 
   // Load workflow data for edit
   useEffect(() => {
-    if (isEdit && workflow) {
-      setResource(workflow.workflow.resource);
-      setName(workflow.workflow.name);
-      setDescription(workflow.workflow.description || "");
-      setIsActive(workflow.workflow.is_active);
-
-      // Convert document_states to SelectedState format
-      setSelectedStates(
-        workflow.document_states.map((ds) => ({
-          state_id: ds.state_id,
-          state_name: ds.state_name,
-          docstatus: ds.docstatus,
-          editable: ds.editable,
-          color: ds.color,
-          icon: ds.icon,
-        }))
-      );
-
-      // Convert transitions to TransitionInput format
-      setTransitions(
-        workflow.transitions.map((t) => ({
-          from_state_id: t.from_state_id,
-          to_state_id: t.to_state_id,
-          action: t.action,
-          mode: t.mode,
-          allowed_role_ids: t.allowed_role_ids,
-          min_required: t.min_required,
-        }))
-      );
-    } else {
-      resetForm();
+    if (!open) {
+      return;
     }
-  }, [isEdit, workflow, open]);
+
+    if (!isEdit || !workflow) {
+      resetForm();
+      return;
+    }
+
+    const editWorkflow = workflow;
+    let cancelled = false;
+
+    async function loadWorkflowDetail() {
+      if (!token) {
+        applyWorkflowToForm(editWorkflow);
+        setOriginalWorkflowData(editWorkflow);
+        return;
+      }
+
+      setLoadingDetail(true);
+
+      try {
+        const headers = getAuthHeaders(token);
+        const identifiers = [editWorkflow.workflow.resource, editWorkflow.workflow.id].filter(
+          (value): value is string | number => value !== undefined && value !== null
+        );
+
+        let detailData: WorkflowWithDetails | null = null;
+
+        for (const identifier of identifiers) {
+          const response = await apiFetch(
+            `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW}/${identifier}`,
+            {
+              method: "GET",
+              cache: "no-store",
+              headers,
+            },
+            token
+          );
+
+          if (!response.ok) {
+            continue;
+          }
+
+          const payload = await response.json();
+          detailData = normalizeWorkflowDetail(payload);
+          if (detailData) {
+            break;
+          }
+        }
+
+        const nextWorkflow = detailData || editWorkflow;
+
+        if (!cancelled) {
+          setOriginalWorkflowData(nextWorkflow);
+          applyWorkflowToForm(nextWorkflow);
+        }
+      } catch {
+        if (!cancelled) {
+          setOriginalWorkflowData(editWorkflow);
+          applyWorkflowToForm(editWorkflow);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingDetail(false);
+        }
+      }
+    }
+
+    void loadWorkflowDetail();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isEdit, workflow, open, token]);
 
   // Validation
   const validate = (): string[] => {
@@ -190,22 +412,38 @@ export default function AddWorkflowModal({
         throw new Error("No auth token found");
       }
 
+      const editWorkflow = workflow ?? null;
+      if (isEdit && !editWorkflow) {
+        throw new Error("Workflow data not found");
+      }
+
       const payload = {
         workflow: {
+          ...(originalWorkflowData?.workflow || {}),
           resource: resource.trim(),
           name: name.trim(),
           description: description.trim(),
           is_active: isActive,
+          ...(actorId > 0
+            ? {
+                created_by:
+                  originalWorkflowData?.workflow.created_by &&
+                  originalWorkflowData.workflow.created_by > 0
+                    ? originalWorkflowData.workflow.created_by
+                    : actorId,
+                updated_by: actorId,
+              }
+            : {}),
         },
-        document_states: selectedStates,
-        transitions,
+        document_states: buildDocumentStatesPayload(),
+        transitions: buildTransitionsPayload(),
       };
 
       let response;
-      if (isEdit) {
+      if (isEdit && editWorkflow) {
         // PUT for update (by resource)
         response = await apiFetch(
-          `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW}/${workflow.workflow.resource}`,
+          `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW}/${editWorkflow.workflow.resource}`,
           {
             method: "PUT",
             headers: getAuthHeaders(token),
@@ -213,6 +451,7 @@ export default function AddWorkflowModal({
           },
           token
         );
+        console.log(payload)
       } else {
         // POST for create
         response = await apiFetch(
@@ -259,6 +498,7 @@ export default function AddWorkflowModal({
 
   const validationErrors = validate();
   const canSubmit = validationErrors.length === 0;
+  const isBusy = loading || loadingDetail;
   const sortedResources = [...resources].sort((a, b) =>
     a.Slug.localeCompare(b.Slug)
   );
@@ -301,7 +541,8 @@ export default function AddWorkflowModal({
                 onClose();
                 resetForm();
               }}
-              className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+              disabled={isBusy}
+              className="p-2 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
             >
               <FaTimes className="w-5 h-5 text-gray-500" />
             </button>
@@ -348,7 +589,7 @@ export default function AddWorkflowModal({
               </div>
 
               {/* Validation summary */}
-              {validationErrors.length > 0 && (
+              {validationErrors.length > 0 && !loadingDetail && (
                 <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <FaExclamationTriangle className="w-5 h-5 text-red-600" />
@@ -367,6 +608,12 @@ export default function AddWorkflowModal({
                       </li>
                     ))}
                   </ul>
+                </div>
+              )}
+
+              {loadingDetail && (
+                <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 text-sm font-medium text-blue-800">
+                  Memuat detail workflow terbaru untuk mode edit...
                 </div>
               )}
 
@@ -389,7 +636,7 @@ export default function AddWorkflowModal({
                         onChange={(e) => setResource(e.target.value)}
                         placeholder="e.g., customer_register"
                         list="workflow-resource-options"
-                        disabled={isEdit}
+                        disabled={isEdit || isBusy}
                         className="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none font-mono disabled:bg-gray-100 disabled:cursor-not-allowed"
                       />
                       <datalist id="workflow-resource-options">
@@ -424,7 +671,8 @@ export default function AddWorkflowModal({
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="e.g., Product Approval, Order Processing"
-                        className="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none"
+                        disabled={isBusy}
+                        className="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
                       />
                       <p className="text-xs text-purple-700 mt-1">
                         Nama yang akan ditampilkan di UI
@@ -441,7 +689,8 @@ export default function AddWorkflowModal({
                         onChange={(e) => setDescription(e.target.value)}
                         placeholder="Deskripsi workflow (optional)"
                         rows={3}
-                        className="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none resize-none"
+                        disabled={isBusy}
+                        className="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
                       />
                     </div>
 
@@ -457,10 +706,11 @@ export default function AddWorkflowModal({
                       </div>
                       <button
                         type="button"
+                        disabled={isBusy}
                         onClick={() => setIsActive(!isActive)}
                         className={`relative w-16 h-8 rounded-full transition-all ${
                           isActive ? "bg-green-500" : "bg-gray-300"
-                        }`}
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
                         <div
                           className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform ${
@@ -476,7 +726,8 @@ export default function AddWorkflowModal({
                     <button
                       type="button"
                       onClick={() => setCurrentStep(2)}
-                      className="px-6 py-3 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition-all"
+                      disabled={isBusy}
+                      className="px-6 py-3 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Next: Select States
                     </button>
@@ -499,14 +750,15 @@ export default function AddWorkflowModal({
                     <button
                       type="button"
                       onClick={() => setCurrentStep(1)}
-                      className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-all"
+                      disabled={isBusy}
+                      className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Back: Basic Info
                     </button>
                     <button
                       type="button"
                       onClick={() => setCurrentStep(3)}
-                      disabled={selectedStates.length < 2}
+                      disabled={isBusy || selectedStates.length < 2}
                       className="px-6 py-3 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Next: Create Transitions
@@ -531,7 +783,8 @@ export default function AddWorkflowModal({
                     <button
                       type="button"
                       onClick={() => setCurrentStep(2)}
-                      className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-all"
+                      disabled={isBusy}
+                      className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Back: States
                     </button>
@@ -548,19 +801,20 @@ export default function AddWorkflowModal({
                   onClose();
                   resetForm();
                 }}
-                className="flex-1 px-6 py-3 rounded-xl bg-white border-2 border-gray-300 text-gray-700 font-bold hover:bg-gray-50 transition-all"
+                disabled={isBusy}
+                className="flex-1 px-6 py-3 rounded-xl bg-white border-2 border-gray-300 text-gray-700 font-bold hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={!canSubmit || loading}
+                disabled={!canSubmit || isBusy}
                 className="flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 text-white font-bold shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? (
+                {isBusy ? (
                   <>
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Menyimpan...</span>
+                    <span>{loadingDetail ? "Memuat data..." : "Menyimpan..."}</span>
                   </>
                 ) : (
                   <>

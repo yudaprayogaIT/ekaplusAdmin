@@ -13,6 +13,7 @@ import { SelectedState } from "./StateManager";
 import { Role } from "./WorkflowList";
 
 export type TransitionInput = {
+  id?: number;
   from_state_id: number;
   to_state_id: number;
   action: string;

@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { FaTimes, FaSave, FaUserShield } from "react-icons/fa";
 import { Role } from "./RoleList";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_CONFIG, getAuthHeadersFormData, apiFetch } from "@/config/api";
+import { API_CONFIG, getAuthHeaders, apiFetch } from "@/config/api";
 
 export default function AddRoleModal({
   open,
@@ -68,14 +68,13 @@ export default function AddRoleModal({
     setLoading(true);
 
     try {
-      const headers = getAuthHeadersFormData(token);
-
-      // Create FormData instead of JSON
-      const formData = new FormData();
-      formData.append("Name", name.trim());
-      formData.append("Slug", slug.trim());
-      formData.append("Description", description.trim());
-      formData.append("IsSystem", is_system ? "1" : "0");
+      const headers = getAuthHeaders(token);
+      const payload = {
+        Name: name.trim(),
+        Slug: slug.trim(),
+        Description: description.trim(),
+        IsSystem: is_system,
+      };
 
       let response;
       if (isEditMode && initialData) {
@@ -84,7 +83,7 @@ export default function AddRoleModal({
         response = await apiFetch(UPDATE_URL, {
           method: "PUT",
           headers,
-          body: formData,
+          body: JSON.stringify(payload),
         });
       } else {
         // Create new role
@@ -93,7 +92,7 @@ export default function AddRoleModal({
         response = await apiFetch(CREATE_URL, {
           method: "POST",
           headers,
-          body: formData,
+          body: JSON.stringify(payload),
         });
       }
 
