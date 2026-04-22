@@ -117,20 +117,15 @@ function buildBranchCustomerLabel(
   gcMap: Map<number, string>,
   branchMap: Map<number, string>,
 ): string {
-  const gcObject =
-    row.gcid && typeof row.gcid === "object" ? row.gcid : null;
+  const gcObject = row.gcid && typeof row.gcid === "object" ? row.gcid : null;
   const branchObject =
     row.branch && typeof row.branch === "object" ? row.branch : null;
 
-  const gcId =
-    gcObject ? Number(gcObject.id || 0) : Number(row.gcid || 0);
-  const branchId =
-    branchObject ? Number(branchObject.id || 0) : Number(row.branch || 0);
-  const gcName =
-    gcObject?.gc_name ||
-    gcObject?.name ||
-    gcMap.get(gcId) ||
-    "";
+  const gcId = gcObject ? Number(gcObject.id || 0) : Number(row.gcid || 0);
+  const branchId = branchObject
+    ? Number(branchObject.id || 0)
+    : Number(row.branch || 0);
+  const gcName = gcObject?.gc_name || gcObject?.name || gcMap.get(gcId) || "";
   const branchName =
     branchObject?.city ||
     branchObject?.branch_name ||
@@ -165,7 +160,9 @@ async function loadLookupPage(
       }
 
       const json = await res.json();
-      const rows = (Array.isArray(json?.data) ? json.data : []) as NationalBrandRow[];
+      const rows = (
+        Array.isArray(json?.data) ? json.data : []
+      ) as NationalBrandRow[];
       return {
         items: rows.map((row) => ({
           id: row.id,
@@ -190,7 +187,9 @@ async function loadLookupPage(
       }
 
       const json = await res.json();
-      const rows = (Array.isArray(json?.data) ? json.data : []) as GroupParentRow[];
+      const rows = (
+        Array.isArray(json?.data) ? json.data : []
+      ) as GroupParentRow[];
       return {
         items: rows.map((row) => ({
           id: row.id,
@@ -215,7 +214,9 @@ async function loadLookupPage(
       }
 
       const json = await res.json();
-      const rows = (Array.isArray(json?.data) ? json.data : []) as GroupCustomerRow[];
+      const rows = (
+        Array.isArray(json?.data) ? json.data : []
+      ) as GroupCustomerRow[];
       return {
         items: rows.map((row) => ({
           id: row.id,
@@ -269,15 +270,15 @@ async function loadLookupPage(
         branchRes.json(),
       ]);
 
-      const branchCustomers = (Array.isArray(bcJson?.data)
-        ? bcJson.data
-        : []) as BranchCustomerRow[];
-      const groupCustomers = (Array.isArray(gcJson?.data)
-        ? gcJson.data
-        : []) as GroupCustomerRow[];
-      const branches = (Array.isArray(branchJson?.data)
-        ? branchJson.data
-        : []) as BranchRow[];
+      const branchCustomers = (
+        Array.isArray(bcJson?.data) ? bcJson.data : []
+      ) as BranchCustomerRow[];
+      const groupCustomers = (
+        Array.isArray(gcJson?.data) ? gcJson.data : []
+      ) as GroupCustomerRow[];
+      const branches = (
+        Array.isArray(branchJson?.data) ? branchJson.data : []
+      ) as BranchRow[];
 
       const gcMap = new Map(
         groupCustomers.map((row) => [
@@ -328,7 +329,9 @@ function normalizeCurrencyInput(value: string): string {
     return `${formattedIntegerPart},`;
   }
 
-  return decimalPart ? `${formattedIntegerPart},${decimalPart}` : formattedIntegerPart;
+  return decimalPart
+    ? `${formattedIntegerPart},${decimalPart}`
+    : formattedIntegerPart;
 }
 
 function parseCurrencyInput(value: string): number | undefined {
@@ -426,9 +429,11 @@ export function CreditChangeRequestFormModal({
   const [requestedPaymentTerm, setRequestedPaymentTerm] = useState("");
   const [requestedLimitCustomerOverdue, setRequestedLimitCustomerOverdue] =
     useState("");
-  const [applyToChilds, setApplyToChilds] = useState(false);
+  const [applyToChilds, setApplyToChilds] = useState(true);
   const [reason, setReason] = useState("");
-  const [identityAttachment, setIdentityAttachment] = useState<File | null>(null);
+  const [identityAttachment, setIdentityAttachment] = useState<File | null>(
+    null,
+  );
   const [customerApprovalAttachment, setCustomerApprovalAttachment] =
     useState<File | null>(null);
   const [lookups, setLookups] = useState<PolicyLookups>({
@@ -437,11 +442,11 @@ export function CreditChangeRequestFormModal({
     gcid: [],
     bcid: [],
   });
-  const [lookupMeta, setLookupMeta] = useState<PolicyLookupMetaMap>(EMPTY_LOOKUP_META);
+  const [lookupMeta, setLookupMeta] =
+    useState<PolicyLookupMetaMap>(EMPTY_LOOKUP_META);
   const [lookupLoading, setLookupLoading] = useState(false);
-  const [currentProfile, setCurrentProfile] = useState<PolicyCurrentProfile | null>(
-    null,
-  );
+  const [currentProfile, setCurrentProfile] =
+    useState<PolicyCurrentProfile | null>(null);
   const [currentProfileLoading, setCurrentProfileLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -455,7 +460,7 @@ export function CreditChangeRequestFormModal({
     setRequestedCreditLimit("");
     setRequestedPaymentTerm("");
     setRequestedLimitCustomerOverdue("");
-    setApplyToChilds(false);
+    setApplyToChilds(true);
     setReason("");
     setIdentityAttachment(null);
     setCustomerApprovalAttachment(null);
@@ -520,7 +525,10 @@ export function CreditChangeRequestFormModal({
                 : [
                     ...current[policyType],
                     ...result.items.filter(
-                      (item) => !current[policyType].some((existing) => existing.id === item.id),
+                      (item) =>
+                        !current[policyType].some(
+                          (existing) => existing.id === item.id,
+                        ),
                     ),
                   ],
           }));
@@ -559,7 +567,14 @@ export function CreditChangeRequestFormModal({
     return () => {
       cancelled = true;
     };
-  }, [debouncedPolicySearch, isAuthenticated, lookupMeta, open, policyType, token]);
+  }, [
+    debouncedPolicySearch,
+    isAuthenticated,
+    lookupMeta,
+    open,
+    policyType,
+    token,
+  ]);
 
   useEffect(() => {
     if (!open) return;
@@ -640,16 +655,26 @@ export function CreditChangeRequestFormModal({
     };
   }, [isAuthenticated, open, policyId, policyType, token]);
 
-  const policyOptions = useMemo(() => lookups[policyType] || [], [lookups, policyType]);
+  const policyOptions = useMemo(
+    () => lookups[policyType] || [],
+    [lookups, policyType],
+  );
   const activeLookupMeta = lookupMeta[policyType];
   const selectedPolicyOption = useMemo(
-    () => policyOptions.find((option) => String(option.id) === policyId) || null,
+    () =>
+      policyOptions.find((option) => String(option.id) === policyId) || null,
     [policyId, policyOptions],
   );
-  const selectedPolicyLabel = selectedPolicyOption?.label || policySearch.trim() || "-";
+  const selectedPolicyLabel =
+    selectedPolicyOption?.label || policySearch.trim() || "-";
 
   const handleLoadMore = async () => {
-    if (!token || !isAuthenticated || lookupLoading || !activeLookupMeta.hasMore) {
+    if (
+      !token ||
+      !isAuthenticated ||
+      lookupLoading ||
+      !activeLookupMeta.hasMore
+    ) {
       return;
     }
 
@@ -668,7 +693,8 @@ export function CreditChangeRequestFormModal({
         [policyType]: [
           ...current[policyType],
           ...result.items.filter(
-            (item) => !current[policyType].some((existing) => existing.id === item.id),
+            (item) =>
+              !current[policyType].some((existing) => existing.id === item.id),
           ),
         ],
       }));
@@ -703,6 +729,18 @@ export function CreditChangeRequestFormModal({
       requestedLimitCustomerOverdue,
     );
     const trimmedReason = reason.trim();
+    const resolvedRequestedCreditLimit =
+      parsedCreditLimit !== undefined
+        ? parsedCreditLimit
+        : (currentProfile?.creditLimit ?? undefined);
+    const resolvedRequestedPaymentTerm =
+      parsedPaymentTerm !== undefined
+        ? parsedPaymentTerm
+        : (currentProfile?.paymentTerm ?? undefined);
+    const resolvedRequestedLimitCustomerOverdue =
+      parsedLimitCustomerOverdue !== undefined
+        ? parsedLimitCustomerOverdue
+        : (currentProfile?.limitCustomerOverdue ?? undefined);
 
     if (!parsedPolicyId) {
       setError("Policy wajib dipilih.");
@@ -725,14 +763,18 @@ export function CreditChangeRequestFormModal({
 
     if (parsedCreditLimit !== undefined) {
       if (!Number.isFinite(parsedCreditLimit) || parsedCreditLimit < 0) {
-        setError("Requested credit limit harus berupa angka valid 0 atau lebih.");
+        setError(
+          "Requested credit limit harus berupa angka valid 0 atau lebih.",
+        );
         return;
       }
     }
 
     if (parsedPaymentTerm !== undefined) {
       if (!Number.isInteger(parsedPaymentTerm) || parsedPaymentTerm < 0) {
-        setError("Requested payment term harus berupa angka bulat 0 atau lebih.");
+        setError(
+          "Requested payment term harus berupa angka bulat 0 atau lebih.",
+        );
         return;
       }
     }
@@ -754,9 +796,9 @@ export function CreditChangeRequestFormModal({
         policyType,
         policyId: parsedPolicyId,
         applyToChilds,
-        requestedCreditLimit: parsedCreditLimit,
-        requestedPaymentTerm: parsedPaymentTerm,
-        requestedLimitCustomerOverdue: parsedLimitCustomerOverdue,
+        requestedCreditLimit: resolvedRequestedCreditLimit,
+        requestedPaymentTerm: resolvedRequestedPaymentTerm,
+        requestedLimitCustomerOverdue: resolvedRequestedLimitCustomerOverdue,
         reason: trimmedReason,
         identityAttachment,
         customerApprovalAttachment,
@@ -787,7 +829,8 @@ export function CreditChangeRequestFormModal({
     event: React.UIEvent<HTMLDivElement>,
   ) => {
     const element = event.currentTarget;
-    const remaining = element.scrollHeight - element.scrollTop - element.clientHeight;
+    const remaining =
+      element.scrollHeight - element.scrollTop - element.clientHeight;
 
     if (remaining < 24) {
       await handleLoadMore();
@@ -815,7 +858,8 @@ export function CreditChangeRequestFormModal({
                   Tambah Credit Change Request
                 </h2>
                 <p className="text-sm text-gray-500">
-                  Ajukan perubahan credit limit, payment term, atau overdue limit
+                  Ajukan perubahan credit limit, payment term, atau overdue
+                  limit
                 </p>
               </div>
             </div>
@@ -839,14 +883,16 @@ export function CreditChangeRequestFormModal({
                   </div>
                 ) : null}
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div>
+                <div className=" gap-4 grid md:grid-cols-10">
+                  <div className="md:col-span-5">
                     <label className="mb-1 block text-sm font-semibold text-gray-700">
                       Policy Type
                     </label>
                     <select
                       value={policyType}
-                      onChange={(e) => setPolicyType(e.target.value as PolicyType)}
+                      onChange={(e) =>
+                        setPolicyType(e.target.value as PolicyType)
+                      }
                       disabled={saving}
                       className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-emerald-300 focus:bg-white"
                     >
@@ -858,16 +904,18 @@ export function CreditChangeRequestFormModal({
                     </select>
                   </div>
 
-                  <div>
+                  <div className="md:col-span-3">
                     <label className="mb-1 block text-sm font-semibold text-gray-700">
-                      Policy
+                      Policy ID
                     </label>
                     <div className="relative" ref={policyDropdownRef}>
                       <FaSearch className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-gray-400" />
                       <input
                         type="text"
                         value={policySearch}
-                        onChange={(e) => handlePolicySearchChange(e.target.value)}
+                        onChange={(e) =>
+                          handlePolicySearchChange(e.target.value)
+                        }
                         onFocus={() => setPolicyDropdownOpen(true)}
                         disabled={saving}
                         placeholder="Cari policy..."
@@ -890,7 +938,8 @@ export function CreditChangeRequestFormModal({
                             <AnimatePresence mode="popLayout" initial={false}>
                               {policyOptions.length > 0 ? (
                                 policyOptions.map((option) => {
-                                  const isSelected = String(option.id) === policyId;
+                                  const isSelected =
+                                    String(option.id) === policyId;
 
                                   return (
                                     <motion.button
@@ -898,7 +947,10 @@ export function CreditChangeRequestFormModal({
                                       initial={{ opacity: 0, y: 6 }}
                                       animate={{ opacity: 1, y: 0 }}
                                       exit={{ opacity: 0, y: -4 }}
-                                      transition={{ duration: 0.15, ease: "easeOut" }}
+                                      transition={{
+                                        duration: 0.15,
+                                        ease: "easeOut",
+                                      }}
                                       key={option.id}
                                       type="button"
                                       onClick={() => handlePolicySelect(option)}
@@ -908,7 +960,9 @@ export function CreditChangeRequestFormModal({
                                           : "text-gray-700 hover:bg-gray-50"
                                       }`}
                                     >
-                                      <span className="line-clamp-2">{option.label}</span>
+                                      <span className="line-clamp-2">
+                                        {option.label}
+                                      </span>
                                       <span className="shrink-0 text-xs text-gray-400">
                                         #{option.id}
                                       </span>
@@ -958,10 +1012,11 @@ export function CreditChangeRequestFormModal({
                         </motion.div>
                       )}
                     </div>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Nilai yang dikirim ke database adalah `id` dari policy yang dipilih.
-                    </p>
-                    <div className="mt-3 flex items-center justify-between gap-3 text-xs text-gray-500">
+                    {/* <p className="mt-1 text-xs text-gray-500">
+                      Nilai yang dikirim ke database adalah `id` dari policy
+                      yang dipilih.
+                    </p> */}
+                    {/* <div className="mt-3 flex items-center justify-between gap-3 text-xs text-gray-500">
                       <p>{policyOptions.length} policy dimuat</p>
                       <p>
                         {lookupLoading
@@ -972,14 +1027,30 @@ export function CreditChangeRequestFormModal({
                               ? "Semua data sudah dimuat"
                               : ""}
                       </p>
-                    </div>
-                    {selectedPolicyOption ? (
+                    </div> */}
+                    {/* {selectedPolicyOption ? (
                       <p className="mt-2 text-xs font-medium text-emerald-700">
                         Policy terpilih: {selectedPolicyOption.label}
                       </p>
-                    ) : null}
+                    ) : null} */}
                   </div>
 
+                  <div className="md:col-span-2 self-end">
+                    <label className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={applyToChilds}
+                        onChange={() => undefined}
+                        disabled
+                        className="h-4 w-4 rounded border-gray-300 text-emerald-600"
+                      />
+                      {/* <span>Terapkan perubahan ini ke child policy terkait</span> */}
+                      <span>Apply to Childs</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="md:col-span-2 grid grid-cols-1 gap-4 xl:grid-cols-2">
                     <section className="rounded-2xl border border-gray-200 bg-gradient-to-br from-slate-50 via-white to-slate-100 p-5">
                       <div className="mb-4 flex items-start justify-between gap-3">
@@ -1032,12 +1103,14 @@ export function CreditChangeRequestFormModal({
                             {currentProfileLoading
                               ? "Memuat..."
                               : currentProfile
-                                ? formatDays(currentProfile.limitCustomerOverdue)
+                                ? formatDays(
+                                    currentProfile.limitCustomerOverdue,
+                                  )
                                 : "-"}
                           </p>
                         </div>
 
-                        <div className="rounded-xl border border-gray-200 bg-white p-4">
+                        {/* <div className="rounded-xl border border-gray-200 bg-white p-4">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
                             Created By
                           </p>
@@ -1046,11 +1119,11 @@ export function CreditChangeRequestFormModal({
                               ? "Memuat..."
                               : currentProfile?.createdBy || "-"}
                           </p>
-                        </div>
+                        </div> */}
 
                         <div className="rounded-xl border border-gray-200 bg-white p-4 sm:col-span-2">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                            Policy
+                            Policy ID
                           </p>
                           <p className="mt-2 text-sm font-medium text-slate-700">
                             {selectedPolicyLabel}
@@ -1097,7 +1170,9 @@ export function CreditChangeRequestFormModal({
                               type="number"
                               min="0"
                               value={requestedPaymentTerm}
-                              onChange={(e) => setRequestedPaymentTerm(e.target.value)}
+                              onChange={(e) =>
+                                setRequestedPaymentTerm(e.target.value)
+                              }
                               disabled={saving}
                               placeholder="Hari"
                               className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-emerald-300"
@@ -1147,12 +1222,16 @@ export function CreditChangeRequestFormModal({
                       <input
                         type="checkbox"
                         checked={applyToChilds}
-                        onChange={(e) => setApplyToChilds(e.target.checked)}
-                        disabled={saving}
+                        onChange={() => undefined}
+                        disabled
                         className="h-4 w-4 rounded border-gray-300 text-emerald-600"
                       />
-                      <span>Terapkan perubahan ini ke child policy terkait</span>
+                      {/* <span>Terapkan perubahan ini ke child policy terkait</span> */}
+                      <span>Apply to Childs</span>
                     </label>
+                    {/* <p className="mt-1 text-xs text-gray-500">
+                      Nilai ini selalu aktif dan akan dikirim sebagai `1`.
+                    </p> */}
                   </div>
 
                   <div>
@@ -1211,7 +1290,8 @@ export function CreditChangeRequestFormModal({
                       />
                     </label>
                     <p className="mt-1 text-xs text-gray-500">
-                      Attachment ini akan dikirim sebagai `customer_approval_attachment`.
+                      Attachment ini akan dikirim sebagai
+                      `customer_approval_attachment`.
                     </p>
                   </div>
                 </div>
