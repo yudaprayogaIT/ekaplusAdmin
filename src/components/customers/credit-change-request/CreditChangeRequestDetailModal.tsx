@@ -6,19 +6,29 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   FaCalendarAlt,
   FaCheckCircle,
+  FaCopy,
   FaClock,
   FaExchangeAlt,
   FaExternalLinkAlt,
   FaFileAlt,
   FaInfoCircle,
   FaImage,
+  FaPaperPlane,
   FaMoneyBillWave,
   FaStickyNote,
   FaTimes,
+  FaUpload,
   FaUser,
 } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_CONFIG, apiFetch, getFileUrl, getQueryUrl } from "@/config/api";
+import {
+  API_CONFIG,
+  apiFetch,
+  getAuthHeadersFormData,
+  getFileUrl,
+  getQueryUrl,
+  getResourceUrl,
+} from "@/config/api";
 import ActionResultModal from "@/components/ui/ActionResultModal";
 import WorkflowActionBar from "@/components/workflow-actions/WorkflowActionBar";
 import WorkflowRejectNoteModal from "@/components/workflow-actions/WorkflowRejectNoteModal";
@@ -26,8 +36,14 @@ import {
   executeWorkflowAction,
   type WorkflowActionItem,
 } from "@/services/workflowActionService";
+import {
+  buildDirectorWhatsappText,
+  formatRequestDate,
+  policyTypeLabel,
+  resolvePolicyDisplayName,
+} from "./utils";
 
-export interface CreditChangeRequestListItem {
+export interface ICreditChangeRequestRow {
   id: number;
   code: string;
   policyType: string;
@@ -50,11 +66,16 @@ export interface CreditChangeRequestListItem {
   syncLastRollbackError?: string | null;
   status: string;
   docstatus: number;
+  created_at?: string | null;
+  updated_at?: string | null;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
   updatedBy: string;
+  workflowState?: string | null;
 }
+
+export type CreditChangeRequestListItem = ICreditChangeRequestRow;
 
 interface CreditChangeRequestDetailResponse {
   id: number;
@@ -80,6 +101,7 @@ interface CreditChangeRequestDetailResponse {
   docstatus?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
+  workflow_state?: string | null;
   "created_by.full_name"?: string | null;
   "updated_by.full_name"?: string | null;
   created_by?: number | { id?: number; full_name?: string } | null;
@@ -135,6 +157,35 @@ function displayText(value?: string | number | null): string {
 function formatDays(value?: number | null): string {
   if (typeof value !== "number" || Number.isNaN(value)) return "-";
   return `${value} hari`;
+}
+
+async function copyToClipboard(value: string): Promise<void> {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  if (typeof document === "undefined") {
+    throw new Error("Clipboard tidak tersedia");
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  try {
+    const success = document.execCommand("copy");
+    if (!success) {
+      throw new Error("Gagal menyalin teks WA");
+    }
+  } finally {
+    document.body.removeChild(textarea);
+  }
 }
 
 function getPreviewType(params: {
@@ -318,6 +369,13 @@ export function CreditChangeRequestDetailModal({
   const [pendingRejectAction, setPendingRejectAction] = useState<WorkflowActionItem | null>(
     null,
   );
+  const [policyName, setPolicyName] = useState("-");
+  const [policyNameLoading, setPolicyNameLoading] = useState(false);
+  const [policyNameError, setPolicyNameError] = useState<string | null>(null);
+  const [customerApprovalFile, setCustomerApprovalFile] = useState<File | null>(null);
+  const [uploadingApprovalAttachment, setUploadingApprovalAttachment] =
+    useState(false);
+  const [waPreviewOpen, setWaPreviewOpen] = useState(false);
   const [resultModal, setResultModal] = useState<{
     isOpen: boolean;
     type: "success" | "error";
@@ -373,6 +431,12 @@ export function CreditChangeRequestDetailModal({
     void loadDetail();
   }, [loadDetail]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setCustomerApprovalFile(null);
+    setWaPreviewOpen(false);
+  }, [isOpen, item?.id]);
+
   const activeDetail = detail || null;
   const normalizedActions = useMemo(() => actions, [actions]);
   const attachmentUrl = getFileUrl(activeDetail?.identity_attachment);
@@ -397,6 +461,125 @@ export function CreditChangeRequestDetailModal({
       ),
     [activeDetail],
   );
+  const workflowState = activeDetail?.workflow_state ?? item?.workflowState ?? "";
+  const isInDirector = workflowState === "In Director";
+  const effectiveRequestedCreditLimit =
+    activeDetail?.requested_credit_limit ??
+    item?.requestedCreditLimit ??
+    activeDetail?.current_credit_limit ??
+    item?.currentCreditLimit ??
+    null;
+  const effectiveRequestedPaymentTerm =
+    activeDetail?.requested_payment_term ??
+    item?.requestedPaymentTerm ??
+    activeDetail?.current_payment_term ??
+    item?.currentPaymentTerm ??
+    null;
+  const waPreviewText = useMemo(
+    () =>
+      buildDirectorWhatsappText({
+        policyName,
+        requestDate: formatRequestDate(activeDetail?.created_at ?? item?.createdAt),
+        creditLimitText: formatCurrency(effectiveRequestedCreditLimit),
+        paymentTermText: formatDays(effectiveRequestedPaymentTerm),
+      }),
+    [
+      activeDetail?.created_at,
+      effectiveRequestedCreditLimit,
+      effectiveRequestedPaymentTerm,
+      item?.createdAt,
+      policyName,
+    ],
+  );
+  const hasStoredCustomerApprovalAttachment = Boolean(
+    activeDetail?.customer_approval_attachment ?? item?.customerApprovalAttachment,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPolicyName() {
+      if (!isOpen || !token) return;
+
+      setPolicyNameLoading(true);
+      setPolicyNameError(null);
+
+      try {
+        const resolvedPolicyName = await resolvePolicyDisplayName({
+          token,
+          policyType: activeDetail?.policy_type ?? item?.policyType,
+          policyId: activeDetail?.policy_id ?? item?.policyId,
+        });
+
+        if (!cancelled) {
+          setPolicyName(resolvedPolicyName);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setPolicyName("-");
+          setPolicyNameError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Gagal memuat nama policy",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setPolicyNameLoading(false);
+        }
+      }
+    }
+
+    void loadPolicyName();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeDetail?.policy_id,
+    activeDetail?.policy_type,
+    isOpen,
+    item?.policyId,
+    item?.policyType,
+    token,
+  ]);
+
+  const uploadCustomerApprovalAttachment = useCallback(async () => {
+    if (!token || !item?.id || !customerApprovalFile) {
+      return;
+    }
+
+    setUploadingApprovalAttachment(true);
+    try {
+      const formData = new FormData();
+      formData.append("customer_approval_attachment", customerApprovalFile);
+
+      const response = await apiFetch(
+        getResourceUrl(API_CONFIG.ENDPOINTS.CREDIT_CHANGE_REQUEST, item.id),
+        {
+          method: "PUT",
+          headers: getAuthHeadersFormData(token),
+          body: formData,
+          cache: "no-store",
+        },
+        token,
+      );
+
+      if (!response.ok) {
+        const json = await response.json().catch(() => ({}));
+        throw new Error(
+          json?.message ||
+            `Gagal mengunggah attachment approval customer (${response.status})`,
+        );
+      }
+
+      setCustomerApprovalFile(null);
+      await loadDetail();
+      await onActionExecuted?.();
+    } finally {
+      setUploadingApprovalAttachment(false);
+    }
+  }, [customerApprovalFile, item?.id, loadDetail, onActionExecuted, token]);
 
   const executeAction = useCallback(
     async (workflowAction: WorkflowActionItem, payload?: Record<string, unknown>) => {
@@ -410,10 +593,33 @@ export function CreditChangeRequestDetailModal({
         return;
       }
 
+      const normalizedLabel = workflowAction.action.toLowerCase();
+      const isRejectAction = normalizedLabel.includes("reject");
+      const requiresDirectorAttachment = isInDirector && !isRejectAction;
+      const hasAnyCustomerApprovalAttachment =
+        hasStoredCustomerApprovalAttachment || Boolean(customerApprovalFile);
+
+      if (requiresDirectorAttachment && !hasAnyCustomerApprovalAttachment) {
+        const message =
+          "Screenshot persetujuan customer wajib diunggah dulu sebelum melanjutkan action dari In Director.";
+        setError(message);
+        setResultModal({
+          isOpen: true,
+          type: "error",
+          title: "Attachment Wajib",
+          message,
+        });
+        return;
+      }
+
       setExecutingActionId(workflowAction.id);
       setError(null);
 
       try {
+        if (requiresDirectorAttachment && customerApprovalFile) {
+          await uploadCustomerApprovalAttachment();
+        }
+
         await executeWorkflowAction({
           token,
           resourceName: "credit_change_request",
@@ -450,7 +656,16 @@ export function CreditChangeRequestDetailModal({
         setExecutingActionId(null);
       }
     },
-    [item, loadDetail, onActionExecuted, token],
+    [
+      customerApprovalFile,
+      hasStoredCustomerApprovalAttachment,
+      isInDirector,
+      item,
+      loadDetail,
+      onActionExecuted,
+      token,
+      uploadCustomerApprovalAttachment,
+    ],
   );
 
   const handleActionClick = useCallback(
@@ -490,8 +705,12 @@ export function CreditChangeRequestDetailModal({
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-100">
                   Credit Change Request
                 </p>
-                <h2 className="mt-1 text-2xl font-bold">{item.code}</h2>
-                <p className="mt-1 text-sm text-emerald-50">{item.policyTypeLabel}</p>
+                <h2 className="mt-1 text-2xl font-bold">
+                  {policyNameLoading ? item.code : policyName}
+                </h2>
+                <p className="mt-1 text-sm text-emerald-50">
+                  {item.code} • {item.policyTypeLabel}
+                </p>
               </div>
               <button
                 type="button"
@@ -529,7 +748,7 @@ export function CreditChangeRequestDetailModal({
                         Name
                       </p>
                       <p className="mt-1 text-sm font-semibold text-slate-900">
-                        {displayText(activeDetail?.name || item.code)}
+                        {displayText(policyNameLoading ? item.code : policyName)}
                       </p>
                     </div>
                     <div>
@@ -537,7 +756,11 @@ export function CreditChangeRequestDetailModal({
                         Policy Type
                       </p>
                       <p className="mt-1 text-sm font-semibold text-slate-900">
-                        {displayText(item.policyTypeLabel)}
+                        {displayText(
+                          activeDetail?.policy_type
+                            ? policyTypeLabel(activeDetail.policy_type)
+                            : item.policyTypeLabel,
+                        )}
                       </p>
                     </div>
                     <div>
@@ -554,6 +777,14 @@ export function CreditChangeRequestDetailModal({
                       </p>
                       <p className="mt-1 text-sm font-semibold text-slate-900">
                         {displayText(activeDetail?.status || item.status)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Workflow State
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {displayText(workflowState)}
                       </p>
                     </div>
                     <div>
@@ -717,11 +948,75 @@ export function CreditChangeRequestDetailModal({
                       Customer Approval Attachment
                     </h3>
                   </div>
+                  {isInDirector && (
+                    <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                      <div>
+                        <label className="mb-1 block text-sm font-semibold text-slate-700">
+                          Upload Screenshot Persetujuan Customer
+                        </label>
+                        <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-600 transition hover:border-emerald-300 hover:bg-white">
+                          <FaUpload className="h-4 w-4 text-emerald-600" />
+                          <span className="flex-1">
+                            {customerApprovalFile
+                              ? customerApprovalFile.name
+                              : "Pilih file approval customer"}
+                          </span>
+                          <span className="rounded-lg bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                            Upload
+                          </span>
+                          <input
+                            type="file"
+                            accept="image/*,.pdf"
+                            disabled={uploadingApprovalAttachment || executingActionId !== null}
+                            className="hidden"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0] || null;
+                              setCustomerApprovalFile(file);
+                              setError(null);
+                            }}
+                          />
+                        </label>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Saat workflow berada di `In Director`, lampiran ini wajib ada sebelum action lanjut.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-3">
+                        {customerApprovalFile && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomerApprovalFile(null);
+                            }}
+                            disabled={uploadingApprovalAttachment || executingActionId !== null}
+                            className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
+                          >
+                            Reset File
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setWaPreviewOpen(true);
+                          }}
+                          disabled={policyNameLoading}
+                          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-70"
+                        >
+                          <FaPaperPlane className="h-4 w-4" />
+                          {policyNameLoading ? "Memuat..." : "Preview Teks WA"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <AttachmentPreview
                     label="Customer Approval Attachment"
                     url={customerApprovalAttachmentUrl}
                     token={token}
                   />
+                  {policyNameError ? (
+                    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+                      {policyNameError}
+                    </div>
+                  ) : null}
                 </section>
 
                 <section className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -865,6 +1160,82 @@ export function CreditChangeRequestDetailModal({
           }))
         }
       />
+
+      <AnimatePresence>
+        {waPreviewOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 12 }}
+              className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Preview Teks WhatsApp
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Ringkasan pengajuan untuk konfirmasi customer.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setWaPreviewOpen(false)}
+                  className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                >
+                  <FaTimes className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="space-y-4 px-6 py-5">
+                <textarea
+                  readOnly
+                  value={waPreviewText}
+                  rows={14}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none"
+                />
+                <div className="flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setWaPreviewOpen(false)}
+                    className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                  >
+                    Tutup
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await copyToClipboard(waPreviewText);
+                        setResultModal({
+                          isOpen: true,
+                          type: "success",
+                          title: "Teks Berhasil Disalin",
+                          message: "Teks WhatsApp berhasil disalin ke clipboard.",
+                        });
+                      } catch (copyError) {
+                        setResultModal({
+                          isOpen: true,
+                          type: "error",
+                          title: "Copy Gagal",
+                          message:
+                            copyError instanceof Error
+                              ? copyError.message
+                              : "Gagal menyalin teks WhatsApp",
+                        });
+                      }
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-cyan-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:shadow-lg"
+                  >
+                    <FaCopy className="h-4 w-4" />
+                    Copy
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </AnimatePresence>
   );
 }

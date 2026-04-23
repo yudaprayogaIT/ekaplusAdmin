@@ -3,10 +3,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  FaCopy,
   FaExclamationTriangle,
   FaFileInvoiceDollar,
   FaInfoCircle,
   FaImage,
+  FaPaperPlane,
   FaSearch,
   FaSave,
   FaTimes,
@@ -18,13 +20,18 @@ import {
   getQueryUrl,
   getResourceUrl,
 } from "@/config/api";
-
-type PolicyType = "nbid" | "gpid" | "gcid" | "bcid";
-
-interface EntityOption {
-  id: number;
-  label: string;
-}
+import {
+  buildBranchCustomerLabel,
+  buildDirectorWhatsappText,
+  type BranchCustomerRow,
+  type BranchRow,
+  type EntityOption,
+  formatRequestDate,
+  type GroupCustomerRow,
+  type GroupParentRow,
+  type NationalBrandRow,
+  type PolicyType,
+} from "./utils";
 
 interface PolicyLookups {
   nbid: EntityOption[];
@@ -41,37 +48,6 @@ interface PolicyLookupMeta {
 }
 
 type PolicyLookupMetaMap = Record<PolicyType, PolicyLookupMeta>;
-
-interface NationalBrandRow {
-  id: number;
-  name?: string | null;
-  nb_name?: string | null;
-}
-
-interface GroupParentRow {
-  id: number;
-  name?: string | null;
-  gp_name?: string | null;
-}
-
-interface GroupCustomerRow {
-  id: number;
-  name?: string | null;
-  gc_name?: string | null;
-}
-
-interface BranchCustomerRow {
-  id: number;
-  name?: string | null;
-  gcid?: number | { id?: number; gc_name?: string; name?: string } | null;
-  branch?: number | { id?: number; branch_name?: string; city?: string } | null;
-}
-
-interface BranchRow {
-  id: number;
-  branch_name?: string | null;
-  city?: string | null;
-}
 
 interface PolicyCurrentProfile {
   creditLimit: number | null;
@@ -111,29 +87,6 @@ const EMPTY_LOOKUP_META: PolicyLookupMetaMap = {
   gcid: { page: 0, hasMore: true, loaded: false, search: "" },
   bcid: { page: 0, hasMore: true, loaded: false, search: "" },
 };
-
-function buildBranchCustomerLabel(
-  row: BranchCustomerRow,
-  gcMap: Map<number, string>,
-  branchMap: Map<number, string>,
-): string {
-  const gcObject = row.gcid && typeof row.gcid === "object" ? row.gcid : null;
-  const branchObject =
-    row.branch && typeof row.branch === "object" ? row.branch : null;
-
-  const gcId = gcObject ? Number(gcObject.id || 0) : Number(row.gcid || 0);
-  const branchId = branchObject
-    ? Number(branchObject.id || 0)
-    : Number(row.branch || 0);
-  const gcName = gcObject?.gc_name || gcObject?.name || gcMap.get(gcId) || "";
-  const branchName =
-    branchObject?.city ||
-    branchObject?.branch_name ||
-    branchMap.get(branchId) ||
-    "";
-  const combined = [gcName, branchName].filter(Boolean).join(" - ");
-  return combined || row.name || `Branch Customer ${row.id}`;
-}
 
 async function loadLookupPage(
   token: string,
@@ -397,6 +350,35 @@ function resolveUserName(value: unknown): string {
   return "-";
 }
 
+async function copyToClipboard(value: string): Promise<void> {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  if (typeof document === "undefined") {
+    throw new Error("Clipboard tidak tersedia");
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  try {
+    const success = document.execCommand("copy");
+    if (!success) {
+      throw new Error("Gagal menyalin teks WA");
+    }
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
 function endpointForPolicyType(policyType: PolicyType): string {
   switch (policyType) {
     case "nbid":
@@ -449,6 +431,7 @@ export function CreditChangeRequestFormModal({
     useState<PolicyCurrentProfile | null>(null);
   const [currentProfileLoading, setCurrentProfileLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [waPreviewOpen, setWaPreviewOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -467,6 +450,7 @@ export function CreditChangeRequestFormModal({
     setError(null);
     setCurrentProfile(null);
     setCurrentProfileLoading(false);
+    setWaPreviewOpen(false);
     setLookups({
       nbid: [],
       gpid: [],
@@ -667,6 +651,40 @@ export function CreditChangeRequestFormModal({
   );
   const selectedPolicyLabel =
     selectedPolicyOption?.label || policySearch.trim() || "-";
+  const effectiveRequestedCreditLimit = useMemo(() => {
+    const parsedValue = parseCurrencyInput(requestedCreditLimit);
+    if (parsedValue !== undefined && Number.isFinite(parsedValue)) {
+      return parsedValue;
+    }
+    return currentProfile?.creditLimit ?? null;
+  }, [currentProfile?.creditLimit, requestedCreditLimit]);
+  const effectiveRequestedPaymentTerm = useMemo(() => {
+    const parsedValue = parseIntegerInput(requestedPaymentTerm);
+    if (parsedValue !== undefined && Number.isInteger(parsedValue)) {
+      return parsedValue;
+    }
+    return currentProfile?.paymentTerm ?? null;
+  }, [currentProfile?.paymentTerm, requestedPaymentTerm]);
+  const waText = useMemo(
+    () =>
+      buildDirectorWhatsappText({
+        policyName: selectedPolicyLabel,
+        requestDate: formatRequestDate(),
+        creditLimitText:
+          effectiveRequestedCreditLimit === null
+            ? "-"
+            : `Rp ${formatCurrency(effectiveRequestedCreditLimit)}`,
+        paymentTermText:
+          effectiveRequestedPaymentTerm === null
+            ? "-"
+            : formatDays(effectiveRequestedPaymentTerm),
+      }),
+    [
+      effectiveRequestedCreditLimit,
+      effectiveRequestedPaymentTerm,
+      selectedPolicyLabel,
+    ],
+  );
 
   const handleLoadMore = async () => {
     if (
@@ -841,7 +859,10 @@ export function CreditChangeRequestFormModal({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div
+        key="credit-change-request-form-modal"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      >
         <motion.div
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -1268,6 +1289,19 @@ export function CreditChangeRequestFormModal({
                     <label className="mb-1 block text-sm font-semibold text-gray-700">
                       Customer Approval Attachment
                     </label>
+                    <div className="mb-3 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setWaPreviewOpen(true);
+                        }}
+                        disabled={!policyId}
+                        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-70"
+                      >
+                        <FaPaperPlane className="h-4 w-4" />
+                        Generate Teks WA
+                      </button>
+                    </div>
                     <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-4 text-sm text-gray-600 transition hover:border-emerald-300 hover:bg-white">
                       <FaImage className="h-4 w-4 text-emerald-600" />
                       <span className="flex-1">
@@ -1319,6 +1353,76 @@ export function CreditChangeRequestFormModal({
           </form>
         </motion.div>
       </div>
+      <AnimatePresence key="credit-change-request-wa-preview">
+        {waPreviewOpen && (
+          <div
+            key="credit-change-request-wa-preview-modal"
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 12 }}
+              className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Preview Teks WhatsApp
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Teks ini siap disalin untuk dikirim ke customer.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setWaPreviewOpen(false)}
+                  className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                >
+                  <FaTimes className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="space-y-4 px-6 py-5">
+                <textarea
+                  readOnly
+                  value={waText}
+                  rows={14}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none"
+                />
+                <div className="flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setWaPreviewOpen(false)}
+                    className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                  >
+                    Tutup
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await copyToClipboard(waText);
+                        setError(null);
+                        setWaPreviewOpen(false);
+                      } catch (copyError) {
+                        setError(
+                          copyError instanceof Error
+                            ? copyError.message
+                            : "Gagal menyalin teks WhatsApp",
+                        );
+                      }
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-cyan-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:shadow-lg"
+                  >
+                    <FaCopy className="h-4 w-4" />
+                    Copy
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </AnimatePresence>
   );
 }

@@ -32,6 +32,7 @@ import {
   type CreditChangeRequestListItem,
 } from "./CreditChangeRequestDetailModal";
 import { CreditChangeRequestFormModal } from "./CreditChangeRequestFormModal";
+import { policyTypeLabel, resolvePolicyDisplayName } from "./utils";
 
 type SortField = "created_at" | "updated_at" | "status";
 type SortDirection = "asc" | "desc";
@@ -58,6 +59,7 @@ interface CreditChangeRequestApiResponse {
   sync_last_rollback_error?: string | null;
   status?: string | null;
   docstatus?: number | null;
+  workflow_state?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
   "created_by.full_name"?: string | null;
@@ -103,15 +105,6 @@ function formatDays(value?: number | null): string {
   return `${value} hari`;
 }
 
-function policyTypeLabel(value?: string | null): string {
-  const normalized = String(value || "").trim().toLowerCase();
-  if (normalized === "nbid") return "National Brand";
-  if (normalized === "gpid") return "Group Parent";
-  if (normalized === "gcid") return "Group Customer";
-  if (normalized === "bcid") return "Branch Customer";
-  return normalized || "-";
-}
-
 function getStatusTone(status: string) {
   const normalized = status.toLowerCase();
   if (normalized === "approved") {
@@ -146,14 +139,16 @@ export function CreditChangeRequestList() {
   const [items, setItems] = useState<CreditChangeRequestListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedItem, setSelectedItem] = useState<CreditChangeRequestListItem | null>(
-    null,
-  );
+  const [selectedItem, setSelectedItem] =
+    useState<CreditChangeRequestListItem | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortField, setSortField] = useState<SortField>("updated_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [policyNameMap, setPolicyNameMap] = useState<Record<string, string>>(
+    {},
+  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -175,7 +170,9 @@ export function CreditChangeRequestList() {
       );
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch credit change request (${response.status})`);
+        throw new Error(
+          `Failed to fetch credit change request (${response.status})`,
+        );
       }
 
       const json = await response.json();
@@ -186,7 +183,9 @@ export function CreditChangeRequestList() {
       const mapped: CreditChangeRequestListItem[] = rows.map((row) => ({
         id: Number(row.id),
         code: row.name || `CCR-${row.id}`,
-        policyType: String(row.policy_type || "").trim().toLowerCase(),
+        policyType: String(row.policy_type || "")
+          .trim()
+          .toLowerCase(),
         policyTypeLabel: policyTypeLabel(row.policy_type),
         policyId: Number(row.policy_id || 0),
         applyToChilds: Boolean(Number(row.apply_to_childs || 0)),
@@ -207,8 +206,12 @@ export function CreditChangeRequestList() {
         syncLastRollbackError: row.sync_last_rollback_error || null,
         status: row.status || "Draft",
         docstatus: Number(row.docstatus || 0),
+        workflowState: row.workflow_state || null,
+        created_at: row.created_at || null,
+        updated_at: row.updated_at || row.created_at || null,
         createdAt: row.created_at || new Date(0).toISOString(),
-        updatedAt: row.updated_at || row.created_at || new Date(0).toISOString(),
+        updatedAt:
+          row.updated_at || row.created_at || new Date(0).toISOString(),
         createdBy: resolveUserName(row["created_by.full_name"], row.created_by),
         updatedBy: resolveUserName(row["updated_by.full_name"], row.updated_by),
       }));
@@ -251,8 +254,12 @@ export function CreditChangeRequestList() {
         return left.status.localeCompare(right.status) * multiplier;
       }
       return (
-        (new Date(left[sortField === "created_at" ? "createdAt" : "updatedAt"]).getTime() -
-          new Date(right[sortField === "created_at" ? "createdAt" : "updatedAt"]).getTime()) *
+        (new Date(
+          left[sortField === "created_at" ? "createdAt" : "updatedAt"],
+        ).getTime() -
+          new Date(
+            right[sortField === "created_at" ? "createdAt" : "updatedAt"],
+          ).getTime()) *
         multiplier
       );
     });
@@ -265,7 +272,8 @@ export function CreditChangeRequestList() {
     return {
       total: items.length,
       requestOrDraft: normalized.filter(
-        (status) => status === "request" || status === "requested" || status === "draft",
+        (status) =>
+          status === "request" || status === "requested" || status === "draft",
       ).length,
       approved: normalized.filter((status) => status === "approved").length,
       rejected: normalized.filter((status) => status === "rejected").length,
@@ -280,6 +288,64 @@ export function CreditChangeRequestList() {
     itemsPerPage,
     setCurrentPage,
   } = usePagination(filteredItems, 12);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadVisiblePolicyNames() {
+      if (!token || !isAuthenticated || paginatedItems.length === 0) {
+        return;
+      }
+
+      const itemsToResolve = paginatedItems.filter((item) => {
+        const key = `${item.policyType}:${item.policyId || 0}`;
+        return Boolean(item.policyId) && !policyNameMap[key];
+      });
+
+      if (itemsToResolve.length === 0) {
+        return;
+      }
+
+      const resolvedEntries = await Promise.allSettled(
+        itemsToResolve.map(async (item) => {
+          const key = `${item.policyType}:${item.policyId || 0}`;
+          const label = await resolvePolicyDisplayName({
+            token,
+            policyType: item.policyType,
+            policyId: item.policyId,
+          });
+
+          return [key, label] as const;
+        }),
+      );
+
+      if (!cancelled) {
+        setPolicyNameMap((current) => {
+          const next = { ...current };
+          resolvedEntries.forEach((result, index) => {
+            const fallbackItem = itemsToResolve[index];
+            const key = `${fallbackItem.policyType}:${fallbackItem.policyId || 0}`;
+
+            if (result.status === "fulfilled") {
+              next[key] = result.value[1];
+              return;
+            }
+
+            next[key] = fallbackItem.policyId
+              ? `${fallbackItem.policyTypeLabel} #${fallbackItem.policyId}`
+              : fallbackItem.policyTypeLabel;
+          });
+          return next;
+        });
+      }
+    }
+
+    void loadVisiblePolicyNames();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, paginatedItems, policyNameMap, token]);
 
   const sortOptions: Array<{ value: SortField; label: string }> = [
     { value: "updated_at", label: "Tanggal Update" },
@@ -410,12 +476,16 @@ export function CreditChangeRequestList() {
             <FaFileInvoiceDollar className="h-4 w-4 text-emerald-700" />
             <div className="text-sm font-medium text-emerald-700">Total</div>
           </div>
-          <div className="text-3xl font-bold text-emerald-900">{stats.total}</div>
+          <div className="text-3xl font-bold text-emerald-900">
+            {stats.total}
+          </div>
         </div>
         <div className="rounded-xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-amber-100 p-5">
           <div className="mb-1 flex items-center gap-2">
             <FaClock className="h-4 w-4 text-amber-700" />
-            <div className="text-sm font-medium text-amber-700">Request / Draft</div>
+            <div className="text-sm font-medium text-amber-700">
+              Request / Draft
+            </div>
           </div>
           <div className="text-3xl font-bold text-amber-900">
             {stats.requestOrDraft}
@@ -426,14 +496,18 @@ export function CreditChangeRequestList() {
             <FaCheckCircle className="h-4 w-4 text-green-700" />
             <div className="text-sm font-medium text-green-700">Approved</div>
           </div>
-          <div className="text-3xl font-bold text-green-900">{stats.approved}</div>
+          <div className="text-3xl font-bold text-green-900">
+            {stats.approved}
+          </div>
         </div>
         <div className="rounded-xl border-2 border-red-200 bg-gradient-to-br from-red-50 to-red-100 p-5">
           <div className="mb-1 flex items-center gap-2">
             <FaTimesCircle className="h-4 w-4 text-red-700" />
             <div className="text-sm font-medium text-red-700">Rejected</div>
           </div>
-          <div className="text-3xl font-bold text-red-900">{stats.rejected}</div>
+          <div className="text-3xl font-bold text-red-900">
+            {stats.rejected}
+          </div>
         </div>
       </div>
 
@@ -510,29 +584,35 @@ export function CreditChangeRequestList() {
                 {(() => {
                   const attachmentUrl = getFileUrl(item.identityAttachment);
                   const hasImageAttachment = isImageAttachment(attachmentUrl);
+                  const policyKey = `${item.policyType}:${item.policyId || 0}`;
+                  const policyName =
+                    policyNameMap[policyKey] || item.policyTypeLabel;
 
                   return (
                     <>
-                <div className="border-b border-gray-100 bg-gradient-to-br from-white via-emerald-50/30 to-white p-5">
-                  <div className="mb-4 flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">
-                        {item.code}
-                      </p>
-                      <h3 className="mt-2 truncate text-lg font-bold text-slate-900">
-                        {item.policyTypeLabel}
-                      </h3>
-                    </div>
-                    <span
-                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${getStatusTone(
-                        item.status,
-                      )}`}
-                    >
-                      {item.status}
-                    </span>
-                  </div>
+                      <div className="border-b border-gray-100 bg-gradient-to-br from-white via-emerald-50/30 to-white p-5">
+                        <div className="mb-4 flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">
+                              {item.code}
+                            </p>
+                            <h3 className="mt-2 truncate text-lg font-bold text-slate-900">
+                              {policyName}
+                            </h3>
+                            <p className="mt-1 text-sm text-slate-500">
+                              {item.policyTypeLabel}
+                            </p>
+                          </div>
+                          <span
+                            className={`rounded-full border px-3 py-1 text-xs font-semibold ${getStatusTone(
+                              item.status,
+                            )}`}
+                          >
+                            {item.status}
+                          </span>
+                        </div>
 
-                  <div className="mb-4 flex items-center gap-3 rounded-xl border border-slate-200 bg-white/80 p-3">
+                        {/* <div className="mb-4 flex items-center gap-3 rounded-xl border border-slate-200 bg-white/80 p-3">
                     <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
                       {hasImageAttachment && attachmentUrl ? (
                         <Image
@@ -552,7 +632,7 @@ export function CreditChangeRequestList() {
                         </span>
                       )}
                     </div>
-                    {/* <div className="min-w-0 flex-1">
+                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Identity Attachment
                       </p>
@@ -563,75 +643,77 @@ export function CreditChangeRequestList() {
                             : "Lampiran file tersedia"
                           : "Belum ada lampiran"}
                       </p>
-                    </div> */}
-                  </div>
+                    </div> 
+                  </div> */}
 
-                  <div className="grid grid-cols-1 gap-3">
-                    <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                        Current Credit Limit
-                      </p>
-                      <p className="mt-1 text-lg font-bold text-emerald-900">
-                        {formatCurrency(item.currentCreditLimit)}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
-                        Requested Credit Limit
-                      </p>
-                      <p className="mt-1 text-lg font-bold text-blue-900">
-                        {formatCurrency(item.requestedCreditLimit)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                        <div className="grid grid-cols-1 gap-3">
+                          <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                              Current Credit Limit
+                            </p>
+                            <p className="mt-1 text-lg font-bold text-emerald-900">
+                              {formatCurrency(item.currentCreditLimit)}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                              Requested Credit Limit
+                            </p>
+                            <p className="mt-1 text-lg font-bold text-blue-900">
+                              {formatCurrency(item.requestedCreditLimit)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
 
-                <div className="space-y-3 p-5">
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Current Term
-                      </p>
-                      <p className="mt-1 font-semibold text-slate-900">
-                        {formatDays(item.currentPaymentTerm)}
-                      </p>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Requested Term
-                      </p>
-                      <p className="mt-1 font-semibold text-slate-900">
-                        {formatDays(item.requestedPaymentTerm)}
-                      </p>
-                    </div>
-                  </div>
+                      <div className="space-y-3 p-5">
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div className="rounded-xl bg-slate-50 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              Current Term
+                            </p>
+                            <p className="mt-1 font-semibold text-slate-900">
+                              {formatDays(item.currentPaymentTerm)}
+                            </p>
+                          </div>
+                          <div className="rounded-xl bg-slate-50 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              Requested Term
+                            </p>
+                            <p className="mt-1 font-semibold text-slate-900">
+                              {formatDays(item.requestedPaymentTerm)}
+                            </p>
+                          </div>
+                        </div>
 
-                  <div className="rounded-xl bg-slate-50 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Reason
-                    </p>
-                    <p className="mt-1 line-clamp-2 text-sm text-slate-700">
-                      {item.reason || item.rejectedNote || "-"}
-                    </p>
-                  </div>
+                        <div className="rounded-xl bg-slate-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Reason
+                          </p>
+                          <p className="mt-1 line-clamp-2 text-sm text-slate-700">
+                            {item.reason || item.rejectedNote || "-"}
+                          </p>
+                        </div>
 
-                  <div className="flex items-center justify-between text-xs text-slate-500">
-                    <div className="flex items-center gap-2">
-                      <FaCalendarAlt className="h-3 w-3" />
-                      <span>{formatDate(item.updatedAt)}</span>
-                    </div>
-                    <span>{item.updatedBy || item.createdBy || "System"}</span>
-                  </div>
+                        <div className="flex items-center justify-between text-xs text-slate-500">
+                          <div className="flex items-center gap-2">
+                            <FaCalendarAlt className="h-3 w-3" />
+                            <span>{formatDate(item.updatedAt)}</span>
+                          </div>
+                          <span>
+                            {item.updatedBy || item.createdBy || "System"}
+                          </span>
+                        </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setSelectedItem(item)}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:shadow-lg"
-                  >
-                    <FaEye className="h-4 w-4" />
-                    View Details
-                  </button>
-                </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedItem(item)}
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:shadow-lg"
+                        >
+                          <FaEye className="h-4 w-4" />
+                          View Details
+                        </button>
+                      </div>
                     </>
                   );
                 })()}
