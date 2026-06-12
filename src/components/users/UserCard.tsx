@@ -13,7 +13,7 @@ import {
   FaGoogle,
   FaShieldAlt,
 } from "react-icons/fa";
-import type { User, Role } from "./UserList";
+import type { IntegrationTokenInfo, User, Role } from "./UserList";
 import Image from "next/image";
 import { getFileUrl } from "@/config/api";
 
@@ -47,6 +47,7 @@ export default function UserCard({
 }: {
   user: User;
   role?: Role;
+  integrationToken?: IntegrationTokenInfo;
   viewMode?: "grid" | "list";
   onEdit?: () => void;
   onDelete?: () => void;
@@ -55,7 +56,11 @@ export default function UserCard({
   canDelete?: boolean;
 }) {
   const bgColor = role?.color || "#6B7280";
-  const avatarUrl = getFileUrl(user.profile_pic || user.picture) || user.profile_pic || user.picture || "";
+  const avatarUrl =
+    getFileUrl(user.profile_pic || user.picture) ||
+    user.profile_pic ||
+    user.picture ||
+    "";
 
   if (viewMode === "list") {
     return (
@@ -137,17 +142,6 @@ export default function UserCard({
                   <FaTimesCircle className="w-3 h-3 text-gray-300" />
                 )}
               </div>
-              <span
-                className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize ${
-                  user.status === "active"
-                    ? "bg-green-100 text-green-700"
-                    : user.status === "inactive"
-                    ? "bg-gray-100 text-gray-700"
-                    : "bg-red-100 text-red-700"
-                }`}
-              >
-                {user.status}
-              </span>
             </div>
           </div>
 
@@ -222,21 +216,6 @@ export default function UserCard({
               <FaGoogle className="w-3 h-3 text-blue-500" />
             </span>
           )}
-        </div>
-
-        {/* Status Badge */}
-        <div className="absolute top-3 left-3">
-          <span
-            className={`px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-sm capitalize ${
-              user.status === "active"
-                ? "bg-green-500/90 text-white"
-                : user.status === "inactive"
-                ? "bg-gray-500/90 text-white"
-                : "bg-red-500/90 text-white"
-            }`}
-          >
-            {user.status}
-          </span>
         </div>
       </div>
 
@@ -330,7 +309,7 @@ export default function UserCard({
             </div>
           )}
 
-          {canDelete && !user.is_system && (
+          {/* {canDelete && !user.is_system && (
             <motion.button
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
@@ -343,7 +322,7 @@ export default function UserCard({
               <FaTrash className="w-3.5 h-3.5 text-red-600" />
               <span className="text-sm font-semibold text-red-600">Hapus</span>
             </motion.button>
-          )}
+          )} */}
         </div>
       </div>
     </motion.div>

@@ -18,9 +18,10 @@ import {
   FaBirthdayCake,
   FaCity,
   FaClock,
+  FaCopy,
   FaKey,
 } from "react-icons/fa";
-import type { User, Role } from "./UserList";
+import type { IntegrationTokenInfo, User, Role } from "./UserList";
 import Image from "next/image";
 import { getFileUrl } from "@/config/api";
 
@@ -60,6 +61,7 @@ export default function UserDetailModal({
   onClose,
   user,
   role,
+  integrationToken,
   onEdit,
   onDelete,
   canEdit = true,
@@ -69,6 +71,7 @@ export default function UserDetailModal({
   onClose: () => void;
   user?: User | null;
   role?: Role;
+  integrationToken?: IntegrationTokenInfo;
   onEdit?: (u: User) => void;
   onDelete?: (u: User) => void;
   canEdit?: boolean;
@@ -78,6 +81,12 @@ export default function UserDetailModal({
 
   const bgColor = role?.color || "#6B7280";
   const avatarUrl = getFileUrl(user.profile_pic || user.picture) || user.profile_pic || user.picture || "";
+
+  async function copyTokenValue(value: string) {
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+    }
+  }
 
   return (
     <AnimatePresence>
@@ -141,17 +150,6 @@ export default function UserDetailModal({
                   <div className="flex items-center gap-2 mb-3">
                     <span className="px-4 py-1.5 bg-white/20 backdrop-blur-sm rounded-full text-sm font-semibold">
                       {role?.display_name || user.role}
-                    </span>
-                    <span
-                      className={`px-4 py-1.5 backdrop-blur-sm rounded-full text-sm font-semibold capitalize ${
-                        user.status === "active"
-                          ? "bg-green-500/90"
-                          : user.status === "inactive"
-                          ? "bg-gray-500/90"
-                          : "bg-red-500/90"
-                      }`}
-                    >
-                      {user.status}
                     </span>
                     {user.is_system && (
                       <span className="px-4 py-1.5 bg-amber-500/90 backdrop-blur-sm rounded-full text-sm font-semibold flex items-center gap-1">
@@ -342,6 +340,41 @@ export default function UserDetailModal({
                   </div>
                 </div>
               )}
+
+              {integrationToken?.token ? (
+                <div className="mb-8">
+                  <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-gray-800">
+                    <FaKey className="w-5 h-5 text-gray-400" />
+                    Integration Token
+                  </h3>
+                  <div className="rounded-2xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-600">
+                          {integrationToken.name}
+                        </p>
+                        <p className="mt-1 text-sm text-amber-800">
+                          User ID {integrationToken.userId}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void copyTokenValue(integrationToken.token)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+                      >
+                        <FaCopy className="h-3.5 w-3.5" />
+                        Copy Token
+                      </button>
+                    </div>
+                    <div className="break-all rounded-xl bg-slate-950 px-4 py-3 font-mono text-sm text-slate-100">
+                      {integrationToken.token}
+                    </div>
+                    <div className="mt-3 text-xs text-amber-700">
+                      Preview: {integrationToken.tokenPreview || "-"}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               {/* System Info */}
               <div className="mb-8">

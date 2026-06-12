@@ -718,6 +718,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const userData = mapApiUserToUser(apiUserData);
+      if (!userData.is_system) {
+        return {
+          success: false,
+          message:
+            "Akun ini belum diizinkan masuk ke EKA+ Admin Panel. Aktifkan opsi System User pada data user agar akun bisa login.",
+        };
+      }
+
       const resolved = await resolveSessionState(authToken, userData, [
         responseData.data,
         apiUserData,

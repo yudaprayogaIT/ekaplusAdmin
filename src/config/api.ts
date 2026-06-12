@@ -25,11 +25,13 @@ export const API_CONFIG = {
     WISHLIST: "/api/resource/wishlist",
     BANNER: "/api/resource/ekatalog_banner",
     USER: "/api/resource/user",
+    USER_CREATE: "/api/user/create",
     USER_ME: "/api/user/me",
     INTEGRATION_TOKEN: "/api/user/integration-token",
 
     // Authorization (Authz)
     AUTHZ_ROLE: "/api/authz/roles",
+    AUTHZ_USER_ROLE: "/api/authz/user-role",
     AUTHZ_PERMISSION: "/api/authz/permissions",
     AUTHZ_RESOURCE: "/api/authz/resources",
     AUTHZ_ROLE_PERMISSION: "/api/authz/role-permissions",

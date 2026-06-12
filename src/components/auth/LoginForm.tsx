@@ -82,7 +82,7 @@ export default function LoginForm({
           setError(result.message || "Login gagal");
         }
       }
-    } catch (err) {
+    } catch {
       setError("Terjadi kesalahan saat login");
       // console.error("Login error:", err);
     } finally {
@@ -156,10 +156,21 @@ export default function LoginForm({
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700"
+                  className="rounded-2xl border border-red-200 bg-gradient-to-r from-red-50 to-rose-50 p-4 text-red-700 shadow-sm"
                 >
-                  <FaExclamationCircle className="w-5 h-5 flex-shrink-0" />
-                  <span className="text-sm">{error}</span>
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600">
+                      <FaExclamationCircle className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-red-700">
+                        Login belum bisa dilanjutkan
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-red-600">
+                        {error}
+                      </p>
+                    </div>
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>

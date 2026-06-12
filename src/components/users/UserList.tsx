@@ -9,16 +9,12 @@ import React, {
 } from "react";
 import { motion } from "framer-motion";
 import {
-  FaCheckCircle,
-  FaFilter,
-  FaGoogle,
   FaList,
   FaLock,
   FaPlus,
   FaSearch,
   FaSortAmountDown,
   FaTh,
-  FaUserShield,
   FaUsers,
 } from "react-icons/fa";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
@@ -27,6 +23,7 @@ import {
   API_CONFIG,
   apiFetch,
   getAuthHeaders,
+  getApiUrl,
   getQueryUrl,
   getResourceUrl,
 } from "@/config/api";
@@ -85,6 +82,17 @@ export type Role = {
   status: string;
 };
 
+export type IntegrationTokenInfo = {
+  id: number;
+  name: string;
+  token: string;
+  tokenPreview: string;
+  userId: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type UserMutationPayload = {
   first_name: string;
   last_name: string;
@@ -101,9 +109,29 @@ export type UserMutationPayload = {
   postal_code: string | null;
   country: string | null;
   role_id: string | null;
+  role_ids: string[];
   role: string;
-  status: string;
+  is_system: number;
+  generate_integration_token?: boolean;
+  integration_token_name?: string | null;
 };
+
+function normalizePhoneForDb(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("62")) return digits;
+  if (digits.startsWith("0")) return `62${digits.slice(1)}`;
+  return `62${digits}`;
+}
+
+function extractUserIdFromResponse(data: UsersApiResponse["data"]): string {
+  if (!data || Array.isArray(data)) return "";
+  return (
+    toStringValue(data.id) ||
+    toStringValue(data.ID) ||
+    toStringValue(data.user_id)
+  );
+}
 
 type SortOption =
   | "name-asc"
@@ -120,7 +148,23 @@ type RolesApiResponse = {
 };
 
 type UsersApiResponse = {
-  data?: UsersApiRow[];
+  data?: UsersApiRow[] | UsersApiRow | null;
+  message?: string;
+};
+
+type IntegrationTokenApiRow = {
+  ID?: number;
+  Name?: string;
+  Token?: string;
+  TokenPreview?: string;
+  UserID?: string | number;
+  IsActive?: boolean;
+  CreatedAt?: string;
+  UpdatedAt?: string;
+};
+
+type IntegrationTokensApiResponse = {
+  data?: IntegrationTokenApiRow[] | null;
   message?: string;
 };
 
@@ -168,6 +212,14 @@ function normalizeStatus(value: unknown): string {
   if (["0", "inactive", "disabled", "nonaktif"].includes(normalized))
     return "inactive";
   return normalized;
+}
+
+function extractServerMessage(json: unknown, fallback: string) {
+  if (json && typeof json === "object" && "message" in json) {
+    const message = (json as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  return fallback;
 }
 
 function formatRoleName(role: string): string {
@@ -268,6 +320,19 @@ function mapUser(row: UsersApiRow): User {
   };
 }
 
+function mapIntegrationToken(row: IntegrationTokenApiRow): IntegrationTokenInfo {
+  return {
+    id: Number(row.ID || 0),
+    name: row.Name || `Token ${row.ID || "-"}`,
+    token: row.Token || "",
+    tokenPreview: row.TokenPreview || "",
+    userId: toStringValue(row.UserID),
+    isActive: Boolean(row.IsActive),
+    createdAt: row.CreatedAt || "",
+    updatedAt: row.UpdatedAt || "",
+  };
+}
+
 export default function UserList() {
   const {
     hasPermission,
@@ -277,13 +342,15 @@ export default function UserList() {
   } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [integrationTokens, setIntegrationTokens] = useState<
+    IntegrationTokenInfo[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedRole, setSelectedRole] = useState<string | null>(null);
-  const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortBy, setSortBy] = useState<SortOption>("created-desc");
 
@@ -297,7 +364,6 @@ export default function UserList() {
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
   const activeEndpointRef = useRef<string>(USER_ENDPOINTS[0]);
-
   const canViewUsers = hasPermission("user.read");
   const canCreateUsers = hasPermission("user.create");
   const canEditUsers = hasPermission("user.update");
@@ -364,6 +430,73 @@ export default function UserList() {
     throw new Error(lastError);
   }, [token]);
 
+  const loadIntegrationTokens = useCallback(async () => {
+    if (!token) {
+      setIntegrationTokens([]);
+      return [];
+    }
+
+    const res = await apiFetch(
+      `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.INTEGRATION_TOKEN}`,
+      {
+        method: "GET",
+        cache: "no-store",
+        headers: getAuthHeaders(token),
+      },
+      token,
+    );
+
+    const json = (await res
+      .json()
+      .catch(() => null)) as IntegrationTokensApiResponse | null;
+    if (!res.ok) {
+      throw new Error(
+        json?.message || `Gagal memuat integration token (${res.status})`,
+      );
+    }
+
+    const baseRows = Array.isArray(json?.data)
+      ? json.data.map(mapIntegrationToken)
+      : [];
+
+    const detailedRows = await Promise.all(
+      baseRows.map(async (item) => {
+        try {
+          const detailRes = await apiFetch(
+            `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.INTEGRATION_TOKEN}/${item.id}`,
+            {
+              method: "GET",
+              cache: "no-store",
+              headers: getAuthHeaders(token),
+            },
+            token,
+          );
+
+          const detailJson = (await detailRes
+            .json()
+            .catch(() => null)) as IntegrationTokensApiResponse | null;
+          if (!detailRes.ok || !detailJson?.data || Array.isArray(detailJson.data)) {
+            return item;
+          }
+
+          const detail = mapIntegrationToken(
+            detailJson.data as IntegrationTokenApiRow,
+          );
+
+          return {
+            ...item,
+            token: detail.token || item.token,
+            tokenPreview: detail.tokenPreview || item.tokenPreview,
+          };
+        } catch {
+          return item;
+        }
+      }),
+    );
+
+    return detailedRows;
+  }, [token]);
+
   const refreshData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -371,17 +504,23 @@ export default function UserList() {
       if (!isAuthenticated || !token) {
         setUsers([]);
         setRoles([]);
+        setIntegrationTokens([]);
         return;
       }
 
-      const [nextRoles] = await Promise.all([loadRoles(), loadUsers()]);
+      const [nextRoles, nextTokens] = await Promise.all([
+        loadRoles(),
+        loadIntegrationTokens(),
+        loadUsers(),
+      ]);
       setRoles(nextRoles);
+      setIntegrationTokens(nextTokens);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal memuat users");
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, loadRoles, loadUsers, token]);
+  }, [isAuthenticated, loadIntegrationTokens, loadRoles, loadUsers, token]);
 
   useEffect(() => {
     void refreshData();
@@ -444,14 +583,6 @@ export default function UserList() {
       );
     }
 
-    if (selectedRole) {
-      result = result.filter((user) => user.role === selectedRole);
-    }
-
-    if (selectedStatus) {
-      result = result.filter((user) => user.status === selectedStatus);
-    }
-
     return result.sort((a, b) => {
       switch (sortBy) {
         case "name-asc":
@@ -481,31 +612,34 @@ export default function UserList() {
           );
       }
     });
-  }, [getRoleInfo, searchQuery, selectedRole, selectedStatus, sortBy, users]);
+  }, [getRoleInfo, searchQuery, sortBy, users]);
 
-  const stats = useMemo(() => {
-    const active = users.filter((user) => user.status === "active").length;
-    const verifiedEmail = users.filter((user) => user.is_email_verified).length;
-    const verifiedPhone = users.filter((user) => user.is_phone_verified).length;
-    const googleLinked = users.filter((user) => Boolean(user.google_id)).length;
-    const systemUsers = users.filter((user) => user.is_system).length;
-    return {
-      total: users.length,
-      active,
-      verifiedEmail,
-      verifiedPhone,
-      googleLinked,
-      systemUsers,
-    };
-  }, [users]);
+  const integrationTokenByUserId = useMemo(() => {
+    const tokenMap = new Map<string, IntegrationTokenInfo>();
 
-  const statusList = useMemo(
-    () =>
-      Array.from(
-        new Set(users.map((user) => user.status).filter(Boolean)),
-      ).sort((a, b) => a.localeCompare(b)),
-    [users],
-  );
+    integrationTokens.forEach((tokenItem) => {
+      if (!tokenItem.userId) return;
+
+      const existing = tokenMap.get(tokenItem.userId);
+      if (!existing) {
+        tokenMap.set(tokenItem.userId, tokenItem);
+        return;
+      }
+
+      const nextTime = new Date(
+        tokenItem.updatedAt || tokenItem.createdAt || 0,
+      ).getTime();
+      const currentTime = new Date(
+        existing.updatedAt || existing.createdAt || 0,
+      ).getTime();
+
+      if (nextTime >= currentTime) {
+        tokenMap.set(tokenItem.userId, tokenItem);
+      }
+    });
+
+    return tokenMap;
+  }, [integrationTokens]);
 
   const closeModal = () => {
     if (saving) return;
@@ -546,11 +680,89 @@ export default function UserList() {
     setTimeout(() => promptDeleteUser(user), 80);
   };
 
+  const assignRoleToUser = useCallback(
+    async (userId: string, roleIds: string[]) => {
+      if (!token || !userId || roleIds.length === 0) return;
+
+      const res = await apiFetch(
+        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_USER_ROLE}`,
+        {
+          method: "POST",
+          headers: getAuthHeaders(token),
+          body: JSON.stringify({
+            user_id: Number(userId),
+            role_ids: roleIds.map((roleId) => Number(roleId)),
+          }),
+        },
+        token,
+      );
+
+      const json = (await res
+        .json()
+        .catch(() => null)) as UsersApiResponse | null;
+      if (!res.ok) {
+        throw new Error(
+          json?.message || `Gagal menetapkan role user (${res.status})`,
+        );
+      }
+    },
+    [token],
+  );
+
+  const createIntegrationTokenForUser = useCallback(
+    async (userId: string, tokenName: string | null | undefined) => {
+      if (!token || !userId) return;
+
+      const trimmedName = tokenName?.trim();
+      if (!trimmedName) {
+        throw new Error("Nama integration token wajib diisi.");
+      }
+
+      const payload = {
+        name: trimmedName,
+        user_id: Number(userId),
+      };
+
+      let lastError = "Gagal membuat integration token.";
+
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const res = await apiFetch(
+          getApiUrl(API_CONFIG.ENDPOINTS.INTEGRATION_TOKEN),
+          {
+            method: "POST",
+            cache: "no-store",
+            headers: getAuthHeaders(token),
+            body: JSON.stringify(payload),
+          },
+          token,
+        );
+
+        const json = await res.json().catch(() => null);
+        if (res.ok) {
+          return;
+        }
+
+        lastError = extractServerMessage(
+          json,
+          `Gagal membuat integration token (${res.status})`,
+        );
+
+        if (attempt === 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, 500));
+        }
+      }
+
+      throw new Error(lastError);
+    },
+    [token],
+  );
+
   const submitUser = async (payload: UserMutationPayload) => {
     if (!token) return;
 
     setSaving(true);
     setModalError(null);
+    let shouldRefresh = false;
     try {
       const body = {
         first_name: payload.first_name.trim(),
@@ -559,7 +771,7 @@ export default function UserList() {
           `${payload.first_name.trim()} ${payload.last_name.trim()}`.trim(),
         username: payload.username.trim(),
         email: payload.email.trim(),
-        phone: payload.phone.trim(),
+        phone: normalizePhoneForDb(payload.phone),
         gender: payload.gender.trim() || null,
         date_of_birth: payload.date_of_birth || null,
         place_of_birth: payload.birth_place || null,
@@ -568,24 +780,22 @@ export default function UserList() {
         province: payload.province || null,
         postal_code: payload.postal_code || null,
         country: payload.country || null,
-        role: payload.role,
-        status: payload.status === "active" ? 1 : 0,
-        workflow_state: payload.status === "active" ? "Active" : "Inactive",
+        is_system: modalInitial ? payload.is_system : Boolean(payload.is_system),
+        token_version: 1,
+        status: 1,
+        workflow_state: "Active",
       } as Record<string, unknown>;
-
-      if (payload.role_id) {
-        body.role_id = payload.role_id;
-      }
 
       if (payload.password?.trim()) {
         body.password = payload.password.trim();
       }
 
       const endpoint = activeEndpointRef.current;
+      const requestUrl = modalInitial
+        ? getResourceUrl(endpoint, modalInitial.id)
+        : `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.USER_CREATE}`;
       const res = await apiFetch(
-        modalInitial
-          ? getResourceUrl(endpoint, modalInitial.id)
-          : getResourceUrl(endpoint),
+        requestUrl,
         {
           method: modalInitial ? "PUT" : "POST",
           headers: getAuthHeaders(token),
@@ -603,15 +813,45 @@ export default function UserList() {
         );
       }
 
+      const userId = modalInitial?.id || extractUserIdFromResponse(json?.data);
+      if (!userId) {
+        throw new Error(
+          "User berhasil disimpan, tetapi user_id tidak ditemukan untuk set role.",
+        );
+      }
+
+      await assignRoleToUser(userId, payload.role_ids);
+      shouldRefresh = true;
+
+      if (payload.generate_integration_token) {
+        await createIntegrationTokenForUser(
+          userId,
+          payload.integration_token_name,
+        );
+      }
+
+      setSuccessMessage(
+        payload.generate_integration_token
+          ? "User berhasil dibuat, role terpasang, dan integration token berhasil dibuat."
+          : "User berhasil dibuat dan role berhasil dipasang.",
+      );
       setModalOpen(false);
       setModalInitial(null);
       window.dispatchEvent(new Event(USER_EVENT));
     } catch (submitError) {
-      setModalError(
+      const message =
         submitError instanceof Error
           ? submitError.message
-          : "Gagal menyimpan user",
-      );
+          : "Gagal menyimpan user";
+
+      if (shouldRefresh) {
+        setModalOpen(false);
+        setModalInitial(null);
+        setError(`User sudah tersimpan, tetapi proses lanjutan gagal: ${message}`);
+        window.dispatchEvent(new Event(USER_EVENT));
+      } else {
+        setModalError(message);
+      }
     } finally {
       setSaving(false);
     }
@@ -755,12 +995,27 @@ export default function UserList() {
 
   return (
     <div>
-      <div className="mb-8 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+      {successMessage ? (
+        <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-700 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <span className="text-sm font-medium">{successMessage}</span>
+            <button
+              type="button"
+              onClick={() => setSuccessMessage(null)}
+              className="text-xs font-semibold text-emerald-700 transition-colors hover:text-emerald-900"
+            >
+              Tutup
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mb-5 flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
         <div>
-          <h1 className="mb-2 text-2xl font-bold text-gray-800 md:text-3xl">
+          <h1 className="mb-1 text-[1.75rem] font-bold leading-tight text-gray-800 md:text-[2rem]">
             Users
           </h1>
-          <p className="text-sm text-gray-600 md:text-base">
+          <p className="text-sm text-gray-600">
             Kelola pengguna aplikasi EKA+ dari resource backend.
           </p>
         </div>
@@ -770,95 +1025,30 @@ export default function UserList() {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={handleAdd}
-            className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-500 to-red-600 px-5 py-3 font-medium text-white shadow-lg shadow-red-200 transition-all hover:shadow-xl"
+            className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-500 to-red-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-red-200 transition-all hover:shadow-xl"
           >
             <FaPlus className="h-4 w-4" />
             <span>Tambah User</span>
           </motion.button>
         ) : (
-          <div className="flex cursor-not-allowed items-center gap-2 rounded-xl bg-gray-100 px-5 py-3 font-medium text-gray-400">
+          <div className="flex cursor-not-allowed items-center gap-2 rounded-xl bg-gray-100 px-5 py-2.5 font-medium text-gray-400">
             <FaLock className="h-4 w-4" />
             <span>Tambah User</span>
           </div>
         )}
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-        <div className="rounded-xl border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100 p-4">
-          <div className="mb-2 flex items-center gap-2">
-            <FaUsers className="h-4 w-4 text-blue-600" />
-            <span className="text-xs font-medium text-blue-700">
-              Total Users
-            </span>
-          </div>
-          <div className="text-2xl font-bold text-blue-900">{stats.total}</div>
-        </div>
-        <div className="rounded-xl border-2 border-emerald-200 bg-gradient-to-br from-emerald-50 to-emerald-100 p-4">
-          <div className="mb-2 flex items-center gap-2">
-            <FaCheckCircle className="h-4 w-4 text-emerald-600" />
-            <span className="text-xs font-medium text-emerald-700">Active</span>
-          </div>
-          <div className="text-2xl font-bold text-emerald-900">
-            {stats.active}
-          </div>
-        </div>
-        <div className="rounded-xl border-2 border-cyan-200 bg-gradient-to-br from-cyan-50 to-cyan-100 p-4">
-          <div className="mb-2 flex items-center gap-2">
-            <FaCheckCircle className="h-4 w-4 text-cyan-600" />
-            <span className="text-xs font-medium text-cyan-700">
-              Email Verified
-            </span>
-          </div>
-          <div className="text-2xl font-bold text-cyan-900">
-            {stats.verifiedEmail}
-          </div>
-        </div>
-        <div className="rounded-xl border-2 border-green-200 bg-gradient-to-br from-green-50 to-green-100 p-4">
-          <div className="mb-2 flex items-center gap-2">
-            <FaCheckCircle className="h-4 w-4 text-green-600" />
-            <span className="text-xs font-medium text-green-700">
-              Phone Verified
-            </span>
-          </div>
-          <div className="text-2xl font-bold text-green-900">
-            {stats.verifiedPhone}
-          </div>
-        </div>
-        <div className="rounded-xl border-2 border-orange-200 bg-gradient-to-br from-orange-50 to-orange-100 p-4">
-          <div className="mb-2 flex items-center gap-2">
-            <FaGoogle className="h-4 w-4 text-orange-600" />
-            <span className="text-xs font-medium text-orange-700">
-              Google Linked
-            </span>
-          </div>
-          <div className="text-2xl font-bold text-orange-900">
-            {stats.googleLinked}
-          </div>
-        </div>
-        <div className="rounded-xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-amber-100 p-4">
-          <div className="mb-2 flex items-center gap-2">
-            <FaUserShield className="h-4 w-4 text-amber-600" />
-            <span className="text-xs font-medium text-amber-700">
-              System User
-            </span>
-          </div>
-          <div className="text-2xl font-bold text-amber-900">
-            {stats.systemUsers}
-          </div>
-        </div>
-      </div>
-
-      <div className="mb-6 rounded-xl border border-gray-100 bg-white p-4 shadow-sm md:p-6">
+      <div className="mb-5 rounded-xl border border-gray-100 bg-white p-4 shadow-sm md:p-5">
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-4 md:flex-row">
-            <div className="relative flex-1">
+            <div className="relative flex-1 md:max-w-xl">
               <FaSearch className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Cari nama, email, telepon, username, role, atau kota..."
-                className="w-full rounded-xl border border-gray-200 py-3 pl-11 pr-4 transition-all focus:border-transparent focus:ring-2 focus:ring-red-500"
+                className="w-full rounded-xl border border-gray-200 py-2.5 pl-11 pr-4 text-sm transition-all focus:border-transparent focus:ring-2 focus:ring-red-500"
               />
             </div>
 
@@ -869,7 +1059,7 @@ export default function UserList() {
                 onChange={(event) =>
                   setSortBy(event.target.value as SortOption)
                 }
-                className="min-w-[200px] cursor-pointer appearance-none rounded-xl border border-gray-200 bg-white py-3 pl-11 pr-10 font-medium text-gray-700 transition-all focus:border-transparent focus:ring-2 focus:ring-red-500"
+                className="min-w-[190px] cursor-pointer appearance-none rounded-xl border border-gray-200 bg-white py-2.5 pl-11 pr-10 text-sm font-medium text-gray-700 transition-all focus:border-transparent focus:ring-2 focus:ring-red-500"
               >
                 <option value="created-desc">Terbaru</option>
                 <option value="created-asc">Terlama</option>
@@ -897,7 +1087,7 @@ export default function UserList() {
               <button
                 type="button"
                 onClick={() => setViewMode("grid")}
-                className={`rounded-xl px-4 py-3 font-medium transition-all ${
+                className={`rounded-xl px-4 py-2.5 font-medium transition-all ${
                   viewMode === "grid"
                     ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
@@ -908,7 +1098,7 @@ export default function UserList() {
               <button
                 type="button"
                 onClick={() => setViewMode("list")}
-                className={`rounded-xl px-4 py-3 font-medium transition-all ${
+                className={`rounded-xl px-4 py-2.5 font-medium transition-all ${
                   viewMode === "list"
                     ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
@@ -918,72 +1108,7 @@ export default function UserList() {
               </button>
             </div>
           </div>
-
-          <div className="flex items-center gap-2 overflow-x-auto pb-2">
-            <FaFilter className="h-4 w-4 flex-shrink-0 text-gray-400" />
-
-            <button
-              type="button"
-              onClick={() => setSelectedRole(null)}
-              className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-all ${
-                selectedRole === null
-                  ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Semua Role
-            </button>
-
-            {allRoles.map((role) => (
-              <button
-                type="button"
-                key={role.id}
-                onClick={() => setSelectedRole(role.name)}
-                className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-all ${
-                  selectedRole === role.name
-                    ? "text-white shadow-lg"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-                style={
-                  selectedRole === role.name
-                    ? { backgroundColor: role.color }
-                    : undefined
-                }
-              >
-                {role.display_name}
-              </button>
-            ))}
-
-            {statusList.length > 0 ? (
-              <div className="mx-2 h-6 w-px bg-gray-300" />
-            ) : null}
-
-            {statusList.map((status) => (
-              <button
-                type="button"
-                key={status}
-                onClick={() =>
-                  setSelectedStatus(selectedStatus === status ? null : status)
-                }
-                className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium capitalize transition-all ${
-                  selectedStatus === status
-                    ? status === "active"
-                      ? "bg-green-500 text-white shadow-lg shadow-green-200"
-                      : status === "inactive"
-                        ? "bg-gray-500 text-white shadow-lg shadow-gray-200"
-                        : "bg-red-500 text-white shadow-lg shadow-red-200"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                {status}
-              </button>
-            ))}
-          </div>
-
-          {searchQuery ||
-          selectedRole ||
-          selectedStatus ||
-          sortBy !== "created-desc" ? (
+          {searchQuery || sortBy !== "created-desc" ? (
             <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2">
               <span className="text-xs font-medium text-gray-500">
                 Filter aktif:
@@ -993,37 +1118,10 @@ export default function UserList() {
                   Pencarian: &quot;{searchQuery}&quot;
                 </span>
               ) : null}
-              {selectedRole ? (
-                <span
-                  className="rounded-full px-3 py-1 text-xs font-medium text-white"
-                  style={{
-                    backgroundColor:
-                      getRoleInfo(selectedRole)?.color || "#6B7280",
-                  }}
-                >
-                  Role:{" "}
-                  {getRoleInfo(selectedRole)?.display_name || selectedRole}
-                </span>
-              ) : null}
-              {selectedStatus ? (
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-medium capitalize ${
-                    selectedStatus === "active"
-                      ? "bg-green-100 text-green-700"
-                      : selectedStatus === "inactive"
-                        ? "bg-gray-100 text-gray-700"
-                        : "bg-red-100 text-red-700"
-                  }`}
-                >
-                  Status: {selectedStatus}
-                </span>
-              ) : null}
               <button
                 type="button"
                 onClick={() => {
                   setSearchQuery("");
-                  setSelectedRole(null);
-                  setSelectedStatus(null);
                   setSortBy("created-desc");
                 }}
                 className="rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-700 transition-colors hover:bg-red-200"
@@ -1062,6 +1160,7 @@ export default function UserList() {
               key={user.id}
               user={user}
               role={getRoleInfo(user.role)}
+              integrationToken={integrationTokenByUserId.get(user.id)}
               viewMode={viewMode}
               onEdit={() => handleEdit(user)}
               onDelete={() => promptDeleteUser(user)}
@@ -1076,6 +1175,7 @@ export default function UserList() {
       <AddUserModal
         open={modalOpen}
         onClose={closeModal}
+        onDismissError={() => setModalError(null)}
         initial={modalInitial}
         roles={allRoles}
         saving={saving}
@@ -1088,6 +1188,9 @@ export default function UserList() {
         onClose={closeDetail}
         user={detailItem}
         role={detailItem ? getRoleInfo(detailItem.role) : undefined}
+        integrationToken={
+          detailItem ? integrationTokenByUserId.get(detailItem.id) : undefined
+        }
         onEdit={onDetailEdit}
         onDelete={onDetailDelete}
         canEdit={canEditUsers}
