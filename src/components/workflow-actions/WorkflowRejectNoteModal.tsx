@@ -89,17 +89,6 @@ export default function WorkflowRejectNoteModal({
               await onSubmit(trimmed);
             }}
           >
-            {/* <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              <div className="flex items-start gap-3">
-                <FaExclamationTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <div>
-                  <p className="font-semibold">
-                    Konfirmasi reject membutuhkan alasan
-                  </p>
-                </div>
-              </div>
-            </div> */}
-
             {error ? (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
