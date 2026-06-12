@@ -97,6 +97,8 @@ function formatDate(value?: string | null): string {
     day: "numeric",
     month: "short",
     year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
@@ -451,7 +453,7 @@ export function CreditChangeRequestList() {
 
   return (
     <div>
-      <div className="mb-8 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+      <div className="mb-4 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 md:text-3xl">
             Credit Change Request
@@ -470,7 +472,7 @@ export function CreditChangeRequestList() {
         </button>
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+      {/* <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
         <div className="rounded-xl border-2 border-emerald-200 bg-gradient-to-br from-emerald-50 to-emerald-100 p-5">
           <div className="mb-1 flex items-center gap-2">
             <FaFileInvoiceDollar className="h-4 w-4 text-emerald-700" />
@@ -509,7 +511,7 @@ export function CreditChangeRequestList() {
             {stats.rejected}
           </div>
         </div>
-      </div>
+      </div> */}
 
       <div className="mb-6 rounded-xl border border-gray-100 bg-white p-4 shadow-sm md:p-6">
         <div className="flex flex-col gap-4 md:flex-row">
@@ -579,7 +581,16 @@ export function CreditChangeRequestList() {
                   y: -5,
                   boxShadow: "0 18px 35px -15px rgba(16, 185, 129, 0.25)",
                 }}
-                className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm"
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelectedItem(item)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setSelectedItem(item);
+                  }
+                }}
+                className="cursor-pointer overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm outline-none transition focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2"
               >
                 {(() => {
                   const attachmentUrl = getFileUrl(item.identityAttachment);
@@ -593,9 +604,9 @@ export function CreditChangeRequestList() {
                       <div className="border-b border-gray-100 bg-gradient-to-br from-white via-emerald-50/30 to-white p-5">
                         <div className="mb-4 flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">
+                            {/* <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">
                               {item.code}
-                            </p>
+                            </p> */}
                             <h3 className="mt-2 truncate text-lg font-bold text-slate-900">
                               {policyName}
                             </h3>
@@ -646,12 +657,12 @@ export function CreditChangeRequestList() {
                     </div> 
                   </div> */}
 
-                        <div className="grid grid-cols-1 gap-3">
+                        <div className="grid grid-cols-2 gap-3">
                           <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
                             <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
                               Current Credit Limit
                             </p>
-                            <p className="mt-1 text-lg font-bold text-emerald-900">
+                            <p className="mt-1 text-[var(--credit-limit-card-font-size,1.125rem)] font-bold leading-tight text-emerald-900">
                               {formatCurrency(item.currentCreditLimit)}
                             </p>
                           </div>
@@ -659,7 +670,7 @@ export function CreditChangeRequestList() {
                             <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
                               Requested Credit Limit
                             </p>
-                            <p className="mt-1 text-lg font-bold text-blue-900">
+                            <p className="mt-1 text-[var(--credit-limit-card-font-size,1.125rem)] font-bold leading-tight text-blue-900">
                               {formatCurrency(item.requestedCreditLimit)}
                             </p>
                           </div>
@@ -669,7 +680,7 @@ export function CreditChangeRequestList() {
                       <div className="space-y-3 p-5">
                         <div className="grid grid-cols-2 gap-3 text-sm">
                           <div className="rounded-xl bg-slate-50 p-3">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            <p className="text-xs font-semibold  tracking-wide text-slate-500">
                               Current Term
                             </p>
                             <p className="mt-1 font-semibold text-slate-900">
@@ -677,7 +688,7 @@ export function CreditChangeRequestList() {
                             </p>
                           </div>
                           <div className="rounded-xl bg-slate-50 p-3">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            <p className="text-xs font-semibold  tracking-wide text-slate-500">
                               Requested Term
                             </p>
                             <p className="mt-1 font-semibold text-slate-900">
@@ -687,7 +698,7 @@ export function CreditChangeRequestList() {
                         </div>
 
                         <div className="rounded-xl bg-slate-50 p-3">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          <p className="text-xs font-semibold  tracking-wide text-slate-500">
                             Reason
                           </p>
                           <p className="mt-1 line-clamp-2 text-sm text-slate-700">
@@ -707,7 +718,10 @@ export function CreditChangeRequestList() {
 
                         <button
                           type="button"
-                          onClick={() => setSelectedItem(item)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelectedItem(item);
+                          }}
                           className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:shadow-lg"
                         >
                           <FaEye className="h-4 w-4" />

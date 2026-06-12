@@ -17,6 +17,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   API_CONFIG,
   apiFetch,
+  getApiUrl,
   getQueryUrl,
   getResourceUrl,
 } from "@/config/api";
@@ -54,6 +55,30 @@ interface PolicyCurrentProfile {
   paymentTerm: number | null;
   limitCustomerOverdue: number | null;
   createdBy: string;
+}
+
+interface PolicyHierarchyBranchCustomer {
+  id: number;
+  name?: string | null;
+  _relations?: {
+    branch?: {
+      city?: string | null;
+      id?: number | null;
+    } | null;
+    gcid?: {
+      gc_name?: string | null;
+      id?: number | null;
+      name?: string | null;
+    } | null;
+  } | null;
+}
+
+interface PolicyHierarchyResponse {
+  data?: {
+    data?: {
+      bcs?: PolicyHierarchyBranchCustomer[] | null;
+    } | null;
+  } | null;
 }
 
 interface CreditChangeRequestFormModalProps {
@@ -430,6 +455,13 @@ export function CreditChangeRequestFormModal({
   const [currentProfile, setCurrentProfile] =
     useState<PolicyCurrentProfile | null>(null);
   const [currentProfileLoading, setCurrentProfileLoading] = useState(false);
+  const [affectedBranches, setAffectedBranches] = useState<
+    PolicyHierarchyBranchCustomer[]
+  >([]);
+  const [affectedBranchesLoading, setAffectedBranchesLoading] = useState(false);
+  const [affectedBranchesError, setAffectedBranchesError] = useState<
+    string | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
   const [waPreviewOpen, setWaPreviewOpen] = useState(false);
 
@@ -450,6 +482,9 @@ export function CreditChangeRequestFormModal({
     setError(null);
     setCurrentProfile(null);
     setCurrentProfileLoading(false);
+    setAffectedBranches([]);
+    setAffectedBranchesLoading(false);
+    setAffectedBranchesError(null);
     setWaPreviewOpen(false);
     setLookups({
       nbid: [],
@@ -568,6 +603,9 @@ export function CreditChangeRequestFormModal({
     setPolicyDropdownOpen(false);
     setCurrentProfile(null);
     setCurrentProfileLoading(false);
+    setAffectedBranches([]);
+    setAffectedBranchesLoading(false);
+    setAffectedBranchesError(null);
   }, [open, policyType]);
 
   useEffect(() => {
@@ -633,6 +671,88 @@ export function CreditChangeRequestFormModal({
     }
 
     void fetchCurrentProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, open, policyId, policyType, token]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchAffectedBranches() {
+      const parsedPolicyId = Number(policyId || 0);
+      if (!open || !token || !isAuthenticated || !parsedPolicyId) {
+        setAffectedBranches([]);
+        setAffectedBranchesLoading(false);
+        setAffectedBranchesError(null);
+        return;
+      }
+
+      setAffectedBranchesLoading(true);
+      setAffectedBranchesError(null);
+
+      try {
+        const response = await apiFetch(
+          getApiUrl(
+            `${API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2}/method/get_policy_hierarchy`,
+          ),
+          {
+            method: "POST",
+            cache: "no-store",
+            body: JSON.stringify({
+              level: policyType,
+              value: parsedPolicyId,
+              format: "full",
+              entities: ["bcs"],
+              query: {
+                bcs: {
+                  fields: ["id", "name", "branch.city", "gcid"],
+                },
+                gcs: {
+                  fields: ["id", "gc_name"],
+                },
+                gps: {
+                  fields: ["id", "gp_name"],
+                },
+                nb: {
+                  fields: ["id", "nb_name"],
+                },
+              },
+            }),
+          },
+          token,
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            `Gagal memuat daftar customer cabang (${response.status})`,
+          );
+        }
+
+        const json = (await response.json()) as PolicyHierarchyResponse;
+        const rows = json.data?.data?.bcs;
+
+        if (!cancelled) {
+          setAffectedBranches(Array.isArray(rows) ? rows : []);
+        }
+      } catch (fetchError) {
+        if (!cancelled) {
+          setAffectedBranches([]);
+          setAffectedBranchesError(
+            fetchError instanceof Error
+              ? fetchError.message
+              : "Gagal memuat daftar customer cabang",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setAffectedBranchesLoading(false);
+        }
+      }
+    }
+
+    void fetchAffectedBranches();
 
     return () => {
       cancelled = true;
@@ -1232,6 +1352,68 @@ export function CreditChangeRequestFormModal({
                           />
                         </div>
                       </div>
+                    </section>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <section className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-5">
+                      <div className="mb-4 flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-base font-semibold text-gray-800">
+                            Customer Yang Akan Mengikuti Credit Limit Ini
+                          </h3>
+                          <p className="mt-1 text-xs text-gray-500">
+                            Daftar customer dalam hierarchy policy yang dipilih.
+                          </p>
+                        </div>
+                        <span className="inline-flex items-center rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-indigo-700 ring-1 ring-indigo-100">
+                          {affectedBranchesLoading
+                            ? "Memuat..."
+                            : `${affectedBranches.length} customer`}
+                        </span>
+                      </div>
+
+                      {!policyId ? (
+                        <div className="rounded-xl border border-dashed border-indigo-200 bg-white/70 p-4 text-sm text-slate-500">
+                          Pilih policy lebih dulu untuk melihat customer yang
+                          akan mengikuti credit limit ini.
+                        </div>
+                      ) : affectedBranchesError ? (
+                        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                          {affectedBranchesError}
+                        </div>
+                      ) : affectedBranchesLoading ? (
+                        <div className="rounded-xl border border-indigo-100 bg-white/70 p-4 text-sm text-slate-500">
+                          Memuat daftar customer cabang...
+                        </div>
+                      ) : affectedBranches.length > 0 ? (
+                        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                          {affectedBranches.map((branch) => {
+                            const gcName =
+                              branch._relations?.gcid?.gc_name?.trim() || "-";
+                            const city =
+                              branch._relations?.branch?.city?.trim() || "-";
+
+                            return (
+                              <div
+                                key={branch.id}
+                                className="rounded-xl border border-indigo-100 bg-white p-4"
+                              >
+                                <p className="text-sm font-bold text-slate-900">
+                                  {gcName} - {city}
+                                </p>
+                                <p className="mt-1 text-sm font-semibold text-indigo-700">
+                                  {branch.name || "-"}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-indigo-200 bg-white/70 p-4 text-sm text-slate-500">
+                          Tidak ada customer cabang dalam cakupan policy ini.
+                        </div>
+                      )}
                     </section>
                   </div>
 

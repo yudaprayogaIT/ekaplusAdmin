@@ -2,7 +2,12 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import { FaReply, FaSave, FaTimes } from "react-icons/fa";
+import {
+  FaExclamationTriangle,
+  FaReply,
+  FaSave,
+  FaTimes,
+} from "react-icons/fa";
 import { WorkflowActionItem } from "@/services/workflowActionService";
 
 type Props = {
@@ -54,7 +59,9 @@ export default function WorkflowRejectNoteModal({
               </div>
               <div>
                 <h3 className="text-lg font-bold">{action.action}</h3>
-                <p className="text-sm text-red-50">Tambahkan catatan reject</p>
+                <p className="text-sm text-red-50">
+                  Alasan reject wajib diisi sebelum action dikirim.
+                </p>
               </div>
             </div>
             <button
@@ -82,6 +89,17 @@ export default function WorkflowRejectNoteModal({
               await onSubmit(trimmed);
             }}
           >
+            {/* <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              <div className="flex items-start gap-3">
+                <FaExclamationTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  <p className="font-semibold">
+                    Konfirmasi reject membutuhkan alasan
+                  </p>
+                </div>
+              </div>
+            </div> */}
+
             {error ? (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
@@ -96,10 +114,17 @@ export default function WorkflowRejectNoteModal({
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
                 rows={5}
+                required
                 disabled={loading}
                 placeholder="Tuliskan alasan reject..."
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-red-300 focus:bg-white"
               />
+              <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+                <span>
+                  Berikan alasan yang jelas agar mudah ditindaklanjuti.
+                </span>
+                <span>{note.trim().length} karakter</span>
+              </div>
             </div>
 
             <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">

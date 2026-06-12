@@ -24,7 +24,14 @@ function LayoutContent({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div
+      className="flex h-screen bg-gray-50"
+      style={
+        {
+          "--credit-limit-card-font-size": collapsed ? "1rem" : "1.125rem",
+        } as React.CSSProperties
+      }
+    >
       {/* Sidebar */}
       <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
 

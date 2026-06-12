@@ -9,9 +9,7 @@ import {
   FaCopy,
   FaClock,
   FaExchangeAlt,
-  FaExternalLinkAlt,
   FaFileAlt,
-  FaInfoCircle,
   FaImage,
   FaPaperPlane,
   FaMoneyBillWave,
@@ -24,6 +22,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   API_CONFIG,
   apiFetch,
+  getApiUrl,
   getAuthHeadersFormData,
   getFileUrl,
   getQueryUrl,
@@ -39,7 +38,6 @@ import {
 import {
   buildDirectorWhatsappText,
   formatRequestDate,
-  policyTypeLabel,
   resolvePolicyDisplayName,
 } from "./utils";
 
@@ -113,6 +111,31 @@ interface DetailApiEnvelope {
   data?: CreditChangeRequestDetailResponse | null;
 }
 
+interface PolicyHierarchyBranchCustomer {
+  id: number;
+  name?: string | null;
+  _relations?: {
+    branch?: {
+      city?: string | null;
+      id?: number | null;
+    } | null;
+    gcid?: {
+      gc_name?: string | null;
+      id?: number | null;
+      name?: string | null;
+    } | null;
+  } | null;
+}
+
+interface PolicyHierarchyResponse {
+  data?: {
+    data?: {
+      bcs?: PolicyHierarchyBranchCustomer[] | null;
+    } | null;
+  } | null;
+  message?: string | null;
+}
+
 interface CreditChangeRequestDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -125,7 +148,8 @@ function resolveUserName(
   value: number | { id?: number; full_name?: string } | null | undefined,
 ): string {
   if (explicitName) return explicitName;
-  if (value && typeof value === "object" && value.full_name) return value.full_name;
+  if (value && typeof value === "object" && value.full_name)
+    return value.full_name;
   if (typeof value === "number") return `User ${value}`;
   return "System";
 }
@@ -157,6 +181,25 @@ function displayText(value?: string | number | null): string {
 function formatDays(value?: number | null): string {
   if (typeof value !== "number" || Number.isNaN(value)) return "-";
   return `${value} hari`;
+}
+
+function getStatusBadgeTone(status?: string | null): string {
+  const normalized = (status || "").toLowerCase();
+
+  if (normalized.includes("approve")) {
+    return "bg-emerald-100 text-emerald-700 border-emerald-200";
+  }
+  if (normalized.includes("reject")) {
+    return "bg-rose-100 text-rose-700 border-rose-200";
+  }
+  if (normalized.includes("draft")) {
+    return "bg-amber-100 text-amber-700 border-amber-200";
+  }
+  if (normalized.includes("marketing") || normalized.includes("request")) {
+    return "bg-sky-100 text-sky-700 border-sky-200";
+  }
+
+  return "bg-white/15 text-white border-white/20";
 }
 
 async function copyToClipboard(value: string): Promise<void> {
@@ -230,6 +273,9 @@ function AttachmentPreview({
   const [contentType, setContentType] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
+  const [imageZoomed, setImageZoomed] = useState(false);
+  const [imageZoomOrigin, setImageZoomOrigin] = useState({ x: 50, y: 50 });
 
   useEffect(() => {
     let cancelled = false;
@@ -315,17 +361,30 @@ function AttachmentPreview({
             </div>
           )}
           {!loading && !error && previewType === "image" && (
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-              <div className="relative h-72 w-full bg-white">
-                <Image
-                  src={previewUrl}
-                  alt={label}
-                  fill
-                  unoptimized
-                  className="object-contain"
-                />
-              </div>
-            </div>
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setImagePreviewOpen(true);
+                  setImageZoomed(false);
+                  setImageZoomOrigin({ x: 50, y: 50 });
+                }}
+                className="block w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-50 text-left transition hover:border-sky-300"
+              >
+                <div className="relative h-72 w-full bg-white">
+                  <Image
+                    src={previewUrl}
+                    alt={label}
+                    fill
+                    unoptimized
+                    className="object-contain"
+                  />
+                </div>
+              </button>
+              <p className="text-xs text-slate-500">
+                Klik gambar untuk melihat preview lebih besar.
+              </p>
+            </>
           )}
           {!loading && !error && previewType === "pdf" && (
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -337,17 +396,86 @@ function AttachmentPreview({
               Preview tidak tersedia untuk tipe file ini.
             </div>
           )}
-          <a
-            href={previewUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 hover:bg-sky-100"
-          >
-            <FaExternalLinkAlt className="h-3 w-3" />
-            Buka Lampiran
-          </a>
         </div>
       )}
+
+      <AnimatePresence>
+        {imagePreviewOpen && previewType === "image" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-100/90 p-4 backdrop-blur-sm"
+            onClick={(event) =>
+              event.target === event.currentTarget
+                ? setImagePreviewOpen(false)
+                : undefined
+            }
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              className="relative w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setImagePreviewOpen(false);
+                  setImageZoomed(false);
+                  setImageZoomOrigin({ x: 50, y: 50 });
+                }}
+                className="absolute right-4 top-4 z-10 rounded-xl bg-white/90 p-2 text-slate-700 shadow-sm transition hover:bg-white"
+              >
+                <FaTimes className="h-5 w-5" />
+              </button>
+              <div
+                className={`relative h-[80vh] w-full overflow-hidden bg-slate-100 ${
+                  imageZoomed ? "cursor-zoom-out" : "cursor-zoom-in"
+                }`}
+                onDoubleClick={(event) => {
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  const x = ((event.clientX - rect.left) / rect.width) * 100;
+                  const y = ((event.clientY - rect.top) / rect.height) * 100;
+
+                  setImageZoomOrigin({ x, y });
+                  setImageZoomed((prev) => !prev);
+                }}
+                onMouseMove={(event) => {
+                  if (!imageZoomed) return;
+
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  const x = ((event.clientX - rect.left) / rect.width) * 100;
+                  const y = ((event.clientY - rect.top) / rect.height) * 100;
+
+                  setImageZoomOrigin({
+                    x: Math.min(100, Math.max(0, x)),
+                    y: Math.min(100, Math.max(0, y)),
+                  });
+                }}
+              >
+                <Image
+                  src={previewUrl}
+                  alt={label}
+                  fill
+                  unoptimized
+                  className={`object-contain transition-transform duration-200 ${
+                    imageZoomed ? "scale-[1.8]" : "scale-100"
+                  }`}
+                  style={{
+                    transformOrigin: `${imageZoomOrigin.x}% ${imageZoomOrigin.y}%`,
+                  }}
+                />
+                <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-white/85 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm">
+                  {imageZoomed
+                    ? "Arahkan mouse ke area yang ingin dilihat, double click untuk reset zoom."
+                    : "Double click untuk zoom."}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -361,18 +489,27 @@ export function CreditChangeRequestDetailModal({
   const { token, isAuthenticated } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [detail, setDetail] = useState<CreditChangeRequestDetailResponse | null>(
-    null,
-  );
+  const [detail, setDetail] =
+    useState<CreditChangeRequestDetailResponse | null>(null);
   const [actions, setActions] = useState<WorkflowActionItem[]>([]);
-  const [executingActionId, setExecutingActionId] = useState<number | null>(null);
-  const [pendingRejectAction, setPendingRejectAction] = useState<WorkflowActionItem | null>(
+  const [executingActionId, setExecutingActionId] = useState<number | null>(
     null,
   );
+  const [pendingRejectAction, setPendingRejectAction] =
+    useState<WorkflowActionItem | null>(null);
   const [policyName, setPolicyName] = useState("-");
   const [policyNameLoading, setPolicyNameLoading] = useState(false);
   const [policyNameError, setPolicyNameError] = useState<string | null>(null);
-  const [customerApprovalFile, setCustomerApprovalFile] = useState<File | null>(null);
+  const [affectedBranches, setAffectedBranches] = useState<
+    PolicyHierarchyBranchCustomer[]
+  >([]);
+  const [affectedBranchesLoading, setAffectedBranchesLoading] = useState(false);
+  const [affectedBranchesError, setAffectedBranchesError] = useState<
+    string | null
+  >(null);
+  const [customerApprovalFile, setCustomerApprovalFile] = useState<File | null>(
+    null,
+  );
   const [uploadingApprovalAttachment, setUploadingApprovalAttachment] =
     useState(false);
   const [waPreviewOpen, setWaPreviewOpen] = useState(false);
@@ -461,8 +598,10 @@ export function CreditChangeRequestDetailModal({
       ),
     [activeDetail],
   );
-  const workflowState = activeDetail?.workflow_state ?? item?.workflowState ?? "";
-  const isInDirector = workflowState === "In Director";
+  const currentStatus = activeDetail?.status || item?.status || "";
+  const isInDirector = currentStatus === "In Director";
+  const effectivePolicyType = activeDetail?.policy_type ?? item?.policyType;
+  const effectivePolicyId = activeDetail?.policy_id ?? item?.policyId;
   const effectiveRequestedCreditLimit =
     activeDetail?.requested_credit_limit ??
     item?.requestedCreditLimit ??
@@ -479,7 +618,9 @@ export function CreditChangeRequestDetailModal({
     () =>
       buildDirectorWhatsappText({
         policyName,
-        requestDate: formatRequestDate(activeDetail?.created_at ?? item?.createdAt),
+        requestDate: formatRequestDate(
+          activeDetail?.created_at ?? item?.createdAt,
+        ),
         creditLimitText: formatCurrency(effectiveRequestedCreditLimit),
         paymentTermText: formatDays(effectiveRequestedPaymentTerm),
       }),
@@ -492,7 +633,8 @@ export function CreditChangeRequestDetailModal({
     ],
   );
   const hasStoredCustomerApprovalAttachment = Boolean(
-    activeDetail?.customer_approval_attachment ?? item?.customerApprovalAttachment,
+    activeDetail?.customer_approval_attachment ??
+    item?.customerApprovalAttachment,
   );
 
   useEffect(() => {
@@ -507,8 +649,8 @@ export function CreditChangeRequestDetailModal({
       try {
         const resolvedPolicyName = await resolvePolicyDisplayName({
           token,
-          policyType: activeDetail?.policy_type ?? item?.policyType,
-          policyId: activeDetail?.policy_id ?? item?.policyId,
+          policyType: effectivePolicyType,
+          policyId: effectivePolicyId,
         });
 
         if (!cancelled) {
@@ -535,14 +677,88 @@ export function CreditChangeRequestDetailModal({
     return () => {
       cancelled = true;
     };
-  }, [
-    activeDetail?.policy_id,
-    activeDetail?.policy_type,
-    isOpen,
-    item?.policyId,
-    item?.policyType,
-    token,
-  ]);
+  }, [effectivePolicyId, effectivePolicyType, isOpen, token]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAffectedBranches() {
+      if (!isOpen || !token || !effectivePolicyType || !effectivePolicyId) {
+        setAffectedBranches([]);
+        setAffectedBranchesError(null);
+        setAffectedBranchesLoading(false);
+        return;
+      }
+
+      setAffectedBranchesLoading(true);
+      setAffectedBranchesError(null);
+
+      try {
+        const response = await apiFetch(
+          getApiUrl(
+            `${API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2}/method/get_policy_hierarchy`,
+          ),
+          {
+            method: "POST",
+            cache: "no-store",
+            body: JSON.stringify({
+              level: effectivePolicyType,
+              value: effectivePolicyId,
+              format: "full",
+              entities: ["bcs"],
+              query: {
+                bcs: {
+                  fields: ["id", "name", "branch.city", "gcid"],
+                },
+                gcs: {
+                  fields: ["id", "gc_name"],
+                },
+                gps: {
+                  fields: ["id", "gp_name"],
+                },
+                nb: {
+                  fields: ["id", "nb_name"],
+                },
+              },
+            }),
+          },
+          token,
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            `Gagal memuat daftar customer cabang (${response.status})`,
+          );
+        }
+
+        const json = (await response.json()) as PolicyHierarchyResponse;
+        const rows = json.data?.data?.bcs;
+
+        if (!cancelled) {
+          setAffectedBranches(Array.isArray(rows) ? rows : []);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setAffectedBranches([]);
+          setAffectedBranchesError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Gagal memuat daftar customer cabang",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setAffectedBranchesLoading(false);
+        }
+      }
+    }
+
+    void loadAffectedBranches();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [effectivePolicyId, effectivePolicyType, isOpen, token]);
 
   const uploadCustomerApprovalAttachment = useCallback(async () => {
     if (!token || !item?.id || !customerApprovalFile) {
@@ -582,7 +798,10 @@ export function CreditChangeRequestDetailModal({
   }, [customerApprovalFile, item?.id, loadDetail, onActionExecuted, token]);
 
   const executeAction = useCallback(
-    async (workflowAction: WorkflowActionItem, payload?: Record<string, unknown>) => {
+    async (
+      workflowAction: WorkflowActionItem,
+      payload?: Record<string, unknown>,
+    ) => {
       if (!token || !item) {
         setResultModal({
           isOpen: true,
@@ -636,7 +855,8 @@ export function CreditChangeRequestDetailModal({
           type: "success",
           title: "Action Berhasil",
           message: `${workflowAction.action} berhasil dijalankan`,
-          description: "Status dokumen dan daftar credit change request sudah diperbarui.",
+          description:
+            "Status dokumen dan daftar credit change request sudah diperbarui.",
         });
       } catch (actionError) {
         const message =
@@ -700,25 +920,39 @@ export function CreditChangeRequestDetailModal({
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
             className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
           >
-            <div className="flex items-center justify-between bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-5 text-white">
-              <div>
+            <div className="flex items-start justify-between gap-4 bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-5 text-white">
+              <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-100">
                   Credit Change Request
                 </p>
                 <h2 className="mt-1 text-2xl font-bold">
                   {policyNameLoading ? item.code : policyName}
                 </h2>
-                <p className="mt-1 text-sm text-emerald-50">
-                  {item.code} • {item.policyTypeLabel}
-                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-emerald-50">
+                  <span>{item.policyTypeLabel}</span>
+                  <span className="hidden text-emerald-200 sm:inline">•</span>
+                  <span>
+                    Policy ID:{" "}
+                    {displayText(activeDetail?.policy_id ?? item.policyId)}
+                  </span>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-xl bg-white/15 p-2 transition hover:bg-white/25"
-              >
-                <FaTimes className="h-5 w-5" />
-              </button>
+              <div className="flex items-start gap-3">
+                <span
+                  className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getStatusBadgeTone(
+                    currentStatus,
+                  )}`}
+                >
+                  {displayText(currentStatus)}
+                </span>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-xl bg-white/15 p-2 transition hover:bg-white/25"
+                >
+                  <FaTimes className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto bg-slate-50 px-6 py-6">
@@ -735,95 +969,18 @@ export function CreditChangeRequestDetailModal({
               )}
 
               <div className="space-y-6">
-                <section className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <div className="mb-4 flex items-center gap-2">
-                    <FaInfoCircle className="text-emerald-600" />
-                    <h3 className="text-lg font-bold text-slate-900">
-                      Informasi Umum
-                    </h3>
-                  </div>
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Name
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-slate-900">
-                        {displayText(policyNameLoading ? item.code : policyName)}
-                      </p>
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 grid grid-cols-2 gap-6">
+                  <div>
+                    <div className="mb-4 flex items-center gap-2">
+                      <FaMoneyBillWave className="text-emerald-600" />
+                      <h3 className="text-lg font-bold text-slate-900">
+                        Current Values
+                      </h3>
                     </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Policy Type
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-slate-900">
-                        {displayText(
-                          activeDetail?.policy_type
-                            ? policyTypeLabel(activeDetail.policy_type)
-                            : item.policyTypeLabel,
-                        )}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Policy ID
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-slate-900">
-                        {displayText(activeDetail?.policy_id ?? item.policyId)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Status
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-slate-900">
-                        {displayText(activeDetail?.status || item.status)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Workflow State
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-slate-900">
-                        {displayText(workflowState)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Docstatus
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-slate-900">
-                        {displayText(activeDetail?.docstatus ?? item.docstatus)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Apply to Childs
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-slate-900">
-                        {Boolean(
-                          Number(
-                            activeDetail?.apply_to_childs ??
-                              (item.applyToChilds ? 1 : 0),
-                          ),
-                        )
-                          ? "Yes"
-                          : "No"}
-                      </p>
-                    </div>
-                  </div>
-                </section>
 
-                <section className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <div className="mb-4 flex items-center gap-2">
-                    <FaMoneyBillWave className="text-emerald-600" />
-                    <h3 className="text-lg font-bold text-slate-900">
-                      Current Values
-                    </h3>
-                  </div>
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                     <div className="rounded-xl bg-slate-50 p-4">
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Credit Limit
+                        Current Credit Limit
                       </p>
                       <p className="mt-1 text-lg font-bold text-emerald-700">
                         {formatCurrency(
@@ -832,17 +989,18 @@ export function CreditChangeRequestDetailModal({
                         )}
                       </p>
                     </div>
-                    <div className="rounded-xl bg-slate-50 p-4">
+                    <div className="rounded-xl bg-slate-50 p-4 mt-4">
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Payment Term
+                        Current Payment Term
                       </p>
                       <p className="mt-1 text-sm font-semibold text-slate-900">
                         {formatDays(
-                          activeDetail?.current_payment_term ?? item.currentPaymentTerm,
+                          activeDetail?.current_payment_term ??
+                            item.currentPaymentTerm,
                         )}
                       </p>
                     </div>
-                    <div className="rounded-xl bg-slate-50 p-4">
+                    {/* <div className="rounded-xl bg-slate-50 p-4">
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Limit Customer Overdue
                       </p>
@@ -852,11 +1010,54 @@ export function CreditChangeRequestDetailModal({
                             item.currentLimitCustomerOverdue,
                         )}
                       </p>
+                    </div> */}
+                  </div>
+
+                  <div>
+                    <div className="mb-4 flex items-center gap-2">
+                      <FaExchangeAlt className="text-blue-600" />
+                      <h3 className="text-lg font-bold text-slate-900">
+                        Requested Values
+                      </h3>
                     </div>
+
+                    <div className="rounded-xl bg-slate-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Requested Credit Limit
+                      </p>
+                      <p className="mt-1 text-lg font-bold text-blue-700">
+                        {formatCurrency(
+                          activeDetail?.requested_credit_limit ??
+                            item.requestedCreditLimit,
+                        )}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-4 mt-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Requested Payment Term
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {formatDays(
+                          activeDetail?.requested_payment_term ??
+                            item.requestedPaymentTerm,
+                        )}
+                      </p>
+                    </div>
+                    {/* <div className="rounded-xl bg-slate-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Requested Limit Customer Overdue
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {formatDays(
+                          activeDetail?.requested_limit_customer_overdue ??
+                            item.requestedLimitCustomerOverdue,
+                        )}
+                      </p>
+                    </div> */}
                   </div>
                 </section>
 
-                <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                {/* <section className="rounded-2xl border border-slate-200 bg-white p-5">
                   <div className="mb-4 flex items-center gap-2">
                     <FaExchangeAlt className="text-blue-600" />
                     <h3 className="text-lg font-bold text-slate-900">
@@ -898,14 +1099,72 @@ export function CreditChangeRequestDetailModal({
                       </p>
                     </div>
                   </div>
+                </section> */}
+
+                <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <div className="mb-4 flex items-center gap-2">
+                    <FaUser className="text-indigo-600" />
+                    <div>
+                      <h3 className="text-lg font-bold text-slate-900">
+                        Daftar Customer Yang Akan Mengikuti Credit Limit Ini
+                      </h3>
+                      <p className="text-sm text-slate-500">
+                        {affectedBranchesLoading
+                          ? "Memuat data cabang..."
+                          : `${affectedBranches.length} customer dalam cakupan policy ini`}
+                      </p>
+                    </div>
+                  </div>
+
+                  {affectedBranchesError && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                      {affectedBranchesError}
+                    </div>
+                  )}
+
+                  {!affectedBranchesError && affectedBranchesLoading && (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                      Memuat daftar customer yang akan mengikuti credit limit
+                      ini...
+                    </div>
+                  )}
+
+                  {!affectedBranchesError &&
+                    !affectedBranchesLoading &&
+                    (affectedBranches.length > 0 ? (
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        {affectedBranches.map((branch) => {
+                          const gcName =
+                            branch._relations?.gcid?.gc_name?.trim() || "-";
+                          const city =
+                            branch._relations?.branch?.city?.trim() || "-";
+
+                          return (
+                            <div
+                              key={branch.id}
+                              className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                            >
+                              <p className="text-sm font-bold text-slate-900">
+                                {gcName} - {city}
+                              </p>
+                              <p className="mt-1 text-sm font-semibold text-indigo-700">
+                                {displayText(branch.name)}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                        Tidak ada customer cabang dalam cakupan policy ini.
+                      </div>
+                    ))}
                 </section>
 
                 <section className="rounded-2xl border border-slate-200 bg-white p-5">
                   <div className="mb-4 flex items-center gap-2">
                     <FaStickyNote className="text-amber-500" />
-                    <h3 className="text-lg font-bold text-slate-900">
-                      Notes
-                    </h3>
+                    <h3 className="text-lg font-bold text-slate-900">Notes</h3>
                   </div>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div>
@@ -921,103 +1180,116 @@ export function CreditChangeRequestDetailModal({
                         Rejected Note
                       </p>
                       <p className="mt-1 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-sm text-slate-800">
-                        {displayText(activeDetail?.rejected_note ?? item.rejectedNote)}
+                        {displayText(
+                          activeDetail?.rejected_note ?? item.rejectedNote,
+                        )}
                       </p>
                     </div>
                   </div>
                 </section>
 
-                <section className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <div className="mb-4 flex items-center gap-2">
-                    <FaFileAlt className="text-sky-500" />
-                    <h3 className="text-lg font-bold text-slate-900">
-                      Identity Attachment
-                    </h3>
-                  </div>
-                  <AttachmentPreview
-                    label="Identity Attachment"
-                    url={attachmentUrl}
-                    token={token}
-                  />
-                </section>
+                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                  <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="mb-4 flex items-center gap-2">
+                      <FaFileAlt className="text-sky-500" />
+                      <h3 className="text-lg font-bold text-slate-900">
+                        Identity Attachment
+                      </h3>
+                    </div>
+                    <AttachmentPreview
+                      label="Identity Attachment"
+                      url={attachmentUrl}
+                      token={token}
+                    />
+                  </section>
 
-                <section className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <div className="mb-4 flex items-center gap-2">
-                    <FaImage className="text-sky-500" />
-                    <h3 className="text-lg font-bold text-slate-900">
-                      Customer Approval Attachment
-                    </h3>
-                  </div>
-                  {isInDirector && (
-                    <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-                      <div>
-                        <label className="mb-1 block text-sm font-semibold text-slate-700">
-                          Upload Screenshot Persetujuan Customer
-                        </label>
-                        <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-600 transition hover:border-emerald-300 hover:bg-white">
-                          <FaUpload className="h-4 w-4 text-emerald-600" />
-                          <span className="flex-1">
-                            {customerApprovalFile
-                              ? customerApprovalFile.name
-                              : "Pilih file approval customer"}
-                          </span>
-                          <span className="rounded-lg bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                            Upload
-                          </span>
-                          <input
-                            type="file"
-                            accept="image/*,.pdf"
-                            disabled={uploadingApprovalAttachment || executingActionId !== null}
-                            className="hidden"
-                            onChange={(event) => {
-                              const file = event.target.files?.[0] || null;
-                              setCustomerApprovalFile(file);
-                              setError(null);
-                            }}
-                          />
-                        </label>
-                        <p className="mt-1 text-xs text-slate-500">
-                          Saat workflow berada di `In Director`, lampiran ini wajib ada sebelum action lanjut.
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-3">
-                        {customerApprovalFile && (
+                  <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="mb-4 flex items-center gap-2">
+                      <FaImage className="text-sky-500" />
+                      <h3 className="text-lg font-bold text-slate-900">
+                        Customer Approval Attachment
+                      </h3>
+                    </div>
+                    {isInDirector && (
+                      <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                        <div>
+                          <label className="mb-1 block text-sm font-semibold text-slate-700">
+                            Upload Screenshot Persetujuan Customer
+                          </label>
+                          <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-600 transition hover:border-emerald-300 hover:bg-white">
+                            <FaUpload className="h-4 w-4 text-emerald-600" />
+                            <span className="flex-1">
+                              {customerApprovalFile
+                                ? customerApprovalFile.name
+                                : "Pilih file approval customer"}
+                            </span>
+                            <span className="rounded-lg bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                              Upload
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*,.pdf"
+                              disabled={
+                                uploadingApprovalAttachment ||
+                                executingActionId !== null
+                              }
+                              className="hidden"
+                              onChange={(event) => {
+                                const file = event.target.files?.[0] || null;
+                                setCustomerApprovalFile(file);
+                                setError(null);
+                              }}
+                            />
+                          </label>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Saat workflow berada di `In Director`, lampiran ini
+                            wajib ada sebelum action lanjut.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                          {customerApprovalFile && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCustomerApprovalFile(null);
+                              }}
+                              disabled={
+                                uploadingApprovalAttachment ||
+                                executingActionId !== null
+                              }
+                              className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
+                            >
+                              Reset File
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => {
-                              setCustomerApprovalFile(null);
+                              setWaPreviewOpen(true);
                             }}
-                            disabled={uploadingApprovalAttachment || executingActionId !== null}
-                            className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
+                            disabled={policyNameLoading}
+                            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-70"
                           >
-                            Reset File
+                            <FaPaperPlane className="h-4 w-4" />
+                            {policyNameLoading
+                              ? "Memuat..."
+                              : "Preview Teks WA"}
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setWaPreviewOpen(true);
-                          }}
-                          disabled={policyNameLoading}
-                          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-70"
-                        >
-                          <FaPaperPlane className="h-4 w-4" />
-                          {policyNameLoading ? "Memuat..." : "Preview Teks WA"}
-                        </button>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  <AttachmentPreview
-                    label="Customer Approval Attachment"
-                    url={customerApprovalAttachmentUrl}
-                    token={token}
-                  />
-                  {policyNameError ? (
-                    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
-                      {policyNameError}
-                    </div>
-                  ) : null}
-                </section>
+                    )}
+                    <AttachmentPreview
+                      label="Customer Approval Attachment"
+                      url={customerApprovalAttachmentUrl}
+                      token={token}
+                    />
+                    {policyNameError ? (
+                      <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+                        {policyNameError}
+                      </div>
+                    ) : null}
+                  </section>
+                </div>
 
                 <section className="rounded-2xl border border-slate-200 bg-white p-5">
                   <div className="mb-4 flex items-center gap-2">
@@ -1065,7 +1337,9 @@ export function CreditChangeRequestDetailModal({
                 <section className="rounded-2xl border border-slate-200 bg-white p-5">
                   <div className="mb-4 flex items-center gap-2">
                     <FaUser className="text-violet-500" />
-                    <h3 className="text-lg font-bold text-slate-900">Audit Trail</h3>
+                    <h3 className="text-lg font-bold text-slate-900">
+                      Audit Trail
+                    </h3>
                   </div>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div className="rounded-xl bg-slate-50 p-4">
@@ -1079,7 +1353,9 @@ export function CreditChangeRequestDetailModal({
                       <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
                         <FaCalendarAlt className="h-3 w-3" />
                         <span>
-                          {formatDateTime(activeDetail?.created_at ?? item.createdAt)}
+                          {formatDateTime(
+                            activeDetail?.created_at ?? item.createdAt,
+                          )}
                         </span>
                       </div>
                     </div>
@@ -1094,7 +1370,9 @@ export function CreditChangeRequestDetailModal({
                       <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
                         <FaCalendarAlt className="h-3 w-3" />
                         <span>
-                          {formatDateTime(activeDetail?.updated_at ?? item.updatedAt)}
+                          {formatDateTime(
+                            activeDetail?.updated_at ?? item.updatedAt,
+                          )}
                         </span>
                       </div>
                     </div>
@@ -1103,15 +1381,22 @@ export function CreditChangeRequestDetailModal({
 
                 {normalizedActions.length > 0 && (
                   <section className="rounded-2xl border border-slate-200 bg-white p-5">
-                    <div className="mb-4 flex items-center gap-2">
-                      <FaCheckCircle className="text-emerald-600" />
-                      <h3 className="text-lg font-bold text-slate-900">
-                        Available Actions
-                      </h3>
+                    <div className="mb-4 flex items-start justify-between gap-4">
+                      <div className="flex items-center gap-2">
+                        <FaCheckCircle className="text-emerald-600" />
+                        <div>
+                          <h3 className="text-lg font-bold text-slate-900">
+                            Available Actions
+                          </h3>
+                          <p className="mt-1 text-sm text-slate-500">
+                            Pilih action workflow yang sesuai untuk dokumen ini.
+                          </p>
+                        </div>
+                      </div>
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                        {normalizedActions.length} action tersedia
+                      </span>
                     </div>
-                    <p className="mb-4 text-sm text-slate-500">
-                      Tombol di bawah ini berasal dari workflow aktif untuk dokumen ini.
-                    </p>
                     <WorkflowActionBar
                       actions={normalizedActions}
                       loadingActionId={executingActionId}
@@ -1211,7 +1496,8 @@ export function CreditChangeRequestDetailModal({
                           isOpen: true,
                           type: "success",
                           title: "Teks Berhasil Disalin",
-                          message: "Teks WhatsApp berhasil disalin ke clipboard.",
+                          message:
+                            "Teks WhatsApp berhasil disalin ke clipboard.",
                         });
                       } catch (copyError) {
                         setResultModal({
