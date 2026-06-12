@@ -26,6 +26,9 @@ import {
   FaDatabase,
   FaCircle,
   FaKey,
+  FaAddressBook,
+  FaIdBadge,
+  FaFolder,
 } from "react-icons/fa";
 import { BiSolidPurchaseTag, BiSolidUserDetail } from "react-icons/bi";
 import { AiFillProduct } from "react-icons/ai";
@@ -85,13 +88,13 @@ const MAIN_MENU: MenuItem[] = [
 ];
 
 const SECONDARY_MENU: MenuItem[] = [
-  //   {
-  //     label: "File Management",
-  //     href: "/files",
-  //     icon: <FaFolder className="w-5 h-5" />,
-  //     category: "Tools",
-  //     requireAuth: true,
-  //   },
+  {
+    label: "File Management",
+    href: "/files",
+    icon: <FaFolder className="w-5 h-5" />,
+    category: "Tools",
+    requireAuth: true,
+  },
   {
     label: "Whatsapp",
     href: "/whatsapp",
@@ -187,6 +190,20 @@ const MASTER_MENU: MenuItem[] = [
     href: "/items",
     icon: <BiSolidPurchaseTag className="w-4 h-4" />,
     category: "Master Data",
+    requireAuth: true,
+  },
+  {
+    label: "Contact",
+    href: "/contact",
+    icon: <FaAddressBook className="w-4 h-4" />,
+    category: "Customer",
+    requireAuth: true,
+  },
+  {
+    label: "Customer Position",
+    href: "/customer-position",
+    icon: <FaIdBadge className="w-4 h-4" />,
+    category: "Customer",
     requireAuth: true,
   },
 ];
@@ -293,7 +310,7 @@ const CUSTOMER_SUBMENU: MenuItem[] = [
   //   category: "Customer",
   //   requireAuth: true,
   // },
-  
+
   // {
   //   label: "Tiers",
   //   href: "/member-tiers",

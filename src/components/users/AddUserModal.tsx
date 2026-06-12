@@ -1,34 +1,37 @@
-// src/components/users/AddUserModal.tsx
 "use client";
 
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  FaTimes,
-  FaUser,
+  FaCalendarAlt,
   FaEnvelope,
-  FaPhone,
   FaLock,
   FaMapMarkerAlt,
-  FaCalendarAlt,
+  FaPhone,
+  FaTimes,
+  FaUser,
 } from "react-icons/fa";
-import type { User, Role } from "./UserList";
-
-const SNAP_KEY = "ekaplus_users_snapshot";
+import type { Role, User, UserMutationPayload } from "./UserList";
 
 const GENDER_OPTIONS = ["Laki-laki", "Perempuan"];
-const STATUS_OPTIONS = ["active", "inactive", "suspended"];
+const STATUS_OPTIONS = ["active", "inactive"];
 
 export default function AddUserModal({
   open,
   onClose,
   initial,
   roles,
+  saving,
+  error,
+  onSubmit,
 }: {
   open: boolean;
   onClose: () => void;
   initial?: User | null;
   roles: Role[];
+  saving: boolean;
+  error: string | null;
+  onSubmit: (payload: UserMutationPayload) => Promise<void>;
 }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -43,16 +46,16 @@ export default function AddUserModal({
   const [city, setCity] = useState("");
   const [province, setProvince] = useState("");
   const [postalCode, setPostalCode] = useState("");
-  const [roleId, setRoleId] = useState("role_004");
+  const [roleId, setRoleId] = useState("");
   const [status, setStatus] = useState("active");
   const [profileBgColor, setProfileBgColor] = useState("#EF4444");
-  const [saving, setSaving] = useState(false);
-
   const [activeTab, setActiveTab] = useState<"basic" | "address" | "settings">(
-    "basic"
+    "basic",
   );
 
   useEffect(() => {
+    if (!open) return;
+
     if (initial) {
       setFirstName(initial.first_name ?? "");
       setLastName(initial.last_name ?? "");
@@ -61,15 +64,14 @@ export default function AddUserModal({
       setPhone(initial.phone ?? "");
       setPassword("");
       setGender(initial.gender ?? "Laki-laki");
-      setDateOfBirth(initial.date_of_birth ?? "");
+      setDateOfBirth(initial.date_of_birth ? initial.date_of_birth.slice(0, 10) : "");
       setBirthPlace(initial.birth_place ?? "");
       setAddress(initial.address ?? "");
       setCity(initial.city ?? "");
       setProvince(initial.province ?? "");
       setPostalCode(initial.postal_code ?? "");
-      setRoleId(initial.role_id ?? "role_004");
+      setRoleId(initial.role_id || roles.find((role) => role.name === initial.role)?.id || "");
       setStatus(initial.status ?? "active");
-      setProfileBgColor(initial.profile_bg_color ?? "#EF4444");
     } else {
       setFirstName("");
       setLastName("");
@@ -84,14 +86,13 @@ export default function AddUserModal({
       setCity("");
       setProvince("");
       setPostalCode("");
-      setRoleId("role_004");
+      setRoleId(roles[0]?.id ?? "");
       setStatus("active");
-      setProfileBgColor("#EF4444");
     }
-    setActiveTab("basic");
-  }, [initial, open]);
 
-  // Auto-generate username from name
+    setActiveTab("basic");
+  }, [initial, open, roles]);
+
   useEffect(() => {
     if (!initial && firstName && lastName) {
       const auto = `${firstName}${lastName}`.toLowerCase().replace(/\s+/g, "");
@@ -101,84 +102,27 @@ export default function AddUserModal({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
+    const selectedRole = roles.find((role) => role.id === roleId);
 
-    const selectedRole = roles.find((r) => r.id === roleId);
-    const now = new Date().toISOString();
-
-    const payload: Partial<User> = {
+    await onSubmit({
       first_name: firstName.trim(),
       last_name: lastName.trim(),
-      full_name: `${firstName.trim()} ${lastName.trim()}`,
       username: username.trim(),
       email: email.trim(),
       phone: phone.trim(),
+      password: password.trim() || undefined,
       gender,
-      date_of_birth: dateOfBirth,
-      birth_place: birthPlace.trim(),
+      date_of_birth: dateOfBirth || null,
+      birth_place: birthPlace.trim() || null,
       address: address.trim() || null,
       city: city.trim() || null,
       province: province.trim() || null,
       postal_code: postalCode.trim() || null,
       country: "Indonesia",
-      role_id: roleId,
-      role: selectedRole?.name || "customer",
+      role_id: roleId || null,
+      role: selectedRole?.name || initial?.role || "user",
       status,
-      profile_bg_color: profileBgColor,
-      updated_at: now,
-    };
-
-    if (password) {
-      payload.password = password; // In real app, this should be hashed
-    }
-
-    try {
-      const raw = localStorage.getItem(SNAP_KEY);
-      let list: User[] = raw ? JSON.parse(raw) : [];
-
-      if (initial && initial.id) {
-        list = list.map((u) =>
-          u.id === initial.id
-            ? ({ ...u, ...payload, id: initial.id } as User)
-            : u
-        );
-      } else {
-        const newUser: User = {
-          id: `user_${Date.now()}`,
-          ...payload,
-          password: password || "default_password",
-          is_email_verified: false,
-          is_phone_verified: false,
-          email_verified_at: null,
-          phone_verified_at: null,
-          profile_pic: null,
-          picture: null,
-          google_id: null,
-          google_access_token: null,
-          google_refresh_token: null,
-          google_token_expiry: null,
-          referral_code: null,
-          referred_by: null,
-          branch_id: null,
-          workflow_state: "registered",
-          active_customer_id: null,
-          token_version: 0,
-          last_login: null,
-          created_by: "admin",
-          updated_by: null,
-          created_at: now,
-          is_system: false,
-        } as User;
-        list.push(newUser);
-      }
-
-      localStorage.setItem(SNAP_KEY, JSON.stringify(list));
-      window.dispatchEvent(new Event("ekaplus:users_update"));
-    } catch (error) {
-    }
-
-    setSaving(false);
-    onClose();
+    });
   }
 
   const colorOptions = [
@@ -205,7 +149,9 @@ export default function AddUserModal({
         >
           <div
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={onClose}
+            onClick={() => {
+              if (!saving) onClose();
+            }}
           />
 
           <motion.div
@@ -213,82 +159,85 @@ export default function AddUserModal({
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
             transition={{ type: "spring", duration: 0.3 }}
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden z-10"
+            className="z-10 max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-2xl"
           >
-            {/* Header */}
-            <div className="bg-gradient-to-r from-red-500 to-red-600 px-6 py-6 text-white relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32" />
-              <div className="absolute bottom-0 left-0 w-48 h-48 bg-black/10 rounded-full -ml-24 -mb-24" />
+            <div className="relative overflow-hidden bg-gradient-to-r from-red-500 to-red-600 px-6 py-6 text-white">
+              <div className="absolute right-0 top-0 -mr-32 -mt-32 h-64 w-64 rounded-full bg-white/10" />
+              <div className="absolute bottom-0 left-0 -mb-24 -ml-24 h-48 w-48 rounded-full bg-black/10" />
 
               <div className="relative flex items-center justify-between">
                 <div>
-                  <h3 className="text-2xl font-bold mb-1">
+                  <h3 className="mb-1 text-2xl font-bold">
                     {initial ? "Edit User" : "Tambah User Baru"}
                   </h3>
-                  <p className="text-red-100 text-sm">
+                  <p className="text-sm text-red-100">
                     {initial
                       ? "Perbarui informasi user"
                       : "Lengkapi form untuk menambahkan user"}
                   </p>
                 </div>
                 <button
+                  type="button"
                   onClick={onClose}
-                  className="p-2 hover:bg-white/20 rounded-xl transition-colors"
+                  disabled={saving}
+                  className="rounded-xl p-2 transition-colors hover:bg-white/20 disabled:opacity-50"
                 >
-                  <FaTimes className="w-6 h-6" />
+                  <FaTimes className="h-6 w-6" />
                 </button>
               </div>
             </div>
 
-            {/* Tabs */}
             <div className="flex border-b border-gray-200">
               <button
+                type="button"
                 onClick={() => setActiveTab("basic")}
                 className={`flex-1 px-6 py-4 text-sm font-semibold transition-all ${
                   activeTab === "basic"
-                    ? "text-red-600 border-b-2 border-red-600 bg-red-50"
-                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                    ? "border-b-2 border-red-600 bg-red-50 text-red-600"
+                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
                 }`}
               >
-                <FaUser className="w-4 h-4 inline-block mr-2" />
+                <FaUser className="mr-2 inline-block h-4 w-4" />
                 Informasi Dasar
               </button>
               <button
+                type="button"
                 onClick={() => setActiveTab("address")}
                 className={`flex-1 px-6 py-4 text-sm font-semibold transition-all ${
                   activeTab === "address"
-                    ? "text-red-600 border-b-2 border-red-600 bg-red-50"
-                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                    ? "border-b-2 border-red-600 bg-red-50 text-red-600"
+                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
                 }`}
               >
-                <FaMapMarkerAlt className="w-4 h-4 inline-block mr-2" />
+                <FaMapMarkerAlt className="mr-2 inline-block h-4 w-4" />
                 Alamat
               </button>
               <button
+                type="button"
                 onClick={() => setActiveTab("settings")}
                 className={`flex-1 px-6 py-4 text-sm font-semibold transition-all ${
                   activeTab === "settings"
-                    ? "text-red-600 border-b-2 border-red-600 bg-red-50"
-                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                    ? "border-b-2 border-red-600 bg-red-50 text-red-600"
+                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
                 }`}
               >
-                <FaLock className="w-4 h-4 inline-block mr-2" />
+                <FaLock className="mr-2 inline-block h-4 w-4" />
                 Pengaturan
               </button>
             </div>
 
-            {/* Form */}
-            <form
-              onSubmit={submit}
-              className="p-6 max-h-[calc(90vh-220px)] overflow-y-auto"
-            >
-              {/* Basic Info Tab */}
+            <form onSubmit={submit} className="max-h-[calc(90vh-220px)] overflow-y-auto p-6">
+              {error ? (
+                <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {error}
+                </div>
+              ) : null}
+
               {activeTab === "basic" && (
                 <div className="space-y-6">
-                  {/* Name */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      <label className="mb-2 block text-sm font-semibold text-gray-700">
                         Nama Depan <span className="text-red-500">*</span>
                       </label>
                       <div className="relative">
@@ -296,48 +245,46 @@ export default function AddUserModal({
                         <input
                           value={firstName}
                           onChange={(e) => setFirstName(e.target.value)}
-                          className="w-full pl-11 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                          className="w-full rounded-xl border-2 border-gray-200 py-3 pl-11 pr-4 transition-all focus:border-red-500 focus:ring-2 focus:ring-red-500"
                           placeholder="John"
                           required
+                          disabled={saving}
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      <label className="mb-2 block text-sm font-semibold text-gray-700">
                         Nama Belakang <span className="text-red-500">*</span>
                       </label>
                       <input
                         value={lastName}
                         onChange={(e) => setLastName(e.target.value)}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 transition-all focus:border-red-500 focus:ring-2 focus:ring-red-500"
                         placeholder="Doe"
                         required
+                        disabled={saving}
                       />
                     </div>
                   </div>
 
-                  {/* Username & Email */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      <label className="mb-2 block text-sm font-semibold text-gray-700">
                         Username <span className="text-red-500">*</span>
                       </label>
                       <input
                         value={username}
-                        onChange={(e) =>
-                          setUsername(
-                            e.target.value.toLowerCase().replace(/\s+/g, "")
-                          )
-                        }
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                        onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s+/g, ""))}
+                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 transition-all focus:border-red-500 focus:ring-2 focus:ring-red-500"
                         placeholder="johndoe"
                         required
+                        disabled={saving}
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      <label className="mb-2 block text-sm font-semibold text-gray-700">
                         Email <span className="text-red-500">*</span>
                       </label>
                       <div className="relative">
@@ -346,18 +293,18 @@ export default function AddUserModal({
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           type="email"
-                          className="w-full pl-11 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                          className="w-full rounded-xl border-2 border-gray-200 py-3 pl-11 pr-4 transition-all focus:border-red-500 focus:ring-2 focus:ring-red-500"
                           placeholder="john@example.com"
                           required
+                          disabled={saving}
                         />
                       </div>
                     </div>
                   </div>
 
-                  {/* Phone & Password */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      <label className="mb-2 block text-sm font-semibold text-gray-700">
                         No. Telepon <span className="text-red-500">*</span>
                       </label>
                       <div className="relative">
@@ -365,17 +312,17 @@ export default function AddUserModal({
                         <input
                           value={phone}
                           onChange={(e) => setPhone(e.target.value)}
-                          className="w-full pl-11 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                          className="w-full rounded-xl border-2 border-gray-200 py-3 pl-11 pr-4 transition-all focus:border-red-500 focus:ring-2 focus:ring-red-500"
                           placeholder="6281234567890"
                           required
+                          disabled={saving}
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Password{" "}
-                        {!initial && <span className="text-red-500">*</span>}
+                      <label className="mb-2 block text-sm font-semibold text-gray-700">
+                        Password {!initial && <span className="text-red-500">*</span>}
                       </label>
                       <div className="relative">
                         <FaLock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -383,37 +330,34 @@ export default function AddUserModal({
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           type="password"
-                          className="w-full pl-11 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
-                          placeholder={
-                            initial ? "Kosongkan jika tidak diubah" : "••••••••"
-                          }
+                          className="w-full rounded-xl border-2 border-gray-200 py-3 pl-11 pr-4 transition-all focus:border-red-500 focus:ring-2 focus:ring-red-500"
+                          placeholder={initial ? "Kosongkan jika tidak diubah" : "••••••••"}
                           required={!initial}
+                          disabled={saving}
                         />
                       </div>
                     </div>
                   </div>
 
-                  {/* Gender, DOB, Birth Place */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Gender
-                      </label>
+                      <label className="mb-2 block text-sm font-semibold text-gray-700">Gender</label>
                       <select
                         value={gender}
                         onChange={(e) => setGender(e.target.value)}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 transition-all focus:border-red-500 focus:ring-2 focus:ring-red-500"
+                        disabled={saving}
                       >
-                        {GENDER_OPTIONS.map((g) => (
-                          <option key={g} value={g}>
-                            {g}
+                        {GENDER_OPTIONS.map((item) => (
+                          <option key={item} value={item}>
+                            {item}
                           </option>
                         ))}
                       </select>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      <label className="mb-2 block text-sm font-semibold text-gray-700">
                         Tanggal Lahir
                       </label>
                       <div className="relative">
@@ -422,97 +366,100 @@ export default function AddUserModal({
                           value={dateOfBirth}
                           onChange={(e) => setDateOfBirth(e.target.value)}
                           type="date"
-                          className="w-full pl-11 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                          className="w-full rounded-xl border-2 border-gray-200 py-3 pl-11 pr-4 transition-all focus:border-red-500 focus:ring-2 focus:ring-red-500"
+                          disabled={saving}
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      <label className="mb-2 block text-sm font-semibold text-gray-700">
                         Tempat Lahir
                       </label>
                       <input
                         value={birthPlace}
                         onChange={(e) => setBirthPlace(e.target.value)}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 transition-all focus:border-red-500 focus:ring-2 focus:ring-red-500"
                         placeholder="Jakarta"
+                        disabled={saving}
                       />
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Address Tab */}
               {activeTab === "address" && (
                 <div className="space-y-6">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">
                       Alamat Lengkap
                     </label>
                     <textarea
                       value={address}
                       onChange={(e) => setAddress(e.target.value)}
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all resize-none"
+                      className="w-full resize-none rounded-xl border-2 border-gray-200 px-4 py-3 transition-all focus:border-red-500 focus:ring-2 focus:ring-red-500"
                       rows={3}
                       placeholder="Jl. Sudirman No. 123, RT 01/RW 02"
+                      disabled={saving}
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      <label className="mb-2 block text-sm font-semibold text-gray-700">
                         Kota/Kabupaten
                       </label>
                       <input
                         value={city}
                         onChange={(e) => setCity(e.target.value)}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 transition-all focus:border-red-500 focus:ring-2 focus:ring-red-500"
                         placeholder="Jakarta Selatan"
+                        disabled={saving}
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      <label className="mb-2 block text-sm font-semibold text-gray-700">
                         Provinsi
                       </label>
                       <input
                         value={province}
                         onChange={(e) => setProvince(e.target.value)}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 transition-all focus:border-red-500 focus:ring-2 focus:ring-red-500"
                         placeholder="DKI Jakarta"
+                        disabled={saving}
                       />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      <label className="mb-2 block text-sm font-semibold text-gray-700">
                         Kode Pos
                       </label>
                       <input
                         value={postalCode}
                         onChange={(e) => setPostalCode(e.target.value)}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 transition-all focus:border-red-500 focus:ring-2 focus:ring-red-500"
                         placeholder="12345"
+                        disabled={saving}
                       />
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Settings Tab */}
               {activeTab === "settings" && (
                 <div className="space-y-6">
-                  {/* Role */}
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">
                       Role <span className="text-red-500">*</span>
                     </label>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                       {roles.map((role) => (
                         <label
                           key={role.id}
-                          className={`relative flex flex-col items-center p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                          className={`relative flex cursor-pointer flex-col items-center rounded-xl border-2 p-4 transition-all ${
                             roleId === role.id
                               ? "border-red-500 bg-red-50"
                               : "border-gray-200 hover:border-gray-300"
@@ -525,62 +472,56 @@ export default function AddUserModal({
                             checked={roleId === role.id}
                             onChange={(e) => setRoleId(e.target.value)}
                             className="sr-only"
+                            disabled={saving}
                           />
                           <div
-                            className="w-10 h-10 rounded-lg flex items-center justify-center text-white mb-2"
+                            className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg text-white"
                             style={{ backgroundColor: role.color }}
                           >
-                            <span className="text-lg font-bold">
-                              {role.display_name[0]}
-                            </span>
+                            <span className="text-lg font-bold">{role.display_name[0]}</span>
                           </div>
-                          <span className="text-sm font-medium text-gray-800">
+                          <span className="text-center text-sm font-medium text-gray-800">
                             {role.display_name}
                           </span>
-                          <span className="text-xs text-gray-500">
-                            Level {role.level}
-                          </span>
+                          <span className="text-xs text-gray-500">{role.name}</span>
                         </label>
                       ))}
                     </div>
                   </div>
 
-                  {/* Status */}
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">
                       Status <span className="text-red-500">*</span>
                     </label>
                     <div className="flex gap-3">
-                      {STATUS_OPTIONS.map((s) => (
+                      {STATUS_OPTIONS.map((item) => (
                         <label
-                          key={s}
-                          className={`flex-1 flex items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-all capitalize ${
-                            status === s
-                              ? s === "active"
+                          key={item}
+                          className={`flex flex-1 cursor-pointer items-center justify-center rounded-xl border-2 p-4 capitalize transition-all ${
+                            status === item
+                              ? item === "active"
                                 ? "border-green-500 bg-green-50 text-green-700"
-                                : s === "inactive"
-                                ? "border-gray-500 bg-gray-50 text-gray-700"
-                                : "border-red-500 bg-red-50 text-red-700"
-                              : "border-gray-200 hover:border-gray-300 text-gray-600"
+                                : "border-gray-500 bg-gray-50 text-gray-700"
+                              : "border-gray-200 text-gray-600 hover:border-gray-300"
                           }`}
                         >
                           <input
                             type="radio"
                             name="status"
-                            value={s}
-                            checked={status === s}
+                            value={item}
+                            checked={status === item}
                             onChange={(e) => setStatus(e.target.value)}
                             className="sr-only"
+                            disabled={saving}
                           />
-                          <span className="font-medium">{s}</span>
+                          <span className="font-medium">{item}</span>
                         </label>
                       ))}
                     </div>
                   </div>
 
-                  {/* Profile Color */}
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">
                       Warna Profil
                     </label>
                     <div className="flex flex-wrap gap-3">
@@ -589,12 +530,13 @@ export default function AddUserModal({
                           key={color}
                           type="button"
                           onClick={() => setProfileBgColor(color)}
-                          className={`w-10 h-10 rounded-xl transition-all ${
+                          className={`h-10 w-10 rounded-xl transition-all ${
                             profileBgColor === color
-                              ? "ring-4 ring-offset-2 ring-gray-400 scale-110"
+                              ? "scale-110 ring-4 ring-gray-400 ring-offset-2"
                               : "hover:scale-105"
                           }`}
                           style={{ backgroundColor: color }}
+                          disabled={saving}
                         />
                       ))}
                     </div>
@@ -602,23 +544,23 @@ export default function AddUserModal({
                 </div>
               )}
 
-              {/* Actions */}
-              <div className="flex justify-end gap-3 pt-6 mt-6 border-t-2 border-gray-100">
+              <div className="mt-6 flex justify-end gap-3 border-t-2 border-gray-100 pt-6">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-6 py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-all font-semibold text-gray-700"
+                  disabled={saving}
+                  className="rounded-xl border-2 border-gray-300 px-6 py-3 font-semibold text-gray-700 transition-all hover:bg-gray-50 disabled:opacity-50"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-8 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:shadow-xl hover:shadow-red-200 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-red-500 to-red-600 px-8 py-3 font-semibold text-white transition-all hover:shadow-xl hover:shadow-red-200 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving ? (
                     <>
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
                       <span>Menyimpan...</span>
                     </>
                   ) : (

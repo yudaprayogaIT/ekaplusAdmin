@@ -50,6 +50,10 @@ export const API_CONFIG = {
     GROUP_PARENT: "/api/resource/group_parent",
     GROUP_CUSTOMER: "/api/resource/group_customer",
     BRANCH_CUSTOMER_V2: "/api/resource/branch_customer",
+    CONTACT: "/api/resource/contact",
+    CUSTOMER_POSITION: "/api/resource/customer_position",
+    CUSTOMER_CONTACT: "/api/resource/customer_contact",
+    CONTACT_IDENTITIES: "/api/resource/contact_identities",
     MEMBER_OF: "/api/resource/member_of",
 
     // Customer Management - GP/GC/BC

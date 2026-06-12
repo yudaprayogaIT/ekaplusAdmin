@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion";
 import {
   FaBan,
+  FaAddressBook,
   FaBuilding,
   FaCheckCircle,
   FaChevronRight,
@@ -25,6 +26,7 @@ import {
   type PaymentAccountInfo,
 } from "@/utils/paymentAccount";
 import LoadMoreButton from "@/components/ui/LoadMoreButton";
+import { BCContactRelationsPanel } from "./BCContactRelationsPanel";
 
 interface BCDetailModalProps {
   isOpen: boolean;
@@ -79,7 +81,7 @@ interface BCDetailApi {
   updated_by?: number | { full_name?: string } | null;
 }
 
-type DetailTab = "company" | "owner" | "finance" | "address";
+type DetailTab = "company" | "owner" | "finance" | "address" | "contacts";
 
 interface AddressRow {
   id: number;
@@ -1321,6 +1323,12 @@ export function BCDetailModal({
       caption: "Alamat terdaftar saja",
       icon: <FaMapMarkerAlt className="h-4 w-4" />,
     },
+    {
+      key: "contacts",
+      label: "Contacts",
+      caption: "Relasi contact customer",
+      icon: <FaAddressBook className="h-4 w-4" />,
+    },
   ];
 
   const typeTone = (type?: string | null) => {
@@ -2365,6 +2373,10 @@ export function BCDetailModal({
                     </section>
                     )}
 
+                    {activeTab === "contacts" && (
+                      <BCContactRelationsPanel branchCustomerId={bc.id} />
+                    )}
+
                   </div>
                 </div>
               </div>
@@ -2405,12 +2417,12 @@ export function BCDetailModal({
               <button
                 type="button"
                 onClick={isEditMode ? cancelEdit : startEdit}
-                disabled={isSaving}
+                disabled={isSaving || activeTab === "contacts"}
                 className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
                   isEditMode
                     ? "border-slate-300 text-slate-700 hover:bg-slate-50"
                     : "border-blue-200 text-blue-700 hover:bg-blue-50"
-                } disabled:opacity-50`}
+                } disabled:cursor-not-allowed disabled:opacity-50`}
               >
                 {isEditMode ? <FaBan className="text-xs" /> : <FaEdit className="text-xs" />}
                 {isEditMode ? "Cancel Edit" : "Edit Details"}
@@ -2426,7 +2438,7 @@ export function BCDetailModal({
                 <button
                   type="button"
                   onClick={() => void applyEdit()}
-                  disabled={!isEditMode || isSaving}
+                  disabled={!isEditMode || isSaving || activeTab === "contacts"}
                   className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 >
                   {isSaving ? "Saving..." : "Apply Changes"}

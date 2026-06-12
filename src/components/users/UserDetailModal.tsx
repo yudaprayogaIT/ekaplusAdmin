@@ -22,6 +22,7 @@ import {
 } from "react-icons/fa";
 import type { User, Role } from "./UserList";
 import Image from "next/image";
+import { getFileUrl } from "@/config/api";
 
 function getInitials(name: string): string {
   return name
@@ -75,7 +76,8 @@ export default function UserDetailModal({
 }) {
   if (!user) return null;
 
-  const bgColor = user.profile_bg_color || role?.color || "#6B7280";
+  const bgColor = role?.color || "#6B7280";
+  const avatarUrl = getFileUrl(user.profile_pic || user.picture) || user.profile_pic || user.picture || "";
 
   return (
     <AnimatePresence>
@@ -121,9 +123,9 @@ export default function UserDetailModal({
                   className="w-28 h-28 rounded-2xl flex items-center justify-center text-white font-bold text-4xl shadow-2xl border-4 border-white/30 flex-shrink-0"
                   style={{ backgroundColor: "rgba(255,255,255,0.2)" }}
                 >
-                  {user.profile_pic || user.picture ? (
+                  {avatarUrl ? (
                     <Image
-                      src={user.profile_pic || user.picture || ""}
+                      src={avatarUrl}
                       alt={user.full_name}
                       width={120}
                       height={120}

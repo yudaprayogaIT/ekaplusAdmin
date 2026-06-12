@@ -15,6 +15,7 @@ import {
 } from "react-icons/fa";
 import type { User, Role } from "./UserList";
 import Image from "next/image";
+import { getFileUrl } from "@/config/api";
 
 function getInitials(name: string): string {
   return name
@@ -53,7 +54,8 @@ export default function UserCard({
   canEdit?: boolean;
   canDelete?: boolean;
 }) {
-  const bgColor = user.profile_bg_color || role?.color || "#6B7280";
+  const bgColor = role?.color || "#6B7280";
+  const avatarUrl = getFileUrl(user.profile_pic || user.picture) || user.profile_pic || user.picture || "";
 
   if (viewMode === "list") {
     return (
@@ -70,9 +72,9 @@ export default function UserCard({
             className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 text-white font-bold text-lg shadow-lg"
             style={{ backgroundColor: bgColor }}
           >
-            {user.profile_pic || user.picture ? (
+            {avatarUrl ? (
               <Image
-                src={user.profile_pic || user.picture || ""}
+                src={avatarUrl}
                 alt={user.full_name}
                 width={100}
                 height={100}
@@ -244,9 +246,9 @@ export default function UserCard({
           className="w-20 h-20 rounded-2xl flex items-center justify-center text-white font-bold text-2xl shadow-xl border-4 border-white"
           style={{ backgroundColor: bgColor }}
         >
-          {user.profile_pic || user.picture ? (
+          {avatarUrl ? (
             <Image
-              src={user.profile_pic || user.picture || ""}
+              src={avatarUrl}
               alt={user.full_name}
               width={200}
               height={200}
