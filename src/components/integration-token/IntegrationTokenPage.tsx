@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getApiUrl, getQueryUrl } from "@/config/api";
@@ -8,7 +14,6 @@ import {
   FaBolt,
   FaCheckCircle,
   FaCopy,
-  FaClock,
   FaEye,
   FaKey,
   FaPlus,
@@ -48,6 +53,25 @@ type UserLookupRow = {
   username?: string | null;
   email?: string | null;
 };
+
+type UserLookupResponse = {
+  data?: UserLookupRow[];
+  message?: string;
+  meta?: {
+    page?: number;
+    per_page?: number;
+  };
+};
+
+const USER_LOOKUP_ENDPOINTS = [
+  "/api/resource/users",
+  API_CONFIG.ENDPOINTS.USER,
+];
+const USER_LOOKUP_PAGE_SIZE = 20;
+
+function capitalizeWords(value: string): string {
+  return value.replace(/\b\w/g, (char) => char.toUpperCase());
+}
 
 function toTokenRow(row: IntegrationTokenApiRow): IntegrationTokenRow {
   return {
@@ -204,7 +228,9 @@ function IntegrationTokenDetailModal({
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-100">
               Integration Token
             </p>
-            <h2 className="mt-1 text-2xl font-bold">{detail?.Name || item.name}</h2>
+            <h2 className="mt-1 text-2xl font-bold">
+              {capitalizeWords(detail?.Name || item.name)}
+            </h2>
           </div>
           <button
             type="button"
@@ -341,10 +367,15 @@ export default function IntegrationTokenPage() {
   const { token, isAuthenticated } = useAuth();
   const [items, setItems] = useState<IntegrationTokenRow[]>([]);
   const [users, setUsers] = useState<UserLookupRow[]>([]);
+  const [userDirectory, setUserDirectory] = useState<
+    Record<number, UserLookupRow>
+  >({});
   const [loading, setLoading] = useState(true);
   const [usersLoading, setUsersLoading] = useState(true);
+  const [usersLoadingMore, setUsersLoadingMore] = useState(false);
+  const [usersPage, setUsersPage] = useState(1);
+  const [usersHasMore, setUsersHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [usersError, setUsersError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedItem, setSelectedItem] = useState<IntegrationTokenRow | null>(
@@ -353,11 +384,15 @@ export default function IntegrationTokenPage() {
   const [name, setName] = useState("CRM Sales SPV");
   const [selectedUserId, setSelectedUserId] = useState("");
   const [manualUserId, setManualUserId] = useState("");
+  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+  const [userSearch, setUserSearch] = useState("");
+  const [debouncedUserSearch, setDebouncedUserSearch] = useState("");
   const [createFeedback, setCreateFeedback] = useState<{
     title: string;
     description: string;
     payload?: unknown;
   } | null>(null);
+  const userDropdownRef = useRef<HTMLDivElement | null>(null);
 
   const loadTokens = useCallback(async () => {
     if (!token || !isAuthenticated) {
@@ -396,55 +431,202 @@ export default function IntegrationTokenPage() {
     }
   }, [isAuthenticated, token]);
 
-  const loadUsers = useCallback(async () => {
-    if (!token || !isAuthenticated) {
-      setUsers([]);
-      setUsersLoading(false);
-      return;
-    }
+  const mergeUsersToDirectory = useCallback((nextRows: UserLookupRow[]) => {
+    setUserDirectory((prev) => {
+      const nextDirectory = { ...prev };
+      nextRows.forEach((user) => {
+        nextDirectory[Number(user.id)] = user;
+      });
+      return nextDirectory;
+    });
+  }, []);
 
-    setUsersLoading(true);
-    setUsersError(null);
-    try {
-      const res = await apiFetch(
-        getQueryUrl(API_CONFIG.ENDPOINTS.USER, {
-          fields: ["id", "full_name", "username", "email"],
-          limit: 100000,
-        }),
-        { method: "GET", cache: "no-store" },
-        token,
-      );
-      const json = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(
-          extractServerMessage(json, `Gagal memuat user (${res.status})`),
-        );
+  const loadUsers = useCallback(
+    async (page = 1, reset = false, searchValue = "") => {
+      if (!token || !isAuthenticated) {
+        setUsers([]);
+        setUsersLoading(false);
+        setUsersLoadingMore(false);
+        setUsersPage(1);
+        setUsersHasMore(true);
+        return;
       }
-      setUsers(Array.isArray(json?.data) ? json.data : []);
+
+    if (reset) {
+      setUsersLoading(true);
+      setUsersPage(1);
+      setUsersHasMore(true);
+    } else {
+        setUsersLoadingMore(true);
+      }
+
+      let lastError = "Gagal memuat daftar user";
+
+      try {
+        for (const endpoint of USER_LOOKUP_ENDPOINTS) {
+          const res = await apiFetch(
+            getQueryUrl(endpoint, {
+              fields: ["id", "full_name", "username", "email"],
+              page,
+              per_page: USER_LOOKUP_PAGE_SIZE,
+              ...(searchValue.trim() ? { search: searchValue.trim() } : {}),
+            }),
+            { method: "GET", cache: "no-store" },
+            token,
+          );
+          const json = (await res
+            .json()
+            .catch(() => null)) as UserLookupResponse | null;
+          if (!res.ok) {
+            lastError = extractServerMessage(
+              json,
+              `Gagal memuat user (${res.status})`,
+            );
+            continue;
+          }
+
+          const nextRows = Array.isArray(json?.data) ? json.data : [];
+          const resolvedPage = Number(json?.meta?.page || page);
+          const resolvedPerPage = Number(
+            json?.meta?.per_page || USER_LOOKUP_PAGE_SIZE,
+          );
+          const hasMore = nextRows.length >= resolvedPerPage;
+          mergeUsersToDirectory(nextRows);
+
+          setUsers((prev) => {
+            if (reset) return nextRows;
+
+            const merged = new Map<number, UserLookupRow>();
+            [...prev, ...nextRows].forEach((user) => {
+              merged.set(Number(user.id), user);
+            });
+            return Array.from(merged.values());
+          });
+          setUsersPage(resolvedPage);
+          setUsersHasMore(hasMore);
+          return;
+        }
+
+        throw new Error(lastError);
     } catch (err) {
-      setUsersError(
+      console.error(
         err instanceof Error ? err.message : "Gagal memuat daftar user",
       );
     } finally {
-      setUsersLoading(false);
-    }
-  }, [isAuthenticated, token]);
+        if (reset) {
+          setUsersLoading(false);
+        } else {
+          setUsersLoadingMore(false);
+        }
+      }
+    },
+    [isAuthenticated, mergeUsersToDirectory, token],
+  );
+
+  const loadUsersByIds = useCallback(
+    async (userIds: number[]) => {
+      if (!token || !isAuthenticated || userIds.length === 0) return;
+
+      const missingIds = userIds.filter((id) => !userDirectory[id]);
+      if (missingIds.length === 0) return;
+
+      const rows = await Promise.all(
+        missingIds.map(async (userId) => {
+          const detailUrl = `${getApiUrl(
+            `${USER_LOOKUP_ENDPOINTS[0]}/${userId}`,
+          )}?spec=${encodeURIComponent(
+            JSON.stringify({
+              fields: ["id", "full_name", "username", "email"],
+            }),
+          )}`;
+
+          const res = await apiFetch(
+            detailUrl,
+            { method: "GET", cache: "no-store" },
+            token,
+          );
+          const json = (await res.json().catch(() => null)) as {
+            data?: UserLookupRow;
+            message?: string;
+          } | null;
+
+          if (!res.ok || !json?.data) return null;
+          return json.data;
+        }),
+      );
+
+      mergeUsersToDirectory(
+        rows.filter((row): row is UserLookupRow => Boolean(row)),
+      );
+    },
+    [isAuthenticated, mergeUsersToDirectory, token, userDirectory],
+  );
 
   useEffect(() => {
     void loadTokens();
-    void loadUsers();
-  }, [loadTokens, loadUsers]);
+  }, [loadTokens]);
 
-  const selectedUser =
-    users.find((row) => String(row.id) === selectedUserId) || null;
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedUserSearch(userSearch.trim());
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [userSearch]);
+
+  useEffect(() => {
+    if (!token || !isAuthenticated) return;
+    void loadUsers(1, true, debouncedUserSearch);
+  }, [debouncedUserSearch, isAuthenticated, loadUsers, token]);
+
+  useEffect(() => {
+    if (!isUserDropdownOpen) return;
+
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        userDropdownRef.current &&
+        !userDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsUserDropdownOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isUserDropdownOpen]);
+
+  const selectedUser = userDirectory[Number(selectedUserId)] || null;
   const effectiveUserId =
     Number.parseInt(manualUserId || selectedUserId || "", 10) || 0;
+
+  const loadMoreUsers = useCallback(() => {
+    if (usersLoading || usersLoadingMore || !usersHasMore) return;
+    void loadUsers(usersPage + 1, false, debouncedUserSearch);
+  }, [
+    debouncedUserSearch,
+    loadUsers,
+    usersHasMore,
+    usersLoading,
+    usersLoadingMore,
+    usersPage,
+  ]);
+
+  useEffect(() => {
+    const tokenUserIds = Array.from(
+      new Set(items.map((item) => Number(item.userId)).filter(Boolean)),
+    );
+    void loadUsersByIds(tokenUserIds);
+  }, [items, loadUsersByIds]);
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return items;
     return items.filter((item) => {
-      const user = users.find((row) => Number(row.id) === Number(item.userId));
+      const user = userDirectory[Number(item.userId)] || null;
       const label = [
         item.name,
         String(item.userId),
@@ -457,7 +639,7 @@ export default function IntegrationTokenPage() {
         .toLowerCase();
       return label.includes(q);
     });
-  }, [items, search, users]);
+  }, [items, search, userDirectory]);
 
   const stats = useMemo(
     () => ({
@@ -492,7 +674,7 @@ export default function IntegrationTokenPage() {
     setCreateFeedback(null);
     try {
       const payload = {
-        name: trimmedName,
+        name: capitalizeWords(trimmedName),
         user_id: effectiveUserId,
       };
 
@@ -572,7 +754,9 @@ export default function IntegrationTokenPage() {
             </div>
             <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
               <div className="text-xs text-red-100">Used</div>
-              <div className="mt-1 text-2xl font-bold">{stats.recentlyUsed}</div>
+              <div className="mt-1 text-2xl font-bold">
+                {stats.recentlyUsed}
+              </div>
             </div>
           </div>
         </div>
@@ -598,13 +782,13 @@ export default function IntegrationTokenPage() {
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="space-y-2 md:col-span-2">
+            <label className="space-y-2">
               <span className="text-sm font-semibold text-slate-700">
                 Token Name
               </span>
               <input
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => setName(capitalizeWords(e.target.value))}
                 placeholder="Contoh: CRM Sales SPV"
                 className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-red-400 focus:ring-4 focus:ring-red-100"
               />
@@ -614,25 +798,124 @@ export default function IntegrationTokenPage() {
               <span className="text-sm font-semibold text-slate-700">
                 Pilih User
               </span>
-              <select
-                value={selectedUserId}
-                onChange={(e) => setSelectedUserId(e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-red-400 focus:ring-4 focus:ring-red-100"
-                disabled={usersLoading}
-              >
-                <option value="">
-                  {usersLoading ? "Memuat user..." : "Pilih user"}
-                </option>
-                {users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.full_name || user.username || `User ${user.id}`} - ID{" "}
-                    {user.id}
-                  </option>
-                ))}
-              </select>
+              <div className="relative" ref={userDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setIsUserDropdownOpen((prev) =>
+                      usersLoading ? prev : !prev,
+                    )
+                  }
+                  disabled={usersLoading}
+                  className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-sm text-slate-900 outline-none transition focus:border-red-400 focus:ring-4 focus:ring-red-100 disabled:cursor-not-allowed disabled:bg-slate-50"
+                >
+                  <span
+                    className={
+                      selectedUser ? "text-slate-900" : "text-slate-400"
+                    }
+                  >
+                    {usersLoading
+                      ? "Memuat user..."
+                      : selectedUser
+                        ? `${selectedUser.full_name || selectedUser.username || `User ${selectedUser.id}`} - ID ${selectedUser.id}`
+                        : "Pilih user"}
+                  </span>
+                  <span className="text-slate-400">
+                    {isUserDropdownOpen ? "▲" : "▼"}
+                  </span>
+                </button>
+
+                {isUserDropdownOpen ? (
+                  <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+                    <div className="border-b border-slate-100 p-3">
+                      <div className="relative">
+                        <FaSearch className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                        <input
+                          value={userSearch}
+                          onChange={(e) => setUserSearch(e.target.value)}
+                          placeholder="Cari nama user atau email..."
+                          className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:border-red-400 focus:ring-4 focus:ring-red-100"
+                        />
+                      </div>
+                    </div>
+                    <div
+                      className="max-h-72 overflow-y-auto py-2"
+                      onScroll={(e) => {
+                        const target = e.currentTarget;
+                        const remaining =
+                          target.scrollHeight -
+                          target.scrollTop -
+                          target.clientHeight;
+                        if (remaining < 48) {
+                          loadMoreUsers();
+                        }
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedUserId("");
+                          setIsUserDropdownOpen(false);
+                        }}
+                        className="flex w-full items-center px-4 py-3 text-left text-sm text-slate-500 transition hover:bg-red-50 hover:text-red-600"
+                      >
+                        Pilih user
+                      </button>
+
+                      {!usersLoading && users.length === 0 ? (
+                        <div className="px-4 py-3 text-sm text-slate-500">
+                          {debouncedUserSearch
+                            ? "User tidak ditemukan."
+                            : "Belum ada user."}
+                        </div>
+                      ) : null}
+
+                      {users.map((user) => (
+                        <button
+                          key={user.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedUserId(String(user.id));
+                            setIsUserDropdownOpen(false);
+                          }}
+                          className={`flex w-full items-start px-4 py-3 text-left text-sm transition ${
+                            String(user.id) === selectedUserId
+                              ? "bg-red-50 text-red-600"
+                              : "text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate font-semibold">
+                              {user.full_name ||
+                                user.username ||
+                                `User ${user.id}`}
+                            </span>
+                            <span className="block truncate text-xs text-slate-500">
+                              ID {user.id}
+                              {user.email ? ` | ${user.email}` : ""}
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+
+                      {usersLoadingMore ? (
+                        <div className="px-4 py-3 text-xs text-slate-500">
+                          Memuat user berikutnya...
+                        </div>
+                      ) : null}
+
+                      {!usersHasMore && users.length > 0 ? (
+                        <div className="px-4 py-3 text-xs text-slate-400">
+                          Semua user sudah dimuat.
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </label>
 
-            <label className="space-y-2">
+            {/* <label className="space-y-2">
               <span className="text-sm font-semibold text-slate-700">
                 Atau Isi Manual `user_id`
               </span>
@@ -644,9 +927,9 @@ export default function IntegrationTokenPage() {
                 placeholder="Contoh: 21"
                 className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-red-400 focus:ring-4 focus:ring-red-100"
               />
-            </label>
+            </label> */}
 
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 md:col-span-2">
+            {/* <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 md:col-span-2">
               <div className="font-semibold">Payload preview</div>
               <div className="mt-2 font-mono text-xs text-amber-900">
                 {`{ "name": "${name.trim() || "..."}", "user_id": ${
@@ -659,10 +942,16 @@ export default function IntegrationTokenPage() {
                   {selectedUser.email || selectedUser.username || "-"}
                 </div>
               )}
+              {users.length > 0 && (
+                <div className="mt-2 text-xs text-amber-700">
+                  Menampilkan {users.length} user
+                  {usersHasMore ? ", scroll dropdown untuk memuat lagi." : "."}
+                </div>
+              )}
               {usersError && (
                 <div className="mt-2 text-xs text-red-600">{usersError}</div>
               )}
-            </div>
+            </div> */}
           </div>
 
           <div className="mt-5 flex flex-wrap items-center gap-3">
@@ -707,7 +996,7 @@ export default function IntegrationTokenPage() {
               type="button"
               onClick={() => {
                 void loadTokens();
-                void loadUsers();
+                void loadUsers(1, true);
               }}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
             >
@@ -819,9 +1108,7 @@ export default function IntegrationTokenPage() {
         ) : (
           <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
             {filteredItems.map((item) => {
-              const user =
-                users.find((row) => Number(row.id) === Number(item.userId)) ||
-                null;
+              const user = userDirectory[Number(item.userId)] || null;
               return (
                 <div
                   key={item.id}
@@ -834,7 +1121,7 @@ export default function IntegrationTokenPage() {
                       </div>
                       <div>
                         <div className="text-sm font-semibold text-slate-900">
-                          {item.name}
+                          {capitalizeWords(item.name)}
                         </div>
                         <div className="text-xs text-slate-500">
                           Token ID #{item.id}
@@ -868,7 +1155,9 @@ export default function IntegrationTokenPage() {
                         </div>
                         <div className="min-w-0">
                           <div className="truncate text-sm font-semibold text-slate-900">
-                            {user?.full_name || user?.username || `User ${item.userId}`}
+                            {user?.full_name ||
+                              user?.username ||
+                              `ID ${item.userId}`}
                           </div>
                           <div className="truncate text-xs text-slate-500">
                             ID {item.userId}
@@ -878,42 +1167,23 @@ export default function IntegrationTokenPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="rounded-2xl bg-red-50 px-4 py-3">
-                        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-red-500">
-                          <FaClock className="h-3.5 w-3.5" />
-                          Last Used
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <div className="rounded-2xl bg-slate-900 px-4 py-3 text-slate-100">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                          Token Preview
                         </div>
-                        <div className="mt-1 text-sm font-semibold text-slate-900">
-                          {dt(item.lastUsedAt)}
-                        </div>
-                      </div>
-                      <div className="rounded-2xl bg-orange-50 px-4 py-3">
-                        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-500">
-                          <FaSyncAlt className="h-3.5 w-3.5" />
-                          Updated
-                        </div>
-                        <div className="mt-1 text-sm font-semibold text-slate-900">
-                          {dt(item.updatedAt)}
+                        <div className="mt-1 truncate text-sm font-semibold">
+                          {item.tokenPreview || "-"}
                         </div>
                       </div>
-                    </div>
 
-                    <div className="rounded-2xl bg-slate-900 px-4 py-3 text-slate-100">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                        Token Preview
-                      </div>
-                      <div className="mt-1 truncate text-sm font-semibold">
-                        {item.tokenPreview || "-"}
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl bg-slate-900 px-4 py-3 text-slate-100">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                        Created At
-                      </div>
-                      <div className="mt-1 text-sm font-semibold">
-                        {dt(item.createdAt)}
+                      <div className="rounded-2xl bg-slate-900 px-4 py-3 text-slate-100">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                          Created At
+                        </div>
+                        <div className="mt-1 text-sm font-semibold">
+                          {dt(item.createdAt)}
+                        </div>
                       </div>
                     </div>
 
