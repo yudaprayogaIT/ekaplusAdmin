@@ -999,7 +999,7 @@ export function CustomerRegistrationList() {
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      {/* <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border-2 border-blue-200">
           <div className="flex items-center gap-2 mb-1">
             <FaUserCheck className="w-4 h-4 text-blue-700" />
@@ -1036,7 +1036,7 @@ export function CustomerRegistrationList() {
             {stats.rejected}
           </div>
         </div>
-      </div>
+      </div> */}
 
       {/* Search & Filter Bar */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 mb-6">
@@ -1055,7 +1055,7 @@ export function CustomerRegistrationList() {
           </div>
 
           {/* Status Filter */}
-          <div className="relative">
+          {/* <div className="relative">
             <select
               value={selectedStatus}
               onChange={(e) => handleStatusFilterChange(e.target.value)}
@@ -1066,108 +1066,108 @@ export function CustomerRegistrationList() {
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
             </select>
-          </div>
-        </div>
+          </div> */}
 
-        {/* Advanced Filters Row */}
-        <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-gray-100">
-          <FilterBuilder
-            entity="customer_register"
-            config={CUSTOMER_REGISTER_FILTER_FIELDS}
-            onApply={handleApplyFilters}
-          />
+          {/* Advanced Filters Row */}
+          <div className="flex flex-wrap items-center gap-3 border-t border-gray-100">
+            <FilterBuilder
+              entity="customer_register"
+              config={CUSTOMER_REGISTER_FILTER_FIELDS}
+              onApply={handleApplyFilters}
+            />
 
-          {/* Sort Direction Button */}
-          <button
-            onClick={() => {
-              const newDirection = sortDirection === "asc" ? "desc" : "asc";
-              setSortDirection(newDirection);
-            }}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
-            title={
-              sortDirection === "asc"
-                ? "Ascending (A-Z, 1-9, Oldest)"
-                : "Descending (Z-A, 9-1, Newest)"
-            }
-          >
-            {sortDirection === "asc" ? (
-              <FaSortAmountUp className="w-3.5 h-3.5" />
-            ) : (
-              <FaSortAmountDown className="w-3.5 h-3.5" />
-            )}
-          </button>
-
-          {/* Sort Field Dropdown */}
-          <div className="relative">
+            {/* Sort Direction Button */}
             <button
-              onClick={() => setSortFieldDropdownOpen(!sortFieldDropdownOpen)}
+              onClick={() => {
+                const newDirection = sortDirection === "asc" ? "desc" : "asc";
+                setSortDirection(newDirection);
+              }}
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
+              title={
+                sortDirection === "asc"
+                  ? "Ascending (A-Z, 1-9, Oldest)"
+                  : "Descending (Z-A, 9-1, Newest)"
+              }
             >
-              <span>
-                {sortField === "company_name" && "Nama Perusahaan"}
-                {sortField === "created_at" && "Tanggal Dibuat"}
-                {sortField === "updated_at" && "Tanggal Diupdate"}
-                {sortField === "status" && "Status"}
-                {sortField === "company_type" && "Tipe Bisnis"}
-              </span>
-              <FaChevronDown
-                className={`w-3 h-3 transition-transform ${
-                  sortFieldDropdownOpen ? "rotate-180" : ""
-                }`}
-              />
+              {sortDirection === "asc" ? (
+                <FaSortAmountUp className="w-3.5 h-3.5" />
+              ) : (
+                <FaSortAmountDown className="w-3.5 h-3.5" />
+              )}
             </button>
 
-            <AnimatePresence>
-              {sortFieldDropdownOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-10"
-                    onClick={() => setSortFieldDropdownOpen(false)}
-                  />
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 py-2 min-w-[200px] z-20"
-                  >
-                    {[
-                      {
-                        value: "company_name" as SortField,
-                        label: "Nama Perusahaan",
-                      },
-                      {
-                        value: "created_at" as SortField,
-                        label: "Tanggal Dibuat",
-                      },
-                      {
-                        value: "updated_at" as SortField,
-                        label: "Tanggal Diupdate",
-                      },
-                      { value: "status" as SortField, label: "Status" },
-                      {
-                        value: "company_type" as SortField,
-                        label: "Tipe Bisnis",
-                      },
-                    ].map((option) => (
-                      <button
-                        key={option.value}
-                        onClick={() => {
-                          setSortField(option.value);
-                          setSortFieldDropdownOpen(false);
-                        }}
-                        className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors ${
-                          sortField === option.value
-                            ? "text-red-600 bg-red-50"
-                            : "text-gray-700"
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </motion.div>
-                </>
-              )}
-            </AnimatePresence>
+            {/* Sort Field Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setSortFieldDropdownOpen(!sortFieldDropdownOpen)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
+              >
+                <span>
+                  {sortField === "company_name" && "Nama Perusahaan"}
+                  {sortField === "created_at" && "Tanggal Dibuat"}
+                  {sortField === "updated_at" && "Tanggal Diupdate"}
+                  {sortField === "status" && "Status"}
+                  {sortField === "company_type" && "Tipe Bisnis"}
+                </span>
+                <FaChevronDown
+                  className={`w-3 h-3 transition-transform ${
+                    sortFieldDropdownOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+
+              <AnimatePresence>
+                {sortFieldDropdownOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setSortFieldDropdownOpen(false)}
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="absolute top-full rigth-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 py-2 min-w-[200px] z-20"
+                    >
+                      {[
+                        {
+                          value: "company_name" as SortField,
+                          label: "Nama Perusahaan",
+                        },
+                        {
+                          value: "created_at" as SortField,
+                          label: "Tanggal Dibuat",
+                        },
+                        {
+                          value: "updated_at" as SortField,
+                          label: "Tanggal Diupdate",
+                        },
+                        { value: "status" as SortField, label: "Status" },
+                        {
+                          value: "company_type" as SortField,
+                          label: "Tipe Bisnis",
+                        },
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => {
+                            setSortField(option.value);
+                            setSortFieldDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors ${
+                            sortField === option.value
+                              ? "text-red-600 bg-red-50"
+                              : "text-gray-700"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
       </div>

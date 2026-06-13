@@ -1,11 +1,7 @@
 // src/components/filters/FilterBuilder.tsx
 
 import React, { useState, useRef, useEffect } from "react";
-import {
-  FilterState,
-  FilterTriple,
-  EntityFilterConfig,
-} from "@/types/filter";
+import { FilterState, FilterTriple, EntityFilterConfig } from "@/types/filter";
 import {
   stateToTriple,
   tripleToState,
@@ -79,7 +75,9 @@ export default function FilterBuilder({
         const currentTriples = urlParamToFilters(filterParam);
         // Only update if different from current state
         const currentStateTriples = stateToTriple(filters);
-        if (JSON.stringify(currentTriples) !== JSON.stringify(currentStateTriples)) {
+        if (
+          JSON.stringify(currentTriples) !== JSON.stringify(currentStateTriples)
+        ) {
           setFilters(tripleToState(currentTriples));
         }
       }
@@ -129,7 +127,8 @@ export default function FilterBuilder({
   }
 
   function handleApply(customFilters?: FilterState[]) {
-    const filtersToApply = customFilters !== undefined ? customFilters : filters;
+    const filtersToApply =
+      customFilters !== undefined ? customFilters : filters;
     const triples = stateToTriple(filtersToApply);
 
     // Save to localStorage
@@ -174,7 +173,9 @@ export default function FilterBuilder({
             : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400"
         }`}
       >
-        <FaFilter className={activeFilterCount > 0 ? "text-white" : "text-gray-600"} />
+        <FaFilter
+          className={activeFilterCount > 0 ? "text-white" : "text-gray-600"}
+        />
         <span>Filter</span>
         {activeFilterCount > 0 && (
           <span className="bg-white text-blue-600 text-xs font-bold px-2 py-0.5 rounded-full">
@@ -196,7 +197,7 @@ export default function FilterBuilder({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
-            className="absolute left-0 mt-2 bg-white border-2 border-blue-100 rounded-xl shadow-2xl z-50 min-w-[600px] max-w-[800px] overflow-hidden"
+            className="absolute right-0 mt-2 z-50 w-[min(500px,calc(100vw-2rem))] min-w-[120px] overflow-hidden rounded-xl border-2 border-blue-100 bg-white shadow-2xl md:min-w-[600px] md:max-w-[800px]"
           >
             {/* Header with Gradient */}
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4 border-b border-blue-100">

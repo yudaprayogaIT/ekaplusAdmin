@@ -56,6 +56,8 @@ interface BCDetailApi {
   notes?: string | null;
   payment_account?: string | null;
   payment_method?: string | null;
+  receipt_delivery_method?: string | null;
+  receipt_issued_at?: string | null;
   limit_basis?: string | null;
   sales_team?:
     | number
@@ -1217,6 +1219,10 @@ export function BCDetailModal({
         owner_name: editedOwner.trim() || undefined,
         owner_phone: editedOwnerPhone.trim() || undefined,
         owner_email: normalizedEmail || undefined,
+        payment_account: editedPaymentAccount.trim() || undefined,
+        payment_method: editedPaymentMethod.trim() || undefined,
+        receipt_delivery_method: detail?.receipt_delivery_method || undefined,
+        receipt_issued_at: detail?.receipt_issued_at || undefined,
         updated_at: new Date().toISOString(),
       };
       onBCUpdate?.(updatedBC);
@@ -1258,6 +1264,8 @@ export function BCDetailModal({
   const paymentAccountNumber =
     paymentAccountInfo?.nomor_rekening || detail?.payment_account || "-";
   const paymentMethod = detail?.payment_method || "-";
+  const receiptDeliveryMethod = detail?.receipt_delivery_method || "-";
+  const receiptIssuedAt = detail?.receipt_issued_at || "-";
   const salesTeam = resolveSalesTeamLabel(detail?.sales_team);
   const creditLimitActiveLabel =
     Number(detail?.credit_limit_active || 0) === 1 ? "Active" : "Inactive";
@@ -1966,6 +1974,22 @@ export function BCDetailModal({
                                 {paymentMethod}
                               </p>
                             )}
+                          </div>
+                          <div className="rounded-2xl border border-cyan-100 bg-cyan-50/70 p-4">
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-700">
+                              Receipt Delivery Method
+                            </p>
+                            <p className="text-sm font-semibold text-slate-900">
+                              {receiptDeliveryMethod}
+                            </p>
+                          </div>
+                          <div className="rounded-2xl border border-lime-100 bg-lime-50/70 p-4">
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-lime-700">
+                              Receipt Issued At
+                            </p>
+                            <p className="text-sm font-semibold text-slate-900">
+                              {receiptIssuedAt}
+                            </p>
                           </div>
                           <div className="rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
                             <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-sky-700">

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
 import type {
@@ -19,17 +20,20 @@ import {
   FaBuilding,
   FaEdit,
   FaEye,
-  FaHospital,
   FaRegBuilding,
   FaSearch,
+  FaSortAmountDown,
+  FaSortAmountUp,
   FaStore,
-  FaToolbox,
   FaTruck,
+  FaChevronDown,
 } from "react-icons/fa";
 
 type CustomerTab = "all" | "nb" | "gp" | "gc" | "bc";
 type CustomerType = Exclude<CustomerTab, "all">;
 type CustomerStatus = "active" | "pending" | "inactive";
+type CustomerSortField = "created_at" | "code" | "name";
+type CustomerSortDirection = "desc" | "asc";
 
 interface UnifiedCard {
   id: number;
@@ -41,6 +45,7 @@ interface UnifiedCard {
   status: CustomerStatus;
   type: CustomerType;
   segment: string;
+  createdAt: string;
   detail:
     | { kind: "nb"; item: NationalBrandDetailData }
     | { kind: "gp"; item: GroupParent }
@@ -102,6 +107,8 @@ interface BranchCustomerApiResponse {
   branch_owner?: string | null;
   branch_owner_phone?: string | null;
   branch_owner_email?: string | null;
+  receipt_delivery_method?: string | null;
+  receipt_issued_at?: string | null;
   disabled?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -119,7 +126,7 @@ interface GroupCustomerLookupRow {
   gc_name?: string | null;
 }
 
-const ITEMS_PER_PAGE = 6;
+const ITEMS_PER_PAGE = 10;
 
 function toNumber(value: unknown): number | undefined {
   if (typeof value === "number") return value;
@@ -172,8 +179,12 @@ function renderCardIcon(type: CustomerType) {
 
 export default function CustomerOverviewPage() {
   const { token, isAuthenticated } = useAuth();
-  const [activeTab, setActiveTab] = useState<CustomerTab>("all");
+  const [activeTab, setActiveTab] = useState<CustomerTab>("bc");
   const [search, setSearch] = useState("");
+  const [sortField, setSortField] = useState<CustomerSortField>("created_at");
+  const [sortDirection, setSortDirection] =
+    useState<CustomerSortDirection>("desc");
+  const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -194,7 +205,7 @@ export default function CustomerOverviewPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab, search]);
+  }, [activeTab, search, sortField, sortDirection]);
 
   useEffect(() => {
     async function loadData() {
@@ -410,6 +421,7 @@ export default function CustomerOverviewPage() {
             status: getStatus(row.disabled),
             type: "nb",
             segment: "National",
+            createdAt: row.created_at || new Date(0).toISOString(),
             detail: {
               kind: "nb",
               item: {
@@ -462,6 +474,7 @@ export default function CustomerOverviewPage() {
             status: getStatus(row.disabled),
             type: "gp",
             segment: "Group",
+            createdAt: gp.created_at,
             detail: { kind: "gp", item: gp },
           };
         });
@@ -496,6 +509,7 @@ export default function CustomerOverviewPage() {
             status: getStatus(row.disabled),
             type: "gc",
             segment: "Channel",
+            createdAt: gc.created_at,
             detail: { kind: "gc", item: gc },
           };
         });
@@ -539,6 +553,8 @@ export default function CustomerOverviewPage() {
             owner_name: row.branch_owner || undefined,
             owner_phone: row.branch_owner_phone || undefined,
             owner_email: row.branch_owner_email || undefined,
+            receipt_delivery_method: row.receipt_delivery_method || undefined,
+            receipt_issued_at: row.receipt_issued_at || undefined,
             created_at: row.created_at || new Date(0).toISOString(),
             updated_at:
               row.updated_at || row.created_at || new Date(0).toISOString(),
@@ -555,6 +571,7 @@ export default function CustomerOverviewPage() {
             status: getStatus(row.disabled),
             type: "bc",
             segment: "Branch",
+            createdAt: bc.created_at,
             detail: { kind: "bc", item: bc },
           };
         });
@@ -603,9 +620,8 @@ export default function CustomerOverviewPage() {
 
   const filteredCards = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
-    return cards.filter((item) => {
+    const filtered = cards.filter((item) => {
       const matchesTab = item.type === activeTab;
-      // const matchesTab = activeTab === "all" || item.type === activeTab;
       if (!matchesTab) return false;
       if (!normalizedSearch) return true;
       return (
@@ -614,7 +630,41 @@ export default function CustomerOverviewPage() {
         item.branchLocation.toLowerCase().includes(normalizedSearch)
       );
     });
-  }, [activeTab, cards, search]);
+
+    filtered.sort((left, right) => {
+      if (sortField === "created_at") {
+        const leftValue = new Date(left.createdAt).getTime();
+        const rightValue = new Date(right.createdAt).getTime();
+        return sortDirection === "desc"
+          ? rightValue - leftValue
+          : leftValue - rightValue;
+      }
+
+      const leftValue =
+        sortField === "code"
+          ? left.code.toLowerCase()
+          : left.name.toLowerCase();
+      const rightValue =
+        sortField === "code"
+          ? right.code.toLowerCase()
+          : right.name.toLowerCase();
+
+      const compared = leftValue.localeCompare(rightValue, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+      return sortDirection === "desc" ? -compared : compared;
+    });
+
+    return filtered;
+  }, [activeTab, cards, search, sortDirection, sortField]);
+
+  const sortFieldLabel =
+    sortField === "created_at"
+      ? "Tanggal Dibuat"
+      : sortField === "code"
+        ? "ID Customer"
+        : "Nama Customer";
 
   const totalPages = Math.max(
     1,
@@ -625,19 +675,6 @@ export default function CustomerOverviewPage() {
     (clampedPage - 1) * ITEMS_PER_PAGE,
     clampedPage * ITEMS_PER_PAGE,
   );
-
-  const activeCount = filteredCards.filter(
-    (card) => card.status === "active",
-  ).length;
-  const inactiveCount = filteredCards.filter(
-    (card) => card.status === "inactive",
-  ).length;
-  const activeRatio = filteredCards.length
-    ? (activeCount / filteredCards.length) * 100
-    : 0;
-  const inactiveRatio = filteredCards.length
-    ? (inactiveCount / filteredCards.length) * 100
-    : 0;
 
   const openDetail = (card: UnifiedCard) => {
     if (card.detail.kind === "nb") {
@@ -698,7 +735,8 @@ export default function CustomerOverviewPage() {
             ...card,
             name: updatedBC.name,
             contact: updatedBC.owner_name || "-",
-            branchLocation: updatedBC.branch_city || updatedBC.branch_name || "-",
+            branchLocation:
+              updatedBC.branch_city || updatedBC.branch_name || "-",
             detail: { kind: "bc", item: updatedBC },
           };
         }
@@ -726,7 +764,7 @@ export default function CustomerOverviewPage() {
 
   return (
     <div className="space-y-8">
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      {/* <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-orange-100 bg-orange-50 p-5">
           <div className="mb-3 flex items-start justify-between">
             <p className="text-xs font-bold uppercase tracking-wider text-orange-900">
@@ -792,35 +830,116 @@ export default function CustomerOverviewPage() {
             />
           </div>
         </div>
-      </section>
+      </section> */}
 
       <section className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap items-center gap-5 border-b border-slate-200 pb-3 lg:border-b-0 lg:pb-0">
-            {tabOptions.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`border-b-[3px] pb-2 text-sm font-bold transition-colors ${
-                  activeTab === tab.key
-                    ? "border-orange-500 text-orange-500"
-                    : "border-transparent text-slate-500 hover:text-orange-500"
-                }`}
-              >
-                {tab.label}{" "}
-                <span className="text-xs text-slate-400">({tab.count})</span>
-              </button>
-            ))}
-          </div>
-          <label className="flex h-11 w-full items-center rounded-xl border border-slate-200 bg-slate-50 px-3 lg:max-w-sm">
-            <FaSearch className="mr-2 text-sm text-slate-400" />
+        <div className="flex flex-wrap items-center gap-5 border-b border-slate-200 pb-3">
+          {tabOptions.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`border-b-[3px] pb-2 text-sm font-bold transition-colors ${
+                activeTab === tab.key
+                  ? "border-orange-500 text-orange-500"
+                  : "border-transparent text-slate-500 hover:text-orange-500"
+              }`}
+            >
+              {tab.label}{" "}
+              <span className="text-xs text-slate-400">({tab.count})</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-col gap-4 lg:flex-row">
+          <label className="relative flex-1">
+            <FaSearch className="pointer-events-none absolute left-4 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name, ID or branch..."
-              className="w-full border-0 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+              className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm text-slate-700 outline-none transition-all placeholder:text-slate-400 focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
             />
           </label>
+
+          <div className="flex items-center gap-3 self-start lg:self-auto">
+            <button
+              type="button"
+              onClick={() =>
+                setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"))
+              }
+              className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-600 transition-all hover:bg-slate-200"
+              title={sortDirection === "asc" ? "Urutan naik" : "Urutan turun"}
+            >
+              {sortDirection === "asc" ? (
+                <FaSortAmountUp className="h-3.5 w-3.5" />
+              ) : (
+                <FaSortAmountDown className="h-3.5 w-3.5" />
+              )}
+            </button>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setSortFieldDropdownOpen(!sortFieldDropdownOpen)}
+                className="flex h-11 items-center gap-2 rounded-xl bg-slate-100 px-4 text-sm font-medium text-slate-700 transition-all hover:bg-slate-200"
+              >
+                <span>{sortFieldLabel}</span>
+                <FaChevronDown
+                  className={`h-3 w-3 transition-transform ${
+                    sortFieldDropdownOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+
+              <AnimatePresence>
+                {sortFieldDropdownOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setSortFieldDropdownOpen(false)}
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="absolute left-0 top-full z-20 mt-2 min-w-[190px] rounded-xl border border-slate-200 bg-white py-2 shadow-xl"
+                    >
+                      {[
+                        {
+                          value: "created_at" as CustomerSortField,
+                          label: "Tanggal Dibuat",
+                        },
+                        {
+                          value: "code" as CustomerSortField,
+                          label: "ID Customer",
+                        },
+                        {
+                          value: "name" as CustomerSortField,
+                          label: "Nama Customer",
+                        },
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => {
+                            setSortField(option.value);
+                            setSortFieldDropdownOpen(false);
+                          }}
+                          className={`w-full px-4 py-2 text-left text-sm font-medium transition-colors hover:bg-slate-50 ${
+                            sortField === option.value
+                              ? "bg-orange-50 text-orange-600"
+                              : "text-slate-700"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
         </div>
 
         {loading && (

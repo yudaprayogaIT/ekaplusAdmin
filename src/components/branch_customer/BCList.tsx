@@ -45,6 +45,8 @@ interface BranchCustomerApiResponse {
   branch_owner?: string | null;
   branch_owner_phone?: string | null;
   branch_owner_email?: string | null;
+  receipt_delivery_method?: string | null;
+  receipt_issued_at?: string | null;
   disabled?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -320,6 +322,8 @@ export default function BCList() {
           owner_name: row.branch_owner || undefined,
           owner_phone: row.branch_owner_phone || undefined,
           owner_email: row.branch_owner_email || undefined,
+          receipt_delivery_method: row.receipt_delivery_method || undefined,
+          receipt_issued_at: row.receipt_issued_at || undefined,
           created_at: row.created_at || new Date(0).toISOString(),
           updated_at:
             row.updated_at || row.created_at || new Date(0).toISOString(),

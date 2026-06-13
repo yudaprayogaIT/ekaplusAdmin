@@ -81,6 +81,8 @@ export interface BranchCustomer {
   owner_date_of_birth?: string;
   payment_method?: string;
   payment_account?: string;
+  receipt_delivery_method?: string;
+  receipt_issued_at?: string;
   sales_team?: string;
   change_reason?: string;
   customer_register?: number;
@@ -155,6 +157,8 @@ export interface BranchCustomerApiResponse {
   owner_name?: string;
   owner_phone?: string;
   owner_email?: string;
+  receipt_delivery_method?: string | null;
+  receipt_issued_at?: string | null;
   created_at: string;
   created_by?: number | { id: number; full_name: string };
   updated_at: string;
