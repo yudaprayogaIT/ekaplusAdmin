@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import type {
   BranchCustomer,
   GroupCustomer,
@@ -126,7 +127,7 @@ interface GroupCustomerLookupRow {
   gc_name?: string | null;
 }
 
-const ITEMS_PER_PAGE = 10;
+const ITEMS_PER_BATCH = 20;
 
 function toNumber(value: unknown): number | undefined {
   if (typeof value === "number") return value;
@@ -185,7 +186,7 @@ export default function CustomerOverviewPage() {
   const [sortDirection, setSortDirection] =
     useState<CustomerSortDirection>("desc");
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [visibleCount, setVisibleCount] = useState(ITEMS_PER_BATCH);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cards, setCards] = useState<UnifiedCard[]>([]);
@@ -202,9 +203,10 @@ export default function CustomerOverviewPage() {
   const [selectedGP, setSelectedGP] = useState<GroupParent | null>(null);
   const [selectedGC, setSelectedGC] = useState<GroupCustomer | null>(null);
   const [selectedBC, setSelectedBC] = useState<BranchCustomer | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    setCurrentPage(1);
+    setVisibleCount(ITEMS_PER_BATCH);
   }, [activeTab, search, sortField, sortDirection]);
 
   useEffect(() => {
@@ -221,45 +223,37 @@ export default function CustomerOverviewPage() {
       try {
         const [nbResult, gpResult, gcResult, bcResult] =
           await Promise.allSettled([
-            apiFetch(
-              getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, {
-                fields: ["*"],
-                limit: 10000000,
-              }),
-              { method: "GET", cache: "no-store" },
+            fetchAllQueryRows<NationalBrandApiResponse>({
+              endpoint: API_CONFIG.ENDPOINTS.NATIONAL_BRAND,
+              spec: { fields: ["*"] },
               token,
-            ),
-            apiFetch(
-              getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, {
-                fields: ["*", "created_by.full_name", "updated_by.full_name"],
-                limit: 10000000,
-              }),
-              { method: "GET", cache: "no-store" },
+              errorMessage: "Failed to fetch NB",
+            }),
+            fetchAllQueryRows<GroupParentApiResponse>({
+              endpoint: API_CONFIG.ENDPOINTS.GROUP_PARENT,
+              spec: { fields: ["*", "created_by.full_name", "updated_by.full_name"] },
               token,
-            ),
-            apiFetch(
-              getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, {
-                fields: ["*", "created_by.full_name", "updated_by.full_name"],
-                limit: 10000000,
-              }),
-              { method: "GET", cache: "no-store" },
+              errorMessage: "Failed to fetch GP",
+            }),
+            fetchAllQueryRows<GroupCustomerApiResponse>({
+              endpoint: API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
+              spec: { fields: ["*", "created_by.full_name", "updated_by.full_name"] },
               token,
-            ),
-            apiFetch(
-              getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, {
-                fields: ["*", "created_by.full_name", "updated_by.full_name"],
-                limit: 10000000,
-              }),
-              { method: "GET", cache: "no-store" },
+              errorMessage: "Failed to fetch GC",
+            }),
+            fetchAllQueryRows<BranchCustomerApiResponse>({
+              endpoint: API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2,
+              spec: { fields: ["*", "created_by.full_name", "updated_by.full_name"] },
               token,
-            ),
+              errorMessage: "Failed to fetch BC",
+            }),
           ]);
 
         const errors: string[] = [];
         let failedMainRequests = 0;
 
         const parseRows = async <T,>(
-          result: PromiseSettledResult<Response>,
+          result: PromiseSettledResult<T[]>,
           label: "NB" | "GP" | "GC" | "BC",
         ): Promise<T[]> => {
           if (result.status === "rejected") {
@@ -267,13 +261,7 @@ export default function CustomerOverviewPage() {
             failedMainRequests += 1;
             return [];
           }
-          if (!result.value.ok) {
-            errors.push(`Failed to fetch ${label} (${result.value.status})`);
-            failedMainRequests += 1;
-            return [];
-          }
-          const json = await result.value.json();
-          return Array.isArray(json?.data) ? json.data : [];
+          return Array.isArray(result.value) ? result.value : [];
         };
 
         const [nbRows, gpRows, gcRows, bcRows] = await Promise.all([
@@ -666,15 +654,34 @@ export default function CustomerOverviewPage() {
         ? "ID Customer"
         : "Nama Customer";
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredCards.length / ITEMS_PER_PAGE),
-  );
-  const clampedPage = Math.min(currentPage, totalPages);
-  const paginatedCards = filteredCards.slice(
-    (clampedPage - 1) * ITEMS_PER_PAGE,
-    clampedPage * ITEMS_PER_PAGE,
-  );
+  const visibleCards = filteredCards.slice(0, visibleCount);
+  const hasMoreCards = visibleCards.length < filteredCards.length;
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || loading || !hasMoreCards) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (!entry?.isIntersecting) return;
+        setVisibleCount((prev) =>
+          Math.min(prev + ITEMS_PER_BATCH, filteredCards.length),
+        );
+      },
+      {
+        root: null,
+        rootMargin: "240px 0px",
+        threshold: 0,
+      },
+    );
+
+    observer.observe(target);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [filteredCards.length, hasMoreCards, loading, visibleCount]);
 
   const openDetail = (card: UnifiedCard) => {
     if (card.detail.kind === "nb") {
@@ -952,15 +959,15 @@ export default function CustomerOverviewPage() {
             {error}
           </div>
         )}
-        {!loading && !error && paginatedCards.length === 0 && (
+        {!loading && !error && visibleCards.length === 0 && (
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
             Tidak ada data customer untuk filter ini.
           </div>
         )}
 
-        {!loading && !error && paginatedCards.length > 0 && (
+        {!loading && !error && visibleCards.length > 0 && (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {paginatedCards.map((item) => (
+            {visibleCards.map((item) => (
               <article
                 key={`${item.type}-${item.id}`}
                 className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm cursor-pointer"
@@ -1052,35 +1059,23 @@ export default function CustomerOverviewPage() {
 
         <div className="flex flex-col gap-3 pt-1 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
           <p>
-            Showing{" "}
-            {filteredCards.length === 0
-              ? 0
-              : (clampedPage - 1) * ITEMS_PER_PAGE + 1}{" "}
-            to {Math.min(clampedPage * ITEMS_PER_PAGE, filteredCards.length)} of{" "}
-            {filteredCards.length} customers
+            Showing {visibleCards.length} of {filteredCards.length} customers
           </p>
-          <div className="flex items-center gap-2">
-            <button
-              disabled={clampedPage <= 1}
-              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-              className="rounded-lg border border-slate-200 px-4 py-2 font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
-            >
-              Previous
-            </button>
-            <button className="rounded-lg bg-gradient-to-r from-orange-500 to-orange-400 px-4 py-2 font-bold text-white">
-              {clampedPage}
-            </button>
-            <button
-              disabled={clampedPage >= totalPages}
-              onClick={() =>
-                setCurrentPage((prev) => Math.min(totalPages, prev + 1))
-              }
-              className="rounded-lg border border-slate-200 px-4 py-2 font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
-            >
-              Next
-            </button>
-          </div>
+          <p>
+            {hasMoreCards
+              ? "Scroll ke bawah untuk memuat lebih banyak"
+              : "Semua data sudah tampil"}
+          </p>
         </div>
+
+        {!loading && !error && hasMoreCards ? (
+          <div
+            ref={loadMoreRef}
+            className="flex h-16 items-center justify-center text-sm text-slate-400"
+          >
+            Memuat data berikutnya...
+          </div>
+        ) : null}
       </section>
 
       <NBDetailModal

@@ -36,6 +36,7 @@ import {
   getFileUrl,
   apiFetch,
 } from "@/config/api";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import FilterBuilder from "@/components/filters/FilterBuilder";
 import { useFilters } from "@/hooks/useFilters";
 import { PRODUCT_FILTER_FIELDS } from "@/config/filterFields";
@@ -480,18 +481,17 @@ export default function ProductList() {
       const headers = getAuthHeaders(token);
 
       // Load categories
-      const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
-        fields: ["*"],
-        limit: 1000,
+      const categoryRows = await fetchAllQueryRows<{
+        id: number | string;
+        category_name: string;
+      }>({
+        endpoint: API_CONFIG.ENDPOINTS.CATEGORY,
+        spec: { fields: ["*"] },
+        token,
+        requestInit: { headers },
       });
-      const categoriesRes = await apiFetch(categoriesUrl, {
-        method: "GET",
-        cache: "no-store",
-        headers,
-      });
-      if (categoriesRes.ok) {
-        const response = await categoriesRes.json();
-        const categoriesData = response.data
+      if (categoryRows.length > 0) {
+        const categoriesData = categoryRows
           .map((cat: { id: number | string; category_name: string }) => {
             const id = toNumber(cat.id);
             return id !== null ? { id, name: cat.category_name } : null;
@@ -504,18 +504,14 @@ export default function ProductList() {
       }
 
       // Load items (including disabled) so mapped variants can still be resolved
-      const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
-        fields: ["*"],
-        limit: 10000,
+      const itemRows = await fetchAllQueryRows<ItemApiResponse>({
+        endpoint: API_CONFIG.ENDPOINTS.ITEM,
+        spec: { fields: ["*"] },
+        token,
+        requestInit: { headers },
       });
-      const itemsRes = await apiFetch(itemsUrl, {
-        method: "GET",
-        cache: "no-store",
-        headers,
-      });
-      if (itemsRes.ok) {
-        const response = await itemsRes.json();
-        const itemsData = response.data
+      if (itemRows.length > 0) {
+        const itemsData = itemRows
           .map((item: ItemApiResponse) => {
             const id = toNumber(item.id);
             if (id === null) return null;

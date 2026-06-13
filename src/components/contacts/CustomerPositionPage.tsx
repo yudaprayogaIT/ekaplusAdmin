@@ -16,6 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import type { CustomerPosition } from "@/types/contact";
 
 type SortOption = "name-asc" | "name-desc" | "id-asc" | "id-desc";
+const DEFAULT_PAGE_SIZE = 20;
 
 type PositionApiRow = {
   id: number | string;
@@ -198,8 +199,10 @@ export default function CustomerPositionPage() {
   const { token, isAuthenticated } = useAuth();
   const [positions, setPositions] = useState<CustomerPosition[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("name-asc");
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<CustomerPosition | null>(null);
@@ -208,20 +211,41 @@ export default function CustomerPositionPage() {
   const [detailItem, setDetailItem] = useState<CustomerPosition | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const actionRef = useRef<(() => Promise<void>) | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  const loadData = useCallback(async () => {
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim());
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
+
+  const loadData = useCallback(async (page: number, replace = false) => {
     if (!isAuthenticated || !token) {
       setPositions([]);
+      setHasMore(false);
       setLoading(false);
       return;
     }
-    setLoading(true);
-    setError(null);
+    if (replace) {
+      setLoading(true);
+      setError(null);
+    } else {
+      setLoadingMore(true);
+    }
     try {
+      const [sortField, sortDirection] = sortBy.split("-") as [
+        "name" | "id",
+        "asc" | "desc",
+      ];
       const response = await apiFetch(
         getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_POSITION, {
           fields: ["*"],
-          limit: 100000,
+          page,
+          ...(debouncedSearchQuery ? { search: debouncedSearchQuery } : {}),
+          order_by: [[sortField === "name" ? "position_name" : "id", sortDirection]],
         }),
         {
           method: "GET",
@@ -236,51 +260,63 @@ export default function CustomerPositionPage() {
       }
 
       const json = await response.json();
-      setPositions((Array.isArray(json?.data) ? json.data : []).map(mapPosition));
+      const rows = (Array.isArray(json?.data) ? json.data : []).map(mapPosition);
+      const perPage = Number(json?.meta?.per_page || DEFAULT_PAGE_SIZE);
+      setPositions((current) =>
+        replace
+          ? rows
+          : [
+              ...current,
+              ...rows.filter(
+                (item) => !current.some((existing) => existing.id === item.id),
+              ),
+            ],
+      );
+      setCurrentPage(page);
+      setHasMore(rows.length >= perPage);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
+      if (replace) setPositions([]);
+      setHasMore(false);
     } finally {
-      setLoading(false);
+      if (replace) setLoading(false);
+      else setLoadingMore(false);
     }
-  }, [isAuthenticated, token]);
+  }, [debouncedSearchQuery, isAuthenticated, sortBy, token]);
 
   useEffect(() => {
-    void loadData();
+    setPositions([]);
+    setCurrentPage(1);
+    setHasMore(true);
+    void loadData(1, true);
   }, [loadData]);
 
   useEffect(() => {
     const refresh = () => {
-      void loadData();
+      setPositions([]);
+      setCurrentPage(1);
+      setHasMore(true);
+      void loadData(1, true);
     };
     window.addEventListener(POSITION_EVENT, refresh);
     return () => window.removeEventListener(POSITION_EVENT, refresh);
   }, [loadData]);
 
-  const filteredPositions = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    const rows = query
-      ? positions.filter((item) => {
-          const haystacks = [item.position_name, item.notes]
-            .filter(Boolean)
-            .map((value) => String(value).toLowerCase());
-          return haystacks.some((value) => value.includes(query));
-        })
-      : positions;
+  const filteredPositions = useMemo(() => [...positions], [positions]);
 
-    return [...rows].sort((a, b) => {
-      switch (sortBy) {
-        case "id-asc":
-          return a.id - b.id;
-        case "id-desc":
-          return b.id - a.id;
-        case "name-desc":
-          return b.position_name.localeCompare(a.position_name);
-        case "name-asc":
-        default:
-          return a.position_name.localeCompare(b.position_name);
-      }
-    });
-  }, [positions, searchQuery, sortBy]);
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || loading || loadingMore || !hasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+        void loadData(currentPage + 1, false);
+      },
+      { root: null, rootMargin: "240px 0px", threshold: 0 },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [currentPage, hasMore, loadData, loading, loadingMore]);
 
   const submitPosition = async (payload: {
     id?: number;
@@ -428,77 +464,102 @@ export default function CustomerPositionPage() {
           </p>
         </div>
       ) : (
-        <div className="grid gap-5 xl:grid-cols-2">
-          {filteredPositions.map((item) => (
-            <div
-              key={item.id}
-              className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-bold text-slate-900">
-                      {item.position_name}
-                    </h3>
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                        Number(item.disabled || 0) === 1
-                          ? "bg-rose-100 text-rose-700"
-                          : "bg-emerald-100 text-emerald-700"
-                      }`}
-                    >
-                      {Number(item.disabled || 0) === 1 ? "Disabled" : "Active"}
-                    </span>
+        <>
+          <div className="grid gap-5 xl:grid-cols-2">
+            {filteredPositions.map((item) => (
+              <div
+                key={item.id}
+                className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg font-bold text-slate-900">
+                        {item.position_name}
+                      </h3>
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                          Number(item.disabled || 0) === 1
+                            ? "bg-rose-100 text-rose-700"
+                            : "bg-emerald-100 text-emerald-700"
+                        }`}
+                      >
+                        {Number(item.disabled || 0) === 1 ? "Disabled" : "Active"}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm text-slate-600">{item.notes || "-"}</p>
                   </div>
-                  <p className="mt-2 text-sm text-slate-600">{item.notes || "-"}</p>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDetailItem(item)}
+                      className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    >
+                      <FaEye className="text-sm" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalError(null);
+                        setModalInitial(item);
+                        setModalOpen(true);
+                      }}
+                      className="rounded-xl border border-blue-200 p-2 text-blue-700 hover:bg-blue-50"
+                    >
+                      <FaEdit className="text-sm" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deletePosition(item)}
+                      className="rounded-xl border border-rose-200 p-2 text-rose-700 hover:bg-rose-50"
+                    >
+                      <FaTrash className="text-sm" />
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setDetailItem(item)}
-                    className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                  >
-                    <FaEye className="text-sm" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setModalError(null);
-                      setModalInitial(item);
-                      setModalOpen(true);
-                    }}
-                    className="rounded-xl border border-blue-200 p-2 text-blue-700 hover:bg-blue-50"
-                  >
-                    <FaEdit className="text-sm" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deletePosition(item)}
-                    className="rounded-xl border border-rose-200 p-2 text-rose-700 hover:bg-rose-50"
-                  >
-                    <FaTrash className="text-sm" />
-                  </button>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-500">
+                      Position ID
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-slate-900">#{item.id}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-500">
+                      Updated
+                    </p>
+                    <p className="mt-2 text-sm text-slate-700">
+                      {formatDate(item.updated_at)}
+                    </p>
+                  </div>
                 </div>
               </div>
-
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-500">
-                    Position ID
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-slate-900">#{item.id}</p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-500">
-                    Updated
-                  </p>
-                  <p className="mt-2 text-sm text-slate-700">{formatDate(item.updated_at)}</p>
-                </div>
-              </div>
+            ))}
+          </div>
+          <div className="flex flex-col gap-3 pt-2 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
+            <p>
+              Showing {filteredPositions.length} loaded positions
+              {debouncedSearchQuery ? " matching current search" : ""}
+            </p>
+            <p>
+              {hasMore
+                ? "Scroll ke bawah untuk memuat lebih banyak"
+                : "Semua data yang tersedia sudah dimuat"}
+            </p>
+          </div>
+          {hasMore ? (
+            <div
+              ref={loadMoreRef}
+              className="flex h-16 items-center justify-center text-sm text-slate-400"
+            >
+              {loadingMore
+                ? "Memuat data berikutnya..."
+                : "Siap memuat data berikutnya..."}
             </div>
-          ))}
-        </div>
+          ) : null}
+        </>
       )}
 
       <PositionFormModal

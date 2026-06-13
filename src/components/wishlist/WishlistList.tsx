@@ -24,11 +24,10 @@ import {
 } from "@/services/wishlistService";
 import {
   API_CONFIG,
-  getQueryUrl,
   getAuthHeaders,
   getFileUrl,
-  apiFetch,
 } from "@/config/api";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import type {
   WishlistItem,
   Item,
@@ -79,18 +78,30 @@ export default function WishlistList() {
         }
 
         // Load items from API
-        const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
-          fields: ["*"],
-          limit: 1000000000000,
-        });
-        const itemsRes = await apiFetch(itemsUrl, {
-          headers: getAuthHeaders(token),
+        const itemRows = await fetchAllQueryRows<{
+          id: number;
+          item_code: string;
+          item_name: string;
+          item_color?: string;
+          ekatalog_type?: string;
+          uom: string;
+          image?: string;
+          item_desc?: string;
+          item_category?: string;
+          item_group?: string;
+          disabled?: number;
+        }>({
+          endpoint: API_CONFIG.ENDPOINTS.ITEM,
+          spec: { fields: ["*"] },
+          token,
+          requestInit: {
+            headers: getAuthHeaders(token),
+          },
         });
 
         let itemsData: Item[] = [];
-        if (itemsRes.ok) {
-          const json = await itemsRes.json();
-          itemsData = json.data.map(
+        if (itemRows.length > 0) {
+          itemsData = itemRows.map(
             (i: {
               id: number;
               item_code: string;

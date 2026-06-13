@@ -34,6 +34,7 @@ import {
   API_CONFIG,
   apiFetch,
 } from "@/config/api";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import FilterBuilder from "@/components/filters/FilterBuilder";
 import { useFilters } from "@/hooks/useFilters";
 import { ITEM_FILTER_FIELDS } from "@/config/filterFields";
@@ -756,15 +757,18 @@ export default function ItemList() {
 
     try {
       // Load categories
-      const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
-        fields: ["*"],
-        limit: 1000000000000,
+      const categoryRows = await fetchAllQueryRows<{
+        id: number;
+        category_name: string;
+      }>({
+        endpoint: API_CONFIG.ENDPOINTS.CATEGORY,
+        spec: { fields: ["*"] },
+        token,
+        requestInit: { headers },
       });
-      const categoriesRes = await apiFetch(categoriesUrl, { headers });
 
-      if (categoriesRes.ok) {
-        const json = await categoriesRes.json();
-        const categoriesData = json.data.map(
+      if (categoryRows.length > 0) {
+        const categoriesData = categoryRows.map(
           (cat: { id: number; category_name: string }) => ({
             id: cat.id,
             name: cat.category_name,
@@ -774,15 +778,21 @@ export default function ItemList() {
       }
 
       // Load products
-      const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, {
-        fields: ["*"],
-        limit: 1000000000000,
+      const productRows = await fetchAllQueryRows<{
+        id: number;
+        product_name: string;
+        item_category: [];
+        disabled: number;
+        hot_deals: boolean;
+      }>({
+        endpoint: API_CONFIG.ENDPOINTS.PRODUCT,
+        spec: { fields: ["*"] },
+        token,
+        requestInit: { headers },
       });
-      const productsRes = await apiFetch(productsUrl, { headers });
 
-      if (productsRes.ok) {
-        const json = await productsRes.json();
-        const productsData = json.data.map(
+      if (productRows.length > 0) {
+        const productsData = productRows.map(
           (p: {
             id: number;
             product_name: string;

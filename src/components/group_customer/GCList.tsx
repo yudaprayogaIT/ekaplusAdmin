@@ -1,6 +1,12 @@
 ﻿"use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
 import { GCCard } from "./GCCard";
 import { GCDetailModal } from "./GCDetailModal";
 import { GPDetailModal } from "@/components/group_parent/GPDetailModal";
@@ -20,12 +26,12 @@ import {
   FaChevronDown,
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
-import Pagination, { usePagination } from "@/components/ui/Pagination";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
 
 type SortField = "name" | "gp_name" | "created_at" | "updated_at";
 type SortDirection = "asc" | "desc";
+const DEFAULT_PAGE_SIZE = 20;
 
 interface GroupCustomerApiResponse {
   id: number;
@@ -81,31 +87,59 @@ export default function GCList() {
 
   const [gcs, setGcs] = useState<GroupCustomer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [selectedGP, setSelectedGP] = useState<GroupParent | null>(null);
   const [selectedGC, setSelectedGC] = useState<GroupCustomer | null>(null);
   const [selectedBC, setSelectedBC] = useState<BranchCustomer | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
 
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim());
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [searchQuery]);
+
+  const loadData = useCallback(async (page: number, replace = false) => {
+    if (replace) {
+      setLoading(true);
+      setError(null);
+    } else {
+      setLoadingMore(true);
+    }
 
     try {
       if (!isAuthenticated || !token) {
         setGcs([]);
-        setLoading(false);
+        setHasMore(false);
         return;
       }
 
+      const orderByField =
+        sortField === "gp_name"
+          ? "gpid.gp_name"
+          : sortField === "name"
+            ? "name"
+            : sortField;
+
       const gcSpec = {
         fields: ["*", "created_by.full_name", "updated_by.full_name"],
-        limit: 10000000,
+        page,
+        ...(debouncedSearchQuery ? { search: debouncedSearchQuery } : {}),
+        order_by: [[orderByField, sortDirection]],
       };
 
       const gcRes = await apiFetch(
@@ -122,6 +156,7 @@ export default function GCList() {
       const gcRows: GroupCustomerApiResponse[] = Array.isArray(gcJson?.data)
         ? gcJson.data
         : [];
+      const perPage = Number(gcJson?.meta?.per_page || DEFAULT_PAGE_SIZE);
 
       const gpIds = Array.from(
         new Set(
@@ -209,56 +244,67 @@ export default function GCList() {
         };
       });
 
-      setGcs(mapped);
+      setGcs((current) =>
+        replace
+          ? mapped
+          : [
+              ...current,
+              ...mapped.filter(
+                (gc) => !current.some((existing) => existing.id === gc.id),
+              ),
+            ],
+      );
+      setCurrentPage(page);
+      setHasMore(gcRows.length >= perPage);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-      setGcs([]);
+      if (replace) {
+        setGcs([]);
+      }
+      setHasMore(false);
     } finally {
-      setLoading(false);
+      if (replace) {
+        setLoading(false);
+      } else {
+        setLoadingMore(false);
+      }
     }
-  }, [isAuthenticated, token]);
+  }, [debouncedSearchQuery, isAuthenticated, sortDirection, sortField, token]);
 
   useEffect(() => {
-    loadData();
+    setGcs([]);
+    setCurrentPage(1);
+    setHasMore(true);
+    void loadData(1, true);
   }, [loadData]);
 
   const filteredAndSortedGCs = useMemo(() => {
-    let filtered = [...gcs];
+    return [...gcs];
+  }, [gcs]);
 
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (gc) =>
-          gc.name.toLowerCase().includes(query) ||
-          gc.code?.toLowerCase().includes(query) ||
-          gc.gp_name?.toLowerCase().includes(query) ||
-          gc.gp_code?.toLowerCase().includes(query),
-      );
-    }
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || loading || loadingMore || !hasMore) return;
 
-    filtered.sort((a, b) => {
-      let aValue: string | number;
-      let bValue: string | number;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (!entry?.isIntersecting) return;
+        void loadData(currentPage + 1, false);
+      },
+      {
+        root: null,
+        rootMargin: "240px 0px",
+        threshold: 0,
+      },
+    );
 
-      if (sortField === "name") {
-        aValue = a.name.toLowerCase();
-        bValue = b.name.toLowerCase();
-      } else if (sortField === "gp_name") {
-        aValue = (a.gp_name || "").toLowerCase();
-        bValue = (b.gp_name || "").toLowerCase();
-      } else {
-        aValue = new Date(a[sortField]).getTime();
-        bValue = new Date(b[sortField]).getTime();
-      }
+    observer.observe(target);
 
-      if (sortDirection === "asc") {
-        return aValue > bValue ? 1 : -1;
-      }
-      return aValue < bValue ? 1 : -1;
-    });
-
-    return filtered;
-  }, [gcs, searchQuery, sortField, sortDirection]);
+    return () => {
+      observer.disconnect();
+    };
+  }, [currentPage, hasMore, loadData, loading, loadingMore]);
 
   const stats = useMemo(() => {
     return {
@@ -268,22 +314,8 @@ export default function GCList() {
     };
   }, [gcs]);
 
-  const {
-    currentPage,
-    setCurrentPage,
-    totalPages,
-    paginatedItems: paginatedGCs,
-    totalItems,
-    itemsPerPage,
-  } = usePagination(filteredAndSortedGCs, 20);
-
   const handleViewDetails = (gc: GroupCustomer) => {
     setSelectedGC(gc);
-  };
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   if (loading) {
@@ -459,7 +491,7 @@ export default function GCList() {
       {filteredAndSortedGCs.length > 0 && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {paginatedGCs.map((gc) => (
+            {filteredAndSortedGCs.map((gc) => (
               <GCCard
                 key={gc.id}
                 gc={gc}
@@ -468,15 +500,28 @@ export default function GCList() {
             ))}
           </div>
 
-          {totalPages > 1 && (
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={handlePageChange}
-              totalItems={totalItems}
-              itemsPerPage={itemsPerPage}
-            />
-          )}
+          <div className="flex flex-col gap-3 pt-2 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
+            <p>
+              Showing {filteredAndSortedGCs.length} loaded group customers
+              {debouncedSearchQuery ? " matching current search" : ""}
+            </p>
+            <p>
+              {hasMore
+                ? "Scroll ke bawah untuk memuat lebih banyak"
+                : "Semua data yang tersedia sudah dimuat"}
+            </p>
+          </div>
+
+          {hasMore ? (
+            <div
+              ref={loadMoreRef}
+              className="flex h-16 items-center justify-center text-sm text-slate-400"
+            >
+              {loadingMore
+                ? "Memuat data berikutnya..."
+                : "Siap memuat data berikutnya..."}
+            </div>
+          ) : null}
         </>
       )}
 

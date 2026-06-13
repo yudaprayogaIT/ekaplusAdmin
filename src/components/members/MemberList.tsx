@@ -20,6 +20,7 @@ import {
 } from "./MemberDetailModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 
 interface MemberOfApiResponse {
   id: number;
@@ -146,19 +147,12 @@ export function MemberList() {
         return;
       }
 
-      const memberSpec = { fields: ["*"], limit: 10000000 };
-      const memberRes = await apiFetch(
-        getQueryUrl(API_CONFIG.ENDPOINTS.MEMBER_OF, memberSpec),
-        { method: "GET", cache: "no-store" },
-        token
-      );
-
-      if (!memberRes.ok) throw new Error(`Failed to fetch members (${memberRes.status})`);
-      const memberJson = await memberRes.json();
-
-      const members: MemberOfApiResponse[] = Array.isArray(memberJson?.data)
-        ? memberJson.data
-        : [];
+      const members = await fetchAllQueryRows<MemberOfApiResponse>({
+        endpoint: API_CONFIG.ENDPOINTS.MEMBER_OF,
+        spec: { fields: ["*"] },
+        token,
+        errorMessage: "Failed to fetch members",
+      });
 
       const customerSpecs = [
         {
@@ -170,29 +164,25 @@ export function MemberList() {
             "branch_id.branch_name",
             "branch_id.city",
           ],
-          limit: 10000000,
         },
         {
           fields: ["*"],
-          limit: 10000000,
         },
       ];
 
       let customers: CustomerRegisterApiResponse[] = [];
       for (const customerSpec of customerSpecs) {
-        const customerRes = await apiFetch(
-          getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER, customerSpec),
-          { method: "GET", cache: "no-store" },
-          token
-        );
-
-        if (!customerRes.ok) {
+        try {
+          customers = await fetchAllQueryRows<CustomerRegisterApiResponse>({
+            endpoint: API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER,
+            spec: customerSpec,
+            token,
+            errorMessage: "Failed to fetch customer register",
+          });
+          break;
+        } catch {
           continue;
         }
-
-        const customerJson = await customerRes.json();
-        customers = Array.isArray(customerJson?.data) ? customerJson.data : [];
-        break;
       }
 
       const nbIds = Array.from(

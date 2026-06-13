@@ -14,8 +14,9 @@ import {
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
+import { API_CONFIG } from "@/config/api";
 import Pagination, { usePagination } from "@/components/ui/Pagination";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import { NBDetailModal, type NationalBrandDetailData } from "./NBDetailModal";
 
 interface NationalBrandApiResponse {
@@ -154,107 +155,52 @@ export default function NBList() {
         return;
       }
 
-      const [nbRes, memberRes, gpRes, gcRes, bcRes] = await Promise.all([
-        apiFetch(
-          getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, {
-            fields: ["*"],
-            limit: 10000000,
-          }),
-          { method: "GET", cache: "no-store" },
+      const [nbRows, memberRows, gpRows, gcRows, bcRows] = await Promise.all([
+        fetchAllQueryRows<NationalBrandApiResponse>({
+          endpoint: API_CONFIG.ENDPOINTS.NATIONAL_BRAND,
+          spec: { fields: ["*"] },
           token,
-        ),
-        apiFetch(
-          getQueryUrl(API_CONFIG.ENDPOINTS.MEMBER_OF, {
+          errorMessage: "Failed to fetch national brands",
+        }),
+        fetchAllQueryRows<MemberOfApiResponse>({
+          endpoint: API_CONFIG.ENDPOINTS.MEMBER_OF,
+          spec: {
             fields: ["*"],
             filters: [["ref_type", "=", "nbid"]],
-            limit: 10000000,
-          }),
-          { method: "GET", cache: "no-store" },
+          },
           token,
-        ),
-        apiFetch(
-          getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, {
-            fields: ["*"],
-            limit: 10000000,
-          }),
-          { method: "GET", cache: "no-store" },
+          errorMessage: "Failed to fetch member_of",
+        }),
+        fetchAllQueryRows<GroupParentApiResponse>({
+          endpoint: API_CONFIG.ENDPOINTS.GROUP_PARENT,
+          spec: { fields: ["*"] },
           token,
-        ),
-        apiFetch(
-          getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, {
-            fields: ["*"],
-            limit: 10000000,
-          }),
-          { method: "GET", cache: "no-store" },
+          errorMessage: "Failed to fetch group parent",
+        }),
+        fetchAllQueryRows<GroupCustomerApiResponse>({
+          endpoint: API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
+          spec: { fields: ["*"] },
           token,
-        ),
-        apiFetch(
-          getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, {
-            fields: ["*"],
-            limit: 10000000,
-          }),
-          { method: "GET", cache: "no-store" },
+          errorMessage: "Failed to fetch group customer",
+        }),
+        fetchAllQueryRows<BranchCustomerApiResponse>({
+          endpoint: API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2,
+          spec: { fields: ["*"] },
           token,
-        ),
+          errorMessage: "Failed to fetch branch customer",
+        }),
       ]);
-
-      if (!nbRes.ok)
-        throw new Error(`Failed to fetch national brands (${nbRes.status})`);
-      if (!memberRes.ok)
-        throw new Error(`Failed to fetch member_of (${memberRes.status})`);
-      if (!gpRes.ok)
-        throw new Error(`Failed to fetch group parent (${gpRes.status})`);
-      if (!gcRes.ok)
-        throw new Error(`Failed to fetch group customer (${gcRes.status})`);
-      if (!bcRes.ok)
-        throw new Error(`Failed to fetch branch customer (${bcRes.status})`);
-      const [nbJson, memberJson, gpJson, gcJson, bcJson] = await Promise.all([
-        nbRes.json(),
-        memberRes.json(),
-        gpRes.json(),
-        gcRes.json(),
-        bcRes.json(),
-      ]);
-
-      const nbRows: NationalBrandApiResponse[] = Array.isArray(nbJson?.data)
-        ? nbJson.data
-        : [];
-      const memberRows: MemberOfApiResponse[] = Array.isArray(memberJson?.data)
-        ? memberJson.data
-        : [];
-      const gpRows: GroupParentApiResponse[] = Array.isArray(gpJson?.data)
-        ? gpJson.data
-        : [];
-      const gcRows: GroupCustomerApiResponse[] = Array.isArray(gcJson?.data)
-        ? gcJson.data
-        : [];
-      const bcRows: BranchCustomerApiResponse[] = Array.isArray(bcJson?.data)
-        ? bcJson.data
-        : [];
       let customerRows: CustomerRegisterOwnerRow[] = [];
       try {
-        const customerRes = await apiFetch(
-          getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER, {
-            fields: ["nbid", "owner_full_name"],
-            limit: 10000000,
-          }),
-          { method: "GET", cache: "no-store" },
+        customerRows = await fetchAllQueryRows<CustomerRegisterOwnerRow>({
+          endpoint: API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER,
+          spec: { fields: ["nbid", "owner_full_name"] },
           token,
-        );
-        if (customerRes.ok) {
-          const customerJson = await customerRes.json();
-          customerRows = Array.isArray(customerJson?.data)
-            ? customerJson.data
-            : [];
-        } else {
-          // console.warn(
-          //   `Failed to fetch customer register (${customerRes.status}), using owner fallback from member_of only.`,
-          // );
-        }
-      } catch (customerErr) {
+          errorMessage: "Failed to fetch customer register",
+        });
+      } catch {
         // console.warn(
         //   "Failed to fetch customer register, using owner fallback from member_of only.",
-        //   customerErr,
         // );
       }
 

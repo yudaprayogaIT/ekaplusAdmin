@@ -12,8 +12,9 @@ import {
   FaUserTie,
 } from "react-icons/fa";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import { API_CONFIG, apiFetch, getAuthHeaders, getQueryUrl, getResourceUrl } from "@/config/api";
+import { API_CONFIG, apiFetch, getAuthHeaders, getResourceUrl } from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import type {
   Contact,
   ContactIdentity,
@@ -324,55 +325,42 @@ export function BCContactRelationsPanel({
     setError(null);
     try {
       const headers = getAuthHeaders(token);
-      const [relationRes, contactRes, positionRes] = await Promise.all([
-        apiFetch(
-          getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_CONTACT, {
+      const [relationRows, contactRows, positionRows] = await Promise.all([
+        fetchAllQueryRows<CustomerContactApiRow>({
+          endpoint: API_CONFIG.ENDPOINTS.CUSTOMER_CONTACT,
+          spec: {
             fields: ["*"],
             filters: [
               ["parent_type", "=", "branch_customer"],
               ["parent_id", "=", branchCustomerId],
             ],
-            limit: 100000,
-          }),
-          { method: "GET", cache: "no-store", headers },
+          },
           token,
-        ),
-        apiFetch(
-          getQueryUrl(API_CONFIG.ENDPOINTS.CONTACT, {
+          requestInit: { headers },
+          errorMessage: "Gagal memuat relasi contact",
+        }),
+        fetchAllQueryRows<ContactApiRow>({
+          endpoint: API_CONFIG.ENDPOINTS.CONTACT,
+          spec: {
             fields: ["id", "name", "full_name", "display_name", "disabled"],
-            limit: 100000,
-          }),
-          { method: "GET", cache: "no-store", headers },
+          },
           token,
-        ),
-        apiFetch(
-          getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_POSITION, {
+          requestInit: { headers },
+          errorMessage: "Gagal memuat contact lookup",
+        }),
+        fetchAllQueryRows<PositionApiRow>({
+          endpoint: API_CONFIG.ENDPOINTS.CUSTOMER_POSITION,
+          spec: {
             fields: ["id", "name", "position_name", "disabled"],
-            limit: 100000,
-          }),
-          { method: "GET", cache: "no-store", headers },
+          },
           token,
-        ),
-      ]);
-
-      if (!relationRes.ok) {
-        throw new Error(`Gagal memuat relasi contact (${relationRes.status})`);
-      }
-      if (!contactRes.ok) {
-        throw new Error(`Gagal memuat contact lookup (${contactRes.status})`);
-      }
-      if (!positionRes.ok) {
-        throw new Error(`Gagal memuat position lookup (${positionRes.status})`);
-      }
-
-      const [relationJson, contactJson, positionJson] = await Promise.all([
-        relationRes.json(),
-        contactRes.json(),
-        positionRes.json(),
+          requestInit: { headers },
+          errorMessage: "Gagal memuat position lookup",
+        }),
       ]);
 
       const mappedRelations: CustomerContact[] = (
-        Array.isArray(relationJson?.data) ? relationJson.data : []
+        Array.isArray(relationRows) ? relationRows : []
       ).map(mapRelation);
       const relatedContactIds: number[] = Array.from(
         new Set(mappedRelations.map((item: CustomerContact) => item.contact_id).filter(Boolean)),
@@ -380,31 +368,22 @@ export function BCContactRelationsPanel({
 
       let mappedIdentities: ContactIdentity[] = [];
       if (relatedContactIds.length > 0) {
-        const identityRes = await apiFetch(
-          getQueryUrl(API_CONFIG.ENDPOINTS.CONTACT_IDENTITIES, {
+        const identityRows = await fetchAllQueryRows<IdentityApiRow>({
+          endpoint: API_CONFIG.ENDPOINTS.CONTACT_IDENTITIES,
+          spec: {
             fields: ["*"],
             filters: [["contact_id", "in", relatedContactIds]],
-            limit: 100000,
-          }),
-          { method: "GET", cache: "no-store", headers },
+          },
           token,
-        );
-        if (!identityRes.ok) {
-          throw new Error(`Gagal memuat contact identities (${identityRes.status})`);
-        }
-        const identityJson = await identityRes.json();
-        mappedIdentities = (Array.isArray(identityJson?.data) ? identityJson.data : []).map(
-          mapIdentity,
-        );
+          requestInit: { headers },
+          errorMessage: "Gagal memuat contact identities",
+        });
+        mappedIdentities = identityRows.map(mapIdentity);
       }
 
       setRelations(mappedRelations);
-      setContacts(
-        (Array.isArray(contactJson?.data) ? contactJson.data : []).map(mapContact),
-      );
-      setPositions(
-        (Array.isArray(positionJson?.data) ? positionJson.data : []).map(mapPosition),
-      );
+      setContacts(contactRows.map(mapContact));
+      setPositions(positionRows.map(mapPosition));
       setIdentities(mappedIdentities);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));

@@ -31,6 +31,7 @@ import {
   getResourceUrl,
 } from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 
 interface GPDetailModalProps {
   isOpen: boolean;
@@ -289,19 +290,15 @@ export function GPDetailModal({
         );
       }
 
-      const gcRes = await apiFetch(
-        getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, {
+      const gcRows = await fetchAllQueryRows<GroupCustomerRow>({
+        endpoint: API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
+        spec: {
           fields: ["*", "created_by.full_name", "updated_by.full_name"],
           filters: [["gpid", "=", gp.id]],
-          limit: 1000000,
-        }),
-        { method: "GET", cache: "no-store" },
+        },
         token,
-      );
-      const gcJson = gcRes.ok ? await gcRes.json() : { data: [] };
-      const gcRows: GroupCustomerRow[] = Array.isArray(gcJson?.data)
-        ? gcJson.data
-        : [];
+        errorMessage: "Gagal memuat child group customer",
+      });
 
       const mappedGCs: GroupCustomer[] = gcRows.map((row) => ({
         id: Number(row.id),
@@ -343,19 +340,15 @@ export function GPDetailModal({
         return;
       }
 
-      const bcRes = await apiFetch(
-        getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, {
+      const bcRows = await fetchAllQueryRows<BranchCustomerRow>({
+        endpoint: API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2,
+        spec: {
           fields: ["*", "created_by.full_name", "updated_by.full_name"],
           filters: [["gcid", "in", gcIds]],
-          limit: 1000000,
-        }),
-        { method: "GET", cache: "no-store" },
+        },
         token,
-      );
-      const bcJson = bcRes.ok ? await bcRes.json() : { data: [] };
-      const bcRows: BranchCustomerRow[] = Array.isArray(bcJson?.data)
-        ? bcJson.data
-        : [];
+        errorMessage: "Gagal memuat child branch customer",
+      });
 
       const branchIds = Array.from(
         new Set(

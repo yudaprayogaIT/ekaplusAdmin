@@ -1,6 +1,12 @@
 ﻿"use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
 import { GPCard } from "./GPCard";
 import { GPDetailModal } from "./GPDetailModal";
 import { GCDetailModal } from "@/components/group_customer/GCDetailModal";
@@ -20,12 +26,12 @@ import {
   FaChevronDown,
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
-import Pagination, { usePagination } from "@/components/ui/Pagination";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
 
 type SortField = "name" | "created_at" | "updated_at";
 type SortDirection = "asc" | "desc";
+const DEFAULT_PAGE_SIZE = 20;
 
 interface GroupParentApiResponse {
   id: number;
@@ -84,31 +90,52 @@ export default function GPList() {
 
   const [gps, setGps] = useState<GroupParent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [selectedGP, setSelectedGP] = useState<GroupParent | null>(null);
   const [selectedGC, setSelectedGC] = useState<GroupCustomer | null>(null);
   const [selectedBC, setSelectedBC] = useState<BranchCustomer | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
 
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim());
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [searchQuery]);
+
+  const loadData = useCallback(async (page: number, replace = false) => {
+    if (replace) {
+      setLoading(true);
+      setError(null);
+    } else {
+      setLoadingMore(true);
+    }
 
     try {
       if (!isAuthenticated || !token) {
         setGps([]);
-        setLoading(false);
+        setHasMore(false);
         return;
       }
 
       const spec = {
         fields: ["*", "created_by.full_name", "updated_by.full_name"],
-        limit: 10000000,
+        page,
+        ...(debouncedSearchQuery ? { search: debouncedSearchQuery } : {}),
+        order_by: [[sortField === "name" ? "name" : sortField, sortDirection]],
       };
 
       const res = await apiFetch(
@@ -125,49 +152,69 @@ export default function GPList() {
       const rows: GroupParentApiResponse[] = Array.isArray(json?.data)
         ? json.data
         : [];
-      setGps(rows.map(mapGpRow));
+      const perPage = Number(json?.meta?.per_page || DEFAULT_PAGE_SIZE);
+      const mapped = rows.map(mapGpRow);
+      setGps((current) =>
+        replace
+          ? mapped
+          : [
+              ...current,
+              ...mapped.filter(
+                (gp) => !current.some((existing) => existing.id === gp.id),
+              ),
+            ],
+      );
+      setCurrentPage(page);
+      setHasMore(rows.length >= perPage);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-      setGps([]);
+      if (replace) {
+        setGps([]);
+      }
+      setHasMore(false);
     } finally {
-      setLoading(false);
+      if (replace) {
+        setLoading(false);
+      } else {
+        setLoadingMore(false);
+      }
     }
-  }, [isAuthenticated, token]);
+  }, [debouncedSearchQuery, isAuthenticated, sortDirection, sortField, token]);
 
   useEffect(() => {
-    loadData();
+    setGps([]);
+    setCurrentPage(1);
+    setHasMore(true);
+    void loadData(1, true);
   }, [loadData]);
 
   const filteredAndSortedGPs = useMemo(() => {
-    const filtered = gps.filter((gp) => {
-      if (!searchQuery.trim()) return true;
-      const query = searchQuery.toLowerCase();
-      return (
-        gp.name.toLowerCase().includes(query) ||
-        (gp.code || "").toLowerCase().includes(query)
-      );
-    });
+    return [...gps];
+  }, [gps]);
 
-    filtered.sort((a, b) => {
-      let aValue: string | number;
-      let bValue: string | number;
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || loading || loadingMore || !hasMore) return;
 
-      if (sortField === "name") {
-        aValue = a.name.toLowerCase();
-        bValue = b.name.toLowerCase();
-      } else {
-        aValue = new Date(a[sortField]).getTime();
-        bValue = new Date(b[sortField]).getTime();
-      }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (!entry?.isIntersecting) return;
+        void loadData(currentPage + 1, false);
+      },
+      {
+        root: null,
+        rootMargin: "240px 0px",
+        threshold: 0,
+      },
+    );
 
-      if (sortDirection === "asc") {
-        return aValue > bValue ? 1 : -1;
-      }
-      return aValue < bValue ? 1 : -1;
-    });
+    observer.observe(target);
 
-    return filtered;
-  }, [gps, searchQuery, sortField, sortDirection]);
+    return () => {
+      observer.disconnect();
+    };
+  }, [currentPage, hasMore, loadData, loading, loadingMore]);
 
   const stats = useMemo(() => {
     return {
@@ -177,22 +224,8 @@ export default function GPList() {
     };
   }, [gps]);
 
-  const {
-    currentPage,
-    setCurrentPage,
-    totalPages,
-    paginatedItems: paginatedGPs,
-    totalItems,
-    itemsPerPage,
-  } = usePagination(filteredAndSortedGPs, 20);
-
   const handleViewDetails = (gp: GroupParent) => {
     setSelectedGP(gp);
-  };
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   if (loading) {
@@ -366,7 +399,7 @@ export default function GPList() {
       {filteredAndSortedGPs.length > 0 && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {paginatedGPs.map((gp) => (
+            {filteredAndSortedGPs.map((gp) => (
               <GPCard
                 key={gp.id}
                 gp={gp}
@@ -375,15 +408,28 @@ export default function GPList() {
             ))}
           </div>
 
-          {totalPages > 1 && (
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={handlePageChange}
-              totalItems={totalItems}
-              itemsPerPage={itemsPerPage}
-            />
-          )}
+          <div className="flex flex-col gap-3 pt-2 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
+            <p>
+              Showing {filteredAndSortedGPs.length} loaded group parents
+              {debouncedSearchQuery ? " matching current search" : ""}
+            </p>
+            <p>
+              {hasMore
+                ? "Scroll ke bawah untuk memuat lebih banyak"
+                : "Semua data yang tersedia sudah dimuat"}
+            </p>
+          </div>
+
+          {hasMore ? (
+            <div
+              ref={loadMoreRef}
+              className="flex h-16 items-center justify-center text-sm text-slate-400"
+            >
+              {loadingMore
+                ? "Memuat data berikutnya..."
+                : "Siap memuat data berikutnya..."}
+            </div>
+          ) : null}
         </>
       )}
 

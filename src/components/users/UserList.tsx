@@ -24,9 +24,9 @@ import {
   apiFetch,
   getAuthHeaders,
   getApiUrl,
-  getQueryUrl,
   getResourceUrl,
 } from "@/config/api";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import AddUserModal from "./AddUserModal";
 import UserCard from "./UserCard";
 import UserDetailModal from "./UserDetailModal";
@@ -398,33 +398,25 @@ export default function UserList() {
     let lastError = "Gagal memuat data users.";
 
     for (const endpoint of USER_ENDPOINTS) {
-      const url = getQueryUrl(endpoint, {
-        fields: ["*"],
-        limit: 100000,
-      });
-
-      const res = await apiFetch(
-        url,
-        {
-          method: "GET",
-          cache: "no-store",
-          headers: getAuthHeaders(token),
-        },
-        token,
-      );
-
-      const json = (await res
-        .json()
-        .catch(() => null)) as UsersApiResponse | null;
-      if (!res.ok) {
-        lastError = json?.message || `Gagal memuat users (${res.status})`;
+      try {
+        const rows = await fetchAllQueryRows<UserApiResponse>({
+          endpoint,
+          spec: {
+            fields: ["*"],
+          },
+          token,
+          requestInit: {
+            headers: getAuthHeaders(token),
+          },
+        });
+        activeEndpointRef.current = endpoint;
+        setUsers(rows.map(mapUser));
+        return;
+      } catch (error) {
+        lastError =
+          error instanceof Error ? error.message : "Gagal memuat data users.";
         continue;
       }
-
-      const rows = Array.isArray(json?.data) ? json.data : [];
-      activeEndpointRef.current = endpoint;
-      setUsers(rows.map(mapUser));
-      return;
     }
 
     throw new Error(lastError);

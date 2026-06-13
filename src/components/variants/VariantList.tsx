@@ -38,6 +38,7 @@ import {
   getFileUrl,
   apiFetch,
 } from "@/config/api";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Item,
@@ -277,14 +278,17 @@ export default function VariantList() {
 
       try {
         // Load categories
-        const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
-          fields: ["*"],
-          limit: 1000,
+        const categoryRows = await fetchAllQueryRows<{
+          id: number;
+          category_name: string;
+        }>({
+          endpoint: API_CONFIG.ENDPOINTS.CATEGORY,
+          spec: { fields: ["*"] },
+          token,
+          requestInit: { headers },
         });
-        const categoriesRes = await apiFetch(categoriesUrl, { headers });
-        if (categoriesRes.ok) {
-          const json = await categoriesRes.json();
-          const categoriesData = json.data.map(
+        if (categoryRows.length > 0) {
+          const categoriesData = categoryRows.map(
             (cat: { id: number; category_name: string }) => ({
               id: cat.id,
               name: cat.category_name,
@@ -294,14 +298,21 @@ export default function VariantList() {
         }
 
         // Load products (all products, including disabled ones for variant mapping view)
-        const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, {
-          fields: ["*", "item_category.id", "item_category.category_name"],
-          limit: 5000,
+        const productRows = await fetchAllQueryRows<{
+          id: number;
+          product_name: string;
+          item_category: number | { id?: number; category_name?: string };
+          item_category_id?: number;
+          disabled: number;
+          hot_deals: boolean;
+        }>({
+          endpoint: API_CONFIG.ENDPOINTS.PRODUCT,
+          spec: { fields: ["*", "item_category.id", "item_category.category_name"] },
+          token,
+          requestInit: { headers },
         });
-        const productsRes = await apiFetch(productsUrl, { headers });
-        if (productsRes.ok) {
-          const json = await productsRes.json();
-          const productsData = json.data.map(
+        if (productRows.length > 0) {
+          const productsData = productRows.map(
             (p: {
               id: number;
               product_name: string;
@@ -338,14 +349,26 @@ export default function VariantList() {
         }
 
         // Load items (including disabled) so mapped variants still resolve correctly
-        const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
-          fields: ["*"],
-          limit: 10000,
+        const itemRows = await fetchAllQueryRows<{
+          id: number;
+          item_code: string;
+          item_name: string;
+          item_color?: string;
+          ekatalog_type?: string;
+          uom: string;
+          image?: string;
+          item_desc?: string;
+          item_category?: string;
+          item_group?: string;
+          disabled?: number;
+        }>({
+          endpoint: API_CONFIG.ENDPOINTS.ITEM,
+          spec: { fields: ["*"] },
+          token,
+          requestInit: { headers },
         });
-        const itemsRes = await apiFetch(itemsUrl, { headers });
-        if (itemsRes.ok) {
-          const json = await itemsRes.json();
-          const itemsData = json.data.map(
+        if (itemRows.length > 0) {
+          const itemsData = itemRows.map(
             (i: {
               id: number;
               item_code: string;

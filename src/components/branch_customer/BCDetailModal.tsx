@@ -25,6 +25,7 @@ import {
   getTaxStatusLabel,
   type PaymentAccountInfo,
 } from "@/utils/paymentAccount";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import LoadMoreButton from "@/components/ui/LoadMoreButton";
 import { BCContactRelationsPanel } from "./BCContactRelationsPanel";
 
@@ -418,21 +419,22 @@ export function BCDetailModal({
       setDetail(dRow);
 
       const parentId = dRow?.id ?? bc.id;
-      const aRes = await apiFetch(
-        getQueryUrl("/api/resource/customer_address", {
+      const addressRows = await fetchAllQueryRows<AddressRow>({
+        endpoint: "/api/resource/customer_address",
+        spec: {
           fields: ["*"],
           filters: [
             ["parent_type", "=", "branch_customer"],
             ["parent_id", "=", parentId],
           ],
-          limit: 100000,
-        }),
-        { method: "GET", cache: "no-store" },
+        },
         token,
-      );
-      if (!aRes.ok) setAddressError(`Gagal memuat customer_address (${aRes.status})`);
-      const aJson = aRes.ok ? await aRes.json() : { data: [] };
-      const sorted = (Array.isArray(aJson?.data) ? aJson.data : []).sort((a: AddressRow, b: AddressRow) => {
+        errorMessage: "Gagal memuat customer_address",
+      }).catch((error) => {
+        setAddressError(error instanceof Error ? error.message : String(error));
+        return [];
+      });
+      const sorted = addressRows.sort((a: AddressRow, b: AddressRow) => {
         const idxA = toNum(a.idx) ?? Number.MAX_SAFE_INTEGER;
         const idxB = toNum(b.idx) ?? Number.MAX_SAFE_INTEGER;
         if (idxA !== idxB) return idxA - idxB;
@@ -588,23 +590,18 @@ export function BCDetailModal({
   const loadSalesTeamOptions = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await apiFetch(
-        getQueryUrl(API_CONFIG.ENDPOINTS.SALES_TEAM, {
-          fields: ["id", "name", "sales_team_name"],
-          limit: 100000,
-        }),
-        { method: "GET", cache: "no-store" },
-        token,
-      );
-      if (!res.ok) {
-        throw new Error(`Gagal memuat sales team (${res.status})`);
-      }
-      const json = await res.json();
-      const rows: Array<{
+      const rows = await fetchAllQueryRows<{
         id?: number | string | null;
         name?: string | null;
         sales_team_name?: string | null;
-      }> = Array.isArray(json?.data) ? json.data : [];
+      }>({
+        endpoint: API_CONFIG.ENDPOINTS.SALES_TEAM,
+        spec: {
+          fields: ["id", "name", "sales_team_name"],
+        },
+        token,
+        errorMessage: "Gagal memuat sales team",
+      });
       setSalesTeamOptions(
         rows
           .filter((row) => row.id !== undefined && row.id !== null)

@@ -30,6 +30,7 @@ import {
   getResourceUrl,
 } from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 
 interface GCDetailModalProps {
   isOpen: boolean;
@@ -395,19 +396,15 @@ export function GCDetailModal({
       setLinkedNB(null);
     }
 
-    const bcRes = await apiFetch(
-      getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, {
+    const rows = await fetchAllQueryRows<BranchCustomerRow>({
+      endpoint: API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2,
+      spec: {
         fields: ["*", "created_by.full_name", "updated_by.full_name"],
         filters: [["gcid", "=", gc.id]],
-        limit: 1000000,
-      }),
-      { method: "GET", cache: "no-store" },
+      },
       token,
-    );
-    const bcJson = bcRes.ok ? await bcRes.json() : { data: [] };
-    const rows: BranchCustomerRow[] = Array.isArray(bcJson?.data)
-      ? bcJson.data
-      : [];
+      errorMessage: "Gagal memuat child branch customer",
+    });
 
     const branchIds = Array.from(
       new Set(

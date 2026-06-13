@@ -20,6 +20,7 @@ import type {
 } from "@/types/customerRegistration";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getApiUrl, getQueryUrl } from "@/config/api";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 
 interface ApproveRegistrationModalProps {
   isOpen: boolean;
@@ -391,12 +392,10 @@ export function ApproveRegistrationModal({
     if (!token) return;
     const gpSpec = {
       fields: ["id", "name", "gp_name", "nbid"],
-      limit: 1000000,
     };
-    const nbSpec = { fields: ["id", "name", "nb_name"], limit: 1000000 };
+    const nbSpec = { fields: ["id", "name", "nb_name"] };
     const gcSpec = {
       fields: ["id", "name", "gc_name", "gpid"],
-      limit: 1000000,
     };
     const bcSpec = {
       fields: [
@@ -409,43 +408,39 @@ export function ApproveRegistrationModal({
         "branch_owner",
         "branch_owner_phone",
       ],
-      limit: 1000000,
     };
 
-    const [gpListRes, nbListRes, gcListRes, bcListRes] = await Promise.all([
-      apiFetch(
-        getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, gpSpec),
-        { method: "GET", cache: "no-store" },
+    const [gpRows, nbRows, gcRows, bcRows] = await Promise.all([
+      fetchAllQueryRows({
+        endpoint: API_CONFIG.ENDPOINTS.GROUP_PARENT,
+        spec: gpSpec,
         token,
-      ),
-      apiFetch(
-        getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, nbSpec),
-        { method: "GET", cache: "no-store" },
+        errorMessage: "Failed to fetch GP reference list",
+      }),
+      fetchAllQueryRows({
+        endpoint: API_CONFIG.ENDPOINTS.NATIONAL_BRAND,
+        spec: nbSpec,
         token,
-      ),
-      apiFetch(
-        getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, gcSpec),
-        { method: "GET", cache: "no-store" },
+        errorMessage: "Failed to fetch NB reference list",
+      }),
+      fetchAllQueryRows({
+        endpoint: API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
+        spec: gcSpec,
         token,
-      ),
-      apiFetch(
-        getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, bcSpec),
-        { method: "GET", cache: "no-store" },
+        errorMessage: "Failed to fetch GC reference list",
+      }),
+      fetchAllQueryRows({
+        endpoint: API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2,
+        spec: bcSpec,
         token,
-      ),
+        errorMessage: "Failed to fetch BC reference list",
+      }),
     ]);
 
-    const [gpListJson, nbListJson, gcListJson, bcListJson] = await Promise.all([
-      gpListRes.json().catch(() => null),
-      nbListRes.json().catch(() => null),
-      gcListRes.json().catch(() => null),
-      bcListRes.json().catch(() => null),
-    ]);
-
-    setGroupParents(Array.isArray(gpListJson?.data) ? gpListJson.data : []);
-    setNationalBrands(Array.isArray(nbListJson?.data) ? nbListJson.data : []);
-    setGroupCustomers(Array.isArray(gcListJson?.data) ? gcListJson.data : []);
-    setBranchCustomers(Array.isArray(bcListJson?.data) ? bcListJson.data : []);
+    setGroupParents(gpRows);
+    setNationalBrands(nbRows);
+    setGroupCustomers(gcRows);
+    setBranchCustomers(bcRows);
   }, [token]);
 
   useEffect(() => {

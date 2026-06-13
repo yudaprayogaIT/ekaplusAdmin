@@ -20,11 +20,10 @@ import type { Item, ItemVariant, Product, Category, Branch } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   API_CONFIG,
-  getQueryUrl,
   getAuthHeaders,
   getFileUrl,
-  apiFetch,
 } from "@/config/api";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 
 type DashboardStats = {
   totalProducts: number;
@@ -564,19 +563,24 @@ export default function Dashboard() {
         const headers = getAuthHeaders(token);
 
         // Load Categories from API
-        const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
-          fields: ["*"],
-          limit: 100000000,
-        });
-        const categoriesRes = await apiFetch(categoriesUrl, {
-          headers,
-          cache: "no-store",
+        const categoryRows = await fetchAllQueryRows<{
+          id: number;
+          category_name: string;
+          title?: string;
+          subtitle?: string;
+          icon?: string;
+          image?: string;
+          ekatalog_type?: number;
+        }>({
+          endpoint: API_CONFIG.ENDPOINTS.CATEGORY,
+          spec: { fields: ["*"] },
+          token,
+          requestInit: { headers },
         });
 
         let categoriesData: Category[] = [];
-        if (categoriesRes.ok) {
-          const json = await categoriesRes.json();
-          categoriesData = json.data.map(
+        if (categoryRows.length > 0) {
+          categoriesData = categoryRows.map(
             (cat: {
               id: number;
               category_name: string;
@@ -598,19 +602,22 @@ export default function Dashboard() {
         }
 
         // Load Products from API
-        const productsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, {
-          fields: ["*"],
-          limit: 100000000,
-        });
-        const productsRes = await apiFetch(productsUrl, {
-          headers,
-          cache: "no-store",
+        const productRows = await fetchAllQueryRows<{
+          id: number;
+          product_name: string;
+          item_category: number;
+          disabled: number;
+          hot_deals: boolean;
+        }>({
+          endpoint: API_CONFIG.ENDPOINTS.PRODUCT,
+          spec: { fields: ["*"] },
+          token,
+          requestInit: { headers },
         });
 
         let productsData: Product[] = [];
-        if (productsRes.ok) {
-          const json = await productsRes.json();
-          productsData = json.data.map(
+        if (productRows.length > 0) {
+          productsData = productRows.map(
             (p: {
               id: number;
               product_name: string;
@@ -633,19 +640,28 @@ export default function Dashboard() {
         }
 
         // Load Items from API
-        const itemsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
-          fields: ["*"],
-          limit: 100000000,
-        });
-        const itemsRes = await apiFetch(itemsUrl, {
-          headers,
-          cache: "no-store",
+        const itemRows = await fetchAllQueryRows<{
+          id: number;
+          item_code: string;
+          item_name: string;
+          item_color?: string;
+          ekatalog_type?: string;
+          uom: string;
+          image?: string;
+          item_desc?: string;
+          item_category?: string;
+          item_group?: string;
+          disabled?: number;
+        }>({
+          endpoint: API_CONFIG.ENDPOINTS.ITEM,
+          spec: { fields: ["*"] },
+          token,
+          requestInit: { headers },
         });
 
         let itemsData: Item[] = [];
-        if (itemsRes.ok) {
-          const json = await itemsRes.json();
-          itemsData = json.data.map(
+        if (itemRows.length > 0) {
+          itemsData = itemRows.map(
             (i: {
               id: number;
               item_code: string;
@@ -675,19 +691,20 @@ export default function Dashboard() {
         }
 
         // Load Variants from API
-        const variantsUrl = getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT_VARIANT, {
-          fields: ["*"],
-          limit: 100000000,
-        });
-        const variantsRes = await apiFetch(variantsUrl, {
-          headers,
-          cache: "no-store",
+        const variantRows = await fetchAllQueryRows<{
+          id: number;
+          item: number;
+          product: number;
+        }>({
+          endpoint: API_CONFIG.ENDPOINTS.PRODUCT_VARIANT,
+          spec: { fields: ["*"] },
+          token,
+          requestInit: { headers },
         });
 
         let variantsData: ItemVariant[] = [];
-        if (variantsRes.ok) {
-          const json = await variantsRes.json();
-          variantsData = json.data.map(
+        if (variantRows.length > 0) {
+          variantsData = variantRows.map(
             (v: { id: number; item: number; product: number }) => {
               const item = itemsData.find((i) => i.id === v.item);
               return {
@@ -709,19 +726,21 @@ export default function Dashboard() {
           );
         }
 
-        const branchesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH, {
-          fields: ["*"],
-          limit: 100000000,
-        });
-        const branchesRes = await apiFetch(branchesUrl, {
-          headers,
-          cache: "no-store",
+        const branchRows = await fetchAllQueryRows<{
+          id: number;
+          branch_name: string;
+          city: string;
+          address: string;
+        }>({
+          endpoint: API_CONFIG.ENDPOINTS.BRANCH,
+          spec: { fields: ["*"] },
+          token,
+          requestInit: { headers },
         });
 
         let branchesData: Branch[] = [];
-        if (branchesRes.ok) {
-          const json = await branchesRes.json();
-          branchesData = json.data.map(
+        if (branchRows.length > 0) {
+          branchesData = branchRows.map(
             (b: {
               id: number;
               branch_name: string;

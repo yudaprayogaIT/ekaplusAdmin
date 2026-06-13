@@ -7,6 +7,7 @@ import { HiXMark } from "react-icons/hi2";
 import type { CustomerRegistration, CustomerRegistrationShippingAddress } from "@/types/customerRegistration";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getQueryUrl, getResourceUrl } from "@/config/api";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 
 interface EditRegistrationModalProps {
   isOpen: boolean;
@@ -255,21 +256,21 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
           fields: ["*"],
           filters: [["parent_id", "=", Number(registration.id)]],
         };
-        const branchSpec = { fields: ["id", "branch_name", "city"], limit: 1000000 };
+        const branchSpec = { fields: ["id", "branch_name", "city"] };
         const [shippingRes, branchRes, provinceRows] = await Promise.all([
           apiFetch(
             getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER_ADDRESS, shippingSpec),
             { method: "GET", cache: "no-store" },
             token
           ),
-          apiFetch(
-            getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH, branchSpec),
-            { method: "GET", cache: "no-store" },
-            token
-          ),
+          fetchAllQueryRows<BranchOption>({
+            endpoint: API_CONFIG.ENDPOINTS.BRANCH,
+            spec: branchSpec,
+            token,
+            errorMessage: "Failed to fetch branches",
+          }),
           fetchWilayah("provinces.json").catch(() => [] as WilayahOption[]),
         ]);
-        if (!branchRes.ok) throw new Error(`Failed to fetch branches (${branchRes.status})`);
 
         let shippingRows: ShippingApiRow[] = [];
         if (shippingRes.ok) {
@@ -294,8 +295,7 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
           );
         }
 
-        const branchJson = await branchRes.json();
-        const branchRows: BranchOption[] = Array.isArray(branchJson?.data) ? branchJson.data : [];
+        const branchRows: BranchOption[] = Array.isArray(branchRes) ? branchRes : [];
 
         const shipping = shippingRows.map((x) => ({
           id: x.id,

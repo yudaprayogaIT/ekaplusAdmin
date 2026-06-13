@@ -18,6 +18,7 @@ import {
   API_CONFIG,
   apiFetch,
 } from "@/config/api";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import { Item } from "./ItemList";
 
 type Product = {
@@ -73,16 +74,19 @@ export default function MapItemsToProductModal({
 
     try {
       // Load categories
-      const categoriesUrl = getQueryUrl(API_CONFIG.ENDPOINTS.CATEGORY, {
-        fields: ["*"],
-        limit: 1000,
+      const categoryRows = await fetchAllQueryRows<{
+        id: number | string;
+        category_name: string;
+      }>({
+        endpoint: API_CONFIG.ENDPOINTS.CATEGORY,
+        spec: { fields: ["*"] },
+        token,
+        requestInit: { headers },
       });
-      const categoriesRes = await apiFetch(categoriesUrl, { headers });
 
       let categoriesData: Category[] = [];
-      if (categoriesRes.ok) {
-        const json = await categoriesRes.json();
-        categoriesData = json.data.map(
+      if (categoryRows.length > 0) {
+        categoriesData = categoryRows.map(
           (cat: { id: number | string; category_name: string }) => {
             const id = toNumber(cat.id);
             return id !== null

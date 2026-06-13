@@ -16,6 +16,7 @@ import {
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { API_CONFIG, apiFetch, getAuthHeaders, getQueryUrl, getResourceUrl } from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import type { Contact, ContactIdentity } from "@/types/contact";
 
 type SortOption = "name-asc" | "name-desc" | "id-asc" | "id-desc";
@@ -58,6 +59,7 @@ type ContactWithIdentities = Contact & {
 };
 
 const CONTACT_EVENT = "ekaplus:contacts_update";
+const DEFAULT_PAGE_SIZE = 20;
 const CHANNEL_OPTIONS = [
   "whatsapp",
   "facebook",
@@ -613,8 +615,10 @@ export default function ContactPage() {
   const { token, isAuthenticated } = useAuth();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("name-asc");
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<ContactWithIdentities | null>(null);
@@ -626,47 +630,63 @@ export default function ContactPage() {
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim());
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
 
   const loadContactIdentities = useCallback(
     async (contactId: number): Promise<ContactIdentity[]> => {
       if (!token || !contactId) return [];
-      const response = await apiFetch(
-        getQueryUrl(API_CONFIG.ENDPOINTS.CONTACT_IDENTITIES, {
+      const rows = await fetchAllQueryRows<ContactIdentityApiRow>({
+        endpoint: API_CONFIG.ENDPOINTS.CONTACT_IDENTITIES,
+        spec: {
           fields: ["*"],
           filters: [["contact_id", "=", contactId]],
-          limit: 100000,
-        }),
-        {
-          method: "GET",
-          cache: "no-store",
-          headers: getAuthHeaders(token),
         },
         token,
-      );
-      if (!response.ok) {
-        throw new Error(`Gagal memuat contact identities (${response.status})`);
-      }
-      const json = await response.json();
-      return (Array.isArray(json?.data) ? json.data : []).map(mapIdentity);
+        requestInit: {
+          headers: getAuthHeaders(token),
+        },
+        errorMessage: "Gagal memuat contact identities",
+      });
+      return rows.map(mapIdentity);
     },
     [token],
   );
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (page: number, replace = false) => {
     if (!isAuthenticated || !token) {
       setContacts([]);
+      setHasMore(false);
       setLoading(false);
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    if (replace) {
+      setLoading(true);
+      setError(null);
+    } else {
+      setLoadingMore(true);
+    }
     try {
       const headers = getAuthHeaders(token);
+      const [sortField, sortDirection] = sortBy.split("-") as [
+        "name" | "id",
+        "asc" | "desc",
+      ];
       const contactRes = await apiFetch(
         getQueryUrl(API_CONFIG.ENDPOINTS.CONTACT, {
           fields: ["*", "created_by.full_name", "updated_by.full_name"],
-          limit: 100000,
+          page,
+          ...(debouncedSearchQuery ? { search: debouncedSearchQuery } : {}),
+          order_by: [[sortField === "name" ? "full_name" : "id", sortDirection]],
         }),
         { method: "GET", cache: "no-store", headers },
       );
@@ -676,54 +696,63 @@ export default function ContactPage() {
       }
 
       const contactJson = await contactRes.json();
-
-      setContacts(
-        (Array.isArray(contactJson?.data) ? contactJson.data : []).map(mapContact),
+      const rows = (Array.isArray(contactJson?.data) ? contactJson.data : []).map(mapContact);
+      const perPage = Number(contactJson?.meta?.per_page || DEFAULT_PAGE_SIZE);
+      setContacts((current) =>
+        replace
+          ? rows
+          : [
+              ...current,
+              ...rows.filter(
+                (item) => !current.some((existing) => existing.id === item.id),
+              ),
+            ],
       );
+      setCurrentPage(page);
+      setHasMore(rows.length >= perPage);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
+      if (replace) setContacts([]);
+      setHasMore(false);
     } finally {
-      setLoading(false);
+      if (replace) setLoading(false);
+      else setLoadingMore(false);
     }
-  }, [isAuthenticated, token]);
+  }, [debouncedSearchQuery, isAuthenticated, sortBy, token]);
 
   useEffect(() => {
-    void loadData();
+    setContacts([]);
+    setCurrentPage(1);
+    setHasMore(true);
+    void loadData(1, true);
   }, [loadData]);
 
   useEffect(() => {
     const refresh = () => {
-      void loadData();
+      setContacts([]);
+      setCurrentPage(1);
+      setHasMore(true);
+      void loadData(1, true);
     };
     window.addEventListener(CONTACT_EVENT, refresh);
     return () => window.removeEventListener(CONTACT_EVENT, refresh);
   }, [loadData]);
 
-  const filteredContacts = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    const filtered = query
-      ? contacts.filter((item) => {
-          const haystacks = [item.full_name, item.display_name, item.notes]
-            .filter(Boolean)
-            .map((value) => String(value).toLowerCase());
-          return haystacks.some((value) => value.includes(query));
-        })
-      : contacts;
+  const filteredContacts = useMemo(() => [...contacts], [contacts]);
 
-    return [...filtered].sort((a, b) => {
-      switch (sortBy) {
-        case "id-asc":
-          return a.id - b.id;
-        case "id-desc":
-          return b.id - a.id;
-        case "name-desc":
-          return b.full_name.localeCompare(a.full_name);
-        case "name-asc":
-        default:
-          return a.full_name.localeCompare(b.full_name);
-      }
-    });
-  }, [contacts, searchQuery, sortBy]);
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || loading || loadingMore || !hasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+        void loadData(currentPage + 1, false);
+      },
+      { root: null, rootMargin: "240px 0px", threshold: 0 },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [currentPage, hasMore, loadData, loading, loadingMore]);
 
   const stats = useMemo(() => {
     const activeContacts = contacts.filter((item) => Number(item.disabled || 0) !== 1).length;
@@ -1024,6 +1053,7 @@ export default function ContactPage() {
           </p>
         </div>
       ) : (
+        <>
         <div className="grid gap-5 xl:grid-cols-2">
           {filteredContacts.map((item) => (
             <div
@@ -1159,6 +1189,28 @@ export default function ContactPage() {
             </div>
           ))}
         </div>
+        <div className="flex flex-col gap-3 pt-2 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
+          <p>
+            Showing {filteredContacts.length} loaded contacts
+            {debouncedSearchQuery ? " matching current search" : ""}
+          </p>
+          <p>
+            {hasMore
+              ? "Scroll ke bawah untuk memuat lebih banyak"
+              : "Semua data yang tersedia sudah dimuat"}
+          </p>
+        </div>
+        {hasMore ? (
+          <div
+            ref={loadMoreRef}
+            className="flex h-16 items-center justify-center text-sm text-slate-400"
+          >
+            {loadingMore
+              ? "Memuat data berikutnya..."
+              : "Siap memuat data berikutnya..."}
+          </div>
+        ) : null}
+        </>
       )}
 
       <ContactFormModal

@@ -1,32 +1,29 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import Image from "next/image";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { motion } from "framer-motion";
 import {
   FaCalendarAlt,
-  FaCheckCircle,
-  FaClock,
   FaEye,
-  FaFileAlt,
-  FaFileInvoiceDollar,
-  FaImage,
   FaPlus,
   FaSearch,
   FaSortAmountDown,
   FaSortAmountUp,
-  FaTimesCircle,
 } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   API_CONFIG,
   apiFetch,
   getAuthHeadersFormData,
-  getFileUrl,
   getQueryUrl,
   getResourceUrl,
 } from "@/config/api";
-import Pagination, { usePagination } from "@/components/ui/Pagination";
 import {
   CreditChangeRequestDetailModal,
   type CreditChangeRequestListItem,
@@ -36,6 +33,7 @@ import { policyTypeLabel, resolvePolicyDisplayName } from "./utils";
 
 type SortField = "created_at" | "updated_at" | "status";
 type SortDirection = "asc" | "desc";
+const DEFAULT_PAGE_SIZE = 20;
 
 interface CreditChangeRequestApiResponse {
   id: number;
@@ -124,48 +122,61 @@ function getStatusTone(status: string) {
   return "bg-slate-100 text-slate-700 border-slate-200";
 }
 
-function isImageAttachment(url?: string | null): boolean {
-  if (!url) return false;
-  const normalized = url.toLowerCase();
-  return (
-    normalized.endsWith(".png") ||
-    normalized.endsWith(".jpg") ||
-    normalized.endsWith(".jpeg") ||
-    normalized.endsWith(".webp") ||
-    normalized.endsWith(".gif")
-  );
-}
-
 export function CreditChangeRequestList() {
   const { token, isAuthenticated } = useAuth();
   const [items, setItems] = useState<CreditChangeRequestListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] =
     useState<CreditChangeRequestListItem | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [sortField, setSortField] = useState<SortField>("updated_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [policyNameMap, setPolicyNameMap] = useState<Record<string, string>>(
     {},
   );
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim());
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [searchQuery]);
+
+  const loadData = useCallback(async (page: number, replace = false) => {
+    if (replace) {
+      setLoading(true);
+      setError(null);
+    } else {
+      setLoadingMore(true);
+    }
 
     try {
       if (!token || !isAuthenticated) {
         setItems([]);
+        setHasMore(false);
         return;
       }
 
       const response = await apiFetch(
         getQueryUrl(API_CONFIG.ENDPOINTS.CREDIT_CHANGE_REQUEST, {
           fields: ["*", "created_by.full_name", "updated_by.full_name"],
-          limit: 1000000,
+          page,
+          ...(debouncedSearchQuery ? { search: debouncedSearchQuery } : {}),
+          order_by:
+            sortField === "status"
+              ? [["status", sortDirection]]
+              : [[sortField, sortDirection]],
         }),
         { method: "GET", cache: "no-store" },
         token,
@@ -181,6 +192,7 @@ export function CreditChangeRequestList() {
       const rows = Array.isArray(json?.data)
         ? (json.data as CreditChangeRequestApiResponse[])
         : [];
+      const perPage = Number(json?.meta?.per_page || DEFAULT_PAGE_SIZE);
 
       const mapped: CreditChangeRequestListItem[] = rows.map((row) => ({
         id: Number(row.id),
@@ -218,88 +230,62 @@ export function CreditChangeRequestList() {
         updatedBy: resolveUserName(row["updated_by.full_name"], row.updated_by),
       }));
 
-      setItems(mapped);
+      setItems((current) =>
+        replace
+          ? mapped
+          : [
+              ...current,
+              ...mapped.filter(
+                (item) => !current.some((existing) => existing.id === item.id),
+              ),
+            ],
+      );
+      setCurrentPage(page);
+      setHasMore(rows.length >= perPage);
     } catch (loadError) {
-      setItems([]);
+      if (replace) {
+        setItems([]);
+      }
+      setHasMore(false);
       setError(
         loadError instanceof Error
           ? loadError.message
           : "Gagal memuat credit change request",
       );
     } finally {
-      setLoading(false);
+      if (replace) {
+        setLoading(false);
+      } else {
+        setLoadingMore(false);
+      }
     }
-  }, [isAuthenticated, token]);
+  }, [debouncedSearchQuery, isAuthenticated, sortDirection, sortField, token]);
 
   useEffect(() => {
-    void loadData();
+    setItems([]);
+    setCurrentPage(1);
+    setHasMore(true);
+    void loadData(1, true);
   }, [loadData]);
 
-  const filteredItems = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    const next = !query
-      ? [...items]
-      : items.filter((item) => {
-          return (
-            item.code.toLowerCase().includes(query) ||
-            item.policyType.toLowerCase().includes(query) ||
-            item.policyTypeLabel.toLowerCase().includes(query) ||
-            item.status.toLowerCase().includes(query) ||
-            (item.reason || "").toLowerCase().includes(query) ||
-            (item.rejectedNote || "").toLowerCase().includes(query)
-          );
-        });
+  const refreshList = useCallback(async () => {
+    setItems([]);
+    setCurrentPage(1);
+    setHasMore(true);
+    await loadData(1, true);
+  }, [loadData]);
 
-    next.sort((left, right) => {
-      const multiplier = sortDirection === "asc" ? 1 : -1;
-      if (sortField === "status") {
-        return left.status.localeCompare(right.status) * multiplier;
-      }
-      return (
-        (new Date(
-          left[sortField === "created_at" ? "createdAt" : "updatedAt"],
-        ).getTime() -
-          new Date(
-            right[sortField === "created_at" ? "createdAt" : "updatedAt"],
-          ).getTime()) *
-        multiplier
-      );
-    });
-
-    return next;
-  }, [items, searchQuery, sortDirection, sortField]);
-
-  const stats = useMemo(() => {
-    const normalized = items.map((item) => item.status.toLowerCase());
-    return {
-      total: items.length,
-      requestOrDraft: normalized.filter(
-        (status) =>
-          status === "request" || status === "requested" || status === "draft",
-      ).length,
-      approved: normalized.filter((status) => status === "approved").length,
-      rejected: normalized.filter((status) => status === "rejected").length,
-    };
-  }, [items]);
-
-  const {
-    currentPage,
-    totalPages,
-    paginatedItems,
-    totalItems,
-    itemsPerPage,
-    setCurrentPage,
-  } = usePagination(filteredItems, 12);
+  const filteredItems = useMemo(() => items, [items]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadVisiblePolicyNames() {
-      if (!token || !isAuthenticated || paginatedItems.length === 0) {
+      if (!token || !isAuthenticated || filteredItems.length === 0) {
         return;
       }
 
-      const itemsToResolve = paginatedItems.filter((item) => {
+      const itemsToResolve = filteredItems.filter((item) => {
         const key = `${item.policyType}:${item.policyId || 0}`;
         return Boolean(item.policyId) && !policyNameMap[key];
       });
@@ -347,7 +333,31 @@ export function CreditChangeRequestList() {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, paginatedItems, policyNameMap, token]);
+  }, [filteredItems, isAuthenticated, policyNameMap, token]);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || loading || loadingMore || !hasMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (!entry?.isIntersecting) return;
+        void loadData(currentPage + 1, false);
+      },
+      {
+        root: null,
+        rootMargin: "240px 0px",
+        threshold: 0,
+      },
+    );
+
+    observer.observe(target);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [currentPage, hasMore, loadData, loading, loadingMore]);
 
   const sortOptions: Array<{ value: SortField; label: string }> = [
     { value: "updated_at", label: "Tanggal Update" },
@@ -425,12 +435,12 @@ export function CreditChangeRequestList() {
         }
 
         setModalOpen(false);
-        await loadData();
+        await refreshList();
       } finally {
         setSaving(false);
       }
     },
-    [loadData, token],
+    [refreshList, token],
   );
 
   if (loading) {
@@ -520,10 +530,7 @@ export function CreditChangeRequestList() {
             <input
               type="text"
               value={searchQuery}
-              onChange={(event) => {
-                setSearchQuery(event.target.value);
-                setCurrentPage(1);
-              }}
+              onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Cari nama, policy type, status, atau alasan..."
               className="w-full rounded-xl border border-gray-200 py-3 pl-11 pr-4 text-sm transition-all focus:border-transparent focus:ring-2 focus:ring-emerald-500"
             />
@@ -572,7 +579,7 @@ export function CreditChangeRequestList() {
       ) : (
         <>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {paginatedItems.map((item) => (
+            {filteredItems.map((item) => (
               <motion.div
                 key={item.id}
                 initial={{ opacity: 0, y: 16 }}
@@ -593,8 +600,6 @@ export function CreditChangeRequestList() {
                 className="cursor-pointer overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm outline-none transition focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2"
               >
                 {(() => {
-                  const attachmentUrl = getFileUrl(item.identityAttachment);
-                  const hasImageAttachment = isImageAttachment(attachmentUrl);
                   const policyKey = `${item.policyType}:${item.policyId || 0}`;
                   const policyName =
                     policyNameMap[policyKey] || item.policyTypeLabel;
@@ -735,18 +740,26 @@ export function CreditChangeRequestList() {
             ))}
           </div>
 
-          {totalPages > 1 && (
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={(page) => {
-                setCurrentPage(page);
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-              totalItems={totalItems}
-              itemsPerPage={itemsPerPage}
-            />
-          )}
+          <div className="flex flex-col gap-3 pt-2 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
+            <p>
+              Showing {filteredItems.length} loaded requests
+              {debouncedSearchQuery ? " matching current search" : ""}
+            </p>
+            <p>
+              {hasMore
+                ? "Scroll ke bawah untuk memuat lebih banyak"
+                : "Semua data yang tersedia sudah dimuat"}
+            </p>
+          </div>
+
+          {hasMore ? (
+            <div
+              ref={loadMoreRef}
+              className="flex h-16 items-center justify-center text-sm text-slate-400"
+            >
+              {loadingMore ? "Memuat data berikutnya..." : "Siap memuat data berikutnya..."}
+            </div>
+          ) : null}
         </>
       )}
 
@@ -754,7 +767,7 @@ export function CreditChangeRequestList() {
         isOpen={selectedItem !== null}
         onClose={() => setSelectedItem(null)}
         item={selectedItem}
-        onActionExecuted={loadData}
+        onActionExecuted={refreshList}
       />
       <CreditChangeRequestFormModal
         open={modalOpen}

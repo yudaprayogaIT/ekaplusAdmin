@@ -9,10 +9,6 @@ import ActionResultModal from "@/components/ui/ActionResultModal";
 import type { CustomerRegistration } from "@/types/customerRegistration";
 import {
   FaSearch,
-  FaUserCheck,
-  FaClock,
-  FaCheckCircle,
-  FaTimesCircle,
   FaSortAmountUp,
   FaSortAmountDown,
   FaChevronDown,
@@ -24,7 +20,6 @@ import FilterBuilder from "@/components/filters/FilterBuilder";
 import { useFilters } from "@/hooks/useFilters";
 import { CUSTOMER_REGISTER_FILTER_FIELDS } from "@/config/filterFields";
 import { FilterTriple } from "@/types/filter";
-import Pagination, { usePagination } from "@/components/ui/Pagination";
 import { getTaxStatusLabel } from "@/utils/paymentAccount";
 
 type SortField =
@@ -36,6 +31,7 @@ type SortField =
 type SortDirection = "asc" | "desc";
 
 const SNAP_KEY = "ekatalog_customer_registrations_snapshot";
+const DEFAULT_PAGE_SIZE = 20;
 
 // API Response type from backend
 interface CustomerRegistrationApiResponse {
@@ -266,13 +262,18 @@ export function CustomerRegistrationList() {
     [],
   );
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [selectedRegistration, setSelectedRegistration] =
     useState<CustomerRegistration | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const loadMoreRef = React.useRef<HTMLDivElement | null>(null);
 
   // Sort state
   const [sortField, setSortField] = useState<SortField>("created_at");
@@ -302,6 +303,13 @@ export function CustomerRegistrationList() {
   const { filters, setFilters } = useFilters({
     entity: "customer_register",
   });
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim());
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
 
   // Map API response to frontend type
   function mapToFrontendType(
@@ -583,16 +591,25 @@ export function CustomerRegistrationList() {
   // Function to load data with filters and sorting
   const loadDataWithFilters = useCallback(
     async (
+      page: number,
+      replace = false,
       filterTriples: FilterTriple[] = [],
       sort_by?: SortField,
       sort_order?: SortDirection,
     ) => {
-      setLoading(true);
-      setError(null);
+      if (replace) {
+        setLoading(true);
+        setError(null);
+      } else {
+        setLoadingMore(true);
+      }
 
       try {
         if (!isAuthenticated || !token) {
+          setRegistrations([]);
+          setHasMore(false);
           setLoading(false);
+          setLoadingMore(false);
           return;
         }
 
@@ -601,7 +618,8 @@ export function CustomerRegistrationList() {
           fields: string[];
           filters?: FilterTriple[];
           order_by?: [string, string][];
-          limit?: number;
+          page: number;
+          search?: string;
         } = {
           fields: [
             "*",
@@ -610,18 +628,25 @@ export function CustomerRegistrationList() {
             "created_by.full_name",
             "updated_by.full_name",
           ],
-          limit: 10000000,
+          page,
         };
 
         const defaultFilters: FilterTriple[] = [["status", "!=", "Draft"]];
-        spec.filters =
+        const mergedFilters =
           filterTriples.length > 0
             ? [...defaultFilters, ...filterTriples]
             : defaultFilters;
+        spec.filters =
+          selectedStatus !== "all"
+            ? [...mergedFilters, ["status", "=", selectedStatus]]
+            : mergedFilters;
 
         // Add server-side sorting
         if (sort_by && sort_order) {
           spec.order_by = [[sort_by, sort_order]];
+        }
+        if (debouncedSearchQuery) {
+          spec.search = debouncedSearchQuery;
         }
 
         const url = getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER, spec);
@@ -639,40 +664,67 @@ export function CustomerRegistrationList() {
           const apiData: CustomerRegistrationApiResponse[] =
             response.data || [];
           const mapped = apiData.map((item) => mapToFrontendType(item));
-          const enriched = await enrichMasterLinkNames(mapped, token);
-          setRegistrations(enriched);
+          const enrichedPage = await enrichMasterLinkNames(mapped, token);
+          const perPage = Number(response?.meta?.per_page || DEFAULT_PAGE_SIZE);
+          let nextRegistrations: CustomerRegistration[] = [];
+          setRegistrations((current) =>
+            (nextRegistrations =
+              replace
+                ? enrichedPage
+                : [
+                    ...current,
+                    ...enrichedPage.filter(
+                      (item) =>
+                        !current.some((existing) => existing.id === item.id),
+                    ),
+                  ])
+          );
+          setCurrentPage(page);
+          setHasMore(enrichedPage.length >= perPage);
           try {
-            localStorage.setItem(SNAP_KEY, JSON.stringify(enriched));
+            localStorage.setItem(SNAP_KEY, JSON.stringify(nextRegistrations));
           } catch {}
         } else {
           setError(`Failed to fetch registrations (${res.status})`);
+          setHasMore(false);
         }
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
+        if (replace) setRegistrations([]);
+        setHasMore(false);
       } finally {
-        setLoading(false);
+        if (replace) setLoading(false);
+        else setLoadingMore(false);
       }
     },
-    [isAuthenticated, token],
+    [debouncedSearchQuery, isAuthenticated, selectedStatus, token],
   );
 
-  // Load data on mount and when filters change
   useEffect(() => {
-    loadDataWithFilters(filters, sortField, sortDirection);
-  }, [loadDataWithFilters, filters, sortField, sortDirection]);
+    setRegistrations([]);
+    setCurrentPage(1);
+    setHasMore(true);
+    void loadDataWithFilters(1, true, filters, sortField, sortDirection);
+  }, [
+    debouncedSearchQuery,
+    filters,
+    loadDataWithFilters,
+    selectedStatus,
+    sortField,
+    sortDirection,
+  ]);
 
-  // Reload data when sort changes
-  useEffect(() => {
-    if (token) {
-      loadDataWithFilters(filters, sortField, sortDirection);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortField, sortDirection]);
+  const refreshList = useCallback(async () => {
+    setRegistrations([]);
+    setCurrentPage(1);
+    setHasMore(true);
+    await loadDataWithFilters(1, true, filters, sortField, sortDirection);
+  }, [filters, loadDataWithFilters, sortField, sortDirection]);
 
   // Listen for updates - reload from API when triggered
   useEffect(() => {
     async function handler() {
-      loadDataWithFilters(filters, sortField, sortDirection);
+      await refreshList();
     }
 
     window.addEventListener("ekatalog:customer_registrations_update", handler);
@@ -681,7 +733,36 @@ export function CustomerRegistrationList() {
         "ekatalog:customer_registrations_update",
         handler,
       );
-  }, [loadDataWithFilters, filters, sortField, sortDirection]);
+  }, [refreshList]);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || loading || loadingMore || !hasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+        void loadDataWithFilters(
+          currentPage + 1,
+          false,
+          filters,
+          sortField,
+          sortDirection,
+        );
+      },
+      { root: null, rootMargin: "240px 0px", threshold: 0 },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [
+    currentPage,
+    filters,
+    hasMore,
+    loadDataWithFilters,
+    loading,
+    loadingMore,
+    sortField,
+    sortDirection,
+  ]);
 
   // Handle filter apply
   const handleApplyFilters = useCallback(
@@ -693,66 +774,16 @@ export function CustomerRegistrationList() {
 
   // Filter locally based on search and status
   const filteredRegistrations = useMemo(() => {
-    let filtered = [...registrations];
-
-    // Filter by status
-    if (selectedStatus !== "all") {
-      filtered = filtered.filter((reg) => reg.status === selectedStatus);
-    }
-
-    // Filter by search query
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (reg) =>
-          reg.company.name.toLowerCase().includes(query) ||
-          reg.user.full_name.toLowerCase().includes(query) ||
-          reg.company.business_type.toLowerCase().includes(query) ||
-          reg.company.branch_name.toLowerCase().includes(query) ||
-          (reg.source || "").toLowerCase().includes(query) ||
-          (reg.branch_owner?.full_name || "").toLowerCase().includes(query),
-      );
-    }
-
-    return filtered;
-  }, [registrations, selectedStatus, searchQuery]);
-
-  // Calculate stats
-  const stats = useMemo(() => {
-    return {
-      total: registrations.length,
-      request: registrations.filter((r) => r.status === "request").length,
-      approved: registrations.filter((r) => r.status === "approved").length,
-      rejected: registrations.filter((r) => r.status === "rejected").length,
-    };
+    return [...registrations];
   }, [registrations]);
-
-  // Pagination using usePagination hook
-  const {
-    currentPage,
-    setCurrentPage,
-    totalPages,
-    paginatedItems: paginatedRegistrations,
-    totalItems,
-    itemsPerPage,
-  } = usePagination(filteredRegistrations, 20);
 
   const handleViewDetails = (registration: CustomerRegistration) => {
     setSelectedRegistration(registration);
     setIsDetailModalOpen(true);
   };
 
-  const handleStatusFilterChange = (status: string) => {
-    setSelectedStatus(status);
-  };
-
   const handleSearchChange = (query: string) => {
     setSearchQuery(query);
-  };
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   // Approve/Reject action handlers
@@ -868,7 +899,7 @@ export function CustomerRegistrationList() {
         );
       }
 
-      await loadDataWithFilters(filters, sortField, sortDirection);
+      await refreshList();
       setResultModal({
         isOpen: true,
         type: "success",
@@ -928,7 +959,7 @@ export function CustomerRegistrationList() {
         );
       }
 
-      await loadDataWithFilters(filters, sortField, sortDirection);
+      await refreshList();
       setResultModal({
         isOpen: true,
         type: "success",
@@ -1201,10 +1232,10 @@ export function CustomerRegistrationList() {
       )}
 
       {/* Registration Cards Grid */}
-      {!loading && !error && paginatedRegistrations.length > 0 && (
+      {!loading && !error && filteredRegistrations.length > 0 && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {paginatedRegistrations.map((registration) => (
+            {filteredRegistrations.map((registration) => (
               <RegistrationCard
                 key={registration.id}
                 registration={registration}
@@ -1216,17 +1247,27 @@ export function CustomerRegistrationList() {
               />
             ))}
           </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={handlePageChange}
-              totalItems={totalItems}
-              itemsPerPage={itemsPerPage}
-            />
-          )}
+          <div className="flex flex-col gap-3 pt-2 text-sm text-gray-500 md:flex-row md:items-center md:justify-between">
+            <p>
+              Showing {filteredRegistrations.length} loaded registrations
+              {debouncedSearchQuery ? " matching current search" : ""}
+            </p>
+            <p>
+              {hasMore
+                ? "Scroll ke bawah untuk memuat lebih banyak"
+                : "Semua data yang tersedia sudah dimuat"}
+            </p>
+          </div>
+          {hasMore ? (
+            <div
+              ref={loadMoreRef}
+              className="flex h-16 items-center justify-center text-sm text-gray-400"
+            >
+              {loadingMore
+                ? "Memuat data berikutnya..."
+                : "Siap memuat data berikutnya..."}
+            </div>
+          ) : null}
         </>
       )}
 

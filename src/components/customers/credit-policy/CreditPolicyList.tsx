@@ -12,8 +12,9 @@ import {
   FaSearch,
 } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_CONFIG, apiFetch, getQueryUrl, getResourceUrl } from "@/config/api";
+import { API_CONFIG, apiFetch, getResourceUrl } from "@/config/api";
 import Pagination, { usePagination } from "@/components/ui/Pagination";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import { CreditPolicyFormModal } from "./CreditPolicyFormModal";
 
 type CreditPolicyScope = "active" | "all" | "inactive";
@@ -155,68 +156,38 @@ function buildBranchCustomerLabel(
 }
 
 async function loadLookups(token: string): Promise<CreditPolicyLookups> {
-  const [nbRes, gpRes, gcRes, bcRes, branchRes] = await Promise.all([
-    apiFetch(
-      getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, {
-        fields: ["id", "name", "nb_name"],
-        limit: 1000000,
-      }),
-      { method: "GET", cache: "no-store" },
+  const [nbs, gps, gcs, bcs, branches] = await Promise.all([
+    fetchAllQueryRows<NationalBrandRow>({
+      endpoint: API_CONFIG.ENDPOINTS.NATIONAL_BRAND,
+      spec: { fields: ["id", "name", "nb_name"] },
       token,
-    ),
-    apiFetch(
-      getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, {
-        fields: ["id", "name", "gp_name"],
-        limit: 1000000,
-      }),
-      { method: "GET", cache: "no-store" },
+      errorMessage: "Failed to fetch national brand",
+    }),
+    fetchAllQueryRows<GroupParentRow>({
+      endpoint: API_CONFIG.ENDPOINTS.GROUP_PARENT,
+      spec: { fields: ["id", "name", "gp_name"] },
       token,
-    ),
-    apiFetch(
-      getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, {
-        fields: ["id", "name", "gc_name"],
-        limit: 1000000,
-      }),
-      { method: "GET", cache: "no-store" },
+      errorMessage: "Failed to fetch group parent",
+    }),
+    fetchAllQueryRows<GroupCustomerRow>({
+      endpoint: API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
+      spec: { fields: ["id", "name", "gc_name"] },
       token,
-    ),
-    apiFetch(
-      getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, {
-        fields: ["id", "name", "gcid", "branch"],
-        limit: 1000000,
-      }),
-      { method: "GET", cache: "no-store" },
+      errorMessage: "Failed to fetch group customer",
+    }),
+    fetchAllQueryRows<BranchCustomerRow>({
+      endpoint: API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2,
+      spec: { fields: ["id", "name", "gcid", "branch"] },
       token,
-    ),
-    apiFetch(
-      getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH, {
-        fields: ["id", "branch_name", "city"],
-        limit: 1000000,
-      }),
-      { method: "GET", cache: "no-store" },
+      errorMessage: "Failed to fetch branch customer",
+    }),
+    fetchAllQueryRows<BranchRow>({
+      endpoint: API_CONFIG.ENDPOINTS.BRANCH,
+      spec: { fields: ["id", "branch_name", "city"] },
       token,
-    ),
+      errorMessage: "Failed to fetch branch",
+    }),
   ]);
-
-  if (!nbRes.ok) throw new Error(`Failed to fetch national brand (${nbRes.status})`);
-  if (!gpRes.ok) throw new Error(`Failed to fetch group parent (${gpRes.status})`);
-  if (!gcRes.ok) throw new Error(`Failed to fetch group customer (${gcRes.status})`);
-  if (!bcRes.ok) throw new Error(`Failed to fetch branch customer (${bcRes.status})`);
-  if (!branchRes.ok) throw new Error(`Failed to fetch branch (${branchRes.status})`);
-
-  const [nbJson, gpJson, gcJson, bcJson, branchJson] = await Promise.all([
-    nbRes.json(),
-    gpRes.json(),
-    gcRes.json(),
-    bcRes.json(),
-    branchRes.json(),
-  ]);
-
-  const nbs = (Array.isArray(nbJson?.data) ? nbJson.data : []) as NationalBrandRow[];
-  const gps = (Array.isArray(gpJson?.data) ? gpJson.data : []) as GroupParentRow[];
-  const gcs = (Array.isArray(gcJson?.data) ? gcJson.data : []) as GroupCustomerRow[];
-  const bcs = (Array.isArray(bcJson?.data) ? bcJson.data : []) as BranchCustomerRow[];
-  const branches = (Array.isArray(branchJson?.data) ? branchJson.data : []) as BranchRow[];
   const gcMap = new Map(
     gcs.map((row) => [row.id, row.gc_name || row.name || `Group Customer ${row.id}`]),
   );
@@ -261,26 +232,17 @@ export function CreditPolicyList() {
         return;
       }
 
-      const [policyRes, lookupData] = await Promise.all([
-        apiFetch(
-          getQueryUrl(API_CONFIG.ENDPOINTS.CREDIT_POLICY, {
+      const [rows, lookupData] = await Promise.all([
+        fetchAllQueryRows<CreditPolicyApiResponse>({
+          endpoint: API_CONFIG.ENDPOINTS.CREDIT_POLICY,
+          spec: {
             fields: ["*", "created_by.full_name", "updated_by.full_name"],
-            limit: 1000000,
-          }),
-          { method: "GET", cache: "no-store" },
+          },
           token,
-        ),
+          errorMessage: "Failed to fetch credit policy",
+        }),
         loadLookups(token),
       ]);
-
-      if (!policyRes.ok) {
-        throw new Error(`Failed to fetch credit policy (${policyRes.status})`);
-      }
-
-      const policyJson = await policyRes.json();
-      const rows = (Array.isArray(policyJson?.data)
-        ? policyJson.data
-        : []) as CreditPolicyApiResponse[];
 
       const lookupMap: Record<EntityType, Map<number, string>> = {
         nbid: new Map(lookupData.nbid.map((item) => [item.id, item.label])),

@@ -15,6 +15,7 @@ import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
 import Pagination, { usePagination } from "@/components/ui/Pagination";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import { CustomerLimitDetailModal } from "./CustomerLimitDetailModal";
 
 type SortField = "created_at" | "updated_at" | "customer_limit" | "status";
@@ -131,25 +132,14 @@ export function CustomerLimitList() {
         return;
       }
 
-      const listSpec = {
-        fields: ["*", "created_by.full_name", "updated_by.full_name"],
-        limit: 1000000,
-      };
-
-      const response = await apiFetch(
-        getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_LIMIT, listSpec),
-        { method: "GET", cache: "no-store" },
+      const rows = await fetchAllQueryRows<CustomerLimitApiResponse>({
+        endpoint: API_CONFIG.ENDPOINTS.CUSTOMER_LIMIT,
+        spec: {
+          fields: ["*", "created_by.full_name", "updated_by.full_name"],
+        },
         token,
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch customer limit (${response.status})`);
-      }
-
-      const json = await response.json();
-      const rows = Array.isArray(json?.data)
-        ? (json.data as CustomerLimitApiResponse[])
-        : [];
+        errorMessage: "Failed to fetch customer limit",
+      });
 
       const bcIds = Array.from(
         new Set(
@@ -224,7 +214,7 @@ export function CustomerLimitList() {
 
   const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    let next = !query
+    const next = !query
       ? [...items]
       : items.filter((item) => {
           return (
