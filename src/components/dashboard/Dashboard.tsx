@@ -633,6 +633,7 @@ export default function Dashboard() {
                   categoriesData.find((c) => c.id === p.item_category)?.name ||
                   "Unknown",
               },
+              variants: [],
               disabled: p.disabled,
               isHotDeals: Boolean(p.hot_deals),
             }),
@@ -721,6 +722,7 @@ export default function Dashboard() {
                     disabled: 0,
                   } as Item),
                 productid: v.product,
+                displayOrder: 0,
               };
             },
           );

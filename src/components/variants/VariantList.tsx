@@ -340,6 +340,7 @@ export default function VariantList() {
                 id: p.id,
                 name: p.product_name,
                 itemCategory,
+                variants: [],
                 disabled: p.disabled,
                 isHotDeals: Boolean(p.hot_deals),
               };

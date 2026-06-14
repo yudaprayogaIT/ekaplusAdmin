@@ -696,7 +696,9 @@ export default function ContactPage() {
       }
 
       const contactJson = await contactRes.json();
-      const rows = (Array.isArray(contactJson?.data) ? contactJson.data : []).map(mapContact);
+      const rows: Contact[] = (Array.isArray(contactJson?.data) ? contactJson.data : []).map(
+        mapContact,
+      );
       const perPage = Number(contactJson?.meta?.per_page || DEFAULT_PAGE_SIZE);
       setContacts((current) =>
         replace
@@ -704,7 +706,8 @@ export default function ContactPage() {
           : [
               ...current,
               ...rows.filter(
-                (item) => !current.some((existing) => existing.id === item.id),
+                (item: Contact) =>
+                  !current.some((existing: Contact) => existing.id === item.id),
               ),
             ],
       );

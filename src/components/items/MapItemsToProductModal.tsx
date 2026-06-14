@@ -86,8 +86,8 @@ export default function MapItemsToProductModal({
 
       let categoriesData: Category[] = [];
       if (categoryRows.length > 0) {
-        categoriesData = categoryRows.map(
-          (cat: { id: number | string; category_name: string }) => {
+        categoriesData = categoryRows
+          .map((cat: { id: number | string; category_name: string }) => {
             const id = toNumber(cat.id);
             return id !== null
               ? {
@@ -95,11 +95,8 @@ export default function MapItemsToProductModal({
                   name: cat.category_name,
                 }
               : null;
-          },
-        );
-        categoriesData = categoriesData.filter(
-          (cat): cat is Category => cat !== null,
-        );
+          })
+          .filter((cat): cat is Category => cat !== null);
       }
 
       // Load products (only active products)

@@ -399,7 +399,7 @@ export default function UserList() {
 
     for (const endpoint of USER_ENDPOINTS) {
       try {
-        const rows = await fetchAllQueryRows<UserApiResponse>({
+        const rows = await fetchAllQueryRows<UsersApiRow>({
           endpoint,
           spec: {
             fields: ["*"],

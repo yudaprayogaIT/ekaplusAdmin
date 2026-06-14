@@ -260,7 +260,9 @@ export default function CustomerPositionPage() {
       }
 
       const json = await response.json();
-      const rows = (Array.isArray(json?.data) ? json.data : []).map(mapPosition);
+      const rows: CustomerPosition[] = (Array.isArray(json?.data) ? json.data : []).map(
+        mapPosition,
+      );
       const perPage = Number(json?.meta?.per_page || DEFAULT_PAGE_SIZE);
       setPositions((current) =>
         replace
@@ -268,7 +270,10 @@ export default function CustomerPositionPage() {
           : [
               ...current,
               ...rows.filter(
-                (item) => !current.some((existing) => existing.id === item.id),
+                (item: CustomerPosition) =>
+                  !current.some(
+                    (existing: CustomerPosition) => existing.id === item.id,
+                  ),
               ),
             ],
       );

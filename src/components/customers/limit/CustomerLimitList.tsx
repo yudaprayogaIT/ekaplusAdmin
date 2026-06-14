@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FaCalendarAlt,
   FaCheckCircle,
@@ -14,9 +14,10 @@ import {
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
-import Pagination, { usePagination } from "@/components/ui/Pagination";
 import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import { CustomerLimitDetailModal } from "./CustomerLimitDetailModal";
+
+const ITEMS_PER_BATCH = 12;
 
 type SortField = "created_at" | "updated_at" | "customer_limit" | "status";
 type SortDirection = "asc" | "desc";
@@ -121,6 +122,8 @@ export function CustomerLimitList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortField, setSortField] = useState<SortField>("updated_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [visibleCount, setVisibleCount] = useState(ITEMS_PER_BATCH);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -255,14 +258,31 @@ export function CustomerLimitList() {
     };
   }, [items]);
 
-  const {
-    currentPage,
-    totalPages,
-    paginatedItems,
-    totalItems,
-    itemsPerPage,
-    setCurrentPage,
-  } = usePagination(filteredItems, 12);
+  const visibleItems = useMemo(
+    () => filteredItems.slice(0, visibleCount),
+    [filteredItems, visibleCount],
+  );
+  const hasMore = visibleCount < filteredItems.length;
+
+  useEffect(() => {
+    setVisibleCount(ITEMS_PER_BATCH);
+  }, [searchQuery, sortDirection, sortField]);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || !hasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+        setVisibleCount((current) =>
+          Math.min(current + ITEMS_PER_BATCH, filteredItems.length),
+        );
+      },
+      { root: null, rootMargin: "240px 0px", threshold: 0 },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [filteredItems.length, hasMore]);
 
   const sortOptions: Array<{ value: SortField; label: string }> = [
     { value: "updated_at", label: "Tanggal Update" },
@@ -342,7 +362,6 @@ export function CustomerLimitList() {
               value={searchQuery}
               onChange={(event) => {
                 setSearchQuery(event.target.value);
-                setCurrentPage(1);
               }}
               placeholder="Cari kode, branch customer, status, atau catatan..."
               className="w-full rounded-xl border border-gray-200 py-3 pl-11 pr-4 text-sm transition-all focus:border-transparent focus:ring-2 focus:ring-emerald-500"
@@ -392,7 +411,7 @@ export function CustomerLimitList() {
       ) : (
         <>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {paginatedItems.map((item) => (
+            {visibleItems.map((item) => (
               <motion.div
                 key={item.id}
                 initial={{ opacity: 0, y: 16 }}
@@ -484,18 +503,24 @@ export function CustomerLimitList() {
             ))}
           </div>
 
-          {totalPages > 1 && (
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={(page) => {
-                setCurrentPage(page);
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-              totalItems={totalItems}
-              itemsPerPage={itemsPerPage}
-            />
-          )}
+          <div className="flex flex-col gap-3 pt-2 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
+            <p>
+              Showing {visibleItems.length} of {filteredItems.length} customer limits
+            </p>
+            <p>
+              {hasMore
+                ? "Scroll ke bawah untuk memuat lebih banyak"
+                : "Semua data yang tersedia sudah dimuat"}
+            </p>
+          </div>
+          {hasMore ? (
+            <div
+              ref={loadMoreRef}
+              className="flex h-16 items-center justify-center text-sm text-slate-400"
+            >
+              Siap memuat data berikutnya...
+            </div>
+          ) : null}
         </>
       )}
 

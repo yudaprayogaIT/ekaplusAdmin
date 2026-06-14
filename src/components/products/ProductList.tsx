@@ -67,6 +67,7 @@ interface ItemApiResponse {
   id: number | string;
   item_code: string;
   item_name: string;
+  uom?: string;
   item_desc?: string;
   item_category: string;
   item_group: string;
@@ -511,14 +512,14 @@ export default function ProductList() {
         requestInit: { headers },
       });
       if (itemRows.length > 0) {
-        const itemsData = itemRows
-          .map((item: ItemApiResponse) => {
+        const itemsData: Array<Item | null> = itemRows.map((item: ItemApiResponse) => {
             const id = toNumber(item.id);
             if (id === null) return null;
             return {
               id,
               code: item.item_code,
               name: item.item_name,
+              uom: item.uom || "",
               description: item.item_desc || "",
               category: item.item_category,
               group: item.item_group,
@@ -526,11 +527,9 @@ export default function ProductList() {
               color: item.item_color,
               image: getFileUrl(item.image),
               disabled: item.disabled,
-              created_by: item.created_by,
             };
-          })
-          .filter((item: Item | null): item is Item => item !== null);
-        setAvailableItems(itemsData);
+          });
+        setAvailableItems(itemsData.filter((item): item is Item => item !== null));
       }
 
       // Mark static data as loaded

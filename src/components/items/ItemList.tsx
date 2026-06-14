@@ -781,7 +781,7 @@ export default function ItemList() {
       const productRows = await fetchAllQueryRows<{
         id: number;
         product_name: string;
-        item_category: [];
+        item_category: number;
         disabled: number;
         hot_deals: boolean;
       }>({
@@ -796,7 +796,7 @@ export default function ItemList() {
           (p: {
             id: number;
             product_name: string;
-            item_category: [];
+            item_category: number;
             disabled: number;
             hot_deals: boolean;
           }) => ({
@@ -806,6 +806,7 @@ export default function ItemList() {
               id: p.item_category,
               name: `Category ${p.item_category}`,
             },
+            variants: [],
             disabled: p.disabled,
             isHotDeals: Boolean(p.hot_deals),
           }),

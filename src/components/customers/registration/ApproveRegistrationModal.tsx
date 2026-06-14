@@ -411,25 +411,25 @@ export function ApproveRegistrationModal({
     };
 
     const [gpRows, nbRows, gcRows, bcRows] = await Promise.all([
-      fetchAllQueryRows({
+      fetchAllQueryRows<GroupParentRow>({
         endpoint: API_CONFIG.ENDPOINTS.GROUP_PARENT,
         spec: gpSpec,
         token,
         errorMessage: "Failed to fetch GP reference list",
       }),
-      fetchAllQueryRows({
+      fetchAllQueryRows<NationalBrandRow>({
         endpoint: API_CONFIG.ENDPOINTS.NATIONAL_BRAND,
         spec: nbSpec,
         token,
         errorMessage: "Failed to fetch NB reference list",
       }),
-      fetchAllQueryRows({
+      fetchAllQueryRows<GroupCustomerRow>({
         endpoint: API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
         spec: gcSpec,
         token,
         errorMessage: "Failed to fetch GC reference list",
       }),
-      fetchAllQueryRows({
+      fetchAllQueryRows<BranchCustomerRow>({
         endpoint: API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2,
         spec: bcSpec,
         token,

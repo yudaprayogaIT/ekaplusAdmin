@@ -3,6 +3,8 @@
 
 import React, {
   useEffect,
+  useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -35,11 +37,9 @@ import type {
 import WishlistCard from "./WishlistCard";
 import WishlistDetailModal from "./WishlistDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import Pagination, {
-  usePagination,
-} from "@/components/ui/Pagination";
 
 export default function WishlistList() {
+  const ITEMS_PER_BATCH = 20;
   const { token } = useAuth();
   const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
   const [items, setItems] = useState<Item[]>([]);
@@ -47,6 +47,8 @@ export default function WishlistList() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [visibleCount, setVisibleCount] = useState(ITEMS_PER_BATCH);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
@@ -228,27 +230,41 @@ export default function WishlistList() {
   }
 
   // Filter wishlist (MUST be before early returns to comply with Hooks rules)
-  let filteredWishlist = wishlist;
-
-  if (searchQuery.trim()) {
+  const filteredWishlist = useMemo(() => {
+    if (!searchQuery.trim()) return wishlist;
     const query = searchQuery.toLowerCase();
-    filteredWishlist = filteredWishlist.filter(
+    return wishlist.filter(
       (w) =>
         w.item.name.toLowerCase().includes(query) ||
         w.item.code.toLowerCase().includes(query) ||
         w.item.category?.toLowerCase().includes(query)
     );
-  }
+  }, [searchQuery, wishlist]);
+  const visibleItems = useMemo(
+    () => filteredWishlist.slice(0, visibleCount),
+    [filteredWishlist, visibleCount],
+  );
+  const hasMore = visibleCount < filteredWishlist.length;
 
-  // Apply pagination
-  const {
-    currentPage,
-    setCurrentPage,
-    totalPages,
-    paginatedItems,
-    totalItems,
-    itemsPerPage,
-  } = usePagination(filteredWishlist, 20);
+  useEffect(() => {
+    setVisibleCount(ITEMS_PER_BATCH);
+  }, [searchQuery, viewMode]);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || !hasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+        setVisibleCount((current) =>
+          Math.min(current + ITEMS_PER_BATCH, filteredWishlist.length),
+        );
+      },
+      { root: null, rootMargin: "240px 0px", threshold: 0 },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [filteredWishlist.length, hasMore]);
 
   // Get items not in wishlist for add modal
   const wishlistItemIds = new Set(wishlist.map((w) => w.item.id));
@@ -415,7 +431,7 @@ export default function WishlistList() {
                 : "space-y-4"
             }
           >
-            {paginatedItems.map((w) => (
+            {visibleItems.map((w) => (
               <WishlistCard
                 key={w.id}
                 wishlistItem={w}
@@ -426,16 +442,24 @@ export default function WishlistList() {
             ))}
           </div>
 
-          {/* Pagination */}
-          {filteredWishlist.length > 0 && (
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-              totalItems={totalItems}
-              itemsPerPage={itemsPerPage}
-            />
-          )}
+          <div className="flex flex-col gap-3 pt-3 text-sm text-gray-500 md:flex-row md:items-center md:justify-between">
+            <p>
+              Showing {visibleItems.length} of {filteredWishlist.length} wishlist items
+            </p>
+            <p>
+              {hasMore
+                ? "Scroll ke bawah untuk memuat lebih banyak"
+                : "Semua data yang tersedia sudah dimuat"}
+            </p>
+          </div>
+          {hasMore ? (
+            <div
+              ref={loadMoreRef}
+              className="flex h-16 items-center justify-center text-sm text-gray-400"
+            >
+              Siap memuat data berikutnya...
+            </div>
+          ) : null}
         </>
       )}
 

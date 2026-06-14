@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   FaCheckCircle,
@@ -13,9 +13,10 @@ import {
 } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getResourceUrl } from "@/config/api";
-import Pagination, { usePagination } from "@/components/ui/Pagination";
 import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import { CreditPolicyFormModal } from "./CreditPolicyFormModal";
+
+const ITEMS_PER_BATCH = 12;
 
 type CreditPolicyScope = "active" | "all" | "inactive";
 type EntityType = "nbid" | "gpid" | "gcid" | "bcid";
@@ -222,6 +223,8 @@ export function CreditPolicyList() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<CreditPolicyListItem | null>(null);
   const [saving, setSaving] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(ITEMS_PER_BATCH);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -325,14 +328,31 @@ export function CreditPolicyList() {
     [items],
   );
 
-  const {
-    currentPage,
-    totalPages,
-    paginatedItems,
-    totalItems,
-    itemsPerPage,
-    setCurrentPage,
-  } = usePagination(filteredItems, 12);
+  const visibleItems = useMemo(
+    () => filteredItems.slice(0, visibleCount),
+    [filteredItems, visibleCount],
+  );
+  const hasMore = visibleCount < filteredItems.length;
+
+  useEffect(() => {
+    setVisibleCount(ITEMS_PER_BATCH);
+  }, [searchQuery, scope]);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || !hasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+        setVisibleCount((current) =>
+          Math.min(current + ITEMS_PER_BATCH, filteredItems.length),
+        );
+      },
+      { root: null, rootMargin: "240px 0px", threshold: 0 },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [filteredItems.length, hasMore]);
 
   const openCreate = () => {
     setSelectedItem(null);
@@ -552,7 +572,7 @@ export function CreditPolicyList() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 bg-white">
-                {paginatedItems.map((item) => (
+                {visibleItems.map((item) => (
                   <motion.tr
                     key={item.id}
                     initial={{ opacity: 0, y: 8 }}
@@ -594,15 +614,24 @@ export function CreditPolicyList() {
               </tbody>
             </table>
           </div>
-          <div className="px-5">
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-              totalItems={totalItems}
-              itemsPerPage={itemsPerPage}
-            />
+          <div className="flex flex-col gap-3 px-5 py-4 text-sm text-gray-500 md:flex-row md:items-center md:justify-between">
+            <p>
+              Showing {visibleItems.length} of {filteredItems.length} credit policies
+            </p>
+            <p>
+              {hasMore
+                ? "Scroll ke bawah untuk memuat lebih banyak"
+                : "Semua data yang tersedia sudah dimuat"}
+            </p>
           </div>
+          {hasMore ? (
+            <div
+              ref={loadMoreRef}
+              className="flex h-16 items-center justify-center text-sm text-gray-400"
+            >
+              Siap memuat data berikutnya...
+            </div>
+          ) : null}
         </div>
       )}
 
