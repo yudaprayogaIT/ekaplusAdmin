@@ -8,17 +8,34 @@ import {
   FaEdit,
   FaTrash,
   FaMapMarkerAlt,
-  FaGlobe,
   FaCity,
-  FaMapPin,
-  FaExternalLinkAlt,
   FaLock,
-  FaUser,
   FaClock,
   FaHistory,
 } from "react-icons/fa";
 import Image from "next/image";
 import type { Branch } from "./BranchList";
+
+function InfoField({
+  label,
+  value,
+  className = "",
+}: {
+  label: string;
+  value: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+        {label}
+      </p>
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+        {value || "-"}
+      </div>
+    </div>
+  );
+}
 
 export default function BranchDetailModal({
   open,
@@ -101,227 +118,193 @@ export default function BranchDetailModal({
                 </div>
 
                 {/* Title */}
-                <h2 className="text-4xl font-bold mb-3">{branch.branch_name}</h2>
+                <h2 className="text-4xl font-bold mb-3">
+                  {branch.branch_name}
+                </h2>
 
                 <div className="flex items-center gap-2 text-lg text-red-100">
                   <FaCity className="w-5 h-5" />
-                  <span>{branch.city}</span>
+                  <span>
+                    {branch.city} - ID: {branch.id}
+                  </span>
                 </div>
               </div>
             </div>
 
             {/* Content */}
-            <div className="p-8">
-              <div className="mb-8 bg-gradient-to-br from-amber-50 to-white rounded-2xl p-6 border-2 border-amber-100">
-                <div className="flex items-start gap-3 mb-3">
-                  <FaUser className="w-5 h-5 text-amber-500 flex-shrink-0 mt-1" />
-                  <label className="text-sm font-bold text-amber-800 uppercase tracking-wide">
-                    Name
-                  </label>
-                </div>
-                <p className="text-gray-700 leading-relaxed">{branch.name || "-"}</p>
-              </div>
-              {/* Map Preview */}
-              <div className="mb-8">
-                <label className="block text-sm font-semibold text-gray-700 mb-3">
-                  Lokasi
-                </label>
-                <a
-                  href={googleMapsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block relative rounded-2xl overflow-hidden border-2 border-gray-200 shadow-lg hover:shadow-xl transition-all group"
-                >
-                  <Image
-                    src="/images/maps.jpg"
-                    alt="alt"
-                    width={1000}
-                    height={1000}
-                    className="h-80 w-full object-cover"
-                  />
-                  {/* <div className="w-full h-80 bg-gradient-to-br from-red-50 to-red-100 flex items-center justify-center">
-                    <FaMapMarkerAlt className="w-24 h-24 text-red-200" />
-                  </div> */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-6">
-                    <div className="px-6 py-3 bg-white/95 backdrop-blur-sm rounded-full flex items-center gap-2 font-semibold text-gray-800">
-                      <FaExternalLinkAlt className="w-4 h-4" />
-                      <span>Buka di Google Maps</span>
-                    </div>
-                  </div>
-                </a>
-              </div>
-
-              {/* Address & Coordinates */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl p-6 border-2 border-gray-100">
-                  <div className="flex items-start gap-3 mb-3">
-                    <FaMapMarkerAlt className="w-5 h-5 text-red-500 flex-shrink-0 mt-1" />
-                    <label className="text-sm font-bold text-gray-700 uppercase tracking-wide">
-                      Alamat
-                    </label>
-                  </div>
-                  <p className="text-gray-700 leading-relaxed">
-                    {branch.address}
+            <div className="bg-slate-50/70 p-8">
+              <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+                <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-red-500">
+                    Informasi Branch
                   </p>
-                </div>
-
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-6 border-2 border-blue-200">
-                  <div className="flex items-center gap-3 mb-3">
-                    <FaMapPin className="w-5 h-5 text-blue-600" />
-                    <label className="text-sm font-bold text-blue-900 uppercase tracking-wide">
-                      Koordinat
-                    </label>
+                  <h3 className="mt-2 text-2xl font-bold text-slate-900">
+                    Data Perusahaan
+                  </h3>
+                  <div className="mt-5 grid gap-3 md:grid-cols-2">
+                    <InfoField label="Nama Branch" value={branch.branch_name} />
+                    <InfoField label="Kode Branch" value={branch.name || "-"} />
+                    <InfoField label="Kota" value={branch.city} />
+                    <InfoField label="Pulau" value={branch.island} />
+                    <InfoField label="Area" value={branch.area} />
+                    <InfoField
+                      label="Status"
+                      value={branch.disabled === 0 ? "Aktif" : "Nonaktif"}
+                    />
+                    <InfoField
+                      label="Alamat"
+                      value={branch.address}
+                      className="md:col-span-2"
+                    />
+                    <InfoField
+                      label="Latitude"
+                      value={
+                        typeof branch.lat === "number"
+                          ? branch.lat.toFixed(6)
+                          : "-"
+                      }
+                    />
+                    <InfoField
+                      label="Longitude"
+                      value={
+                        typeof branch.lng === "number"
+                          ? branch.lng.toFixed(6)
+                          : "-"
+                      }
+                    />
+                    {branch.url ? (
+                      <InfoField
+                        label="Website"
+                        value={
+                          <a
+                            href={branch.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-green-700 underline"
+                          >
+                            {branch.url}
+                          </a>
+                        }
+                        className="md:col-span-2"
+                      />
+                    ) : null}
+                    {branch.token ? (
+                      <InfoField
+                        label="API Token"
+                        value={<span className="break-all">{branch.token}</span>}
+                        className="md:col-span-2"
+                      />
+                    ) : null}
                   </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-blue-700">
-                        Latitude:
-                      </span>
-                      <code className="px-3 py-1 bg-white rounded-lg text-sm font-mono text-blue-900">
-                        {branch.lat.toFixed(6)}
-                      </code>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-blue-700">
-                        Longitude:
-                      </span>
-                      <code className="px-3 py-1 bg-white rounded-lg text-sm font-mono text-blue-900">
-                        {branch.lng.toFixed(6)}
-                      </code>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                </section>
 
-              {/* URL & Token */}
-              {(branch.url || branch.token) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                  {branch.url && (
-                    <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-6 border-2 border-green-200">
-                      <div className="flex items-center gap-3 mb-3">
-                        <FaGlobe className="w-5 h-5 text-green-600" />
-                        <label className="text-sm font-bold text-green-900 uppercase tracking-wide">
-                          Website
-                        </label>
+                <div className="space-y-5">
+                  <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                    <div className="mb-4 flex items-center gap-3">
+                      <FaMapMarkerAlt className="h-5 w-5 text-red-500" />
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-red-500">
+                          Lokasi
+                        </p>
+                        <h3 className="text-xl font-bold text-slate-900">
+                          Google Maps
+                        </h3>
                       </div>
-                      <a
-                        href={branch.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-green-700 hover:text-green-900 break-all underline text-sm font-medium"
-                      >
-                        {branch.url}
-                      </a>
                     </div>
-                  )}
-
-                  {branch.token && (
-                    <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-6 border-2 border-purple-200">
-                      <div className="flex items-center gap-3 mb-3">
-                        <svg
-                          className="w-5 h-5 text-purple-600"
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M18 8a6 6 0 01-7.743 5.743L10 14l-1 1-1 1H6v2H2v-4l4.257-4.257A6 6 0 1118 8zm-6-4a1 1 0 100 2 2 2 0 012 2 1 1 0 102 0 4 4 0 00-4-4z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                        <label className="text-sm font-bold text-purple-900 uppercase tracking-wide">
-                          API Token
-                        </label>
-                      </div>
-                      <code className="text-purple-800 font-mono text-sm bg-white px-3 py-2 rounded-lg block break-all">
-                        {branch.token}
-                      </code>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Catatan Aktivitas */}
-              {(branch.created_at || branch.updated_at) && (
-                <div className="mb-8">
-                  <div className="flex items-center gap-3 mb-4">
-                    <FaHistory className="w-5 h-5 text-blue-500" />
-                    <h3 className="text-lg font-bold text-gray-900">
-                      Catatan Aktivitas
-                    </h3>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {branch.created_at && (
-                      <div className="bg-gradient-to-br from-green-50 to-white rounded-2xl p-5 border-2 border-green-100">
-                        <div className="flex items-center gap-3 mb-4">
-                          <div className="w-10 h-10 rounded-xl bg-green-500 flex items-center justify-center">
-                            <FaUser className="w-5 h-5 text-white" />
+                    <a
+                      href={googleMapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group block overflow-hidden rounded-2xl border border-slate-200"
+                    >
+                      <div className="relative h-64 w-full">
+                        <Image
+                          src="/images/maps.jpg"
+                          alt="Lokasi branch"
+                          fill
+                          className="object-cover"
+                        />
+                        <div className="absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/45 to-transparent opacity-0 transition-opacity group-hover:opacity-100">
+                          <div className="mb-5 rounded-full bg-white/95 px-5 py-2.5 text-sm font-semibold text-slate-900">
+                            Buka di Google Maps
                           </div>
-                          <div>
-                            <p className="text-xs text-gray-500 font-medium">
-                              Created
-                            </p>
-                            <p className="text-sm font-bold text-gray-900">
+                        </div>
+                      </div>
+                    </a>
+                  </section>
+
+                  {(branch.created_at || branch.updated_at) && (
+                    <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                      <div className="mb-4 flex items-center gap-3">
+                        <FaHistory className="h-5 w-5 text-blue-500" />
+                        <div>
+                          <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-blue-500">
+                            Aktivitas
+                          </p>
+                          <h3 className="text-xl font-bold text-slate-900">
+                            Riwayat Data
+                          </h3>
+                        </div>
+                      </div>
+                      <div className="grid gap-3">
+                        {branch.created_at && (
+                          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+                            <div className="mb-2 flex items-center gap-2">
+                              <FaClock className="h-4 w-4 text-emerald-600" />
+                              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-700">
+                                Created
+                              </p>
+                            </div>
+                            <p className="text-sm font-semibold text-slate-900">
                               {branch.created_by
                                 ? typeof branch.created_by === "string"
                                   ? branch.created_by
                                   : `User #${branch.created_by}`
                                 : "Unknown"}
                             </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <FaClock className="w-4 h-4 text-green-500" />
-                          <p className="text-sm">
-                            {new Date(branch.created_at).toLocaleString(
-                              "id-ID",
-                              {
-                                dateStyle: "long",
-                                timeStyle: "short",
-                              }
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    {branch.updated_at && (
-                      <div className="bg-gradient-to-br from-blue-50 to-white rounded-2xl p-5 border-2 border-blue-100">
-                        <div className="flex items-center gap-3 mb-4">
-                          <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center">
-                            <FaEdit className="w-5 h-5 text-white" />
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 font-medium">
-                              Last Updated
+                            <p className="mt-1 text-sm text-slate-600">
+                              {new Date(branch.created_at).toLocaleString(
+                                "id-ID",
+                                {
+                                  dateStyle: "long",
+                                  timeStyle: "short",
+                                },
+                              )}
                             </p>
-                            <p className="text-sm font-bold text-gray-900">
+                          </div>
+                        )}
+
+                        {branch.updated_at && (
+                          <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+                            <div className="mb-2 flex items-center gap-2">
+                              <FaEdit className="h-4 w-4 text-blue-600" />
+                              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-blue-700">
+                                Updated
+                              </p>
+                            </div>
+                            <p className="text-sm font-semibold text-slate-900">
                               {branch.updated_by
                                 ? typeof branch.updated_by === "string"
                                   ? branch.updated_by
                                   : `User #${branch.updated_by}`
                                 : "Unknown"}
                             </p>
+                            <p className="mt-1 text-sm text-slate-600">
+                              {new Date(branch.updated_at).toLocaleString(
+                                "id-ID",
+                                {
+                                  dateStyle: "long",
+                                  timeStyle: "short",
+                                },
+                              )}
+                            </p>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <FaClock className="w-4 h-4 text-blue-500" />
-                          <p className="text-sm">
-                            {new Date(branch.updated_at).toLocaleString(
-                              "id-ID",
-                              {
-                                dateStyle: "long",
-                                timeStyle: "short",
-                              }
-                            )}
-                          </p>
-                        </div>
+                        )}
                       </div>
-                    )}
-                  </div>
+                    </section>
+                  )}
                 </div>
-              )}
+              </div>
 
               {/* Actions */}
               <div className="flex gap-4 pt-6 border-t-2 border-gray-100">

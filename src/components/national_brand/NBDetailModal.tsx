@@ -408,11 +408,11 @@ export function NBDetailModal({
         setHierarchyGps([]);
         setHierarchyGcs([]);
         setHierarchyBcs([]);
-      setHierarchyError(null);
-      setHierarchyLoading(false);
-      setActivityUsers({});
-      return;
-    }
+        setHierarchyError(null);
+        setHierarchyLoading(false);
+        setActivityUsers({});
+        return;
+      }
 
       setHierarchyLoading(true);
       setHierarchyError(null);
@@ -627,7 +627,7 @@ export function NBDetailModal({
       {
         key: "activity" as const,
         label: "Aktivitas",
-        caption: "Created & updated",
+        caption: "Riwayat Data",
         icon: <FaClock className="h-4 w-4" />,
       },
     ],

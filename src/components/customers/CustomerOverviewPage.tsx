@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
+import { API_CONFIG, apiFetch, getApiUrl, getQueryUrl } from "@/config/api";
 import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import type {
   BranchCustomer,
@@ -19,7 +19,6 @@ import { GCDetailModal } from "@/components/group_customer/GCDetailModal";
 import { BCDetailModal } from "@/components/branch_customer/BCDetailModal";
 import {
   FaBuilding,
-  FaEdit,
   FaEye,
   FaRegBuilding,
   FaSearch,
@@ -32,7 +31,7 @@ import {
 
 type CustomerTab = "all" | "nb" | "gp" | "gc" | "bc";
 type CustomerType = Exclude<CustomerTab, "all">;
-type CustomerStatus = "active" | "pending" | "inactive";
+type CustomerStatus = string;
 type CustomerSortField = "created_at" | "code" | "name";
 type CustomerSortDirection = "desc" | "asc";
 
@@ -52,6 +51,19 @@ interface UnifiedCard {
     | { kind: "gp"; item: GroupParent }
     | { kind: "gc"; item: GroupCustomer }
     | { kind: "bc"; item: BranchCustomer };
+}
+
+interface CustomerPolicyValue {
+  active_id?: number | string | null;
+  active_level?: string | null;
+  value?: number | null;
+}
+
+interface CustomerPolicyResponseData {
+  checked_id?: string | number | null;
+  checked_type?: string | null;
+  credit_limit?: CustomerPolicyValue | null;
+  payment_term?: CustomerPolicyValue | null;
 }
 
 interface TabStats {
@@ -110,6 +122,7 @@ interface BranchCustomerApiResponse {
   branch_owner_email?: string | null;
   receipt_delivery_method?: string | null;
   receipt_issued_at?: string | null;
+  status?: string | null;
   disabled?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -152,16 +165,59 @@ function getStatus(disabled: unknown): CustomerStatus {
 }
 
 function statusBadgeClass(status: CustomerStatus): string {
-  if (status === "active") return "bg-emerald-100 text-emerald-700";
-  if (status === "pending") return "bg-amber-100 text-amber-700";
+  const normalized = status.trim().toLowerCase();
+  if (["active", "aktif"].includes(normalized)) {
+    return "bg-emerald-100 text-emerald-700";
+  }
+  if (["pending", "prospek", "prospect", "draft"].includes(normalized)) {
+    return "bg-amber-100 text-amber-700";
+  }
   return "bg-rose-100 text-rose-700";
 }
 
-function typeBadgeClass(type: CustomerType): string {
-  if (type === "gp") return "bg-orange-100 text-orange-700";
-  if (type === "gc") return "bg-emerald-100 text-emerald-700";
-  if (type === "bc") return "bg-indigo-100 text-indigo-700";
-  return "bg-blue-100 text-blue-700";
+function formatCurrency(value?: number | null): string {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "-";
+  }
+  return `Rp ${new Intl.NumberFormat("id-ID").format(Number(value))}`;
+}
+
+function formatDays(value?: number | null): string {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "-";
+  }
+  return `${new Intl.NumberFormat("id-ID").format(Number(value))} hari`;
+}
+
+function policyLevelLabel(level?: string | null): string {
+  const normalized = String(level || "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "nbid") return "NB";
+  if (normalized === "gpid") return "GP";
+  if (normalized === "gcid") return "GC";
+  if (normalized === "bcid") return "BC";
+  return "-";
+}
+
+function getPolicyRequestParams(card: UnifiedCard): {
+  policy_id: string;
+  policy_type: "nbid" | "gpid" | "gcid" | "bcid";
+} {
+  if (card.type === "nb") {
+    return { policy_id: String(card.id), policy_type: "nbid" };
+  }
+  if (card.type === "gp") {
+    return { policy_id: String(card.id), policy_type: "gpid" };
+  }
+  if (card.type === "gc") {
+    return { policy_id: String(card.id), policy_type: "gcid" };
+  }
+  return { policy_id: card.code, policy_type: "bcid" };
+}
+
+function getPolicyCacheKey(card: UnifiedCard): string {
+  return `${card.type}:${card.code}`;
 }
 
 function iconWrapperClass(type: CustomerType): string {
@@ -190,6 +246,9 @@ export default function CustomerOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cards, setCards] = useState<UnifiedCard[]>([]);
+  const [policyByCard, setPolicyByCard] = useState<
+    Record<string, CustomerPolicyResponseData | null>
+  >({});
   const [tabStats, setTabStats] = useState<TabStats>({
     nb: 0,
     gp: 0,
@@ -231,19 +290,25 @@ export default function CustomerOverviewPage() {
             }),
             fetchAllQueryRows<GroupParentApiResponse>({
               endpoint: API_CONFIG.ENDPOINTS.GROUP_PARENT,
-              spec: { fields: ["*", "created_by.full_name", "updated_by.full_name"] },
+              spec: {
+                fields: ["*", "created_by.full_name", "updated_by.full_name"],
+              },
               token,
               errorMessage: "Failed to fetch GP",
             }),
             fetchAllQueryRows<GroupCustomerApiResponse>({
               endpoint: API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
-              spec: { fields: ["*", "created_by.full_name", "updated_by.full_name"] },
+              spec: {
+                fields: ["*", "created_by.full_name", "updated_by.full_name"],
+              },
               token,
               errorMessage: "Failed to fetch GC",
             }),
             fetchAllQueryRows<BranchCustomerApiResponse>({
               endpoint: API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2,
-              spec: { fields: ["*", "created_by.full_name", "updated_by.full_name"] },
+              spec: {
+                fields: ["*", "created_by.full_name", "updated_by.full_name"],
+              },
               token,
               errorMessage: "Failed to fetch BC",
             }),
@@ -556,7 +621,7 @@ export default function CustomerOverviewPage() {
             contact: bc.owner_name || "-",
             branchLocation: bc.branch_city || bc.branch_name || "-",
             monthlyVolume: "-",
-            status: getStatus(row.disabled),
+            status: row.status || getStatus(row.disabled),
             type: "bc",
             segment: "Branch",
             createdAt: bc.created_at,
@@ -573,6 +638,7 @@ export default function CustomerOverviewPage() {
 
         setTabStats(nextStats);
         setCards([...nbCards, ...gpCards, ...gcCards, ...bcCards]);
+        setPolicyByCard({});
         if (failedMainRequests >= 4 && errors.length > 0) {
           setError(errors.join(" | "));
         } else {
@@ -656,6 +722,70 @@ export default function CustomerOverviewPage() {
 
   const visibleCards = filteredCards.slice(0, visibleCount);
   const hasMoreCards = visibleCards.length < filteredCards.length;
+
+  useEffect(() => {
+    if (!isAuthenticated || !token || visibleCards.length === 0) return;
+
+    const cardsToLoad = visibleCards.filter(
+      (card) => !(getPolicyCacheKey(card) in policyByCard),
+    );
+
+    if (cardsToLoad.length === 0) return;
+
+    let cancelled = false;
+
+    async function loadPolicies() {
+      const results = await Promise.allSettled(
+        cardsToLoad.map(async (card) => {
+          const { policy_id, policy_type } = getPolicyRequestParams(card);
+          const response = await apiFetch(
+            getApiUrl(
+              `${API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2}/method/get_customer_policy_active`,
+            ),
+            {
+              method: "POST",
+              cache: "no-store",
+              body: JSON.stringify({ policy_id, policy_type }),
+            },
+            token,
+          );
+
+          if (!response.ok) {
+            throw new Error(
+              `Gagal memuat policy ${card.type.toUpperCase()} ${card.code}`,
+            );
+          }
+
+          const json = (await response.json()) as {
+            data?: CustomerPolicyResponseData | null;
+          };
+
+          return {
+            key: getPolicyCacheKey(card),
+            data: json?.data || null,
+          };
+        }),
+      );
+
+      if (cancelled) return;
+
+      setPolicyByCard((prev) => {
+        const next = { ...prev };
+        results.forEach((result, index) => {
+          const key = getPolicyCacheKey(cardsToLoad[index]);
+          next[key] =
+            result.status === "fulfilled" ? result.value.data : null;
+        });
+        return next;
+      });
+    }
+
+    void loadPolicies();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, policyByCard, token, visibleCards]);
 
   useEffect(() => {
     const target = loadMoreRef.current;
@@ -970,66 +1100,72 @@ export default function CustomerOverviewPage() {
             {visibleCards.map((item) => (
               <article
                 key={`${item.type}-${item.id}`}
-                className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm cursor-pointer"
+                className="cursor-pointer overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
                 onClick={() => openDetail(item)}
               >
-                <div className="h-1.5 bg-gradient-to-r from-orange-500 to-orange-400" />
-                <div className="space-y-4 p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconWrapperClass(item.type)}`}
-                      >
-                        {renderCardIcon(item.type)}
-                      </div>
-                      <div>
-                        <p className="line-clamp-1 text-xl font-bold text-slate-900">
-                          {item.name}
-                        </p>
-                        <p className="text-xs font-semibold uppercase text-slate-500">
-                          ID: {item.code}
-                        </p>
-                      </div>
-                    </div>
-                    <span
-                      className={`rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase ${statusBadgeClass(item.status)}`}
-                    >
-                      {item.status}
-                    </span>
-                  </div>
+                {(() => {
+                  const policy = policyByCard[getPolicyCacheKey(item)];
+                  const creditLimit = policy?.credit_limit;
+                  const paymentTerm = policy?.payment_term;
 
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Contact</span>
-                      <span className="font-semibold text-slate-900">
-                        {item.contact}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Branch Location</span>
-                      <span className="font-semibold text-slate-900">
-                        {item.branchLocation}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Monthly Volume</span>
-                      <span className="font-bold text-orange-500">
-                        {item.monthlyVolume}
-                      </span>
-                    </div>
-                  </div>
+                  return (
+                    <>
+                      <div className="h-1.5 bg-gradient-to-r from-orange-500 to-orange-400" />
+                      <div className="space-y-4 p-5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconWrapperClass(item.type)}`}
+                            >
+                              {renderCardIcon(item.type)}
+                            </div>
+                            <div>
+                              <p className="line-clamp-1 text-base font-bold text-slate-900">
+                                {item.name}
+                              </p>
+                              <p className="text-xs font-semibold uppercase text-slate-500">
+                                ID: {item.code}
+                              </p>
+                            </div>
+                          </div>
+                          {item.type === "bc" ? (
+                            <span
+                              className={`rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase ${statusBadgeClass(item.status)}`}
+                            >
+                              {item.status}
+                            </span>
+                          ) : null}
+                        </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={`rounded-md px-2.5 py-1 text-[10px] font-bold uppercase ${typeBadgeClass(item.type)}`}
-                    >
-                      {item.type} Account
-                    </span>
-                    <span className="rounded-md bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase text-slate-600">
-                      {item.segment}
-                    </span>
-                  </div>
-                </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-xl border border-violet-100 bg-violet-50/70 px-3 py-2.5">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-violet-700">
+                              Credit Limit
+                            </p>
+                            <p className="mt-1 text-sm font-bold text-slate-900">
+                              {formatCurrency(creditLimit?.value)}
+                            </p>
+                            <p className="mt-1 text-[11px] font-semibold text-violet-700">
+                              Level: {policyLevelLabel(creditLimit?.active_level)}
+                            </p>
+                          </div>
+
+                          <div className="rounded-xl border border-cyan-100 bg-cyan-50/70 px-3 py-2.5">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-700">
+                              Payment Term
+                            </p>
+                            <p className="mt-1 text-sm font-bold text-slate-900">
+                              {formatDays(paymentTerm?.value)}
+                            </p>
+                            <p className="mt-1 text-[11px] font-semibold text-cyan-700">
+                              Level: {policyLevelLabel(paymentTerm?.active_level)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
                 <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-5 py-3">
                   <button
                     onClick={(e) => {
@@ -1041,7 +1177,7 @@ export default function CustomerOverviewPage() {
                     <FaEye className="h-3 w-3" />
                     VIEW DETAILS
                   </button>
-                  <button
+                  {/* <button
                     onClick={(e) => {
                       e.stopPropagation();
                       openDetail(item);
@@ -1050,7 +1186,7 @@ export default function CustomerOverviewPage() {
                   >
                     <FaEdit className="h-3 w-3" />
                     EDIT
-                  </button>
+                  </button> */}
                 </div>
               </article>
             ))}
