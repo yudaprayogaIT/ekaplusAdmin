@@ -1082,12 +1082,28 @@ export default function CustomerOverviewPage() {
         isOpen={selectedNB !== null}
         onClose={() => setSelectedNB(null)}
         item={selectedNB}
+        onViewGP={(gp) => {
+          setSelectedNB(null);
+          setSelectedGP(gp);
+        }}
+        onViewGC={(gc) => {
+          setSelectedNB(null);
+          setSelectedGC(gc);
+        }}
+        onViewBC={(bc) => {
+          setSelectedNB(null);
+          setSelectedBC(bc);
+        }}
       />
 
       <GPDetailModal
         isOpen={selectedGP !== null}
         onClose={() => setSelectedGP(null)}
         gp={selectedGP}
+        onViewNB={(nb) => {
+          setSelectedGP(null);
+          setSelectedNB(nb);
+        }}
         onViewGC={(gc) => {
           setSelectedGP(null);
           setSelectedGC(gc);

@@ -6,6 +6,7 @@ import {
   FaBan,
   FaBuilding,
   FaCheckCircle,
+  FaChevronRight,
   FaClock,
   FaStore,
   FaTags,
@@ -13,7 +14,12 @@ import {
   FaUsers,
 } from "react-icons/fa";
 import { HiXMark } from "react-icons/hi2";
-import { API_CONFIG, apiFetch, getApiUrl } from "@/config/api";
+import type {
+  BranchCustomer,
+  GroupCustomer,
+  GroupParent,
+} from "@/types/customer";
+import { API_CONFIG, apiFetch, getApiUrl, getQueryUrl } from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
 
 export interface NationalBrandDetailData {
@@ -36,6 +42,9 @@ interface NBDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   item: NationalBrandDetailData | null;
+  onViewGP?: (gp: GroupParent) => void;
+  onViewGC?: (gc: GroupCustomer) => void;
+  onViewBC?: (bc: BranchCustomer) => void;
 }
 
 type DetailTab = "summary" | "owner" | "hierarchy" | "activity";
@@ -88,6 +97,95 @@ interface PolicyHierarchyResponse {
   } | null;
 }
 
+interface GroupParentDetailRow {
+  id: number;
+  name?: string | null;
+  gp_name?: string | null;
+  description?: string | null;
+  credit_limit_active?: number | null;
+  credit_limit?: number | null;
+  payment_term_active?: number | null;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number | null;
+  limit_customer_overdue?: number | null;
+  owner_name?: string | null;
+  owner_phone?: string | null;
+  owner_email?: string | null;
+  disabled?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  "created_by.full_name"?: string | null;
+  "updated_by.full_name"?: string | null;
+  created_by?: number | { full_name?: string } | null;
+  updated_by?: number | { full_name?: string } | null;
+}
+
+interface GroupCustomerDetailRow {
+  id: number;
+  name?: string | null;
+  gc_name?: string | null;
+  description?: string | null;
+  gpid?:
+    | number
+    | { id?: number | string; name?: string; gp_name?: string }
+    | null;
+  company_name?: string | null;
+  company_title?: string | null;
+  company_type?: string | null;
+  credit_limit_active?: number | null;
+  credit_limit?: number | null;
+  payment_term_active?: number | null;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number | null;
+  limit_customer_overdue?: number | null;
+  owner_full_name?: string | null;
+  owner_phone?: string | null;
+  owner_email?: string | null;
+  owner_place_of_birth?: string | null;
+  owner_date_of_birth?: string | null;
+  tax_status?: number | null;
+  npwp?: string | null;
+  disabled?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  "created_by.full_name"?: string | null;
+  "updated_by.full_name"?: string | null;
+  created_by?: number | { full_name?: string } | null;
+  updated_by?: number | { full_name?: string } | null;
+}
+
+interface BranchCustomerDetailRow {
+  id: number;
+  name?: string | null;
+  bcid_name?: string | null;
+  gcid?:
+    | number
+    | { id?: number | string; name?: string; gc_name?: string }
+    | null;
+  branch?:
+    | number
+    | { id?: number | string; branch_name?: string; city?: string }
+    | null;
+  credit_limit_active?: number | null;
+  credit_limit?: number | null;
+  payment_term_active?: number | null;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number | null;
+  limit_customer_overdue?: number | null;
+  branch_owner?: string | null;
+  branch_owner_phone?: string | null;
+  branch_owner_email?: string | null;
+  receipt_delivery_method?: string | null;
+  receipt_issued_at?: string | null;
+  disabled?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  "created_by.full_name"?: string | null;
+  "updated_by.full_name"?: string | null;
+  created_by?: number | { full_name?: string } | null;
+  updated_by?: number | { full_name?: string } | null;
+}
+
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("id-ID", {
     dateStyle: "long",
@@ -110,9 +208,172 @@ function formatDays(value?: number | null): string {
   return `${value} hari`;
 }
 
-export function NBDetailModal({ isOpen, onClose, item }: NBDetailModalProps) {
+function toNumber(value: unknown): number | undefined {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+function resolveUserName(
+  directName: string | null | undefined,
+  value: number | { full_name?: string } | null | undefined,
+): string | undefined {
+  if (directName) return directName;
+  if (value && typeof value === "object" && value.full_name) {
+    return value.full_name;
+  }
+  return undefined;
+}
+
+function mapGpRow(row: GroupParentDetailRow): GroupParent {
+  return {
+    id: Number(row.id),
+    code: row.name || undefined,
+    name: row.gp_name || row.name || "-",
+    description: row.description || undefined,
+    credit_limit_active: Number(row.credit_limit_active || 0),
+    credit_limit: row.credit_limit ?? null,
+    payment_term_active: Number(row.payment_term_active || 0),
+    payment_term: row.payment_term ?? null,
+    limit_customer_overdue_active: Number(
+      row.limit_customer_overdue_active || 0,
+    ),
+    limit_customer_overdue: row.limit_customer_overdue ?? null,
+    owner_name: row.owner_name || undefined,
+    owner_phone: row.owner_phone || undefined,
+    owner_email: row.owner_email || undefined,
+    created_at: row.created_at || new Date(0).toISOString(),
+    created_by: resolveUserName(row["created_by.full_name"], row.created_by),
+    updated_at: row.updated_at || row.created_at || new Date(0).toISOString(),
+    updated_by: resolveUserName(row["updated_by.full_name"], row.updated_by),
+    disabled: Number(row.disabled || 0),
+  };
+}
+
+function mapGcRow(row: GroupCustomerDetailRow): GroupCustomer {
+  const gpId =
+    typeof row.gpid === "number"
+      ? row.gpid
+      : row.gpid && typeof row.gpid === "object"
+        ? toNumber(row.gpid.id) || 0
+        : 0;
+  const gpCode =
+    row.gpid && typeof row.gpid === "object"
+      ? row.gpid.name || undefined
+      : undefined;
+  const gpName =
+    row.gpid && typeof row.gpid === "object"
+      ? row.gpid.gp_name || row.gpid.name || undefined
+      : undefined;
+
+  return {
+    id: Number(row.id),
+    code: row.name || undefined,
+    name: row.gc_name || row.name || "-",
+    description: row.description || undefined,
+    gp_id: gpId,
+    gp_name: gpName,
+    gp_code: gpCode,
+    company_name: row.company_name || undefined,
+    company_title: row.company_title || undefined,
+    company_type: row.company_type || undefined,
+    credit_limit_active: Number(row.credit_limit_active || 0),
+    credit_limit: row.credit_limit ?? null,
+    payment_term_active: Number(row.payment_term_active || 0),
+    payment_term: row.payment_term ?? null,
+    limit_customer_overdue_active: Number(
+      row.limit_customer_overdue_active || 0,
+    ),
+    limit_customer_overdue: row.limit_customer_overdue ?? null,
+    owner_name: row.owner_full_name || undefined,
+    owner_phone: row.owner_phone || undefined,
+    owner_email: row.owner_email || undefined,
+    owner_place_of_birth: row.owner_place_of_birth || undefined,
+    owner_date_of_birth: row.owner_date_of_birth || undefined,
+    tax_status: row.tax_status ?? undefined,
+    npwp: row.npwp || undefined,
+    created_at: row.created_at || new Date(0).toISOString(),
+    created_by: resolveUserName(row["created_by.full_name"], row.created_by),
+    updated_at: row.updated_at || row.created_at || new Date(0).toISOString(),
+    updated_by: resolveUserName(row["updated_by.full_name"], row.updated_by),
+    disabled: Number(row.disabled || 0),
+  };
+}
+
+function mapBcRow(row: BranchCustomerDetailRow): BranchCustomer {
+  const gcId =
+    typeof row.gcid === "number"
+      ? row.gcid
+      : row.gcid && typeof row.gcid === "object"
+        ? toNumber(row.gcid.id) || 0
+        : 0;
+  const gcCode =
+    row.gcid && typeof row.gcid === "object"
+      ? row.gcid.name || undefined
+      : undefined;
+  const gcName =
+    row.gcid && typeof row.gcid === "object"
+      ? row.gcid.gc_name || row.gcid.name || undefined
+      : undefined;
+  const branchId =
+    typeof row.branch === "number"
+      ? row.branch
+      : row.branch && typeof row.branch === "object"
+        ? toNumber(row.branch.id) || 0
+        : 0;
+  const branchName =
+    row.branch && typeof row.branch === "object"
+      ? row.branch.branch_name || undefined
+      : undefined;
+  const branchCity =
+    row.branch && typeof row.branch === "object"
+      ? row.branch.city || undefined
+      : undefined;
+
+  return {
+    id: Number(row.id),
+    code: row.name || undefined,
+    name: row.bcid_name || row.name || "-",
+    gc_id: gcId,
+    gc_name: gcName,
+    gc_code: gcCode,
+    credit_limit_active: Number(row.credit_limit_active || 0),
+    credit_limit: row.credit_limit ?? null,
+    payment_term_active: Number(row.payment_term_active || 0),
+    payment_term: row.payment_term ?? null,
+    limit_customer_overdue_active: Number(
+      row.limit_customer_overdue_active || 0,
+    ),
+    limit_customer_overdue: row.limit_customer_overdue ?? null,
+    branch_id: branchId,
+    branch_name: branchName,
+    branch_city: branchCity,
+    owner_name: row.branch_owner || undefined,
+    owner_phone: row.branch_owner_phone || undefined,
+    owner_email: row.branch_owner_email || undefined,
+    receipt_delivery_method: row.receipt_delivery_method || undefined,
+    receipt_issued_at: row.receipt_issued_at || undefined,
+    created_at: row.created_at || new Date(0).toISOString(),
+    created_by: resolveUserName(row["created_by.full_name"], row.created_by),
+    updated_at: row.updated_at || row.created_at || new Date(0).toISOString(),
+    updated_by: resolveUserName(row["updated_by.full_name"], row.updated_by),
+    disabled: Number(row.disabled || 0),
+  };
+}
+
+export function NBDetailModal({
+  isOpen,
+  onClose,
+  item,
+  onViewGP,
+  onViewGC,
+  onViewBC,
+}: NBDetailModalProps) {
   const { token, isAuthenticated } = useAuth();
-  const [activeTab, setActiveTab] = useState<DetailTab>("summary");
+  const [activeTab, setActiveTab] = useState<DetailTab>("hierarchy");
   const [hierarchyLoading, setHierarchyLoading] = useState(false);
   const [hierarchyError, setHierarchyError] = useState<string | null>(null);
   const [hierarchyNb, setHierarchyNb] = useState<PolicyHierarchyNbRow | null>(
@@ -124,7 +385,7 @@ export function NBDetailModal({ isOpen, onClose, item }: NBDetailModalProps) {
 
   useEffect(() => {
     if (!isOpen) return;
-    setActiveTab("summary");
+    setActiveTab("hierarchy");
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
@@ -237,20 +498,80 @@ export function NBDetailModal({ isOpen, onClose, item }: NBDetailModalProps) {
     };
   }, [isAuthenticated, isOpen, item, token]);
 
+  const handleViewGp = async (id: number) => {
+    if (!token || !onViewGP) return;
+    const response = await apiFetch(
+      getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, {
+        fields: ["*", "created_by.full_name", "updated_by.full_name"],
+        filters: [["id", "=", id]],
+        limit: 1,
+      }),
+      { method: "GET", cache: "no-store" },
+      token,
+    );
+    if (!response.ok) return;
+    const json = await response.json();
+    const row = Array.isArray(json?.data)
+      ? (json.data[0] as GroupParentDetailRow | undefined)
+      : undefined;
+    if (!row) return;
+    onViewGP(mapGpRow(row));
+  };
+
+  const handleViewGc = async (id: number) => {
+    if (!token || !onViewGC) return;
+    const response = await apiFetch(
+      getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, {
+        fields: ["*", "created_by.full_name", "updated_by.full_name"],
+        filters: [["id", "=", id]],
+        limit: 1,
+      }),
+      { method: "GET", cache: "no-store" },
+      token,
+    );
+    if (!response.ok) return;
+    const json = await response.json();
+    const row = Array.isArray(json?.data)
+      ? (json.data[0] as GroupCustomerDetailRow | undefined)
+      : undefined;
+    if (!row) return;
+    onViewGC(mapGcRow(row));
+  };
+
+  const handleViewBc = async (id: number) => {
+    if (!token || !onViewBC) return;
+    const response = await apiFetch(
+      getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, {
+        fields: ["*", "created_by.full_name", "updated_by.full_name"],
+        filters: [["id", "=", id]],
+        limit: 1,
+      }),
+      { method: "GET", cache: "no-store" },
+      token,
+    );
+    if (!response.ok) return;
+    const json = await response.json();
+    const row = Array.isArray(json?.data)
+      ? (json.data[0] as BranchCustomerDetailRow | undefined)
+      : undefined;
+    if (!row) return;
+    onViewBC(mapBcRow(row));
+  };
+
   const detailTabs = useMemo(
     () => [
-      {
-        key: "summary" as const,
-        label: "Ringkasan",
-        caption: "Status & relasi",
-        icon: <FaTags className="h-4 w-4" />,
-      },
-      {
-        key: "owner" as const,
-        label: "Data Pemilik",
-        caption: "Owner / pengguna",
-        icon: <FaUser className="h-4 w-4" />,
-      },
+      // {
+      //   key: "summary" as const,
+      //   label: "Ringkasan",
+      //   caption: "Status & relasi",
+      //   icon: <FaTags className="h-4 w-4" />,
+      // },
+      // {
+      //   key: "owner" as const,
+      //   label: "Data Pemilik",
+      //   caption: "Owner / pengguna",
+      //   icon: <FaUser className="h-4 w-4" />,
+      // },
       {
         key: "hierarchy" as const,
         label: "Hierarki",
@@ -523,20 +844,26 @@ export function NBDetailModal({ isOpen, onClose, item }: NBDetailModalProps) {
                         <div className="max-h-[58vh] space-y-2.5 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                           {hierarchyGps.length > 0 ? (
                             hierarchyGps.map((gpRow) => (
-                              <div
+                              <button
+                                type="button"
                                 key={gpRow.id}
-                                className="rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-slate-800"
+                                onClick={() => void handleViewGp(gpRow.id)}
+                                className="flex w-full items-center justify-between rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-left text-sm text-slate-800 transition-all hover:border-violet-300 hover:bg-violet-100/80"
                               >
-                                <p className="line-clamp-2 text-[13px] font-semibold leading-5 text-slate-900">
-                                  {gpRow.gp_name || gpRow.name || "-"}
-                                </p>
-                                <p className="mt-2 text-xs text-violet-700">
-                                  Limit: {formatCurrency(gpRow.credit_limit)}
-                                </p>
-                                <p className="mt-1 text-xs text-violet-700">
-                                  Payment Term: {formatDays(gpRow.payment_term)}
-                                </p>
-                              </div>
+                                <div>
+                                  <p className="line-clamp-2 text-[13px] font-semibold leading-5 text-slate-900">
+                                    {gpRow.gp_name || gpRow.name || "-"}
+                                  </p>
+                                  <p className="mt-2 text-xs text-violet-700">
+                                    Limit: {formatCurrency(gpRow.credit_limit)}
+                                  </p>
+                                  <p className="mt-1 text-xs text-violet-700">
+                                    Payment Term:{" "}
+                                    {formatDays(gpRow.payment_term)}
+                                  </p>
+                                </div>
+                                <FaChevronRight className="ml-3 h-4 w-4 shrink-0 text-violet-500" />
+                              </button>
                             ))
                           ) : item.active_gp_names.length > 0 ? (
                             item.active_gp_names.map((name) => (
@@ -574,17 +901,22 @@ export function NBDetailModal({ isOpen, onClose, item }: NBDetailModalProps) {
                         <div className="max-h-[58vh] space-y-2.5 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                           {hierarchyGcs.length > 0 ? (
                             hierarchyGcs.map((gcRow) => (
-                              <div
+                              <button
+                                type="button"
                                 key={gcRow.id}
-                                className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-slate-800"
+                                onClick={() => void handleViewGc(gcRow.id)}
+                                className="flex w-full items-center justify-between rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-left text-sm text-slate-800 transition-all hover:border-blue-300 hover:bg-blue-100/80"
                               >
-                                <p className="line-clamp-2 text-[13px] font-semibold leading-5 text-slate-900">
-                                  {gcRow.gc_name || gcRow.name || "-"}
-                                </p>
-                                <p className="mt-2 text-xs text-blue-700">
-                                  GCID: {gcRow.name || `GC${gcRow.id}`}
-                                </p>
-                              </div>
+                                <div>
+                                  <p className="line-clamp-2 text-[13px] font-semibold leading-5 text-slate-900">
+                                    {gcRow.gc_name || gcRow.name || "-"}
+                                  </p>
+                                  <p className="mt-2 text-xs text-blue-700">
+                                    GCID: {gcRow.name || `GC${gcRow.id}`}
+                                  </p>
+                                </div>
+                                <FaChevronRight className="ml-3 h-4 w-4 shrink-0 text-blue-500" />
+                              </button>
                             ))
                           ) : item.active_gc_names.length > 0 ? (
                             item.active_gc_names.map((name) => (
@@ -629,17 +961,22 @@ export function NBDetailModal({ isOpen, onClose, item }: NBDetailModalProps) {
                               const city =
                                 bcRow._relations?.branch?.city || "-";
                               return (
-                                <div
+                                <button
+                                  type="button"
                                   key={bcRow.id}
-                                  className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3 text-sm text-slate-800"
+                                  onClick={() => void handleViewBc(bcRow.id)}
+                                  className="flex w-full items-center justify-between rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3 text-left text-sm text-slate-800 transition-all hover:border-orange-300 hover:bg-orange-100/80"
                                 >
-                                  <p className="line-clamp-2 text-[13px] font-semibold leading-5 text-slate-900">
-                                    {gcName} - {city}
-                                  </p>
-                                  <p className="mt-2 text-xs text-orange-700">
-                                    BCID: {bcRow.name || `BC${bcRow.id}`}
-                                  </p>
-                                </div>
+                                  <div>
+                                    <p className="line-clamp-2 text-[13px] font-semibold leading-5 text-slate-900">
+                                      {gcName} - {city}
+                                    </p>
+                                    <p className="mt-2 text-xs text-orange-700">
+                                      BCID: {bcRow.name || `BC${bcRow.id}`}
+                                    </p>
+                                  </div>
+                                  <FaChevronRight className="ml-3 h-4 w-4 shrink-0 text-orange-500" />
+                                </button>
                               );
                             })
                           ) : item.active_bc_names.length > 0 ? (

@@ -18,6 +18,14 @@ import { API_CONFIG } from "@/config/api";
 import Pagination, { usePagination } from "@/components/ui/Pagination";
 import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import { NBDetailModal, type NationalBrandDetailData } from "./NBDetailModal";
+import { GPDetailModal } from "@/components/group_parent/GPDetailModal";
+import { GCDetailModal } from "@/components/group_customer/GCDetailModal";
+import { BCDetailModal } from "@/components/branch_customer/BCDetailModal";
+import type {
+  BranchCustomer,
+  GroupCustomer,
+  GroupParent,
+} from "@/types/customer";
 
 interface NationalBrandApiResponse {
   id: number;
@@ -144,6 +152,9 @@ export default function NBList() {
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
   const [selectedItem, setSelectedItem] =
     useState<NationalBrandDetailData | null>(null);
+  const [selectedGP, setSelectedGP] = useState<GroupParent | null>(null);
+  const [selectedGC, setSelectedGC] = useState<GroupCustomer | null>(null);
+  const [selectedBC, setSelectedBC] = useState<BranchCustomer | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -649,6 +660,67 @@ export default function NBList() {
         isOpen={selectedItem !== null}
         onClose={() => setSelectedItem(null)}
         item={selectedItem}
+        onViewGP={(gp) => {
+          setSelectedItem(null);
+          setSelectedGP(gp);
+        }}
+        onViewGC={(gc) => {
+          setSelectedItem(null);
+          setSelectedGC(gc);
+        }}
+        onViewBC={(bc) => {
+          setSelectedItem(null);
+          setSelectedBC(bc);
+        }}
+      />
+
+      <GPDetailModal
+        isOpen={selectedGP !== null}
+        onClose={() => setSelectedGP(null)}
+        gp={selectedGP}
+        onViewGC={(gc) => {
+          setSelectedGP(null);
+          setSelectedGC(gc);
+        }}
+        onViewBC={(bc) => {
+          setSelectedGP(null);
+          setSelectedBC(bc);
+        }}
+        onViewNB={(nb) => {
+          setSelectedGP(null);
+          setSelectedItem(nb);
+        }}
+      />
+
+      <GCDetailModal
+        isOpen={selectedGC !== null}
+        onClose={() => setSelectedGC(null)}
+        gc={selectedGC}
+        onViewGP={(gp) => {
+          setSelectedGC(null);
+          setSelectedGP(gp);
+        }}
+        onViewBC={(bc) => {
+          setSelectedGC(null);
+          setSelectedBC(bc);
+        }}
+      />
+
+      <BCDetailModal
+        isOpen={selectedBC !== null}
+        onClose={() => setSelectedBC(null)}
+        bc={selectedBC}
+        onViewGP={(gp) => {
+          setSelectedBC(null);
+          setSelectedGP(gp);
+        }}
+        onViewGC={(gc) => {
+          setSelectedBC(null);
+          setSelectedGC(gc);
+        }}
+        onViewBC={(bc) => {
+          setSelectedBC(bc);
+        }}
       />
     </div>
   );

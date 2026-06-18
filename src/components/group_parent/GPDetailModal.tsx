@@ -24,6 +24,7 @@ import type {
   GroupCustomer,
   GroupParent,
 } from "@/types/customer";
+import type { NationalBrandDetailData } from "@/components/national_brand/NBDetailModal";
 import {
   API_CONFIG,
   apiFetch,
@@ -38,6 +39,7 @@ interface GPDetailModalProps {
   onClose: () => void;
   gp: GroupParent | null;
   onGPUpdate?: (updatedGP: GroupParent) => void;
+  onViewNB?: (nb: NationalBrandDetailData) => void;
   onViewGC?: (gc: GroupCustomer) => void;
   onViewBC?: (bc: BranchCustomer) => void;
 }
@@ -55,12 +57,25 @@ interface NationalBrandRow {
   id: number;
   name?: string | null;
   nb_name?: string | null;
+  disabled?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  credit_limit?: number | null;
+  payment_term?: number | null;
 }
 
 interface PolicyHierarchyGcRow {
   id: number;
   name?: string | null;
   gc_name?: string | null;
+}
+
+interface PolicyHierarchyGpRow {
+  id: number;
+  name?: string | null;
+  gp_name?: string | null;
+  credit_limit?: number | null;
+  payment_term?: number | null;
 }
 
 interface PolicyHierarchyBcRow {
@@ -81,13 +96,15 @@ interface PolicyHierarchyBcRow {
 interface PolicyHierarchyResponse {
   data?: {
     data?: {
+      gp?: PolicyHierarchyGpRow | null;
       gcs?: PolicyHierarchyGcRow[] | null;
       bcs?: PolicyHierarchyBcRow[] | null;
     } | null;
   } | null;
 }
 
-type DetailTab = "company" | "finance" | "hierarchy" | "activity";
+// type DetailTab = "company" | "finance" | "hierarchy" | "activity";
+type DetailTab = "hierarchy" | "activity";
 
 function toNumber(value: unknown): number | undefined {
   if (typeof value === "number") return value;
@@ -103,6 +120,21 @@ function formatNullableNumber(value?: number | null): string {
     return "-";
   }
   return new Intl.NumberFormat("id-ID").format(Number(value));
+}
+
+function formatCurrency(value?: number | null): string {
+  if (typeof value !== "number" || Number.isNaN(value)) return "-";
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatDays(value?: number | null): string {
+  if (typeof value !== "number" || Number.isNaN(value)) return "-";
+  return `${value} hari`;
 }
 
 function formatDateTime(value?: string | null): string {
@@ -132,11 +164,12 @@ export function GPDetailModal({
   onClose,
   gp,
   onGPUpdate,
+  onViewNB,
   onViewGC,
   onViewBC,
 }: GPDetailModalProps) {
   const { token, isAuthenticated } = useAuth();
-  const [activeTab, setActiveTab] = useState<DetailTab>("company");
+  const [activeTab, setActiveTab] = useState<DetailTab>("hierarchy");
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedName, setEditedName] = useState("");
   const [editedDescription, setEditedDescription] = useState("");
@@ -144,18 +177,28 @@ export function GPDetailModal({
   const [editedCreditLimit, setEditedCreditLimit] = useState("");
   const [editedPaymentTermActive, setEditedPaymentTermActive] = useState(0);
   const [editedPaymentTerm, setEditedPaymentTerm] = useState("");
-  const [editedLimitCustomerOverdueActive, setEditedLimitCustomerOverdueActive] =
-    useState(0);
+  const [
+    editedLimitCustomerOverdueActive,
+    setEditedLimitCustomerOverdueActive,
+  ] = useState(0);
   const [editedLimitCustomerOverdue, setEditedLimitCustomerOverdue] =
     useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [loadingChildren, setLoadingChildren] = useState(false);
   const [childGCs, setChildGCs] = useState<GroupCustomer[]>([]);
   const [childBCs, setChildBCs] = useState<BranchCustomer[]>([]);
+  const [hierarchyGp, setHierarchyGp] = useState<PolicyHierarchyGpRow | null>(
+    null,
+  );
   const [linkedNB, setLinkedNB] = useState<{
     id: number;
     code: string;
     name: string;
+    credit_limit?: number | null;
+    payment_term?: number | null;
+    disabled?: number | null;
+    created_at?: string | null;
+    updated_at?: string | null;
   } | null>(null);
 
   const syncEditState = useCallback((source: GroupParent) => {
@@ -186,7 +229,7 @@ export function GPDetailModal({
 
   useEffect(() => {
     if (isOpen && gp) {
-      setActiveTab("company");
+      setActiveTab("hierarchy");
       setIsEditMode(false);
       syncEditState(gp);
     }
@@ -206,6 +249,7 @@ export function GPDetailModal({
 
     setLoadingChildren(true);
     try {
+      setHierarchyGp(null);
       const gpMetaRes = await apiFetch(
         getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, {
           fields: ["id", "nbid", "description"],
@@ -250,6 +294,11 @@ export function GPDetailModal({
                 id: Number(nbRow.id),
                 code: nbRow.name || `NB${nbRow.id}`,
                 name: nbRow.nb_name || nbRow.name || "-",
+                credit_limit: nbRow.credit_limit ?? null,
+                payment_term: nbRow.payment_term ?? null,
+                disabled: nbRow.disabled ?? null,
+                created_at: nbRow.created_at || null,
+                updated_at: nbRow.updated_at || null,
               }
             : null,
         );
@@ -272,10 +321,16 @@ export function GPDetailModal({
                 fields: ["id", "name", "branch.city", "gcid"],
               },
               gcs: {
-                fields: ["id", "gc_name"],
+                fields: ["id", "gc_name", "name"],
               },
               gp: {
-                fields: ["id", "gp_name", "credit_limit"],
+                fields: [
+                  "id",
+                  "gp_name",
+                  "credit_limit",
+                  "payment_term",
+                  "name",
+                ],
               },
               nb: {
                 fields: ["id", "nb_name"],
@@ -295,6 +350,7 @@ export function GPDetailModal({
       const hierarchyJson =
         (await hierarchyResponse.json()) as PolicyHierarchyResponse;
       const hierarchyData = hierarchyJson.data?.data;
+      setHierarchyGp(hierarchyData?.gp || null);
       const hierarchyGcRows = Array.isArray(hierarchyData?.gcs)
         ? hierarchyData?.gcs || []
         : [];
@@ -342,12 +398,150 @@ export function GPDetailModal({
       });
       setChildBCs(mappedBCs);
     } catch {
+      setHierarchyGp(null);
       setChildGCs([]);
       setChildBCs([]);
     } finally {
       setLoadingChildren(false);
     }
   }, [gp, isAuthenticated, isOpen, token]);
+
+  const handleViewLinkedNb = async () => {
+    if (!token || !linkedNB || !onViewNB) return;
+
+    try {
+      const [nbRes, hierarchyRes, memberRes] = await Promise.all([
+        apiFetch(
+          getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, {
+            fields: [
+              "id",
+              "name",
+              "nb_name",
+              "disabled",
+              "created_at",
+              "updated_at",
+            ],
+            filters: [["id", "=", linkedNB.id]],
+            limit: 1,
+          }),
+          { method: "GET", cache: "no-store" },
+          token,
+        ),
+        apiFetch(
+          getApiUrl(
+            `${API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2}/method/get_policy_hierarchy`,
+          ),
+          {
+            method: "POST",
+            cache: "no-store",
+            body: JSON.stringify({
+              level: "nbid",
+              value: linkedNB.id,
+              format: "full",
+              entities: ["gps", "gcs", "bcs"],
+              query: {
+                bcs: {
+                  fields: ["id", "name", "branch.city", "gcid"],
+                },
+                gcs: {
+                  fields: ["id", "gc_name", "name"],
+                },
+                gps: {
+                  fields: ["id", "gp_name", "name"],
+                },
+                nb: {
+                  fields: ["id", "nb_name", "name"],
+                },
+              },
+            }),
+          },
+          token,
+        ),
+        apiFetch(
+          getQueryUrl(API_CONFIG.ENDPOINTS.MEMBER_OF, {
+            fields: ["*", "user.full_name"],
+            filters: [
+              ["ref_type", "=", "nbid"],
+              ["ref_id", "=", linkedNB.id],
+            ],
+          }),
+          { method: "GET", cache: "no-store" },
+          token,
+        ),
+      ]);
+
+      if (!nbRes.ok || !hierarchyRes.ok) return;
+
+      const nbJson = await nbRes.json();
+      const nbRow: NationalBrandRow | undefined = Array.isArray(nbJson?.data)
+        ? nbJson.data[0]
+        : undefined;
+
+      const hierarchyJson = (await hierarchyRes.json()) as {
+        data?: {
+          data?: {
+            gps?: Array<{ id: number; gp_name?: string | null }> | null;
+            gcs?: Array<{ id: number; gc_name?: string | null }> | null;
+            bcs?: Array<{
+              id: number;
+              name?: string | null;
+              _relations?: {
+                gcid?: { gc_name?: string | null } | null;
+                branch?: { city?: string | null } | null;
+              } | null;
+            }> | null;
+          } | null;
+        } | null;
+      };
+
+      const memberJson = memberRes.ok ? await memberRes.json() : { data: [] };
+      const owners = Array.isArray(memberJson?.data)
+        ? memberJson.data
+            .map(
+              (row: { user?: { full_name?: string | null } | null }) =>
+                row.user?.full_name || null,
+            )
+            .filter((value: string | null): value is string => Boolean(value))
+        : [];
+
+      const gps = Array.isArray(hierarchyJson.data?.data?.gps)
+        ? hierarchyJson.data?.data?.gps || []
+        : [];
+      const gcs = Array.isArray(hierarchyJson.data?.data?.gcs)
+        ? hierarchyJson.data?.data?.gcs || []
+        : [];
+      const bcs = Array.isArray(hierarchyJson.data?.data?.bcs)
+        ? hierarchyJson.data?.data?.bcs || []
+        : [];
+
+      onViewNB({
+        id: linkedNB.id,
+        code: (nbRow?.name || linkedNB.code || `NB${linkedNB.id}`) as string,
+        name: (nbRow?.nb_name || nbRow?.name || linkedNB.name || "-") as string,
+        disabled: Number(nbRow?.disabled || linkedNB.disabled || 0),
+        created_at:
+          nbRow?.created_at || linkedNB.created_at || new Date(0).toISOString(),
+        updated_at:
+          nbRow?.updated_at ||
+          linkedNB.updated_at ||
+          nbRow?.created_at ||
+          new Date(0).toISOString(),
+        owners,
+        active_gp_count: gps.length,
+        active_gc_count: gcs.length,
+        active_bc_count: bcs.length,
+        active_gp_names: gps.map((row) => row.gp_name || `GP ${row.id}`),
+        active_gc_names: gcs.map((row) => row.gc_name || `GC ${row.id}`),
+        active_bc_names: bcs.map((row) => {
+          const gcName = row._relations?.gcid?.gc_name || "GC";
+          const city = row._relations?.branch?.city || "-";
+          return `${gcName} - ${city}`;
+        }),
+      });
+    } catch {
+      // swallow for now; clicking should fail quietly
+    }
+  };
 
   useEffect(() => {
     void loadChildren();
@@ -356,7 +550,7 @@ export function GPDetailModal({
   const handleEditClick = () => {
     if (!gp) return;
     syncEditState(gp);
-    setActiveTab("company");
+    setActiveTab("hierarchy");
     setIsEditMode(true);
   };
 
@@ -415,18 +609,18 @@ export function GPDetailModal({
 
   const detailTabs = useMemo(
     () => [
-      {
-        key: "company" as const,
-        label: "Data Perusahaan",
-        caption: "Identitas & owner",
-        icon: <FaBuilding className="h-4 w-4" />,
-      },
-      {
-        key: "finance" as const,
-        label: "Data Keuangan",
-        caption: "Credit & term",
-        icon: <FaTags className="h-4 w-4" />,
-      },
+      // {
+      //   key: "company" as const,
+      //   label: "Data Perusahaan",
+      //   caption: "Identitas & owner",
+      //   icon: <FaBuilding className="h-4 w-4" />,
+      // },
+      // {
+      //   key: "finance" as const,
+      //   label: "Data Keuangan",
+      //   caption: "Credit & term",
+      //   icon: <FaTags className="h-4 w-4" />,
+      // },
       {
         key: "hierarchy" as const,
         label: "Hierarki",
@@ -458,7 +652,7 @@ export function GPDetailModal({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+            className="flex max-h-[94vh] w-full max-w-[92vw] xl:max-w-[1320px] flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
           >
             <div className="border-b border-purple-200 bg-gradient-to-r from-purple-600 via-purple-500 to-fuchsia-500 px-6 py-5">
               <div className="flex items-start justify-between gap-4">
@@ -509,8 +703,8 @@ export function GPDetailModal({
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 p-4 md:p-6">
-              <div className="grid min-h-0 gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 p-4 md:p-5 xl:p-6">
+              <div className="grid min-h-0 gap-5 lg:grid-cols-[210px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)]">
                 <aside className="space-y-3">
                   {detailTabs.map((tab) => {
                     const active = activeTab === tab.key;
@@ -551,7 +745,7 @@ export function GPDetailModal({
                   })}
                 </aside>
 
-                <div className="min-h-0 space-y-6">
+                <div className="min-h-0 space-y-5">
                   <section className="rounded-3xl border border-white bg-white p-6 shadow-sm">
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
@@ -576,25 +770,44 @@ export function GPDetailModal({
                           Entitas induk untuk relasi group customer dan branch
                           customer.
                         </p>
+                        {linkedNB && (
+                          <p className="mt-3 text-sm text-slate-500">
+                            Terhubung ke National Brand{" "}
+                            <span className="font-semibold text-slate-900">
+                              {linkedNB.name}
+                            </span>{" "}
+                            <span className="text-indigo-600">
+                              ({linkedNB.code})
+                            </span>
+                          </p>
+                        )}
                       </div>
-
-                      {linkedNB && (
-                        <div className="min-w-[220px] rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3">
-                          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-indigo-600">
-                            National Brand
+                      <div className="grid min-w-[240px] gap-3 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-violet-100 bg-violet-50 px-5 py-4">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">
+                            Credit Limit
                           </p>
-                          <p className="mt-2 text-lg font-bold text-slate-900">
-                            {linkedNB.name}
-                          </p>
-                          <p className="text-sm text-indigo-600">
-                            NBID: {linkedNB.code}
+                          <p className="mt-3 text-2xl font-bold leading-none text-violet-900">
+                            {formatCurrency(
+                              hierarchyGp?.credit_limit ?? gp.credit_limit,
+                            )}
                           </p>
                         </div>
-                      )}
+                        <div className="rounded-2xl border border-cyan-100 bg-cyan-50 px-5 py-4">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">
+                            Payment Term
+                          </p>
+                          <p className="mt-3 text-2xl font-bold leading-none text-cyan-900">
+                            {formatDays(
+                              hierarchyGp?.payment_term ?? gp.payment_term,
+                            )}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   </section>
 
-                  {activeTab === "company" && (
+                  {/* {activeTab === "company" && (
                     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)]">
                       <section className="rounded-3xl border border-purple-100 bg-white p-6 shadow-sm">
                         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-purple-500">
@@ -624,7 +837,9 @@ export function GPDetailModal({
                             {isEditMode ? (
                               <textarea
                                 value={editedDescription}
-                                onChange={(e) => setEditedDescription(e.target.value)}
+                                onChange={(e) =>
+                                  setEditedDescription(e.target.value)
+                                }
                                 className="mt-2 min-h-[96px] w-full rounded-xl border border-purple-200 bg-white px-3 py-2 text-sm"
                                 placeholder="Deskripsi group parent"
                                 disabled={isSaving}
@@ -901,11 +1116,53 @@ export function GPDetailModal({
                         </div>
                       </div>
                     </section>
-                  )}
+                  )} */}
 
                   {activeTab === "hierarchy" && (
-                    <div className="grid min-h-0 gap-4 xl:grid-cols-2">
-                      <section className="flex min-h-0 flex-col rounded-3xl border border-blue-100 bg-white p-5 shadow-sm">
+                    <div className="grid min-h-0 gap-4 xl:grid-cols-3">
+                      <section className="flex min-h-0 flex-col rounded-3xl border border-indigo-100 bg-white p-4 shadow-sm xl:p-5">
+                        <div className="mb-4 flex items-center gap-3">
+                          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-500 text-white">
+                            <FaBuilding className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-indigo-500">
+                              National Brand
+                            </p>
+                            <p className="text-sm text-slate-500">
+                              {linkedNB ? "Relasi induk" : "Belum terhubung"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {linkedNB ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleViewLinkedNb()}
+                            className="flex w-full items-center justify-between rounded-2xl border border-indigo-100 bg-indigo-50/80 px-4 py-4 text-left text-sm text-slate-800 transition-all hover:border-indigo-300 hover:bg-indigo-100/80"
+                          >
+                            <div>
+                              <p className="line-clamp-2 text-[13px] font-semibold leading-5 text-slate-900">
+                                {linkedNB.name}
+                              </p>
+                              <p className="mt-2 text-xs text-indigo-700">
+                                Limit: {formatCurrency(linkedNB.credit_limit)}
+                              </p>
+                              <p className="mt-1 text-xs text-indigo-700">
+                                Payment Term:{" "}
+                                {formatDays(linkedNB.payment_term)}
+                              </p>
+                            </div>
+                            <FaChevronRight className="ml-3 h-4 w-4 shrink-0 text-indigo-500" />
+                          </button>
+                        ) : (
+                          <p className="text-sm italic text-slate-500">
+                            Group Parent ini tidak terhubung ke National Brand.
+                          </p>
+                        )}
+                      </section>
+
+                      <section className="flex min-h-0 flex-col rounded-3xl border border-blue-100 bg-white p-4 shadow-sm xl:p-5">
                         <div className="mb-4 flex items-center gap-3">
                           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500 text-white">
                             <FaUsers className="h-5 w-5" />
@@ -922,23 +1179,23 @@ export function GPDetailModal({
                           </div>
                         </div>
 
-                        <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
+                        <div className="max-h-[58vh] space-y-2.5 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                           {childGCs.length > 0 ? (
                             childGCs.map((item) => (
                               <button
                                 key={item.id}
                                 onClick={() => onViewGC?.(item)}
-                                className="flex w-full items-center justify-between rounded-2xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-left transition-all hover:border-blue-300 hover:bg-blue-50"
+                                className="flex w-full items-center justify-between rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-left text-sm text-slate-800 transition-all hover:border-blue-300 hover:bg-blue-100/80"
                               >
                                 <div>
-                                  <p className="font-semibold text-slate-900">
+                                  <p className="line-clamp-2 text-[13px] font-semibold leading-5 text-slate-900">
                                     {item.name}
                                   </p>
-                                  <p className="text-xs text-slate-500">
+                                  <p className="mt-2 text-xs text-blue-700">
                                     GCID: {item.code || `GC${item.id}`}
                                   </p>
                                 </div>
-                                <FaChevronRight className="h-4 w-4 text-blue-500" />
+                                <FaChevronRight className="ml-3 h-4 w-4 shrink-0 text-blue-500" />
                               </button>
                             ))
                           ) : (
@@ -949,7 +1206,7 @@ export function GPDetailModal({
                         </div>
                       </section>
 
-                      <section className="flex min-h-0 flex-col rounded-3xl border border-orange-100 bg-white p-5 shadow-sm">
+                      <section className="flex min-h-0 flex-col rounded-3xl border border-orange-100 bg-white p-4 shadow-sm xl:p-5">
                         <div className="mb-4 flex items-center gap-3">
                           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-500 text-white">
                             <FaStore className="h-5 w-5" />
@@ -966,16 +1223,16 @@ export function GPDetailModal({
                           </div>
                         </div>
 
-                        <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
+                        <div className="max-h-[58vh] space-y-2.5 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                           {childBCs.length > 0 ? (
                             childBCs.map((item) => (
                               <button
                                 key={item.id}
                                 onClick={() => onViewBC?.(item)}
-                                className="flex w-full items-center justify-between rounded-2xl border border-orange-100 bg-orange-50/60 px-4 py-3 text-left transition-all hover:border-orange-300 hover:bg-orange-50"
+                                className="flex w-full items-center justify-between rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3 text-left text-sm text-slate-800 transition-all hover:border-orange-300 hover:bg-orange-100/80"
                               >
                                 <div>
-                                  <p className="font-semibold text-slate-900">
+                                  <p className="line-clamp-2 text-[13px] font-semibold leading-5 text-slate-900">
                                     {`${item.gc_name || item.gc_code || "GC"} - ${
                                       item.branch_city ||
                                       item.branch_name ||
@@ -983,12 +1240,12 @@ export function GPDetailModal({
                                       "-"
                                     }`}
                                   </p>
-                                  <p className="text-xs text-slate-500">
+                                  <p className="mt-2 text-xs text-orange-700">
                                     BCID: {item.code || `BC${item.id}`} •{" "}
                                     {item.branch_city || "-"}
                                   </p>
                                 </div>
-                                <FaChevronRight className="h-4 w-4 text-orange-500" />
+                                <FaChevronRight className="ml-3 h-4 w-4 shrink-0 text-orange-500" />
                               </button>
                             ))
                           ) : (
