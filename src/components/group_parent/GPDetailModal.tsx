@@ -27,11 +27,11 @@ import type {
 import {
   API_CONFIG,
   apiFetch,
+  getApiUrl,
   getQueryUrl,
   getResourceUrl,
 } from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 
 interface GPDetailModalProps {
   isOpen: boolean;
@@ -40,61 +40,6 @@ interface GPDetailModalProps {
   onGPUpdate?: (updatedGP: GroupParent) => void;
   onViewGC?: (gc: GroupCustomer) => void;
   onViewBC?: (bc: BranchCustomer) => void;
-}
-
-interface GroupCustomerRow {
-  id: number;
-  name?: string | null;
-  gc_name?: string | null;
-  description?: string | null;
-  gpid?: number | null;
-  credit_limit_active?: number | null;
-  credit_limit?: number | null;
-  payment_term_active?: number | null;
-  payment_term?: number | null;
-  limit_customer_overdue_active?: number | null;
-  limit_customer_overdue?: number | null;
-  owner_full_name?: string | null;
-  owner_phone?: string | null;
-  owner_email?: string | null;
-  disabled?: number | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-  "created_by.full_name"?: string | null;
-  "updated_by.full_name"?: string | null;
-  created_by?: number | { full_name?: string } | null;
-  updated_by?: number | { full_name?: string } | null;
-}
-
-interface BranchCustomerRow {
-  id: number;
-  name?: string | null;
-  gcid?: number | { id?: number; name?: string; gc_name?: string } | null;
-  branch?: number | { id?: number; branch_name?: string; city?: string } | null;
-  credit_limit_active?: number | null;
-  credit_limit?: number | null;
-  payment_term_active?: number | null;
-  payment_term?: number | null;
-  limit_customer_overdue_active?: number | null;
-  limit_customer_overdue?: number | null;
-  branch_owner?: string | null;
-  branch_owner_phone?: string | null;
-  branch_owner_email?: string | null;
-  receipt_delivery_method?: string | null;
-  receipt_issued_at?: string | null;
-  disabled?: number | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-  "created_by.full_name"?: string | null;
-  "updated_by.full_name"?: string | null;
-  created_by?: number | { full_name?: string } | null;
-  updated_by?: number | { full_name?: string } | null;
-}
-
-interface BranchLookupRow {
-  id: number;
-  branch_name?: string | null;
-  city?: string | null;
 }
 
 interface GroupParentMetaRow {
@@ -112,6 +57,36 @@ interface NationalBrandRow {
   nb_name?: string | null;
 }
 
+interface PolicyHierarchyGcRow {
+  id: number;
+  name?: string | null;
+  gc_name?: string | null;
+}
+
+interface PolicyHierarchyBcRow {
+  id: number;
+  name?: string | null;
+  _relations?: {
+    branch?: {
+      city?: string | null;
+    } | null;
+    gcid?: {
+      id?: number | null;
+      name?: string | null;
+      gc_name?: string | null;
+    } | null;
+  } | null;
+}
+
+interface PolicyHierarchyResponse {
+  data?: {
+    data?: {
+      gcs?: PolicyHierarchyGcRow[] | null;
+      bcs?: PolicyHierarchyBcRow[] | null;
+    } | null;
+  } | null;
+}
+
 type DetailTab = "company" | "finance" | "hierarchy" | "activity";
 
 function toNumber(value: unknown): number | undefined {
@@ -120,16 +95,6 @@ function toNumber(value: unknown): number | undefined {
     const parsed = Number.parseInt(value, 10);
     if (Number.isFinite(parsed)) return parsed;
   }
-  return undefined;
-}
-
-function resolveUserName(
-  directName: string | null | undefined,
-  value: number | { full_name?: string } | null | undefined,
-): string | undefined {
-  if (directName) return directName;
-  if (value && typeof value === "object" && value.full_name)
-    return value.full_name;
   return undefined;
 }
 
@@ -290,175 +255,95 @@ export function GPDetailModal({
         );
       }
 
-      const gcRows = await fetchAllQueryRows<GroupCustomerRow>({
-        endpoint: API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
-        spec: {
-          fields: ["*", "created_by.full_name", "updated_by.full_name"],
-          filters: [["gpid", "=", gp.id]],
+      const hierarchyResponse = await apiFetch(
+        getApiUrl(
+          `${API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2}/method/get_policy_hierarchy`,
+        ),
+        {
+          method: "POST",
+          cache: "no-store",
+          body: JSON.stringify({
+            level: "gpid",
+            value: gp.id,
+            format: "full",
+            entities: ["gp", "gcs", "bcs"],
+            query: {
+              bcs: {
+                fields: ["id", "name", "branch.city", "gcid"],
+              },
+              gcs: {
+                fields: ["id", "gc_name"],
+              },
+              gp: {
+                fields: ["id", "gp_name", "credit_limit"],
+              },
+              nb: {
+                fields: ["id", "nb_name"],
+              },
+            },
+          }),
         },
         token,
-        errorMessage: "Gagal memuat child group customer",
-      });
+      );
 
-      const mappedGCs: GroupCustomer[] = gcRows.map((row) => ({
+      if (!hierarchyResponse.ok) {
+        throw new Error(
+          `Gagal memuat hierarchy Group Parent (${hierarchyResponse.status})`,
+        );
+      }
+
+      const hierarchyJson =
+        (await hierarchyResponse.json()) as PolicyHierarchyResponse;
+      const hierarchyData = hierarchyJson.data?.data;
+      const hierarchyGcRows = Array.isArray(hierarchyData?.gcs)
+        ? hierarchyData?.gcs || []
+        : [];
+      const hierarchyBcRows = Array.isArray(hierarchyData?.bcs)
+        ? hierarchyData?.bcs || []
+        : [];
+
+      const mappedGCs: GroupCustomer[] = hierarchyGcRows.map((row) => ({
         id: Number(row.id),
         code: row.name || undefined,
         name: row.gc_name || row.name || "-",
-        description: row.description || undefined,
         gp_id: gp.id,
         gp_name: gp.name,
         gp_code: gp.code,
-        credit_limit_active: Number(row.credit_limit_active || 0),
-        credit_limit: row.credit_limit ?? null,
-        payment_term_active: Number(row.payment_term_active || 0),
-        payment_term: row.payment_term ?? null,
-        limit_customer_overdue_active: Number(
-          row.limit_customer_overdue_active || 0,
-        ),
-        limit_customer_overdue: row.limit_customer_overdue ?? null,
-        owner_name: row.owner_full_name || undefined,
-        owner_phone: row.owner_phone || undefined,
-        owner_email: row.owner_email || undefined,
-        created_at: row.created_at || new Date(0).toISOString(),
-        updated_at:
-          row.updated_at || row.created_at || new Date(0).toISOString(),
-        created_by: resolveUserName(
-          row["created_by.full_name"],
-          row.created_by,
-        ),
-        updated_by: resolveUserName(
-          row["updated_by.full_name"],
-          row.updated_by,
-        ),
-        disabled: Number(row.disabled || 0),
+        created_at: new Date(0).toISOString(),
+        updated_at: new Date(0).toISOString(),
+        disabled: 0,
       }));
       setChildGCs(mappedGCs);
 
-      const gcIds = mappedGCs.map((item) => item.id);
-      if (gcIds.length === 0) {
-        setChildBCs([]);
-        return;
-      }
-
-      const bcRows = await fetchAllQueryRows<BranchCustomerRow>({
-        endpoint: API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2,
-        spec: {
-          fields: ["*", "created_by.full_name", "updated_by.full_name"],
-          filters: [["gcid", "in", gcIds]],
-        },
-        token,
-        errorMessage: "Gagal memuat child branch customer",
-      });
-
-      const branchIds = Array.from(
-        new Set(
-          bcRows
-            .map((row) =>
-              row.branch && typeof row.branch === "object"
-                ? toNumber(row.branch.id)
-                : toNumber(row.branch),
-            )
-            .filter((id): id is number => typeof id === "number"),
-        ),
-      );
-
-      const branchMap = new Map<number, { name?: string; city?: string }>();
-      if (branchIds.length > 0) {
-        const branchRes = await apiFetch(
-          getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH, {
-            fields: ["id", "branch_name", "city"],
-            filters: [["id", "in", branchIds]],
-            limit: branchIds.length,
-          }),
-          { method: "GET", cache: "no-store" },
-          token,
-        );
-        if (branchRes.ok) {
-          const branchJson = await branchRes.json();
-          const branchRows: BranchLookupRow[] = Array.isArray(branchJson?.data)
-            ? branchJson.data
-            : [];
-          branchRows.forEach((row) => {
-            branchMap.set(Number(row.id), {
-              name: row.branch_name || undefined,
-              city: row.city || undefined,
-            });
-          });
-        }
-      }
-
-      const gcMap = new Map<number, GroupCustomer>();
-      mappedGCs.forEach((item) => gcMap.set(item.id, item));
-
-      const mappedBCs: BranchCustomer[] = bcRows.map((row) => {
-        const gcId =
-          row.gcid && typeof row.gcid === "object"
-            ? toNumber(row.gcid.id) || 0
-            : toNumber(row.gcid) || 0;
-        const branchId =
-          row.branch && typeof row.branch === "object"
-            ? toNumber(row.branch.id) || 0
-            : toNumber(row.branch) || 0;
-        const gcRef = gcMap.get(gcId);
-        const branchRef = branchMap.get(branchId);
-        const directGcName =
-          row.gcid && typeof row.gcid === "object"
-            ? row.gcid.gc_name || row.gcid.name
-            : undefined;
-        const directBranchName =
-          row.branch && typeof row.branch === "object"
-            ? row.branch.branch_name
-            : undefined;
-        const directBranchCity =
-          row.branch && typeof row.branch === "object" ? row.branch.city : "";
+      const mappedBCs: BranchCustomer[] = hierarchyBcRows.map((row) => {
+        const gcId = toNumber(row._relations?.gcid?.id) || 0;
+        const gcCode = row._relations?.gcid?.name || undefined;
+        const gcName =
+          row._relations?.gcid?.gc_name ||
+          row._relations?.gcid?.name ||
+          undefined;
+        const branchCity = row._relations?.branch?.city || undefined;
 
         return {
           id: Number(row.id),
           code: row.name || undefined,
-          name:
-            row.name ||
-            `${directGcName || gcRef?.name || "GC"} - ${
-              directBranchCity || branchRef?.city || "-"
-            }`,
+          name: `${gcName || "GC"} - ${branchCity || "-"}`,
           gc_id: gcId,
-          gc_name: directGcName || gcRef?.name,
-          gc_code:
-            (row.gcid && typeof row.gcid === "object"
-              ? row.gcid.name
-              : undefined) || gcRef?.code,
+          gc_name: gcName,
+          gc_code: gcCode,
           gp_name: gp.name,
           gp_code: gp.code,
-          credit_limit_active: Number(row.credit_limit_active || 0),
-          credit_limit: row.credit_limit ?? null,
-          payment_term_active: Number(row.payment_term_active || 0),
-          payment_term: row.payment_term ?? null,
-          limit_customer_overdue_active: Number(
-            row.limit_customer_overdue_active || 0,
-          ),
-          limit_customer_overdue: row.limit_customer_overdue ?? null,
-          branch_id: branchId,
-          branch_name: directBranchName || branchRef?.name,
-          branch_city: directBranchCity || branchRef?.city,
-          owner_name: row.branch_owner || undefined,
-          owner_phone: row.branch_owner_phone || undefined,
-          owner_email: row.branch_owner_email || undefined,
-          receipt_delivery_method: row.receipt_delivery_method || undefined,
-          receipt_issued_at: row.receipt_issued_at || undefined,
-          created_at: row.created_at || new Date(0).toISOString(),
-          updated_at:
-            row.updated_at || row.created_at || new Date(0).toISOString(),
-          created_by: resolveUserName(
-            row["created_by.full_name"],
-            row.created_by,
-          ),
-          updated_by: resolveUserName(
-            row["updated_by.full_name"],
-            row.updated_by,
-          ),
-          disabled: Number(row.disabled || 0),
+          branch_id: 0,
+          branch_city: branchCity,
+          created_at: new Date(0).toISOString(),
+          updated_at: new Date(0).toISOString(),
+          disabled: 0,
         };
       });
       setChildBCs(mappedBCs);
+    } catch {
+      setChildGCs([]);
+      setChildBCs([]);
     } finally {
       setLoadingChildren(false);
     }
@@ -624,8 +509,8 @@ export function GPDetailModal({
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto bg-slate-50/70 p-4 md:p-6">
-              <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 p-4 md:p-6">
+              <div className="grid min-h-0 gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
                 <aside className="space-y-3">
                   {detailTabs.map((tab) => {
                     const active = activeTab === tab.key;
@@ -666,7 +551,7 @@ export function GPDetailModal({
                   })}
                 </aside>
 
-                <div className="space-y-6">
+                <div className="min-h-0 space-y-6">
                   <section className="rounded-3xl border border-white bg-white p-6 shadow-sm">
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
@@ -1019,8 +904,8 @@ export function GPDetailModal({
                   )}
 
                   {activeTab === "hierarchy" && (
-                    <div className="grid gap-4 xl:grid-cols-2">
-                      <section className="rounded-3xl border border-blue-100 bg-white p-5 shadow-sm">
+                    <div className="grid min-h-0 gap-4 xl:grid-cols-2">
+                      <section className="flex min-h-0 flex-col rounded-3xl border border-blue-100 bg-white p-5 shadow-sm">
                         <div className="mb-4 flex items-center gap-3">
                           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500 text-white">
                             <FaUsers className="h-5 w-5" />
@@ -1037,7 +922,7 @@ export function GPDetailModal({
                           </div>
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
                           {childGCs.length > 0 ? (
                             childGCs.map((item) => (
                               <button
@@ -1064,7 +949,7 @@ export function GPDetailModal({
                         </div>
                       </section>
 
-                      <section className="rounded-3xl border border-orange-100 bg-white p-5 shadow-sm">
+                      <section className="flex min-h-0 flex-col rounded-3xl border border-orange-100 bg-white p-5 shadow-sm">
                         <div className="mb-4 flex items-center gap-3">
                           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-500 text-white">
                             <FaStore className="h-5 w-5" />
@@ -1081,7 +966,7 @@ export function GPDetailModal({
                           </div>
                         </div>
 
-                        <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
+                        <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
                           {childBCs.length > 0 ? (
                             childBCs.map((item) => (
                               <button
