@@ -29,6 +29,8 @@ export interface NationalBrandDetailData {
   disabled: number;
   created_at: string;
   updated_at: string;
+  created_by?: string;
+  updated_by?: string;
   owners: string[];
   active_gp_count: number;
   active_gc_count: number;
@@ -382,6 +384,10 @@ export function NBDetailModal({
   const [hierarchyGps, setHierarchyGps] = useState<PolicyHierarchyGpRow[]>([]);
   const [hierarchyGcs, setHierarchyGcs] = useState<PolicyHierarchyGcRow[]>([]);
   const [hierarchyBcs, setHierarchyBcs] = useState<PolicyHierarchyBcRow[]>([]);
+  const [activityUsers, setActivityUsers] = useState<{
+    createdBy?: string;
+    updatedBy?: string;
+  }>({});
 
   useEffect(() => {
     if (!isOpen) return;
@@ -402,15 +408,55 @@ export function NBDetailModal({
         setHierarchyGps([]);
         setHierarchyGcs([]);
         setHierarchyBcs([]);
-        setHierarchyError(null);
-        setHierarchyLoading(false);
-        return;
-      }
+      setHierarchyError(null);
+      setHierarchyLoading(false);
+      setActivityUsers({});
+      return;
+    }
 
       setHierarchyLoading(true);
       setHierarchyError(null);
+      setActivityUsers({
+        createdBy: item.created_by,
+        updatedBy: item.updated_by,
+      });
 
       try {
+        const nbDetailRes = await apiFetch(
+          getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, {
+            fields: ["*", "created_by.full_name", "updated_by.full_name"],
+            filters: [["id", "=", item.id]],
+            limit: 1,
+          }),
+          { method: "GET", cache: "no-store" },
+          token,
+        );
+        const nbDetailJson = nbDetailRes.ok
+          ? await nbDetailRes.json()
+          : { data: [] };
+        const nbDetailRow = Array.isArray(nbDetailJson?.data)
+          ? (nbDetailJson.data[0] as
+              | {
+                  "created_by.full_name"?: string | null;
+                  "updated_by.full_name"?: string | null;
+                  created_by?: number | { full_name?: string } | null;
+                  updated_by?: number | { full_name?: string } | null;
+                }
+              | undefined)
+          : undefined;
+        if (!cancelled && nbDetailRow) {
+          setActivityUsers({
+            createdBy: resolveUserName(
+              nbDetailRow["created_by.full_name"],
+              nbDetailRow.created_by,
+            ),
+            updatedBy: resolveUserName(
+              nbDetailRow["updated_by.full_name"],
+              nbDetailRow.updated_by,
+            ),
+          });
+        }
+
         const response = await apiFetch(
           getApiUrl(
             `${API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2}/method/get_policy_hierarchy`,
@@ -622,7 +668,7 @@ export function NBDetailModal({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="flex max-h-[94vh] w-full max-w-[92vw] xl:max-w-[1320px] flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+            className="flex h-[94vh] w-full max-w-[92vw] xl:max-w-[1320px] flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
           >
             <div className="border-b border-slate-200 bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 px-6 py-5">
               <div className="flex items-start justify-between gap-4">
@@ -631,22 +677,9 @@ export function NBDetailModal({
                     <FaTags className="h-6 w-6" />
                   </div>
                   <div>
-                    <div className="mb-2 flex flex-wrap items-center gap-3">
-                      <h2 className="text-2xl font-bold text-white">
-                        National Brand Details
-                      </h2>
-                      {item.disabled === 1 ? (
-                        <span className="inline-flex items-center gap-2 rounded-full bg-rose-100 px-3 py-1 text-sm font-semibold text-rose-700">
-                          <FaBan className="h-3.5 w-3.5" />
-                          Disabled
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700">
-                          <FaCheckCircle className="h-3.5 w-3.5" />
-                          Active
-                        </span>
-                      )}
-                    </div>
+                    <h2 className="mb-2 text-2xl font-bold text-white">
+                      National Brand Details
+                    </h2>
                     <p className="text-sm text-indigo-100">NBID: {item.code}</p>
                   </div>
                 </div>
@@ -1016,7 +1049,7 @@ export function NBDetailModal({
                               Created
                             </p>
                             <p className="text-sm text-slate-500">
-                              Pertama kali dibuat
+                              {activityUsers.createdBy || "System"}
                             </p>
                           </div>
                         </div>
@@ -1035,7 +1068,7 @@ export function NBDetailModal({
                               Updated
                             </p>
                             <p className="text-sm text-slate-500">
-                              Perubahan terakhir
+                              {activityUsers.updatedBy || "System"}
                             </p>
                           </div>
                         </div>

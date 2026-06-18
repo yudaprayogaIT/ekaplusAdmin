@@ -3,19 +3,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  FaBan,
   FaBuilding,
-  FaCheckCircle,
   FaChevronRight,
   FaClock,
   FaEdit,
-  FaEnvelope,
-  FaPhone,
   FaSave,
   FaStore,
-  FaTags,
   FaTimes,
-  FaUser,
   FaUsers,
 } from "react-icons/fa";
 import { HiXMark } from "react-icons/hi2";
@@ -47,6 +41,10 @@ interface GPDetailModalProps {
 interface GroupParentMetaRow {
   id: number;
   description?: string | null;
+  "created_by.full_name"?: string | null;
+  "updated_by.full_name"?: string | null;
+  created_by?: number | { full_name?: string } | null;
+  updated_by?: number | { full_name?: string } | null;
   nbid?:
     | number
     | { id?: number | string; name?: string; nb_name?: string }
@@ -115,13 +113,6 @@ function toNumber(value: unknown): number | undefined {
   return undefined;
 }
 
-function formatNullableNumber(value?: number | null): string {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) {
-    return "-";
-  }
-  return new Intl.NumberFormat("id-ID").format(Number(value));
-}
-
 function formatCurrency(value?: number | null): string {
   if (typeof value !== "number" || Number.isNaN(value)) return "-";
   return new Intl.NumberFormat("id-ID", {
@@ -143,6 +134,17 @@ function formatDateTime(value?: string | null): string {
     dateStyle: "long",
     timeStyle: "short",
   });
+}
+
+function resolveUserName(
+  directName: string | null | undefined,
+  value: number | { full_name?: string } | null | undefined,
+): string | undefined {
+  if (directName) return directName;
+  if (value && typeof value === "object" && value.full_name) {
+    return value.full_name;
+  }
+  return undefined;
 }
 
 function parseNullableInt(value: string): number | null {
@@ -200,6 +202,10 @@ export function GPDetailModal({
     created_at?: string | null;
     updated_at?: string | null;
   } | null>(null);
+  const [activityUsers, setActivityUsers] = useState<{
+    createdBy?: string;
+    updatedBy?: string;
+  }>({});
 
   const syncEditState = useCallback((source: GroupParent) => {
     setEditedName(source.name);
@@ -252,7 +258,15 @@ export function GPDetailModal({
       setHierarchyGp(null);
       const gpMetaRes = await apiFetch(
         getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, {
-          fields: ["id", "nbid", "description"],
+          fields: [
+            "id",
+            "nbid",
+            "description",
+            "created_by.full_name",
+            "updated_by.full_name",
+            "created_by",
+            "updated_by",
+          ],
           filters: [["id", "=", gp.id]],
           limit: 1,
         }),
@@ -271,6 +285,16 @@ export function GPDetailModal({
           : gpMeta?.nbid && typeof gpMeta.nbid === "object"
             ? toNumber(gpMeta.nbid.id)
             : undefined;
+      setActivityUsers({
+        createdBy: resolveUserName(
+          gpMeta?.["created_by.full_name"],
+          gpMeta?.created_by,
+        ),
+        updatedBy: resolveUserName(
+          gpMeta?.["updated_by.full_name"],
+          gpMeta?.updated_by,
+        ),
+      });
 
       if (!nbId) {
         setLinkedNB(null);
@@ -652,7 +676,7 @@ export function GPDetailModal({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="flex max-h-[94vh] w-full max-w-[92vw] xl:max-w-[1320px] flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+            className="flex h-[94vh] w-full max-w-[92vw] xl:max-w-[1320px] flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
           >
             <div className="border-b border-purple-200 bg-gradient-to-r from-purple-600 via-purple-500 to-fuchsia-500 px-6 py-5">
               <div className="flex items-start justify-between gap-4">
@@ -661,22 +685,9 @@ export function GPDetailModal({
                     <FaBuilding className="h-6 w-6" />
                   </div>
                   <div>
-                    <div className="mb-2 flex flex-wrap items-center gap-3">
-                      <h2 className="text-2xl font-bold text-white">
-                        Group Parent Details
-                      </h2>
-                      {gp.disabled === 1 ? (
-                        <span className="inline-flex items-center gap-2 rounded-full bg-rose-100 px-3 py-1 text-sm font-semibold text-rose-700">
-                          <FaBan className="h-3.5 w-3.5" />
-                          Disabled
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700">
-                          <FaCheckCircle className="h-3.5 w-3.5" />
-                          Active
-                        </span>
-                      )}
-                    </div>
+                    <h2 className="mb-2 text-2xl font-bold text-white">
+                      Group Parent Details
+                    </h2>
                     <p className="text-sm text-purple-100">
                       GPID: {gp.code || `GP${gp.id}`}
                     </p>
@@ -1270,7 +1281,9 @@ export function GPDetailModal({
                               Created
                             </p>
                             <p className="text-sm text-slate-500">
-                              {gp.created_by || "System"}
+                              {activityUsers.createdBy ||
+                                gp.created_by ||
+                                "System"}
                             </p>
                           </div>
                         </div>
@@ -1289,7 +1302,9 @@ export function GPDetailModal({
                               Updated
                             </p>
                             <p className="text-sm text-slate-500">
-                              {gp.updated_by || "System"}
+                              {activityUsers.updatedBy ||
+                                gp.updated_by ||
+                                "System"}
                             </p>
                           </div>
                         </div>

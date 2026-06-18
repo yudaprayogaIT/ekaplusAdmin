@@ -16,6 +16,7 @@ import {
   FaBuilding,
   FaCheckCircle,
   FaChevronRight,
+  FaClock,
   FaEdit,
   FaExclamationTriangle,
   FaMapMarkerAlt,
@@ -112,7 +113,8 @@ type DetailTab =
   | "finance"
   | "hierarchy"
   | "address"
-  | "contacts";
+  | "contacts"
+  | "activity";
 
 interface AddressRow {
   id: number;
@@ -564,7 +566,7 @@ export function BCDetailModal({
     try {
       const dRes = await apiFetch(
         getQueryUrl(`${API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2}/${bc.id}`, {
-          fields: ["*"],
+          fields: ["*", "created_by.full_name", "updated_by.full_name"],
         }),
         { method: "GET", cache: "no-store" },
         token,
@@ -1775,6 +1777,12 @@ export function BCDetailModal({
       caption: "Relasi contact customer",
       icon: <FaAddressBook className="h-4 w-4" />,
     },
+    {
+      key: "activity",
+      label: "Aktivitas",
+      caption: "Created & updated",
+      icon: <FaClock className="h-4 w-4" />,
+    },
   ];
 
   const typeTone = (type?: string | null) => {
@@ -1804,7 +1812,7 @@ export function BCDetailModal({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="flex max-h-[95vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
+            className="flex h-[94vh] w-full max-w-[92vw] xl:max-w-[1320px] flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
           >
             <header className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-6 py-4">
               <div className="flex items-start justify-between">
@@ -3138,6 +3146,48 @@ export function BCDetailModal({
 
                     {activeTab === "contacts" && (
                       <BCContactRelationsPanel branchCustomerId={bc.id} />
+                    )}
+
+                    {activeTab === "activity" && (
+                      <section className="grid gap-4 md:grid-cols-2">
+                        <div className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-sm">
+                          <div className="mb-4 flex items-center gap-3">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500 text-white">
+                              <FaClock className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-500">
+                                Created
+                              </p>
+                              <p className="text-sm text-slate-500">
+                                {createdBy}
+                              </p>
+                            </div>
+                          </div>
+                          <p className="text-sm text-slate-800">
+                            {dt(detail?.created_at || bc.created_at)}
+                          </p>
+                        </div>
+
+                        <div className="rounded-3xl border border-blue-100 bg-white p-5 shadow-sm">
+                          <div className="mb-4 flex items-center gap-3">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500 text-white">
+                              <FaEdit className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-500">
+                                Updated
+                              </p>
+                              <p className="text-sm text-slate-500">
+                                {updatedBy}
+                              </p>
+                            </div>
+                          </div>
+                          <p className="text-sm text-slate-800">
+                            {dt(detail?.updated_at || bc.updated_at)}
+                          </p>
+                        </div>
+                      </section>
                     )}
                   </div>
                 </div>

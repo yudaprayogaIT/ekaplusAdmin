@@ -47,6 +47,7 @@ export interface GroupCustomer {
   owner_date_of_birth?: string;
   tax_status?: number;
   npwp?: string;
+  identity_attachment?: string | null;
   created_at: string;
   created_by?: string;
   updated_at: string;

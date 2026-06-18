@@ -2,16 +2,15 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import Image from "next/image";
 import {
-  FaArrowDown,
   FaArrowUp,
-  FaBan,
   FaBuilding,
-  FaCheckCircle,
   FaChevronRight,
   FaClock,
   FaEdit,
   FaSave,
+  FaStore,
   FaTags,
   FaTimes,
   FaUser,
@@ -26,6 +25,8 @@ import type {
 import {
   API_CONFIG,
   apiFetch,
+  getApiUrl,
+  getFileUrl,
   getQueryUrl,
   getResourceUrl,
 } from "@/config/api";
@@ -68,6 +69,28 @@ interface NationalBrandRow {
   id: number;
   name?: string | null;
   nb_name?: string | null;
+}
+
+interface ActivePolicyNode {
+  active_id?: number | null;
+  active_level?: string | null;
+  value?: number | null;
+}
+
+interface CustomerPolicyActiveResponse {
+  data?: {
+    checked_id?: string | number | null;
+    checked_type?: string | null;
+    credit_limit?: ActivePolicyNode | null;
+    limit_overdue?: ActivePolicyNode | null;
+    payment_term?: ActivePolicyNode | null;
+    relation?: {
+      bcid?: number | null;
+      gcid?: number | null;
+      gpid?: number | null;
+      nbid?: number | null;
+    } | null;
+  } | null;
 }
 
 interface BranchCustomerRow {
@@ -123,7 +146,7 @@ interface GroupCustomerDetailRow {
   owner_date_of_birth?: string | null;
 }
 
-type DetailTab = "company" | "owner" | "finance" | "hierarchy" | "activity";
+type DetailTab = "company" | "finance" | "hierarchy" | "activity";
 
 const COMPANY_TYPE_OPTIONS = ["Company", "Individual"];
 const COMPANY_TITLE_OPTIONS_BY_TYPE: Record<string, string[]> = {
@@ -191,19 +214,207 @@ function resolveUserName(
   return undefined;
 }
 
-function formatNullableNumber(value?: number | null): string {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) {
-    return "-";
-  }
-  return new Intl.NumberFormat("id-ID").format(Number(value));
-}
-
 function formatDateTime(value?: string | null): string {
   if (!value) return "-";
   return new Date(value).toLocaleString("id-ID", {
     dateStyle: "long",
     timeStyle: "short",
   });
+}
+
+function formatCurrency(value?: number | null): string {
+  if (typeof value !== "number" || Number.isNaN(value)) return "-";
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatDays(value?: number | null): string {
+  if (typeof value !== "number" || Number.isNaN(value)) return "-";
+  return `${value} hari`;
+}
+
+function detectAttachmentKind(url?: string | null): "image" | "pdf" | "file" {
+  if (!url) return "file";
+  const normalized = url.toLowerCase();
+  if (
+    normalized.endsWith(".png") ||
+    normalized.endsWith(".jpg") ||
+    normalized.endsWith(".jpeg") ||
+    normalized.endsWith(".webp") ||
+    normalized.endsWith(".gif")
+  ) {
+    return "image";
+  }
+  if (normalized.endsWith(".pdf")) {
+    return "pdf";
+  }
+  return "file";
+}
+
+function VerificationDocumentPreview({
+  url,
+  token,
+}: {
+  url?: string | null;
+  token?: string | null;
+}) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [contentType, setContentType] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    async function loadPreview() {
+      if (!url || !token) {
+        setBlobUrl(null);
+        setContentType(null);
+        setError(null);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await apiFetch(
+          url,
+          { method: "GET", cache: "no-store" },
+          token,
+        );
+
+        if (!response.ok) {
+          throw new Error(`Gagal memuat lampiran (${response.status})`);
+        }
+
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+
+        if (!cancelled) {
+          setBlobUrl(objectUrl);
+          setContentType(blob.type || response.headers.get("Content-Type"));
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setBlobUrl(null);
+          setContentType(null);
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Gagal memuat dokumen verifikasi",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadPreview();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [token, url]);
+
+  if (!url) {
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-5 text-sm text-slate-500">
+        Belum ada dokumen verifikasi.
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-5 text-sm text-slate-500">
+        Memuat dokumen verifikasi...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-5 text-sm text-rose-600">
+        {error}
+      </div>
+    );
+  }
+
+  const previewKind = contentType?.startsWith("image/")
+    ? "image"
+    : contentType === "application/pdf"
+      ? "pdf"
+      : detectAttachmentKind(url);
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      {previewKind === "image" && blobUrl ? (
+        <a
+          href={blobUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="block overflow-hidden rounded-xl border border-slate-200 bg-slate-50"
+        >
+          <div className="relative h-40 w-full">
+            <Image
+              src={blobUrl}
+              alt="Dokumen verifikasi"
+              fill
+              unoptimized
+              className="object-cover"
+            />
+          </div>
+        </a>
+      ) : (
+        <div className="flex h-40 flex-col items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-center">
+          <div className="rounded-2xl bg-rose-100 px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-rose-600">
+            PDF
+          </div>
+          <p className="mt-3 text-sm font-semibold text-slate-900">
+            Dokumen verifikasi tersedia
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Buka file untuk melihat isi lengkap
+          </p>
+        </div>
+      )}
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+            Dokumen Verifikasi
+          </p>
+          <p className="mt-1 text-sm font-medium text-slate-900">
+            {previewKind === "image" ? "Foto identitas" : "File PDF"}
+          </p>
+        </div>
+        <a
+          href={blobUrl || url}
+          target="_blank"
+          rel="noreferrer"
+          className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700"
+        >
+          Buka File
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function policyLevelLabel(value?: string | null): string {
+  if (value === "nbid") return "NB";
+  if (value === "gpid") return "GP";
+  if (value === "gcid") return "GC";
+  if (value === "bcid") return "BC";
+  return "-";
 }
 
 export function GCDetailModal({
@@ -244,9 +455,24 @@ export function GCDetailModal({
     name: string;
   } | null>(null);
   const [childBCs, setChildBCs] = useState<BranchCustomer[]>([]);
+  const [activePolicy, setActivePolicy] = useState<{
+    creditLimit: ActivePolicyNode | null;
+    paymentTerm: ActivePolicyNode | null;
+    overdue: ActivePolicyNode | null;
+  }>({
+    creditLimit: null,
+    paymentTerm: null,
+    overdue: null,
+  });
 
   const loadRelations = useCallback(async () => {
     if (!isOpen || !gc || !isAuthenticated || !token) return;
+
+    setActivePolicy({
+      creditLimit: null,
+      paymentTerm: null,
+      overdue: null,
+    });
 
     const gcDetailRes = await apiFetch(
       getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, {
@@ -394,6 +620,30 @@ export function GCDetailModal({
     } else {
       setParentGP(null);
       setLinkedNB(null);
+    }
+
+    const policyRes = await apiFetch(
+      getApiUrl(
+        `${API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2}/method/get_customer_policy_active`,
+      ),
+      {
+        method: "POST",
+        cache: "no-store",
+        body: JSON.stringify({
+          policy_id: String(gc.id),
+          policy_type: "gcid",
+        }),
+      },
+      token,
+    );
+    if (policyRes.ok) {
+      const policyJson =
+        (await policyRes.json()) as CustomerPolicyActiveResponse;
+      setActivePolicy({
+        creditLimit: policyJson.data?.credit_limit || null,
+        paymentTerm: policyJson.data?.payment_term || null,
+        overdue: policyJson.data?.limit_overdue || null,
+      });
     }
 
     const rows = await fetchAllQueryRows<BranchCustomerRow>({
@@ -661,13 +911,7 @@ export function GCDetailModal({
       {
         key: "company" as const,
         label: "Data Perusahaan",
-        caption: "Company profile",
-        icon: <FaBuilding className="h-4 w-4" />,
-      },
-      {
-        key: "owner" as const,
-        label: "Data Pemilik",
-        caption: "Owner details",
+        caption: "Profil & pemilik",
         icon: <FaUser className="h-4 w-4" />,
       },
       {
@@ -692,6 +936,63 @@ export function GCDetailModal({
     [],
   );
 
+  const activeCreditSourceName =
+    activePolicy.creditLimit?.active_level === "gpid"
+      ? `${parentGP?.name || "Group Parent"} - ${parentGP?.code || (parentGP ? `GP${parentGP.id}` : "-")}`
+      : activePolicy.creditLimit?.active_level === "nbid"
+        ? `${linkedNB?.name || "National Brand"}${linkedNB?.code ? ` - ${linkedNB.code}` : ""}`
+        : activePolicy.creditLimit?.active_level === "gcid"
+          ? `${gc?.name || "Group Customer"} - ${gc?.code || (gc ? `GC${gc.id}` : "-")}`
+          : "-";
+
+  const activePaymentSourceName =
+    activePolicy.paymentTerm?.active_level === "gpid"
+      ? `${parentGP?.name || "Group Parent"} - ${parentGP?.code || (parentGP ? `GP${parentGP.id}` : "-")}`
+      : activePolicy.paymentTerm?.active_level === "nbid"
+        ? `${linkedNB?.name || "National Brand"}${linkedNB?.code ? ` - ${linkedNB.code}` : ""}`
+        : activePolicy.paymentTerm?.active_level === "gcid"
+          ? `${gc?.name || "Group Customer"} - ${gc?.code || (gc ? `GC${gc.id}` : "-")}`
+          : "-";
+
+  const hierarchyCreditValue =
+    activePolicy.creditLimit?.active_level === "gpid" ||
+    activePolicy.creditLimit?.active_level === "nbid"
+      ? formatCurrency(activePolicy.creditLimit?.value)
+      : parentGP?.credit_limit != null
+        ? formatCurrency(parentGP.credit_limit)
+        : null;
+
+  const hierarchyPaymentValue =
+    activePolicy.paymentTerm?.active_level === "gpid" ||
+    activePolicy.paymentTerm?.active_level === "nbid"
+      ? formatDays(activePolicy.paymentTerm?.value)
+      : parentGP?.payment_term != null
+        ? formatDays(parentGP.payment_term)
+        : null;
+
+  const hierarchyPolicySourceLabel =
+    activePolicy.creditLimit?.active_level === "nbid" ||
+    activePolicy.paymentTerm?.active_level === "nbid"
+      ? linkedNB?.name || "National Brand"
+      : activePolicy.creditLimit?.active_level === "gpid" ||
+          activePolicy.paymentTerm?.active_level === "gpid"
+        ? parentGP?.name || "Group Parent"
+        : null;
+  const attachmentUrl = getFileUrl(gc?.identity_attachment);
+
+  const renderReadOnlyField = (
+    label: string,
+    value: React.ReactNode,
+    className = "",
+  ) => (
+    <div className={className}>
+      <p className="mb-1.5 text-[11px] font-medium text-slate-600">{label}</p>
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+        {value || "-"}
+      </div>
+    </div>
+  );
+
   if (!gc) return null;
 
   return (
@@ -707,7 +1008,7 @@ export function GCDetailModal({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+            className="flex h-[94vh] w-full max-w-[92vw] xl:max-w-[1320px] flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
           >
             <div className="border-b border-blue-200 bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 px-6 py-5">
               <div className="flex items-start justify-between gap-4">
@@ -716,22 +1017,9 @@ export function GCDetailModal({
                     <FaBuilding className="h-6 w-6" />
                   </div>
                   <div>
-                    <div className="mb-2 flex flex-wrap items-center gap-3">
-                      <h2 className="text-2xl font-bold text-white">
-                        Group Customer Details
-                      </h2>
-                      {gc.disabled === 1 ? (
-                        <span className="inline-flex items-center gap-2 rounded-full bg-rose-100 px-3 py-1 text-sm font-semibold text-rose-700">
-                          <FaBan className="h-3.5 w-3.5" />
-                          Disabled
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700">
-                          <FaCheckCircle className="h-3.5 w-3.5" />
-                          Active
-                        </span>
-                      )}
-                    </div>
+                    <h2 className="mb-2 text-2xl font-bold text-white">
+                      Group Customer Details
+                    </h2>
                     <p className="text-sm text-blue-100">
                       GCID: {gc.code || `GC${gc.id}`}
                     </p>
@@ -758,8 +1046,8 @@ export function GCDetailModal({
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto bg-slate-50/70 p-4 md:p-6">
-              <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 p-4 md:p-5 xl:p-6">
+              <div className="grid min-h-0 gap-5 lg:grid-cols-[210px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)]">
                 <aside className="space-y-3">
                   {detailTabs.map((tab) => {
                     const active = activeTab === tab.key;
@@ -800,7 +1088,7 @@ export function GCDetailModal({
                   })}
                 </aside>
 
-                <div className="space-y-6">
+                <div className="min-h-0 space-y-5">
                   <section className="rounded-3xl border border-white bg-white p-6 shadow-sm">
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
@@ -810,184 +1098,11 @@ export function GCDetailModal({
                         <h3 className="mt-2 text-3xl font-bold text-slate-900">
                           {editedName || gc.name}
                         </h3>
-                        <p className="mt-2 text-sm text-slate-500">
-                          Entitas customer level perusahaan yang terhubung ke GP
-                          dan branch customer.
-                        </p>
-                      </div>
-
-                      <div className="grid min-w-[240px] gap-3">
-                        {linkedNB && (
-                          <div className="rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-indigo-600">
-                              National Brand
-                            </p>
-                            <p className="mt-2 font-bold text-slate-900">
-                              {linkedNB.name}
-                            </p>
-                            <p className="text-sm text-indigo-600">
-                              NBID: {linkedNB.code}
-                            </p>
-                          </div>
-                        )}
-                        {parentGP && (
-                          <div className="rounded-2xl border border-purple-100 bg-purple-50 px-4 py-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-purple-600">
-                              Group Parent
-                            </p>
-                            <p className="mt-2 font-bold text-slate-900">
-                              {parentGP.name}
-                            </p>
-                            <p className="text-sm text-purple-600">
-                              GPID: {parentGP.code || `GP${parentGP.id}`}
-                            </p>
-                          </div>
-                        )}
                       </div>
                     </div>
                   </section>
 
                   {activeTab === "company" && (
-                    <section className="rounded-3xl border border-blue-100 bg-white p-6 shadow-sm">
-                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-500">
-                        Data Perusahaan
-                      </p>
-                      {isEditMode ? (
-                        <div className="mt-5 grid gap-4 md:grid-cols-2">
-                          <div>
-                            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              Jenis Perusahaan
-                            </label>
-                            <select
-                              value={editedCompanyType}
-                              onChange={(e) => setCompanyType(e.target.value)}
-                              className="w-full rounded-2xl border border-blue-200 bg-white px-4 py-3 text-sm"
-                              disabled={isSaving}
-                            >
-                              <option value="">Pilih Jenis Perusahaan</option>
-                              {COMPANY_TYPE_OPTIONS.map((option) => (
-                                <option key={option} value={option}>
-                                  {option}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              Gelar Perusahaan
-                            </label>
-                            <select
-                              value={editedCompanyTitle}
-                              onChange={(e) => setCompanyTitle(e.target.value)}
-                              className="w-full rounded-2xl border border-blue-200 bg-white px-4 py-3 text-sm"
-                              disabled={isSaving || !editedCompanyType}
-                            >
-                              <option value="">Pilih Gelar Perusahaan</option>
-                              {companyTitleOptions.map((option) => (
-                                <option key={option} value={option}>
-                                  {option}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="md:col-span-2">
-                            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              Nama Perusahaan
-                            </label>
-                            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
-                              <input
-                                type="text"
-                                value={editedCompanyNameBase}
-                                onChange={(e) =>
-                                  setCompanyNameBase(e.target.value)
-                                }
-                                className="rounded-2xl border border-blue-200 bg-white px-4 py-3 text-sm"
-                                placeholder="Nama inti perusahaan"
-                                disabled={isSaving}
-                              />
-                              {isSuffixEditable ? (
-                                <select
-                                  value={editedCompanyNameSuffix}
-                                  onChange={(e) =>
-                                    setCompanyNameSuffix(e.target.value)
-                                  }
-                                  className="rounded-2xl border border-blue-200 bg-white px-4 py-3 text-sm"
-                                  disabled={isSaving}
-                                >
-                                  <option value="">Pilih Sebutan</option>
-                                  {companySuffixOptions.map((suffix) => (
-                                    <option key={suffix} value={suffix}>
-                                      {suffix}
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <input
-                                  type="text"
-                                  value={editedCompanyNameSuffix}
-                                  readOnly
-                                  className="rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm"
-                                  placeholder="Sebutan"
-                                />
-                              )}
-                            </div>
-                          </div>
-                          <div className="md:col-span-2">
-                            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              Nama Final
-                            </label>
-                            <input
-                              type="text"
-                              value={editedName}
-                              readOnly
-                              className="w-full rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900"
-                            />
-                          </div>
-                          <div className="md:col-span-2">
-                            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              Description
-                            </label>
-                            <textarea
-                              value={editedDescription}
-                              onChange={(e) => setEditedDescription(e.target.value)}
-                              className="min-h-[96px] w-full rounded-2xl border border-blue-200 bg-white px-4 py-3 text-sm"
-                              placeholder="Deskripsi group customer"
-                              disabled={isSaving}
-                            />
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              Group Customer ID
-                            </p>
-                            <p className="mt-2 font-semibold text-slate-900">
-                              {gc.code || `GC${gc.id}`}
-                            </p>
-                          </div>
-                          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              Status
-                            </p>
-                            <p className="mt-2 font-semibold text-slate-900">
-                              {gc.disabled === 1 ? "Disabled" : "Active"}
-                            </p>
-                          </div>
-                          <div className="sm:col-span-2 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              Description
-                            </p>
-                            <p className="mt-2 whitespace-pre-wrap text-sm font-medium text-slate-900">
-                              {editedDescription || gc.description || "-"}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </section>
-                  )}
-
-                  {activeTab === "owner" && (
                     <section className="rounded-3xl border border-blue-100 bg-white p-6 shadow-sm">
                       <div className="mb-5 flex items-center gap-3">
                         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500 text-white">
@@ -995,381 +1110,456 @@ export function GCDetailModal({
                         </div>
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-500">
-                            Data Pemilik
+                            Data Perusahaan
                           </p>
                           <h4 className="text-xl font-bold text-slate-900">
-                            Owner Information
+                            Company and Owner
                           </h4>
                         </div>
                       </div>
 
                       {isEditMode ? (
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <input
-                            type="text"
-                            value={editedOwnerName}
-                            onChange={(e) => setEditedOwnerName(e.target.value)}
-                            placeholder="Nama owner"
-                            className="rounded-2xl border border-blue-200 px-4 py-3 text-sm"
-                            disabled={isSaving}
-                          />
-                          <input
-                            type="text"
-                            value={editedOwnerPhone}
-                            onChange={(e) => setEditedOwnerPhone(e.target.value)}
-                            placeholder="No. Telepon"
-                            className="rounded-2xl border border-blue-200 px-4 py-3 text-sm"
-                            disabled={isSaving}
-                          />
-                          <input
-                            type="email"
-                            value={editedOwnerEmail}
-                            onChange={(e) => setEditedOwnerEmail(e.target.value)}
-                            placeholder="Email"
-                            className="rounded-2xl border border-blue-200 px-4 py-3 text-sm"
-                            disabled={isSaving}
-                          />
-                          <input
-                            type="text"
-                            value={editedOwnerPlaceOfBirth}
-                            onChange={(e) =>
-                              setEditedOwnerPlaceOfBirth(e.target.value)
-                            }
-                            placeholder="Tempat lahir"
-                            className="rounded-2xl border border-blue-200 px-4 py-3 text-sm"
-                            disabled={isSaving}
-                          />
-                          <input
-                            type="date"
-                            value={editedOwnerDateOfBirth}
-                            onChange={(e) =>
-                              setEditedOwnerDateOfBirth(e.target.value)
-                            }
-                            className="rounded-2xl border border-blue-200 px-4 py-3 text-sm"
-                            disabled={isSaving}
-                          />
+                        <div className="grid gap-6">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+                              Profil Perusahaan
+                            </p>
+                            <div className="mt-4 grid gap-4 md:grid-cols-2">
+                              <div>
+                                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  Jenis Perusahaan
+                                </label>
+                                <select
+                                  value={editedCompanyType}
+                                  onChange={(e) =>
+                                    setCompanyType(e.target.value)
+                                  }
+                                  className="w-full rounded-2xl border border-blue-200 bg-white px-4 py-3 text-sm"
+                                  disabled={isSaving}
+                                >
+                                  <option value="">
+                                    Pilih Jenis Perusahaan
+                                  </option>
+                                  {COMPANY_TYPE_OPTIONS.map((option) => (
+                                    <option key={option} value={option}>
+                                      {option}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  Gelar Perusahaan
+                                </label>
+                                <select
+                                  value={editedCompanyTitle}
+                                  onChange={(e) =>
+                                    setCompanyTitle(e.target.value)
+                                  }
+                                  className="w-full rounded-2xl border border-blue-200 bg-white px-4 py-3 text-sm"
+                                  disabled={isSaving || !editedCompanyType}
+                                >
+                                  <option value="">
+                                    Pilih Gelar Perusahaan
+                                  </option>
+                                  {companyTitleOptions.map((option) => (
+                                    <option key={option} value={option}>
+                                      {option}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="md:col-span-2">
+                                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  Nama Perusahaan
+                                </label>
+                                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+                                  <input
+                                    type="text"
+                                    value={editedCompanyNameBase}
+                                    onChange={(e) =>
+                                      setCompanyNameBase(e.target.value)
+                                    }
+                                    className="rounded-2xl border border-blue-200 bg-white px-4 py-3 text-sm"
+                                    placeholder="Nama inti perusahaan"
+                                    disabled={isSaving}
+                                  />
+                                  {isSuffixEditable ? (
+                                    <select
+                                      value={editedCompanyNameSuffix}
+                                      onChange={(e) =>
+                                        setCompanyNameSuffix(e.target.value)
+                                      }
+                                      className="rounded-2xl border border-blue-200 bg-white px-4 py-3 text-sm"
+                                      disabled={isSaving}
+                                    >
+                                      <option value="">Pilih Sebutan</option>
+                                      {companySuffixOptions.map((suffix) => (
+                                        <option key={suffix} value={suffix}>
+                                          {suffix}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <input
+                                      type="text"
+                                      value={editedCompanyNameSuffix}
+                                      readOnly
+                                      className="rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm"
+                                      placeholder="Sebutan"
+                                    />
+                                  )}
+                                </div>
+                              </div>
+                              <div className="md:col-span-2">
+                                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  Nama Final
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editedName}
+                                  readOnly
+                                  className="w-full rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900"
+                                />
+                              </div>
+                              <div className="md:col-span-2">
+                                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  Description
+                                </label>
+                                <textarea
+                                  value={editedDescription}
+                                  onChange={(e) =>
+                                    setEditedDescription(e.target.value)
+                                  }
+                                  className="min-h-[96px] w-full rounded-2xl border border-blue-200 bg-white px-4 py-3 text-sm"
+                                  placeholder="Deskripsi group customer"
+                                  disabled={isSaving}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+                              Data Pemilik
+                            </p>
+                            <div className="mt-4 grid gap-4 md:grid-cols-2">
+                              <input
+                                type="text"
+                                value={editedOwnerName}
+                                onChange={(e) =>
+                                  setEditedOwnerName(e.target.value)
+                                }
+                                placeholder="Nama owner"
+                                className="rounded-2xl border border-blue-200 px-4 py-3 text-sm"
+                                disabled={isSaving}
+                              />
+                              <input
+                                type="text"
+                                value={editedOwnerPhone}
+                                onChange={(e) =>
+                                  setEditedOwnerPhone(e.target.value)
+                                }
+                                placeholder="No. Telepon"
+                                className="rounded-2xl border border-blue-200 px-4 py-3 text-sm"
+                                disabled={isSaving}
+                              />
+                              <input
+                                type="email"
+                                value={editedOwnerEmail}
+                                onChange={(e) =>
+                                  setEditedOwnerEmail(e.target.value)
+                                }
+                                placeholder="Email"
+                                className="rounded-2xl border border-blue-200 px-4 py-3 text-sm"
+                                disabled={isSaving}
+                              />
+                              <input
+                                type="text"
+                                value={editedOwnerPlaceOfBirth}
+                                onChange={(e) =>
+                                  setEditedOwnerPlaceOfBirth(e.target.value)
+                                }
+                                placeholder="Tempat lahir"
+                                className="rounded-2xl border border-blue-200 px-4 py-3 text-sm"
+                                disabled={isSaving}
+                              />
+                              <input
+                                type="date"
+                                value={editedOwnerDateOfBirth}
+                                onChange={(e) =>
+                                  setEditedOwnerDateOfBirth(e.target.value)
+                                }
+                                className="rounded-2xl border border-blue-200 px-4 py-3 text-sm md:col-span-2"
+                                disabled={isSaving}
+                              />
+                            </div>
+                          </div>
                         </div>
                       ) : (
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              Nama
+                        <div className="grid gap-4 xl:grid-cols-2">
+                          <section className="rounded-[28px] border border-slate-200 bg-slate-50/80 p-5">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-500">
+                              Company Profile
                             </p>
-                            <p className="mt-2 font-semibold text-slate-900">
-                              {editedOwnerName || "-"}
+                            <h5 className="mt-1 text-xl font-bold text-slate-900">
+                              Informasi Perusahaan
+                            </h5>
+                            <div className="mt-4 grid gap-3 md:grid-cols-2">
+                              {/* {renderReadOnlyField(
+                                "Group Customer ID",
+                                gc.code || `GC${gc.id}`,
+                              )}
+                              {renderReadOnlyField(
+                                "Parent Group",
+                                parentGP?.code || (gc.gpid ? `GP${gc.gpid}` : "-"),
+                              )} */}
+                              {renderReadOnlyField(
+                                "Nama Perusahaan",
+                                editedName || gc.name || "-",
+                                "md:col-span-2",
+                              )}
+                              {renderReadOnlyField(
+                                "Tax Status",
+                                gc.tax_status === 1 ? "PKP" : "Non PKP",
+                              )}
+                              {renderReadOnlyField("NPWP", gc.npwp || "-")}
+                              {renderReadOnlyField(
+                                "Description",
+                                editedDescription || gc.description || "-",
+                                "md:col-span-2",
+                              )}
+                            </div>
+                            <div className="mt-4">
+                              <p className="mb-1.5 text-[11px] font-medium text-slate-600">
+                                Dokumen Verifikasi
+                              </p>
+                              <VerificationDocumentPreview
+                                url={attachmentUrl}
+                                token={token}
+                              />
+                            </div>
+                          </section>
+
+                          <section className="rounded-[28px] border border-slate-200 bg-slate-50/80 p-5">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-500">
+                              Primary Contact
                             </p>
-                          </div>
-                          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              Telepon
-                            </p>
-                            <p className="mt-2 font-semibold text-slate-900">
-                              {editedOwnerPhone || "-"}
-                            </p>
-                          </div>
-                          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              Email
-                            </p>
-                            <p className="mt-2 font-semibold text-slate-900">
-                              {editedOwnerEmail || "-"}
-                            </p>
-                          </div>
-                          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              TTL
-                            </p>
-                            <p className="mt-2 font-semibold text-slate-900">
-                              {editedOwnerPlaceOfBirth || "-"},{" "}
-                              {editedOwnerDateOfBirth || "-"}
-                            </p>
-                          </div>
+                            <h5 className="mt-1 text-xl font-bold text-slate-900">
+                              Identitas Pemilik
+                            </h5>
+                            <div className="mt-4 grid gap-3 md:grid-cols-2">
+                              {renderReadOnlyField(
+                                "Nama Owner",
+                                editedOwnerName || "-",
+                              )}
+                              {renderReadOnlyField(
+                                "Telepon",
+                                editedOwnerPhone || "-",
+                              )}
+                              {renderReadOnlyField(
+                                "Email",
+                                editedOwnerEmail || "-",
+                              )}
+                              {renderReadOnlyField(
+                                "Tempat Lahir",
+                                editedOwnerPlaceOfBirth || "-",
+                              )}
+                              {renderReadOnlyField(
+                                "Tanggal Lahir",
+                                editedOwnerDateOfBirth || "-",
+                                "md:col-span-2",
+                              )}
+                            </div>
+                          </section>
                         </div>
                       )}
                     </section>
                   )}
 
                   {activeTab === "finance" && (
-                    <section className="rounded-3xl border border-emerald-100 bg-white p-6 shadow-sm">
-                      <div className="mb-5">
-                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-500">
-                          Data Keuangan
-                        </p>
-                        <h4 className="mt-2 text-xl font-bold text-slate-900">
-                          Credit Policy
-                        </h4>
+                    <section className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-sm">
+                      <div className="mb-4 flex items-center gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-100 text-amber-600">
+                          <FaTags className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-500">
+                            Data Keuangan
+                          </p>
+                          <h4 className="mt-1 text-[1.75rem] font-bold leading-tight text-slate-900">
+                            Credit, Limit, and Payment
+                          </h4>
+                        </div>
                       </div>
 
-                      <div className="grid gap-4 lg:grid-cols-3">
-                        <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                          <div className="mb-3 flex items-center justify-between">
-                            <p className="text-sm font-semibold text-slate-700">
+                      <div className="mb-5 rounded-[24px] border border-slate-200 bg-[linear-gradient(135deg,#fff7ed_0%,#f8fafc_100%)] p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div>
+                            <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-amber-600">
+                              Policy Aktif
+                            </p>
+                            <p className="mt-1 text-sm text-slate-600">
+                              Menunjukkan limit final yang dipakai dan asal
+                              setting policy-nya.
+                            </p>
+                          </div>
+                          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                            Shared ke {childBCs.length} BC
+                          </span>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                          <div className="rounded-2xl border border-amber-100 bg-white/90 p-3.5">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-amber-600">
                               Credit Limit
                             </p>
-                            {isEditMode && (
-                              <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600">
-                                <input
-                                  type="checkbox"
-                                  checked={
-                                    creditPolicyFields.credit_limit_active === 1
-                                  }
-                                  onChange={(e) =>
-                                    setCreditPolicyFields((prev) => ({
-                                      ...prev,
-                                      credit_limit_active: e.target.checked
-                                        ? 1
-                                        : 0,
-                                    }))
-                                  }
-                                  disabled={isSaving}
-                                />
-                                Active
-                              </label>
-                            )}
-                          </div>
-                          {isEditMode ? (
-                            <input
-                              type="number"
-                              value={creditPolicyFields.credit_limit ?? ""}
-                              onChange={(e) =>
-                                setCreditPolicyFields((prev) => ({
-                                  ...prev,
-                                  credit_limit: e.target.value
-                                    ? Number(e.target.value)
-                                    : null,
-                                }))
-                              }
-                              className="w-full rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm"
-                              placeholder="Masukkan credit limit"
-                              disabled={isSaving}
-                            />
-                          ) : (
-                            <div className="space-y-2 text-sm">
-                              <p>
-                                <span className="font-semibold text-slate-500">
-                                  Active:
-                                </span>{" "}
-                                <span className="font-semibold text-slate-900">
-                                  {creditPolicyFields.credit_limit_active === 1
-                                    ? "Yes"
-                                    : "No"}
-                                </span>
-                              </p>
-                              <p>
-                                <span className="font-semibold text-slate-500">
-                                  Value:
-                                </span>{" "}
-                                <span className="font-semibold text-slate-900">
-                                  {formatNullableNumber(
-                                    creditPolicyFields.credit_limit,
-                                  )}
-                                </span>
-                              </p>
+                            <p className="mt-2 text-[1.75rem] font-bold leading-none text-slate-900">
+                              {formatCurrency(activePolicy.creditLimit?.value)}
+                            </p>
+                            <div className="mt-2.5 flex items-center gap-2">
+                              <span className="rounded-full bg-amber-600 px-2.5 py-1 text-[10px] font-bold text-white">
+                                {policyLevelLabel(
+                                  activePolicy.creditLimit?.active_level,
+                                )}
+                              </span>
+                              <span className="text-xs font-semibold text-slate-700 sm:text-sm">
+                                {activeCreditSourceName}
+                              </span>
                             </div>
-                          )}
-                        </div>
+                          </div>
 
-                        <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                          <div className="mb-3 flex items-center justify-between">
-                            <p className="text-sm font-semibold text-slate-700">
+                          <div className="rounded-2xl border border-teal-100 bg-white/90 p-3.5">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-teal-600">
                               Payment Term
                             </p>
-                            {isEditMode && (
-                              <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600">
-                                <input
-                                  type="checkbox"
-                                  checked={
-                                    creditPolicyFields.payment_term_active === 1
-                                  }
-                                  onChange={(e) =>
-                                    setCreditPolicyFields((prev) => ({
-                                      ...prev,
-                                      payment_term_active: e.target.checked
-                                        ? 1
-                                        : 0,
-                                    }))
-                                  }
-                                  disabled={isSaving}
-                                />
-                                Active
-                              </label>
-                            )}
-                          </div>
-                          {isEditMode ? (
-                            <input
-                              type="number"
-                              value={creditPolicyFields.payment_term ?? ""}
-                              onChange={(e) =>
-                                setCreditPolicyFields((prev) => ({
-                                  ...prev,
-                                  payment_term: e.target.value
-                                    ? Number(e.target.value)
-                                    : null,
-                                }))
-                              }
-                              className="w-full rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm"
-                              placeholder="Masukkan payment term"
-                              disabled={isSaving}
-                            />
-                          ) : (
-                            <div className="space-y-2 text-sm">
-                              <p>
-                                <span className="font-semibold text-slate-500">
-                                  Active:
-                                </span>{" "}
-                                <span className="font-semibold text-slate-900">
-                                  {creditPolicyFields.payment_term_active === 1
-                                    ? "Yes"
-                                    : "No"}
-                                </span>
-                              </p>
-                              <p>
-                                <span className="font-semibold text-slate-500">
-                                  Value:
-                                </span>{" "}
-                                <span className="font-semibold text-slate-900">
-                                  {formatNullableNumber(
-                                    creditPolicyFields.payment_term,
-                                  )}
-                                </span>
-                              </p>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                          <div className="mb-3 flex items-center justify-between">
-                            <p className="text-sm font-semibold text-slate-700">
-                              Limit Customer Overdue
+                            <p className="mt-2 text-[1.75rem] font-bold leading-none text-slate-900">
+                              {activePolicy.paymentTerm?.value ?? "-"}{" "}
+                              <span className="text-sm font-semibold text-slate-500">
+                                Hari
+                              </span>
                             </p>
-                            {isEditMode && (
-                              <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600">
-                                <input
-                                  type="checkbox"
-                                  checked={
-                                    creditPolicyFields.limit_customer_overdue_active ===
-                                    1
-                                  }
-                                  onChange={(e) =>
-                                    setCreditPolicyFields((prev) => ({
-                                      ...prev,
-                                      limit_customer_overdue_active:
-                                        e.target.checked ? 1 : 0,
-                                    }))
-                                  }
-                                  disabled={isSaving}
-                                />
-                                Active
-                              </label>
-                            )}
-                          </div>
-                          {isEditMode ? (
-                            <input
-                              type="number"
-                              value={
-                                creditPolicyFields.limit_customer_overdue ?? ""
-                              }
-                              onChange={(e) =>
-                                setCreditPolicyFields((prev) => ({
-                                  ...prev,
-                                  limit_customer_overdue: e.target.value
-                                    ? Number(e.target.value)
-                                    : null,
-                                }))
-                              }
-                              className="w-full rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm"
-                              placeholder="Masukkan batas overdue"
-                              disabled={isSaving}
-                            />
-                          ) : (
-                            <div className="space-y-2 text-sm">
-                              <p>
-                                <span className="font-semibold text-slate-500">
-                                  Active:
-                                </span>{" "}
-                                <span className="font-semibold text-slate-900">
-                                  {creditPolicyFields.limit_customer_overdue_active ===
-                                  1
-                                    ? "Yes"
-                                    : "No"}
-                                </span>
-                              </p>
-                              <p>
-                                <span className="font-semibold text-slate-500">
-                                  Value:
-                                </span>{" "}
-                                <span className="font-semibold text-slate-900">
-                                  {formatNullableNumber(
-                                    creditPolicyFields.limit_customer_overdue,
-                                  )}
-                                </span>
-                              </p>
+                            <div className="mt-2.5 flex items-center gap-2">
+                              <span className="rounded-full bg-teal-600 px-2.5 py-1 text-[10px] font-bold text-white">
+                                {policyLevelLabel(
+                                  activePolicy.paymentTerm?.active_level,
+                                )}
+                              </span>
+                              <span className="text-xs font-semibold text-slate-700 sm:text-sm">
+                                {activePaymentSourceName}
+                              </span>
                             </div>
-                          )}
+                          </div>
                         </div>
                       </div>
                     </section>
                   )}
 
                   {activeTab === "hierarchy" && (
-                    <div className="grid gap-4 xl:grid-cols-2">
-                      <section className="rounded-3xl border border-purple-100 bg-white p-5 shadow-sm">
+                    <div className="grid min-h-0 gap-4 xl:grid-cols-3">
+                      <section className="flex min-h-0 min-w-0 flex-col rounded-3xl border border-indigo-100 bg-white p-4 shadow-sm xl:p-5">
+                        <div className="mb-4 flex items-center gap-3">
+                          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-500 text-white">
+                            <FaBuilding className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-indigo-500">
+                              National Brand
+                            </p>
+                            <p className="text-sm text-slate-500">
+                              {linkedNB ? "Relasi induk" : "Belum terhubung"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {linkedNB ? (
+                          <div className="min-w-0 rounded-2xl border border-indigo-100 bg-indigo-50/80 px-4 py-3 text-sm text-slate-800">
+                            <p className="line-clamp-2 text-[13px] font-semibold leading-5 text-slate-900">
+                              {linkedNB.name}
+                            </p>
+                            {activePolicy.creditLimit?.active_level ===
+                              "nbid" && (
+                              <p className="mt-2 text-xs text-indigo-700">
+                                Limit:{" "}
+                                {formatCurrency(
+                                  activePolicy.creditLimit?.value,
+                                )}
+                              </p>
+                            )}
+                            {activePolicy.paymentTerm?.active_level ===
+                              "nbid" && (
+                              <p className="mt-1 text-xs text-indigo-700">
+                                Payment Term:{" "}
+                                {formatDays(activePolicy.paymentTerm?.value)}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm italic text-slate-500">
+                            Group Customer ini tidak terhubung ke National
+                            Brand.
+                          </p>
+                        )}
+                      </section>
+
+                      <section className="flex min-h-0 min-w-0 flex-col rounded-3xl border border-purple-100 bg-white p-4 shadow-sm xl:p-5">
                         <div className="mb-4 flex items-center gap-3">
                           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-purple-500 text-white">
                             <FaArrowUp className="h-4 w-4" />
                           </div>
                           <div>
                             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-purple-500">
-                              Parent Hierarki
+                              Group Parent
                             </p>
                             <p className="text-sm text-slate-500">
-                              National Brand & Group Parent
+                              {parentGP ? "Parent langsung" : "Belum terhubung"}
                             </p>
                           </div>
                         </div>
 
-                        <div className="space-y-3">
-                          {linkedNB && (
-                            <div className="rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
-                                National Brand
+                        {parentGP ? (
+                          <button
+                            onClick={() => onViewGP?.(parentGP)}
+                            className="flex w-full min-w-0 items-center justify-between rounded-2xl border border-purple-100 bg-purple-50 px-4 py-3 text-left text-sm text-slate-800 transition-all hover:border-purple-300 hover:bg-purple-100/80"
+                          >
+                            <div className="min-w-0">
+                              <p className="line-clamp-2 text-[13px] font-semibold leading-5 text-slate-900">
+                                {parentGP.name}
                               </p>
-                              <p className="mt-1 font-semibold text-slate-900">
-                                {linkedNB.name}
+                              <p className="mt-2 text-xs text-purple-700">
+                                GPID: {parentGP.code || `GP${parentGP.id}`}
                               </p>
-                              <p className="text-sm text-indigo-600">
-                                NBID: {linkedNB.code}
-                              </p>
+                              {hierarchyCreditValue && (
+                                <p className="mt-2 text-xs text-purple-700">
+                                  Limit: {hierarchyCreditValue}
+                                </p>
+                              )}
+                              {hierarchyPaymentValue && (
+                                <p className="mt-1 text-xs text-purple-700">
+                                  Payment Term: {hierarchyPaymentValue}
+                                </p>
+                              )}
+                              {hierarchyPolicySourceLabel &&
+                                hierarchyPolicySourceLabel !==
+                                  parentGP.name && (
+                                  <p className="mt-1 text-xs font-medium text-purple-500">
+                                    Policy mengikuti{" "}
+                                    {hierarchyPolicySourceLabel}
+                                  </p>
+                                )}
                             </div>
-                          )}
-
-                          {parentGP ? (
-                            <button
-                              onClick={() => onViewGP?.(parentGP)}
-                              className="flex w-full items-center justify-between rounded-2xl border border-purple-100 bg-purple-50/70 px-4 py-3 text-left transition-all hover:border-purple-300 hover:bg-purple-50"
-                            >
-                              <div>
-                                <p className="font-semibold text-slate-900">
-                                  {parentGP.name}
-                                </p>
-                                <p className="text-sm text-purple-600">
-                                  GPID: {parentGP.code || `GP${parentGP.id}`}
-                                </p>
-                              </div>
-                              <FaChevronRight className="h-4 w-4 text-purple-500" />
-                            </button>
-                          ) : (
-                            <p className="text-sm italic text-slate-500">
-                              Parent GP tidak ditemukan.
-                            </p>
-                          )}
-                        </div>
+                            <FaChevronRight className="ml-3 h-4 w-4 shrink-0 text-purple-500" />
+                          </button>
+                        ) : (
+                          <p className="text-sm italic text-slate-500">
+                            Parent GP tidak ditemukan.
+                          </p>
+                        )}
                       </section>
 
-                      <section className="rounded-3xl border border-orange-100 bg-white p-5 shadow-sm">
+                      <section className="flex min-h-0 min-w-0 flex-col rounded-3xl border border-orange-100 bg-white p-4 shadow-sm xl:p-5">
                         <div className="mb-4 flex items-center gap-3">
                           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-500 text-white">
-                            <FaArrowDown className="h-4 w-4" />
+                            <FaStore className="h-5 w-5" />
                           </div>
                           <div>
                             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-500">
@@ -1381,16 +1571,16 @@ export function GCDetailModal({
                           </div>
                         </div>
 
-                        <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
+                        <div className="max-h-[58vh] space-y-2.5 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                           {childBCs.length > 0 ? (
                             childBCs.map((item) => (
                               <button
                                 key={item.id}
                                 onClick={() => onViewBC?.(item)}
-                                className="flex w-full items-center justify-between rounded-2xl border border-orange-100 bg-orange-50/60 px-4 py-3 text-left transition-all hover:border-orange-300 hover:bg-orange-50"
+                                className="flex w-full min-w-0 items-center justify-between rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3 text-left text-sm text-slate-800 transition-all hover:border-orange-300 hover:bg-orange-100/80"
                               >
-                                <div>
-                                  <p className="font-semibold text-slate-900">
+                                <div className="min-w-0">
+                                  <p className="line-clamp-2 text-[13px] font-semibold leading-5 text-slate-900">
                                     {`${item.gc_name || gc.name || "GC"} - ${
                                       item.branch_city ||
                                       item.branch_name ||
@@ -1398,12 +1588,12 @@ export function GCDetailModal({
                                       "-"
                                     }`}
                                   </p>
-                                  <p className="text-xs text-slate-500">
+                                  <p className="mt-2 text-xs text-orange-700">
                                     BCID: {item.code || `BC${item.id}`} •{" "}
                                     {item.branch_city || "-"}
                                   </p>
                                 </div>
-                                <FaChevronRight className="h-4 w-4 text-orange-500" />
+                                <FaChevronRight className="ml-3 h-4 w-4 shrink-0 text-orange-500" />
                               </button>
                             ))
                           ) : (
