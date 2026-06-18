@@ -110,6 +110,7 @@ export type UserMutationPayload = {
   country: string | null;
   role_id: string | null;
   role_ids: string[];
+  initial_role_ids?: string[];
   role: string;
   is_system: number;
   generate_integration_token?: boolean;
@@ -122,6 +123,15 @@ function normalizePhoneForDb(phone: string): string {
   if (digits.startsWith("62")) return digits;
   if (digits.startsWith("0")) return `62${digits.slice(1)}`;
   return `62${digits}`;
+}
+
+function areRoleIdsEqual(left: string[], right: string[]): boolean {
+  const normalizedLeft = [...new Set(left.filter(Boolean))].sort();
+  const normalizedRight = [...new Set(right.filter(Boolean))].sort();
+  if (normalizedLeft.length !== normalizedRight.length) return false;
+  return normalizedLeft.every(
+    (value, index) => value === normalizedRight[index],
+  );
 }
 
 function extractUserIdFromResponse(data: UsersApiResponse["data"]): string {
@@ -168,8 +178,14 @@ type IntegrationTokensApiResponse = {
   message?: string;
 };
 
+type UserRoleApiRow = Record<string, unknown>;
+
 const USER_EVENT = "ekaplus:users_update";
 const USER_ENDPOINTS = ["/api/resource/users", API_CONFIG.ENDPOINTS.USER];
+const USER_ROLE_ENDPOINTS = [
+  "/api/resource/user_roles",
+  "/api/resource/user_role",
+];
 const ROLE_PALETTE: Record<string, { color: string; level: number }> = {
   administrator: { color: "#b91c1c", level: 100 },
   admin: { color: "#dc2626", level: 90 },
@@ -320,7 +336,9 @@ function mapUser(row: UsersApiRow): User {
   };
 }
 
-function mapIntegrationToken(row: IntegrationTokenApiRow): IntegrationTokenInfo {
+function mapIntegrationToken(
+  row: IntegrationTokenApiRow,
+): IntegrationTokenInfo {
   return {
     id: Number(row.ID || 0),
     name: row.Name || `Token ${row.ID || "-"}`,
@@ -342,6 +360,9 @@ export default function UserList() {
   } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [userRoleIdsByUserId, setUserRoleIdsByUserId] = useState<
+    Map<string, string[]>
+  >(new Map());
   const [integrationTokens, setIntegrationTokens] = useState<
     IntegrationTokenInfo[]
   >([]);
@@ -356,6 +377,7 @@ export default function UserList() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<User | null>(null);
+  const [modalInitialRoleIds, setModalInitialRoleIds] = useState<string[]>([]);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<User | null>(null);
 
@@ -467,7 +489,11 @@ export default function UserList() {
           const detailJson = (await detailRes
             .json()
             .catch(() => null)) as IntegrationTokensApiResponse | null;
-          if (!detailRes.ok || !detailJson?.data || Array.isArray(detailJson.data)) {
+          if (
+            !detailRes.ok ||
+            !detailJson?.data ||
+            Array.isArray(detailJson.data)
+          ) {
             return item;
           }
 
@@ -489,6 +515,55 @@ export default function UserList() {
     return detailedRows;
   }, [token]);
 
+  const loadUserRoleIds = useCallback(async () => {
+    if (!token) {
+      setUserRoleIdsByUserId(new Map());
+      return new Map<string, string[]>();
+    }
+
+    for (const endpoint of USER_ROLE_ENDPOINTS) {
+      try {
+        const rows = await fetchAllQueryRows<UserRoleApiRow>({
+          endpoint,
+          spec: {
+            fields: ["*"],
+          },
+          token,
+          requestInit: {
+            headers: getAuthHeaders(token),
+          },
+        });
+
+        const mapping = new Map<string, string[]>();
+        rows.forEach((row) => {
+          const userId =
+            toStringValue(row.user_id) ||
+            toStringValue(row.UserID) ||
+            toStringValue(row.userId);
+          const roleId =
+            toStringValue(row.role_id) ||
+            toStringValue(row.RoleID) ||
+            toStringValue(row.roleId);
+
+          if (!userId || !roleId) return;
+
+          const current = mapping.get(userId) || [];
+          if (!current.includes(roleId)) {
+            mapping.set(userId, [...current, roleId]);
+          }
+        });
+
+        setUserRoleIdsByUserId(mapping);
+        return mapping;
+      } catch {
+        continue;
+      }
+    }
+
+    setUserRoleIdsByUserId(new Map());
+    return new Map<string, string[]>();
+  }, [token]);
+
   const refreshData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -504,6 +579,7 @@ export default function UserList() {
         loadRoles(),
         loadIntegrationTokens(),
         loadUsers(),
+        loadUserRoleIds(),
       ]);
       setRoles(nextRoles);
       setIntegrationTokens(nextTokens);
@@ -512,7 +588,14 @@ export default function UserList() {
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, loadIntegrationTokens, loadRoles, loadUsers, token]);
+  }, [
+    isAuthenticated,
+    loadIntegrationTokens,
+    loadRoles,
+    loadUserRoleIds,
+    loadUsers,
+    token,
+  ]);
 
   useEffect(() => {
     void refreshData();
@@ -526,32 +609,10 @@ export default function UserList() {
     return () => window.removeEventListener(USER_EVENT, handler);
   }, [refreshData]);
 
-  const allRoles = useMemo(() => {
-    const existing = new Map<string, Role>();
-    roles.forEach((role) => existing.set(role.name, role));
-
-    users.forEach((user) => {
-      if (existing.has(user.role)) return;
-      const palette = ROLE_PALETTE[user.role.toLowerCase()] || {
-        color: "#6b7280",
-        level: 30,
-      };
-      existing.set(user.role, {
-        id: user.role,
-        name: user.role,
-        display_name: formatRoleName(user.role),
-        description: "",
-        level: palette.level,
-        color: palette.color,
-        icon: "",
-        is_system: false,
-        can_be_deleted: false,
-        status: "active",
-      });
-    });
-
-    return Array.from(existing.values()).sort((a, b) => b.level - a.level);
-  }, [roles, users]);
+  const allRoles = useMemo(
+    () => [...roles].sort((a, b) => b.level - a.level),
+    [roles],
+  );
 
   const getRoleInfo = useCallback(
     (roleName: string) => allRoles.find((role) => role.name === roleName),
@@ -637,19 +698,68 @@ export default function UserList() {
     if (saving) return;
     setModalOpen(false);
     setModalInitial(null);
+    setModalInitialRoleIds([]);
     setModalError(null);
   };
 
   const handleAdd = () => {
     setModalInitial(null);
+    setModalInitialRoleIds([]);
     setModalError(null);
     setModalOpen(true);
   };
 
+  const loadRoleIdsForUser = useCallback(
+    async (userId: string) => {
+      if (!token || !userId) return [];
+
+      for (const endpoint of USER_ROLE_ENDPOINTS) {
+        try {
+          const rows = await fetchAllQueryRows<UserRoleApiRow>({
+            endpoint,
+            spec: {
+              fields: ["*"],
+              filters: [["user_id", "=", Number(userId)]],
+            },
+            token,
+            requestInit: {
+              headers: getAuthHeaders(token),
+            },
+          });
+
+          const roleIds = rows
+            .map(
+              (row) =>
+                toStringValue(row.role_id) ||
+                toStringValue(row.RoleID) ||
+                toStringValue(row.roleId),
+            )
+            .filter(Boolean);
+
+          if (roleIds.length > 0) {
+            return [...new Set(roleIds)];
+          }
+        } catch {
+          continue;
+        }
+      }
+
+      return [];
+    },
+    [token],
+  );
+
   const handleEdit = (user: User) => {
     setModalInitial(user);
+    setModalInitialRoleIds(userRoleIdsByUserId.get(user.id) || []);
     setModalError(null);
     setModalOpen(true);
+
+    void loadRoleIdsForUser(user.id).then((roleIds) => {
+      setModalInitialRoleIds((current) =>
+        current.length > 0 || roleIds.length === 0 ? current : roleIds,
+      );
+    });
   };
 
   const openDetail = (user: User) => {
@@ -772,7 +882,9 @@ export default function UserList() {
         province: payload.province || null,
         postal_code: payload.postal_code || null,
         country: payload.country || null,
-        is_system: modalInitial ? payload.is_system : Boolean(payload.is_system),
+        is_system: modalInitial
+          ? payload.is_system
+          : Boolean(payload.is_system),
         token_version: 1,
         status: 1,
         workflow_state: "Active",
@@ -782,9 +894,8 @@ export default function UserList() {
         body.password = payload.password.trim();
       }
 
-      const endpoint = activeEndpointRef.current;
       const requestUrl = modalInitial
-        ? getResourceUrl(endpoint, modalInitial.id)
+        ? `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.USER_UPDATE}/${modalInitial.id}`
         : `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.USER_CREATE}`;
       const res = await apiFetch(
         requestUrl,
@@ -812,7 +923,13 @@ export default function UserList() {
         );
       }
 
-      await assignRoleToUser(userId, payload.role_ids);
+      const shouldAssignRoles =
+        !modalInitial ||
+        !areRoleIdsEqual(payload.initial_role_ids || [], payload.role_ids);
+
+      if (shouldAssignRoles) {
+        await assignRoleToUser(userId, payload.role_ids);
+      }
       shouldRefresh = true;
 
       if (payload.generate_integration_token) {
@@ -829,6 +946,7 @@ export default function UserList() {
       );
       setModalOpen(false);
       setModalInitial(null);
+      setModalInitialRoleIds([]);
       window.dispatchEvent(new Event(USER_EVENT));
     } catch (submitError) {
       const message =
@@ -839,7 +957,10 @@ export default function UserList() {
       if (shouldRefresh) {
         setModalOpen(false);
         setModalInitial(null);
-        setError(`User sudah tersimpan, tetapi proses lanjutan gagal: ${message}`);
+        setModalInitialRoleIds([]);
+        setError(
+          `User sudah tersimpan, tetapi proses lanjutan gagal: ${message}`,
+        );
         window.dispatchEvent(new Event(USER_EVENT));
       } else {
         setModalError(message);
@@ -1169,6 +1290,7 @@ export default function UserList() {
         onClose={closeModal}
         onDismissError={() => setModalError(null)}
         initial={modalInitial}
+        initialRoleIds={modalInitialRoleIds}
         roles={allRoles}
         saving={saving}
         error={modalError}

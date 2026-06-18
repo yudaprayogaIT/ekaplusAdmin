@@ -1391,7 +1391,12 @@ export function GCDetailModal({
                               >
                                 <div>
                                   <p className="font-semibold text-slate-900">
-                                    {item.name}
+                                    {`${item.gc_name || gc.name || "GC"} - ${
+                                      item.branch_city ||
+                                      item.branch_name ||
+                                      item.name ||
+                                      "-"
+                                    }`}
                                   </p>
                                   <p className="text-xs text-slate-500">
                                     BCID: {item.code || `BC${item.id}`} •{" "}

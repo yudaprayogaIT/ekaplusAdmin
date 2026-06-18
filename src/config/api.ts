@@ -26,6 +26,7 @@ export const API_CONFIG = {
     BANNER: "/api/resource/ekatalog_banner",
     USER: "/api/resource/user",
     USER_CREATE: "/api/user/create",
+    USER_UPDATE: "/api/user",
     USER_ME: "/api/user/me",
     INTEGRATION_TOKEN: "/api/user/integration-token",
 

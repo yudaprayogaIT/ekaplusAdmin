@@ -43,11 +43,16 @@ function toTitleCaseName(...parts: string[]): string {
     .join(" ");
 }
 
+function normalizeRoleMatch(value: string | null | undefined): string {
+  return (value || "").trim().toLowerCase().replace(/[_\s-]+/g, "");
+}
+
 export default function AddUserModal({
   open,
   onClose,
   onDismissError,
   initial,
+  initialRoleIds = [],
   roles,
   saving,
   error,
@@ -57,6 +62,7 @@ export default function AddUserModal({
   onClose: () => void;
   onDismissError: () => void;
   initial?: User | null;
+  initialRoleIds?: string[];
   roles: Role[];
   saving: boolean;
   error: string | null;
@@ -89,6 +95,27 @@ export default function AddUserModal({
   const rolePickerRef = useRef<HTMLDivElement | null>(null);
   const roleSearchInputRef = useRef<HTMLInputElement | null>(null);
 
+  const initialSelectedRoleIds = useMemo(() => {
+    if (!initial) return [];
+
+    const directIds = [...new Set([...initialRoleIds, initial.role_id].filter(Boolean))] as string[];
+    if (directIds.length > 0) return directIds;
+
+    const initialRoleValue = normalizeRoleMatch(initial.role);
+    if (!initialRoleValue) return [];
+
+    const matchedRole = roles.find((role) => {
+      const candidates = [
+        normalizeRoleMatch(role.id),
+        normalizeRoleMatch(role.name),
+        normalizeRoleMatch(role.display_name),
+      ];
+      return candidates.includes(initialRoleValue);
+    });
+
+    return matchedRole?.id ? [matchedRole.id] : [];
+  }, [initial, initialRoleIds, roles]);
+
   useEffect(() => {
     if (!open) return;
 
@@ -109,13 +136,7 @@ export default function AddUserModal({
       setCity(initial.city ?? "");
       setProvince(initial.province ?? "");
       setPostalCode(initial.postal_code ?? "");
-      setRoleIds(
-        initial.role_id
-          ? [initial.role_id]
-          : roles.find((role) => role.name === initial.role)?.id
-            ? [roles.find((role) => role.name === initial.role)!.id]
-            : [],
-      );
+      setRoleIds(initialSelectedRoleIds);
       setRoleQuery("");
       setRolePickerOpen(false);
       setIsSystem(Boolean(initial.is_system));
@@ -147,7 +168,7 @@ export default function AddUserModal({
     }
 
     setActiveTab("basic");
-  }, [initial, open, roles]);
+  }, [initial, initialSelectedRoleIds, open, roles]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -221,6 +242,7 @@ export default function AddUserModal({
       country: "Indonesia",
       role_id: primaryRole?.id || null,
       role_ids: roleIds,
+      initial_role_ids: initialSelectedRoleIds,
       role: primaryRole?.name || initial?.role || "user",
       is_system: isSystem ? 1 : 0,
       generate_integration_token: generateIntegrationToken,
@@ -451,7 +473,9 @@ export default function AddUserModal({
                         </button>
                       </div>
                       <p className="mt-2 text-xs text-gray-500">
-                        Password minimal 6 karakter.
+                        {initial
+                          ? "Kosongkan jika password tidak ingin diubah. Minimal 6 karakter jika diisi."
+                          : "Password minimal 6 karakter."}
                       </p>
                     </div>
                   </div>
@@ -544,14 +568,18 @@ export default function AddUserModal({
                             </p>
                             <p className="truncate text-sm font-semibold text-gray-800">
                               {selectedRoles.length === 0
-                                ? "Belum dipilih"
+                                ? initial
+                                  ? "Role lama dipertahankan"
+                                  : "Belum dipilih"
                                 : selectedRoles.length === 1
                                   ? selectedRoles[0].display_name
                                   : `${selectedRoles.length} role dipilih`}
                             </p>
                             <p className="truncate text-xs text-gray-500">
                               {selectedRoles.length === 0
-                                ? "Pilih satu atau beberapa role untuk user ini"
+                                ? initial
+                                  ? "Simpan tanpa memilih ulang jika role user tidak diubah"
+                                  : "Pilih satu atau beberapa role untuk user ini"
                                 : selectedRoles
                                     .map((role) => role.name)
                                     .join(", ")}
@@ -843,7 +871,7 @@ export default function AddUserModal({
                 </button>
                 <button
                   type="submit"
-                  disabled={saving || roleIds.length === 0}
+                      disabled={saving || (!initial && roleIds.length === 0)}
                   className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-red-500 to-red-600 px-8 py-3 font-semibold text-white transition-all hover:shadow-xl hover:shadow-red-200 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving ? (

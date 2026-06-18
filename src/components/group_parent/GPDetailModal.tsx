@@ -1091,7 +1091,12 @@ export function GPDetailModal({
                               >
                                 <div>
                                   <p className="font-semibold text-slate-900">
-                                    {item.name}
+                                    {`${item.gc_name || item.gc_code || "GC"} - ${
+                                      item.branch_city ||
+                                      item.branch_name ||
+                                      item.name ||
+                                      "-"
+                                    }`}
                                   </p>
                                   <p className="text-xs text-slate-500">
                                     BCID: {item.code || `BC${item.id}`} •{" "}
