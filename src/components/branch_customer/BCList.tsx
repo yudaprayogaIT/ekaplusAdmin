@@ -695,6 +695,9 @@ export default function BCList() {
         isOpen={selectedBC !== null}
         onClose={() => setSelectedBC(null)}
         bc={selectedBC}
+        onViewBC={(bc) => {
+          setSelectedBC(bc);
+        }}
         onViewGP={(gp) => {
           setSelectedBC(null);
           setSelectedGP(gp);

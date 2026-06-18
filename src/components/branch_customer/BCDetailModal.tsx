@@ -1,8 +1,16 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  FaArrowDown,
+  FaArrowUp,
   FaBan,
   FaAddressBook,
   FaBuilding,
@@ -16,8 +24,18 @@ import {
   FaWarehouse,
 } from "react-icons/fa";
 import { HiXMark } from "react-icons/hi2";
-import type { BranchCustomer, GroupCustomer, GroupParent } from "@/types/customer";
-import { API_CONFIG, apiFetch, getQueryUrl, getResourceUrl } from "@/config/api";
+import type {
+  BranchCustomer,
+  GroupCustomer,
+  GroupParent,
+} from "@/types/customer";
+import {
+  API_CONFIG,
+  apiFetch,
+  getApiUrl,
+  getQueryUrl,
+  getResourceUrl,
+} from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   fetchBranchErpResourcePage,
@@ -34,6 +52,7 @@ interface BCDetailModalProps {
   onClose: () => void;
   bc: BranchCustomer | null;
   onBCUpdate?: (updatedBC: BranchCustomer) => void;
+  onViewBC?: (bc: BranchCustomer) => void;
   onViewGP?: (gp: GroupParent) => void;
   onViewGC?: (gc: GroupCustomer) => void;
 }
@@ -43,7 +62,10 @@ interface BCDetailApi {
   name?: string | null;
   bcid_name?: string | null;
   gcid?: number | null;
-  branch?: number | null;
+  branch?:
+    | number
+    | { id?: number | null; branch_name?: string | null; city?: string | null }
+    | null;
   customer_register?: number | null;
   product_need?: string | null;
   branch_owner?: string | null;
@@ -84,7 +106,13 @@ interface BCDetailApi {
   updated_by?: number | { full_name?: string } | null;
 }
 
-type DetailTab = "company" | "owner" | "finance" | "address" | "contacts";
+type DetailTab =
+  | "company"
+  | "owner"
+  | "finance"
+  | "hierarchy"
+  | "address"
+  | "contacts";
 
 interface AddressRow {
   id: number;
@@ -128,6 +156,70 @@ interface SalesTeamOption {
   id: number | string;
   code: string;
   label: string;
+}
+
+interface BranchLookupRow {
+  id?: number | null;
+  branch_name?: string | null;
+  city?: string | null;
+}
+
+type PolicyLevel = "nbid" | "gpid" | "gcid" | "bcid" | string;
+
+interface BranchCustomerPolicyScopeRow {
+  id: number;
+  name?: string | null;
+  customer_name?: string | null;
+  branch_code?: string | null;
+  branch_name?: string | null;
+  status?: string | null;
+}
+
+interface BranchCustomerPolicyScope {
+  id?: number | null;
+  level?: PolicyLevel | null;
+  total?: number | null;
+  bcs?: BranchCustomerPolicyScopeRow[] | null;
+}
+
+interface BranchCustomerPolicyRelation {
+  gc_code?: string | null;
+  gc_name?: string | null;
+  gcid?: number | null;
+  gp_code?: string | null;
+  gp_name?: string | null;
+  gpid?: number | null;
+  nb_code?: string | null;
+  nb_name?: string | null;
+  nbid?: number | null;
+}
+
+interface BranchCustomerPolicyActiveData {
+  bc_policy_field?: {
+    credit_limit?: number | null;
+    credit_limit_active?: number | null;
+    limit_customer_overdue?: number | null;
+    limit_customer_overdue_active?: number | null;
+    payment_term?: number | null;
+    payment_term_active?: number | null;
+  } | null;
+  policy?: {
+    credit_limit_level?: PolicyLevel | null;
+    credit_limit_id?: number | null;
+    final_credit_limit?: number | null;
+    payment_term_level?: PolicyLevel | null;
+    payment_term_id?: number | null;
+    final_payment_term?: number | null;
+    limit_overdue_level?: PolicyLevel | null;
+    limit_overdue_id?: number | null;
+    final_limit_overdue?: number | null;
+  } | null;
+  relation?: BranchCustomerPolicyRelation | null;
+  scopes?: {
+    credit_limit?: BranchCustomerPolicyScope | null;
+    payment_term?: BranchCustomerPolicyScope | null;
+    limit_overdue?: BranchCustomerPolicyScope | null;
+  } | null;
 }
 
 const PRODUCT_NEED_OPTIONS = ["Bahan Baku Springbed & Sofa", "Furniture"];
@@ -194,11 +286,7 @@ async function fetchWilayah(path: string): Promise<WilayahOption[]> {
   }
   const json = await res.json();
   const rows: Array<{ code?: string; id?: string; name?: string }> =
-    Array.isArray(json?.data)
-      ? json.data
-      : Array.isArray(json)
-        ? json
-        : [];
+    Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
   return rows
     .map((row) => ({
       code: String(row.code || row.id || ""),
@@ -246,6 +334,46 @@ function formatNullableNumber(value?: number | null): string {
     return "-";
   }
   return new Intl.NumberFormat("id-ID").format(Number(value));
+}
+
+function getPolicyLevelBadge(level?: PolicyLevel | null): string {
+  const normalized = String(level || "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "nbid") return "NB";
+  if (normalized === "gpid") return "GP";
+  if (normalized === "gcid") return "GC";
+  if (normalized === "bcid") return "BC";
+  return normalized ? normalized.toUpperCase() : "-";
+}
+
+function getPolicyLevelName(
+  level: PolicyLevel | null | undefined,
+  relation?: BranchCustomerPolicyRelation | null,
+  fallbackBc?: string,
+): string {
+  const normalized = String(level || "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "nbid") {
+    return (
+      [relation?.nb_name, relation?.nb_code].filter(Boolean).join(" - ") || "-"
+    );
+  }
+  if (normalized === "gpid") {
+    return (
+      [relation?.gp_name, relation?.gp_code].filter(Boolean).join(" - ") || "-"
+    );
+  }
+  if (normalized === "gcid") {
+    return (
+      [relation?.gc_name, relation?.gc_code].filter(Boolean).join(" - ") || "-"
+    );
+  }
+  if (normalized === "bcid") {
+    return fallbackBc || "-";
+  }
+  return "-";
 }
 
 function buildEditSnapshot(input: {
@@ -312,6 +440,7 @@ export function BCDetailModal({
   onClose,
   bc,
   onBCUpdate,
+  onViewBC,
   onViewGP,
   onViewGC,
 }: BCDetailModalProps) {
@@ -324,6 +453,9 @@ export function BCDetailModal({
   const [gp, setGp] = useState<GroupParent | null>(null);
   const [gc, setGc] = useState<GroupCustomer | null>(null);
   const [nb, setNb] = useState<{ code: string; name: string } | null>(null);
+  const [relatedBCs, setRelatedBCs] = useState<BranchCustomer[]>([]);
+  const [relatedBCsLoading, setRelatedBCsLoading] = useState(false);
+  const [relatedBCsError, setRelatedBCsError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<DetailTab>("company");
   const [isEditMode, setIsEditMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -343,8 +475,10 @@ export function BCDetailModal({
   const [editedCreditLimit, setEditedCreditLimit] = useState("");
   const [editedPaymentTermActive, setEditedPaymentTermActive] = useState(0);
   const [editedPaymentTerm, setEditedPaymentTerm] = useState("");
-  const [editedLimitCustomerOverdueActive, setEditedLimitCustomerOverdueActive] =
-    useState(0);
+  const [
+    editedLimitCustomerOverdueActive,
+    setEditedLimitCustomerOverdueActive,
+  ] = useState(0);
   const [editedLimitCustomerOverdue, setEditedLimitCustomerOverdue] =
     useState("");
   const [editedRows, setEditedRows] = useState<AddressRow[]>([]);
@@ -352,7 +486,9 @@ export function BCDetailModal({
   const [editSnapshot, setEditSnapshot] = useState("");
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [provinces, setProvinces] = useState<WilayahOption[]>([]);
-  const [shippingAreaStates, setShippingAreaStates] = useState<ShippingAreaState[]>([]);
+  const [shippingAreaStates, setShippingAreaStates] = useState<
+    ShippingAreaState[]
+  >([]);
   const [paymentAccountInfo, setPaymentAccountInfo] =
     useState<PaymentAccountInfo | null>(null);
   const [paymentAccountError, setPaymentAccountError] = useState<string | null>(
@@ -360,10 +496,18 @@ export function BCDetailModal({
   );
   const [optionError, setOptionError] = useState<string | null>(null);
   const [rekeningOptions, setRekeningOptions] = useState<RekeningOption[]>([]);
-  const [salesTeamOptions, setSalesTeamOptions] = useState<SalesTeamOption[]>([]);
+  const [salesTeamOptions, setSalesTeamOptions] = useState<SalesTeamOption[]>(
+    [],
+  );
   const [rekeningLoading, setRekeningLoading] = useState(false);
   const [rekeningHasMore, setRekeningHasMore] = useState(false);
   const [rekeningStart, setRekeningStart] = useState(0);
+  const [policyActiveInfo, setPolicyActiveInfo] =
+    useState<BranchCustomerPolicyActiveData | null>(null);
+  const [policyActiveInfoLoading, setPolicyActiveInfoLoading] = useState(false);
+  const [policyActiveInfoError, setPolicyActiveInfoError] = useState<
+    string | null
+  >(null);
   const regencyCache = useRef<Record<string, WilayahOption[]>>({});
   const districtCache = useRef<Record<string, WilayahOption[]>>({});
   const branchIdForErp = toNum(detail?.branch) ?? bc?.branch_id;
@@ -371,7 +515,8 @@ export function BCDetailModal({
   const resolveSalesTeamValue = useCallback(
     (value: BCDetailApi["sales_team"]): string => {
       if (typeof value === "object" && value) {
-        if (value.id !== undefined && value.id !== null) return String(value.id);
+        if (value.id !== undefined && value.id !== null)
+          return String(value.id);
         if (value.name) return value.name;
       }
       if (typeof value === "number" || typeof value === "string") {
@@ -385,9 +530,16 @@ export function BCDetailModal({
   const resolveSalesTeamLabel = useCallback(
     (value: BCDetailApi["sales_team"]): string => {
       if (typeof value === "object" && value) {
-        return value.sales_team_name || value.name || (value.id ? String(value.id) : "-");
+        return (
+          value.sales_team_name ||
+          value.name ||
+          (value.id ? String(value.id) : "-")
+        );
       }
-      const raw = typeof value === "number" || typeof value === "string" ? String(value) : "";
+      const raw =
+        typeof value === "number" || typeof value === "string"
+          ? String(value)
+          : "";
       if (!raw) return "-";
       const match = salesTeamOptions.find(
         (option) => String(option.id) === raw || option.code === raw,
@@ -407,13 +559,18 @@ export function BCDetailModal({
     setGp(null);
     setGc(null);
     setNb(null);
+    setRelatedBCs([]);
+    setRelatedBCsError(null);
     try {
       const dRes = await apiFetch(
-        getQueryUrl(`${API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2}/${bc.id}`, { fields: ["*"] }),
+        getQueryUrl(`${API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2}/${bc.id}`, {
+          fields: ["*"],
+        }),
         { method: "GET", cache: "no-store" },
         token,
       );
-      if (!dRes.ok) throw new Error(`Gagal memuat detail Branch Customer (${dRes.status})`);
+      if (!dRes.ok)
+        throw new Error(`Gagal memuat detail Branch Customer (${dRes.status})`);
       const dJson = await dRes.json();
       const dRow = (dJson?.data || null) as BCDetailApi | null;
       setDetail(dRow);
@@ -438,7 +595,10 @@ export function BCDetailModal({
         const idxA = toNum(a.idx) ?? Number.MAX_SAFE_INTEGER;
         const idxB = toNum(b.idx) ?? Number.MAX_SAFE_INTEGER;
         if (idxA !== idxB) return idxA - idxB;
-        return (toNum(a.id) ?? Number.MAX_SAFE_INTEGER) - (toNum(b.id) ?? Number.MAX_SAFE_INTEGER);
+        return (
+          (toNum(a.id) ?? Number.MAX_SAFE_INTEGER) -
+          (toNum(b.id) ?? Number.MAX_SAFE_INTEGER)
+        );
       });
       setRows(sorted);
       setEditedRows(sorted);
@@ -446,7 +606,11 @@ export function BCDetailModal({
       const gcid = toNum(dRow?.gcid) ?? bc.gc_id;
       if (!gcid) return;
       const gcRes = await apiFetch(
-        getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, { fields: ["*"], filters: [["id", "=", gcid]], limit: 1 }),
+        getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, {
+          fields: ["*"],
+          filters: [["id", "=", gcid]],
+          limit: 1,
+        }),
         { method: "GET", cache: "no-store" },
         token,
       );
@@ -459,14 +623,146 @@ export function BCDetailModal({
         name: gcRow.gc_name || gcRow.name || "-",
         gp_id: Number(gcRow.gpid || 0),
         created_at: gcRow.created_at || new Date(0).toISOString(),
-        updated_at: gcRow.updated_at || gcRow.created_at || new Date(0).toISOString(),
+        updated_at:
+          gcRow.updated_at || gcRow.created_at || new Date(0).toISOString(),
         disabled: Number(gcRow.disabled || 0),
       };
       setGc(gcMapped);
+
+      setRelatedBCsLoading(true);
+      try {
+        const bcRows = await fetchAllQueryRows<BCDetailApi>({
+          endpoint: API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2,
+          spec: {
+            fields: ["*", "created_by.full_name", "updated_by.full_name"],
+            filters: [["gcid", "=", gcMapped.id]],
+          },
+          token,
+          errorMessage: "Gagal memuat branch customer pada hierarki",
+        });
+
+        const branchIds = Array.from(
+          new Set(
+            bcRows
+              .map((row) =>
+                row.branch && typeof row.branch === "object"
+                  ? toNum(row.branch.id)
+                  : toNum(row.branch),
+              )
+              .filter((id): id is number => typeof id === "number"),
+          ),
+        );
+
+        const branchMap = new Map<number, { name?: string; city?: string }>();
+        if (branchIds.length > 0) {
+          const branchRes = await apiFetch(
+            getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH, {
+              fields: ["id", "branch_name", "city"],
+              filters: [["id", "in", branchIds]],
+              limit: branchIds.length,
+            }),
+            { method: "GET", cache: "no-store" },
+            token,
+          );
+          if (branchRes.ok) {
+            const branchJson = await branchRes.json();
+            const branchRows: BranchLookupRow[] = Array.isArray(branchJson?.data)
+              ? branchJson.data
+              : [];
+            branchRows.forEach((row) => {
+              if (!row.id) return;
+              branchMap.set(Number(row.id), {
+                name: row.branch_name || undefined,
+                city: row.city || undefined,
+              });
+            });
+          }
+        }
+
+        const mappedBCs: BranchCustomer[] = bcRows.map((row) => {
+          const branchId =
+            row.branch && typeof row.branch === "object"
+              ? toNum(row.branch.id) || 0
+              : toNum(row.branch) || 0;
+          const branchRef = branchMap.get(branchId);
+          const directBranchName =
+            row.branch && typeof row.branch === "object"
+              ? row.branch.branch_name || undefined
+              : undefined;
+          const directBranchCity =
+            row.branch && typeof row.branch === "object"
+              ? row.branch.city || undefined
+              : undefined;
+
+          return {
+            id: Number(row.id),
+            code: row.name || undefined,
+            name:
+              row.bcid_name ||
+              row.name ||
+              `${gcMapped.name} - ${directBranchCity || branchRef?.city || "-"}`,
+            gc_id: gcMapped.id,
+            gc_name: gcMapped.name,
+            gc_code: gcMapped.code,
+            gp_name: bc.gp_name,
+            gp_code: bc.gp_code,
+            credit_limit_active: Number(row.credit_limit_active || 0),
+            credit_limit: row.credit_limit ?? null,
+            payment_term_active: Number(row.payment_term_active || 0),
+            payment_term: row.payment_term ?? null,
+            limit_customer_overdue_active: Number(
+              row.limit_customer_overdue_active || 0,
+            ),
+            limit_customer_overdue: row.limit_customer_overdue ?? null,
+            branch_id: branchId,
+            branch_name: directBranchName || branchRef?.name,
+            branch_city: directBranchCity || branchRef?.city,
+            owner_name: row.branch_owner || undefined,
+            owner_phone: row.branch_owner_phone || undefined,
+            owner_email: row.branch_owner_email || undefined,
+            payment_method: row.payment_method || undefined,
+            payment_account: row.payment_account || undefined,
+            receipt_delivery_method: row.receipt_delivery_method || undefined,
+            receipt_issued_at: row.receipt_issued_at || undefined,
+            notes: row.notes || undefined,
+            tax_status: row.tax_status ?? undefined,
+            npwp: row.npwp || undefined,
+            created_at: row.created_at || new Date(0).toISOString(),
+            updated_at: row.updated_at || row.created_at || new Date(0).toISOString(),
+            created_by:
+              (typeof row.created_by === "object" ? row.created_by?.full_name : undefined) ||
+              row["created_by.full_name"] ||
+              undefined,
+            updated_by:
+              (typeof row.updated_by === "object" ? row.updated_by?.full_name : undefined) ||
+              row["updated_by.full_name"] ||
+              undefined,
+            disabled: Number(row.disabled || 0),
+          };
+        });
+
+        setRelatedBCs(
+          mappedBCs.sort((a, b) =>
+            (a.name || a.code || "").localeCompare(b.name || b.code || "", "id-ID"),
+          ),
+        );
+      } catch (error) {
+        setRelatedBCs([]);
+        setRelatedBCsError(
+          error instanceof Error ? error.message : "Gagal memuat hierarki branch customer",
+        );
+      } finally {
+        setRelatedBCsLoading(false);
+      }
+
       if (!gcMapped.gp_id) return;
 
       const gpRes = await apiFetch(
-        getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, { fields: ["*"], filters: [["id", "=", gcMapped.gp_id]], limit: 1 }),
+        getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, {
+          fields: ["*"],
+          filters: [["id", "=", gcMapped.gp_id]],
+          limit: 1,
+        }),
         { method: "GET", cache: "no-store" },
         token,
       );
@@ -478,20 +774,30 @@ export function BCDetailModal({
         code: gpRow.name || undefined,
         name: gpRow.gp_name || gpRow.name || "-",
         created_at: gpRow.created_at || new Date(0).toISOString(),
-        updated_at: gpRow.updated_at || gpRow.created_at || new Date(0).toISOString(),
+        updated_at:
+          gpRow.updated_at || gpRow.created_at || new Date(0).toISOString(),
         disabled: Number(gpRow.disabled || 0),
       };
       setGp(gpMapped);
-      const nbId = typeof gpRow.nbid === "number" ? gpRow.nbid : toNum(gpRow.nbid?.id);
+      const nbId =
+        typeof gpRow.nbid === "number" ? gpRow.nbid : toNum(gpRow.nbid?.id);
       if (!nbId) return;
       const nbRes = await apiFetch(
-        getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, { fields: ["id", "name", "nb_name"], filters: [["id", "=", nbId]], limit: 1 }),
+        getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, {
+          fields: ["id", "name", "nb_name"],
+          filters: [["id", "=", nbId]],
+          limit: 1,
+        }),
         { method: "GET", cache: "no-store" },
         token,
       );
       const nbJson = nbRes.ok ? await nbRes.json() : { data: [] };
       const nbRow = Array.isArray(nbJson?.data) ? nbJson.data[0] : null;
-      if (nbRow) setNb({ code: nbRow.name || `NB${nbRow.id}`, name: nbRow.nb_name || nbRow.name || "-" });
+      if (nbRow)
+        setNb({
+          code: nbRow.name || `NB${nbRow.id}`,
+          name: nbRow.nb_name || nbRow.name || "-",
+        });
     } catch (e) {
       setDetailError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -516,6 +822,70 @@ export function BCDetailModal({
     if (!isOpen) return;
     setActiveTab("company");
   }, [isOpen, bc?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPolicyActiveInfo() {
+      const currentBcCode = detail?.name || bc?.code || bc?.name || "";
+      if (!isOpen || !token || !isAuthenticated || !currentBcCode) {
+        setPolicyActiveInfo(null);
+        setPolicyActiveInfoError(null);
+        setPolicyActiveInfoLoading(false);
+        return;
+      }
+
+      setPolicyActiveInfoLoading(true);
+      setPolicyActiveInfoError(null);
+
+      try {
+        const response = await apiFetch(
+          getApiUrl(
+            `${API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2}/method/get_customer_policy_active_info_by_bc`,
+          ),
+          {
+            method: "POST",
+            cache: "no-store",
+            body: JSON.stringify({ bcid: currentBcCode }),
+          },
+          token,
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            `Gagal memuat policy aktif branch customer (${response.status})`,
+          );
+        }
+
+        const json = (await response.json()) as {
+          data?: BranchCustomerPolicyActiveData | null;
+        };
+
+        if (!cancelled) {
+          setPolicyActiveInfo(json?.data || null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setPolicyActiveInfo(null);
+          setPolicyActiveInfoError(
+            error instanceof Error
+              ? error.message
+              : "Gagal memuat policy aktif branch customer",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setPolicyActiveInfoLoading(false);
+        }
+      }
+    }
+
+    void loadPolicyActiveInfo();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bc?.code, bc?.name, detail?.name, isAuthenticated, isOpen, token]);
 
   useEffect(() => {
     let cancelled = false;
@@ -572,13 +942,17 @@ export function BCDetailModal({
           start,
         });
         setRekeningOptions((prev) =>
-          start === 0 ? mergeUniqueByName([], rows) : mergeUniqueByName(prev, rows),
+          start === 0
+            ? mergeUniqueByName([], rows)
+            : mergeUniqueByName(prev, rows),
         );
         setRekeningStart(start + rows.length);
         setRekeningHasMore(rows.length === ERP_PAGE_SIZE);
       } catch (error) {
         setOptionError(
-          error instanceof Error ? error.message : "Gagal memuat pilihan rekening",
+          error instanceof Error
+            ? error.message
+            : "Gagal memuat pilihan rekening",
         );
       } finally {
         setRekeningLoading(false);
@@ -613,7 +987,9 @@ export function BCDetailModal({
       );
     } catch (error) {
       setOptionError(
-        error instanceof Error ? error.message : "Gagal memuat pilihan sales team",
+        error instanceof Error
+          ? error.message
+          : "Gagal memuat pilihan sales team",
       );
     }
   }, [token]);
@@ -633,11 +1009,18 @@ export function BCDetailModal({
     }
     void loadRekeningOptions(0);
     void loadSalesTeamOptions();
-  }, [branchIdForErp, isEditMode, loadRekeningOptions, loadSalesTeamOptions, token]);
+  }, [
+    branchIdForErp,
+    isEditMode,
+    loadRekeningOptions,
+    loadSalesTeamOptions,
+    token,
+  ]);
 
   const getRegencies = useCallback(async (provinceCode: string) => {
     if (!provinceCode) return [];
-    if (regencyCache.current[provinceCode]) return regencyCache.current[provinceCode];
+    if (regencyCache.current[provinceCode])
+      return regencyCache.current[provinceCode];
     const rows = await fetchWilayah(`regencies/${provinceCode}.json`);
     regencyCache.current[provinceCode] = rows;
     return rows;
@@ -645,7 +1028,8 @@ export function BCDetailModal({
 
   const getDistricts = useCallback(async (regencyCode: string) => {
     if (!regencyCode) return [];
-    if (districtCache.current[regencyCode]) return districtCache.current[regencyCode];
+    if (districtCache.current[regencyCode])
+      return districtCache.current[regencyCode];
     const rows = await fetchWilayah(`districts/${regencyCode}.json`);
     districtCache.current[regencyCode] = rows;
     return rows;
@@ -710,9 +1094,15 @@ export function BCDetailModal({
     if (!isOpen || !bc) return;
     if (isEditMode) return;
     setEditedOwner((detail?.branch_owner || bc.owner_name || "").trim());
-    setEditedOwnerPhone((detail?.branch_owner_phone || bc.owner_phone || "").trim());
-    setEditedOwnerEmail((detail?.branch_owner_email || bc.owner_email || "").trim());
-    setEditedOwnerPlaceOfBirth((detail?.branch_owner_place_of_birth || "").trim());
+    setEditedOwnerPhone(
+      (detail?.branch_owner_phone || bc.owner_phone || "").trim(),
+    );
+    setEditedOwnerEmail(
+      (detail?.branch_owner_email || bc.owner_email || "").trim(),
+    );
+    setEditedOwnerPlaceOfBirth(
+      (detail?.branch_owner_place_of_birth || "").trim(),
+    );
     setEditedOwnerDateOfBirth(
       detail?.branch_owner_date_of_birth?.split("T")[0] || "",
     );
@@ -817,8 +1207,16 @@ export function BCDetailModal({
   const startEdit = () => {
     if (!bc) return;
     const owner = (detail?.branch_owner || bc.owner_name || "").trim();
-    const ownerPhone = (detail?.branch_owner_phone || bc.owner_phone || "").trim();
-    const ownerEmail = (detail?.branch_owner_email || bc.owner_email || "").trim();
+    const ownerPhone = (
+      detail?.branch_owner_phone ||
+      bc.owner_phone ||
+      ""
+    ).trim();
+    const ownerEmail = (
+      detail?.branch_owner_email ||
+      bc.owner_email ||
+      ""
+    ).trim();
     const ownerPob = (detail?.branch_owner_place_of_birth || "").trim();
     const ownerDob = detail?.branch_owner_date_of_birth?.split("T")[0] || "";
     const productNeed = (detail?.product_need || "").trim();
@@ -937,7 +1335,10 @@ export function BCDetailModal({
     );
   };
 
-  const onShippingProvinceChange = async (idx: number, provinceCode: string) => {
+  const onShippingProvinceChange = async (
+    idx: number,
+    provinceCode: string,
+  ) => {
     const selected = provinces.find((x) => x.code === provinceCode) || null;
     const row = editedRows[idx];
     if (!row) return;
@@ -978,7 +1379,8 @@ export function BCDetailModal({
     const state = shippingAreaStates[idx] || emptyShippingAreaState();
     const row = editedRows[idx];
     if (!row) return;
-    const selected = state.regencies.find((x) => x.code === regencyCode) || null;
+    const selected =
+      state.regencies.find((x) => x.code === regencyCode) || null;
     updateEditedRow(row.id, "city", selected?.name || "");
     updateEditedRow(row.id, "district", "");
     setShippingAreaStates((prev) => {
@@ -1014,7 +1416,8 @@ export function BCDetailModal({
     const state = shippingAreaStates[idx] || emptyShippingAreaState();
     const row = editedRows[idx];
     if (!row) return;
-    const selected = state.districts.find((x) => x.code === districtCode) || null;
+    const selected =
+      state.districts.find((x) => x.code === districtCode) || null;
     updateEditedRow(row.id, "district", selected?.name || "");
   };
 
@@ -1067,7 +1470,11 @@ export function BCDetailModal({
     const paymentTerm = parseNullableInt(editedPaymentTerm);
     const limitCustomerOverdue = parseNullableInt(editedLimitCustomerOverdue);
     if (editedTaxStatus === 1) {
-      if (!normalizedNpwp || normalizedNpwp.length < 15 || normalizedNpwp.length > 16) {
+      if (
+        !normalizedNpwp ||
+        normalizedNpwp.length < 15 ||
+        normalizedNpwp.length > 16
+      ) {
         alert("Nomor NPWP wajib 15-16 digit saat Tax Status = PKP.");
         return;
       }
@@ -1166,7 +1573,10 @@ export function BCDetailModal({
           ),
         ),
       );
-      const hasAddressError = [...addressUpsertResults, ...addressDeleteResults].some(
+      const hasAddressError = [
+        ...addressUpsertResults,
+        ...addressDeleteResults,
+      ].some(
         (result) =>
           result.status === "rejected" ||
           (result.status === "fulfilled" && !result.value.ok),
@@ -1182,7 +1592,8 @@ export function BCDetailModal({
               branch_owner: editedOwner.trim() || null,
               branch_owner_phone: editedOwnerPhone.trim() || null,
               branch_owner_email: normalizedEmail,
-              branch_owner_place_of_birth: editedOwnerPlaceOfBirth.trim() || null,
+              branch_owner_place_of_birth:
+                editedOwnerPlaceOfBirth.trim() || null,
               branch_owner_date_of_birth: editedOwnerDateOfBirth
                 ? `${editedOwnerDateOfBirth}T00:00:00Z`
                 : null,
@@ -1247,14 +1658,12 @@ export function BCDetailModal({
   if (!bc) return null;
 
   const bcCode = detail?.name || bc.code || `BC${bc.id}`;
-  const gcCode = gc?.code || bc.gc_code || "-";
   const gcName = gc?.name || bc.gc_name || "-";
-  const gpCode = gp?.code || bc.gp_code || "-";
-  const gpName = gp?.name || bc.gp_name || "-";
   const branchOwner = detail?.branch_owner || bc.owner_name || "-";
   const branchOwnerPhone = detail?.branch_owner_phone || bc.owner_phone || "-";
   const branchOwnerEmail = detail?.branch_owner_email || bc.owner_email || "-";
-  const branchOwnerDob = detail?.branch_owner_date_of_birth?.split("T")[0] || "-";
+  const branchOwnerDob =
+    detail?.branch_owner_date_of_birth?.split("T")[0] || "-";
   const notes = detail?.notes || "-";
   const paymentAccount =
     paymentAccountInfo?.nama_rekening || detail?.payment_account || "-";
@@ -1264,24 +1673,20 @@ export function BCDetailModal({
   const receiptDeliveryMethod = detail?.receipt_delivery_method || "-";
   const receiptIssuedAt = detail?.receipt_issued_at || "-";
   const salesTeam = resolveSalesTeamLabel(detail?.sales_team);
-  const creditLimitActiveLabel =
-    Number(detail?.credit_limit_active || 0) === 1 ? "Active" : "Inactive";
-  const paymentTermActiveLabel =
-    Number(detail?.payment_term_active || 0) === 1 ? "Active" : "Inactive";
-  const limitCustomerOverdueActiveLabel =
-    Number(detail?.limit_customer_overdue_active || 0) === 1
-      ? "Active"
-      : "Inactive";
   const taxStatusLabel = getTaxStatusLabel(detail?.tax_status);
   const npwpValue = detail?.npwp || "-";
-  const branchLocation = [bc.branch_name, bc.branch_city].filter(Boolean).join(", ") || "-";
-  const availableRekeningOptions = editedPaymentAccount && !rekeningOptions.some((item) => item.name === editedPaymentAccount)
-    ? [{ name: editedPaymentAccount }, ...rekeningOptions]
-    : rekeningOptions;
+  const branchLocation =
+    [bc.branch_name, bc.branch_city].filter(Boolean).join(", ") || "-";
+  const availableRekeningOptions =
+    editedPaymentAccount &&
+    !rekeningOptions.some((item) => item.name === editedPaymentAccount)
+      ? [{ name: editedPaymentAccount }, ...rekeningOptions]
+      : rekeningOptions;
   const availableSalesOptions =
     editedSalesTeam &&
     !salesTeamOptions.some(
-      (item) => String(item.id) === editedSalesTeam || item.code === editedSalesTeam,
+      (item) =>
+        String(item.id) === editedSalesTeam || item.code === editedSalesTeam,
     )
       ? [
           {
@@ -1292,12 +1697,42 @@ export function BCDetailModal({
           ...salesTeamOptions,
         ]
       : salesTeamOptions;
-  const selectedRekeningOption = availableRekeningOptions.find((item) => item.name === editedPaymentAccount) || null;
+  const selectedRekeningOption =
+    availableRekeningOptions.find(
+      (item) => item.name === editedPaymentAccount,
+    ) || null;
   const displayAddressRows = isEditMode ? editedRows : rows;
-  const createdBy = detail?.["created_by.full_name"] || bc.created_by || "System";
-  const updatedBy = detail?.["updated_by.full_name"] || bc.updated_by || "System";
+  const createdBy =
+    detail?.["created_by.full_name"] || bc.created_by || "System";
+  const updatedBy =
+    detail?.["updated_by.full_name"] || bc.updated_by || "System";
   const isActive = Number(detail?.disabled ?? bc.disabled ?? 0) !== 1;
-  const ownerInitial = branchOwner !== "-" ? branchOwner.charAt(0).toUpperCase() : "B";
+  const ownerInitial =
+    branchOwner !== "-" ? branchOwner.charAt(0).toUpperCase() : "B";
+  const inheritedCreditLimit =
+    policyActiveInfo?.policy?.final_credit_limit ?? null;
+  const inheritedPaymentTerm =
+    policyActiveInfo?.policy?.final_payment_term ?? null;
+  const creditLimitLevel = policyActiveInfo?.policy?.credit_limit_level;
+  const paymentTermLevel = policyActiveInfo?.policy?.payment_term_level;
+  const creditLimitSourceName = getPolicyLevelName(
+    creditLimitLevel,
+    policyActiveInfo?.relation,
+    `${displayName} - ${bcCode}`,
+  );
+  const paymentTermSourceName = getPolicyLevelName(
+    paymentTermLevel,
+    policyActiveInfo?.relation,
+    `${displayName} - ${bcCode}`,
+  );
+  const creditLimitSiblings = (
+    policyActiveInfo?.scopes?.credit_limit?.bcs || []
+  ).filter((row) => Number(row.id) !== Number(bc.id));
+  const creditLimitScopeTotal = Number(
+    policyActiveInfo?.scopes?.credit_limit?.total ||
+      policyActiveInfo?.scopes?.credit_limit?.bcs?.length ||
+      0,
+  );
   const detailTabs: Array<{
     key: DetailTab;
     label: string;
@@ -1321,6 +1756,12 @@ export function BCDetailModal({
       label: "Data Keuangan",
       caption: "Limit, term, rekening",
       icon: <FaWarehouse className="h-4 w-4" />,
+    },
+    {
+      key: "hierarchy",
+      label: "Hierarki",
+      caption: "Parent & branch",
+      icon: <FaUsers className="h-4 w-4" />,
     },
     {
       key: "address",
@@ -1370,16 +1811,22 @@ export function BCDetailModal({
                 <div className="space-y-1">
                   <div className="flex items-center gap-3">
                     <FaBuilding className="text-xl text-blue-600" />
-                    <h2 className="text-xl font-bold text-slate-900">Branch Customer Details</h2>
+                    <h2 className="text-xl font-bold text-slate-900">
+                      Branch Customer Details
+                    </h2>
                     <span
                       className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                        isActive ? "bg-emerald-500 text-white" : "bg-red-500 text-white"
+                        isActive
+                          ? "bg-emerald-500 text-white"
+                          : "bg-red-500 text-white"
                       }`}
                     >
                       {isActive ? "Active" : "Disabled"}
                     </span>
                   </div>
-                  <p className="pl-8 text-xs font-semibold text-slate-500">BCID: {bcCode}</p>
+                  <p className="pl-8 text-xs font-semibold text-slate-500">
+                    BCID: {bcCode}
+                  </p>
                 </div>
                 <button
                   onClick={attemptClose}
@@ -1391,37 +1838,6 @@ export function BCDetailModal({
             </header>
 
             <div className="flex-1 overflow-y-auto bg-slate-50">
-              {!isEditMode && (
-                <div className="flex items-center gap-2 overflow-x-auto border-b border-slate-200 bg-slate-100/80 px-6 py-3 text-sm whitespace-nowrap">
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-purple-600 px-2 py-0.5 text-[10px] font-bold text-white">L1</span>
-                  <button
-                    onClick={() => gp && onViewGP?.(gp)}
-                    disabled={!gp}
-                    className="font-semibold text-purple-900 disabled:cursor-default disabled:opacity-80"
-                  >
-                    {gpName} - {gpCode}
-                  </button>
-                </div>
-                <FaChevronRight className="text-xs text-slate-300" />
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">L2</span>
-                  <button
-                    onClick={() => gc && onViewGC?.(gc)}
-                    disabled={!gc}
-                    className="font-semibold text-blue-900 disabled:cursor-default disabled:opacity-80"
-                  >
-                    {gcName} - {gcCode}
-                  </button>
-                </div>
-                <FaChevronRight className="text-xs text-slate-300" />
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-orange-500 px-2 py-0.5 text-[10px] font-bold text-white">L3</span>
-                  <span className="font-bold text-orange-900">{displayName} - {bcCode}</span>
-                </div>
-                </div>
-              )}
-
               <div className="space-y-6 p-6">
                 {detailError && (
                   <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -1429,7 +1845,11 @@ export function BCDetailModal({
                     <span>{detailError}</span>
                   </div>
                 )}
-                {loading && <div className="text-sm text-slate-500">Memuat detail branch customer...</div>}
+                {loading && (
+                  <div className="text-sm text-slate-500">
+                    Memuat detail branch customer...
+                  </div>
+                )}
                 {isEditMode && optionError ? (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
                     {optionError}
@@ -1539,11 +1959,15 @@ export function BCDetailModal({
                               {isEditMode ? (
                                 <select
                                   value={editedProductNeed}
-                                  onChange={(e) => setEditedProductNeed(e.target.value)}
+                                  onChange={(e) =>
+                                    setEditedProductNeed(e.target.value)
+                                  }
                                   className="mt-2 w-full rounded-xl border border-blue-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
                                   disabled={isSaving}
                                 >
-                                  <option value="">Pilih kebutuhan produk</option>
+                                  <option value="">
+                                    Pilih kebutuhan produk
+                                  </option>
                                   {PRODUCT_NEED_OPTIONS.map((option) => (
                                     <option key={option} value={option}>
                                       {option}
@@ -1564,7 +1988,9 @@ export function BCDetailModal({
                                 <div className="mt-2">
                                   <select
                                     value={editedSalesTeam}
-                                    onChange={(e) => setEditedSalesTeam(e.target.value)}
+                                    onChange={(e) =>
+                                      setEditedSalesTeam(e.target.value)
+                                    }
                                     className="w-full rounded-xl border border-blue-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
                                     disabled={isSaving}
                                   >
@@ -1585,14 +2011,6 @@ export function BCDetailModal({
                                 </p>
                               )}
                             </div>
-                            <div className="rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
-                              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-sky-700">
-                                Limit Basis
-                              </p>
-                              <p className="mt-2 text-base font-bold text-slate-900">
-                                {detail?.limit_basis || "-"}
-                              </p>
-                            </div>
                             <div className="rounded-2xl border border-fuchsia-100 bg-fuchsia-50/70 p-4 md:col-span-2 xl:col-span-1">
                               <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-fuchsia-700">
                                 Notes
@@ -1600,7 +2018,9 @@ export function BCDetailModal({
                               {isEditMode ? (
                                 <textarea
                                   value={editedNotes}
-                                  onChange={(e) => setEditedNotes(e.target.value)}
+                                  onChange={(e) =>
+                                    setEditedNotes(e.target.value)
+                                  }
                                   className="mt-2 min-h-[88px] w-full rounded-xl border border-blue-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
                                   disabled={isSaving}
                                   placeholder="Notes"
@@ -1656,7 +2076,9 @@ export function BCDetailModal({
                               {detail?.sync_saga_id
                                 ? ` - Sync Saga: ${detail.sync_saga_id}`
                                 : null}
-                              {detail?.status ? ` - Status: ${detail.status}` : null}
+                              {detail?.status
+                                ? ` - Status: ${detail.status}`
+                                : null}
                               {!isActive ? (
                                 <span className="ml-2 inline-flex items-center gap-1 rounded bg-red-100 px-2 py-0.5 font-semibold text-red-700">
                                   <FaBan className="text-[10px]" /> Disabled
@@ -1695,7 +2117,9 @@ export function BCDetailModal({
                                   <input
                                     type="text"
                                     value={editedOwner}
-                                    onChange={(e) => setEditedOwner(e.target.value)}
+                                    onChange={(e) =>
+                                      setEditedOwner(e.target.value)
+                                    }
                                     className="w-full rounded-xl border border-blue-300 bg-white px-3 py-2 text-lg font-bold text-slate-900 focus:border-blue-500 focus:outline-none"
                                     placeholder="Nama owner"
                                     disabled={isSaving}
@@ -1722,13 +2146,16 @@ export function BCDetailModal({
                                   <input
                                     type="text"
                                     value={editedOwnerEmail}
-                                    onChange={(e) => setEditedOwnerEmail(e.target.value)}
+                                    onChange={(e) =>
+                                      setEditedOwnerEmail(e.target.value)
+                                    }
                                     className="w-full rounded-xl border border-blue-300 px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
                                     placeholder="Email owner"
                                     disabled={isSaving}
                                   />
                                   <p className="text-[11px] text-slate-500">
-                                    Kosongkan jika tidak ada. Saat disimpan akan dikirim sebagai null.
+                                    Kosongkan jika tidak ada. Saat disimpan akan
+                                    dikirim sebagai null.
                                   </p>
                                 </div>
                               ) : (
@@ -1745,7 +2172,9 @@ export function BCDetailModal({
                                 <input
                                   type="text"
                                   value={editedOwnerPhone}
-                                  onChange={(e) => setEditedOwnerPhone(e.target.value)}
+                                  onChange={(e) =>
+                                    setEditedOwnerPhone(e.target.value)
+                                  }
                                   className="w-full rounded-xl border border-blue-300 px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
                                   placeholder="Phone owner"
                                   disabled={isSaving}
@@ -1810,32 +2239,142 @@ export function BCDetailModal({
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                          <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4">
-                            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-700">
-                              Credit Limit Active
-                            </p>
-                            {isEditMode ? (
-                              <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                                <input
-                                  type="checkbox"
-                                  checked={editedCreditLimitActive === 1}
-                                  onChange={(e) =>
-                                    setEditedCreditLimitActive(
-                                      e.target.checked ? 1 : 0,
-                                    )
-                                  }
-                                  disabled={isSaving}
-                                />
-                                Aktif
-                              </label>
-                            ) : (
-                              <p className="text-sm font-semibold text-slate-900">
-                                {creditLimitActiveLabel}
-                              </p>
-                            )}
+                        {!isEditMode && (
+                          <div className="mb-6 space-y-4">
+                            {policyActiveInfoError ? (
+                              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                                {policyActiveInfoError}
+                              </div>
+                            ) : null}
+
+                            <div className="rounded-3xl border border-slate-200 bg-[linear-gradient(135deg,#fff7ed,#ffffff_60%,#eff6ff)] p-5">
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-amber-700">
+                                    Policy Aktif
+                                  </p>
+                                  {/* <h4 className="mt-1 text-lg font-bold text-slate-900">
+                                    Sumber limit branch customer ini
+                                  </h4> */}
+                                  <p className="mt-1 text-sm text-slate-500">
+                                    Menunjukkan limit final yang dipakai dan
+                                    asal setting policy-nya.
+                                  </p>
+                                </div>
+                                {policyActiveInfoLoading ? (
+                                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-500 shadow-sm">
+                                    Memuat policy...
+                                  </span>
+                                ) : creditLimitLevel ? (
+                                  <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">
+                                    Shared ke {creditLimitScopeTotal} BC
+                                  </span>
+                                ) : null}
+                              </div>
+
+                              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                                <div className="rounded-2xl border border-amber-100 bg-white/90 p-4">
+                                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-amber-700">
+                                    Credit Limit
+                                  </p>
+                                  <p className="mt-2 text-xl font-bold text-slate-900">
+                                    {formatNullableNumber(inheritedCreditLimit)}
+                                  </p>
+                                  <div className="mt-3 flex items-center gap-2">
+                                    <span className="rounded-full bg-amber-600 px-2.5 py-1 text-[10px] font-bold text-white">
+                                      {getPolicyLevelBadge(creditLimitLevel)}
+                                    </span>
+                                    <span className="text-sm font-semibold text-slate-700">
+                                      {creditLimitSourceName}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="rounded-2xl border border-teal-100 bg-white/90 p-4">
+                                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-teal-700">
+                                    Payment Term
+                                  </p>
+                                  <p className="mt-2 text-xl font-bold text-slate-900">
+                                    {formatNullableNumber(inheritedPaymentTerm)}{" "}
+                                    <span className="text-xs font-semibold text-slate-500">
+                                      Hari
+                                    </span>
+                                  </p>
+
+                                  <div className="mt-3 flex items-center gap-2">
+                                    <span className="rounded-full bg-teal-600 px-2.5 py-1 text-[10px] font-bold text-white">
+                                      {getPolicyLevelBadge(paymentTermLevel)}
+                                    </span>
+                                    <span className="text-sm font-semibold text-slate-700">
+                                      {paymentTermSourceName}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="rounded-3xl border border-slate-200 bg-slate-50/90 p-5">
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-600">
+                                    Siblings Limit
+                                  </p>
+                                  {/* <h4 className="mt-1 text-lg font-bold text-slate-900">
+                                    Saudara dengan credit limit yang sama
+                                  </h4> */}
+                                  <p className="mt-1 text-sm text-slate-500">
+                                    Berdasarkan scope credit limit aktif untuk
+                                    branch customer ini.
+                                  </p>
+                                </div>
+                                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
+                                  {creditLimitSiblings.length} sibling
+                                </span>
+                              </div>
+
+                              {creditLimitSiblings.length === 0 ? (
+                                <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-4 text-sm text-slate-500">
+                                  Tidak ada sibling lain. Credit limit aktif
+                                  saat ini hanya dipakai BC ini.
+                                </div>
+                              ) : (
+                                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                                  {creditLimitSiblings.map((row) => (
+                                    <div
+                                      key={row.id}
+                                      className="rounded-2xl border border-slate-200 bg-white p-4"
+                                    >
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                          <p className="text-sm font-bold text-slate-900">
+                                            {row.customer_name ||
+                                              row.name ||
+                                              `BC${row.id}`}
+                                          </p>
+                                          <p className="mt-1 text-xs font-semibold text-slate-500">
+                                            {row.name || `BC${row.id}`}
+                                          </p>
+                                        </div>
+                                        <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">
+                                          {row.branch_code || "BC"}
+                                        </span>
+                                      </div>
+                                      <p className="mt-3 text-sm text-slate-600">
+                                        {row.branch_name || "-"}
+                                      </p>
+                                      <p className="mt-1 text-xs font-semibold text-slate-500">
+                                        Status: {row.status || "-"}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <div className="rounded-2xl border border-amber-100 bg-white p-4">
+                        )}
+
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                          {/* <div className="rounded-2xl border border-amber-100 bg-white p-4">
                             <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-600">
                               Credit Limit
                             </p>
@@ -1857,32 +2396,8 @@ export function BCDetailModal({
                                 {formatNullableNumber(detail?.credit_limit)}
                               </p>
                             )}
-                          </div>
-                          <div className="rounded-2xl border border-teal-100 bg-teal-50/70 p-4">
-                            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-teal-700">
-                              Payment Term Active
-                            </p>
-                            {isEditMode ? (
-                              <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                                <input
-                                  type="checkbox"
-                                  checked={editedPaymentTermActive === 1}
-                                  onChange={(e) =>
-                                    setEditedPaymentTermActive(
-                                      e.target.checked ? 1 : 0,
-                                    )
-                                  }
-                                  disabled={isSaving}
-                                />
-                                Aktif
-                              </label>
-                            ) : (
-                              <p className="text-sm font-semibold text-slate-900">
-                                {paymentTermActiveLabel}
-                              </p>
-                            )}
-                          </div>
-                          <div className="rounded-2xl border border-teal-100 bg-white p-4">
+                          </div> */}
+                          {/* <div className="rounded-2xl border border-teal-100 bg-white p-4">
                             <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-teal-600">
                               Payment Term
                             </p>
@@ -1900,32 +2415,8 @@ export function BCDetailModal({
                                 {formatNullableNumber(detail?.payment_term)}
                               </p>
                             )}
-                          </div>
-                          <div className="rounded-2xl border border-rose-100 bg-rose-50/70 p-4">
-                            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-rose-700">
-                              Overdue Limit Active
-                            </p>
-                            {isEditMode ? (
-                              <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                                <input
-                                  type="checkbox"
-                                  checked={editedLimitCustomerOverdueActive === 1}
-                                  onChange={(e) =>
-                                    setEditedLimitCustomerOverdueActive(
-                                      e.target.checked ? 1 : 0,
-                                    )
-                                  }
-                                  disabled={isSaving}
-                                />
-                                Aktif
-                              </label>
-                            ) : (
-                              <p className="text-sm font-semibold text-slate-900">
-                                {limitCustomerOverdueActiveLabel}
-                              </p>
-                            )}
-                          </div>
-                          <div className="rounded-2xl border border-rose-100 bg-white p-4">
+                          </div> */}
+                          {/* <div className="rounded-2xl border border-rose-100 bg-white p-4">
                             <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-rose-600">
                               Limit Customer Overdue
                             </p>
@@ -1947,7 +2438,7 @@ export function BCDetailModal({
                                 )}
                               </p>
                             )}
-                          </div>
+                          </div> */}
                           <div className="rounded-2xl border border-violet-100 bg-violet-50/70 p-4">
                             <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-violet-700">
                               Payment Method
@@ -1955,7 +2446,9 @@ export function BCDetailModal({
                             {isEditMode ? (
                               <select
                                 value={editedPaymentMethod}
-                                onChange={(e) => setEditedPaymentMethod(e.target.value)}
+                                onChange={(e) =>
+                                  setEditedPaymentMethod(e.target.value)
+                                }
                                 className="w-full rounded-xl border border-blue-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
                                 disabled={isSaving}
                               >
@@ -1988,14 +2481,6 @@ export function BCDetailModal({
                               {receiptIssuedAt}
                             </p>
                           </div>
-                          <div className="rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
-                            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-sky-700">
-                              Limit Basis
-                            </p>
-                            <p className="text-sm font-semibold text-slate-900">
-                              {detail?.limit_basis || "-"}
-                            </p>
-                          </div>
                           <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
                             <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700">
                               Tax Status
@@ -2010,7 +2495,10 @@ export function BCDetailModal({
                                 disabled={isSaving}
                               >
                                 {TAX_STATUS_OPTIONS.map((option) => (
-                                  <option key={option.value} value={option.value}>
+                                  <option
+                                    key={option.value}
+                                    value={option.value}
+                                  >
                                     {option.label}
                                   </option>
                                 ))}
@@ -2019,6 +2507,41 @@ export function BCDetailModal({
                               <p className="text-sm font-semibold text-slate-900">
                                 {taxStatusLabel}
                               </p>
+                            )}
+
+                            {(isEditMode
+                              ? editedTaxStatus === 1
+                              : Number(detail?.tax_status || 0) === 1) && (
+                              <div className="mt-4 border-t border-emerald-200 pt-4">
+                                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-rose-700">
+                                  NPWP
+                                </p>
+                                {isEditMode ? (
+                                  <>
+                                    <input
+                                      type="text"
+                                      value={editedNpwp}
+                                      onChange={(e) =>
+                                        setEditedNpwp(
+                                          normalizeNpwpDigits(e.target.value),
+                                        )
+                                      }
+                                      inputMode="numeric"
+                                      maxLength={16}
+                                      className="w-full rounded-xl border border-blue-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+                                      disabled={isSaving}
+                                      placeholder="15-16 digit"
+                                    />
+                                    <p className="mt-1 text-xs text-slate-500">
+                                      Nomor NPWP harus 15-16 digit.
+                                    </p>
+                                  </>
+                                ) : (
+                                  <p className="text-sm font-semibold text-slate-900">
+                                    {npwpValue}
+                                  </p>
+                                )}
+                              </div>
                             )}
                           </div>
                           <div className="rounded-2xl border border-indigo-100 bg-white p-4 md:col-span-2 xl:col-span-2">
@@ -2035,10 +2558,19 @@ export function BCDetailModal({
                                   className="w-full rounded-xl border border-blue-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
                                   disabled={isSaving || rekeningLoading}
                                 >
-                                  <option value="">Pilih payment account</option>
+                                  <option value="">
+                                    Pilih payment account
+                                  </option>
                                   {availableRekeningOptions.map((option) => (
-                                    <option key={option.name} value={option.name}>
-                                      {[option.name, option.nama_rekening, option.bank]
+                                    <option
+                                      key={option.name}
+                                      value={option.name}
+                                    >
+                                      {[
+                                        option.name,
+                                        option.nama_rekening,
+                                        option.bank,
+                                      ]
                                         .filter(Boolean)
                                         .join(" - ")}
                                     </option>
@@ -2060,7 +2592,9 @@ export function BCDetailModal({
                                     }
                                     loading={rekeningLoading}
                                     hasMore={rekeningHasMore}
-                                    currentCount={availableRekeningOptions.length}
+                                    currentCount={
+                                      availableRekeningOptions.length
+                                    }
                                     totalCount={
                                       availableRekeningOptions.length +
                                       (rekeningHasMore ? 1 : 0)
@@ -2087,42 +2621,177 @@ export function BCDetailModal({
                               </div>
                             )}
                           </div>
-                          {(isEditMode
-                            ? editedTaxStatus === 1
-                            : Number(detail?.tax_status || 0) === 1) && (
-                            <div className="rounded-2xl border border-rose-100 bg-white p-4">
-                              <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-rose-700">
-                                NPWP
-                              </p>
-                              {isEditMode ? (
-                                <>
-                                  <input
-                                    type="text"
-                                    value={editedNpwp}
-                                    onChange={(e) =>
-                                      setEditedNpwp(
-                                        normalizeNpwpDigits(e.target.value),
-                                      )
-                                    }
-                                    inputMode="numeric"
-                                    maxLength={16}
-                                    className="w-full rounded-xl border border-blue-300 px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
-                                    disabled={isSaving}
-                                    placeholder="15-16 digit"
-                                  />
-                                  <p className="mt-1 text-xs text-slate-500">
-                                    Nomor NPWP harus 15-16 digit.
-                                  </p>
-                                </>
-                              ) : (
-                                <p className="text-sm font-semibold text-slate-900">
-                                  {npwpValue}
-                                </p>
-                              )}
-                            </div>
-                          )}
                         </div>
                       </section>
+                    )}
+
+                    {activeTab === "hierarchy" && (
+                      <div className="grid gap-4 xl:grid-cols-2">
+                        <section className="rounded-3xl border border-purple-100 bg-white p-5 shadow-sm">
+                          <div className="mb-4 flex items-center gap-3">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-purple-500 text-white">
+                              <FaArrowUp className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-purple-500">
+                                Parent Hierarki
+                              </p>
+                              <p className="text-sm text-slate-500">
+                                National Brand, Group Parent, dan Group Customer
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            {nb ? (
+                              <div className="rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
+                                  National Brand
+                                </p>
+                                <p className="mt-1 font-semibold text-slate-900">
+                                  {nb.name}
+                                </p>
+                                <p className="text-sm text-indigo-600">
+                                  NBID: {nb.code}
+                                </p>
+                              </div>
+                            ) : null}
+
+                            {gp ? (
+                              <button
+                                type="button"
+                                onClick={() => onViewGP?.(gp)}
+                                className="flex w-full items-center justify-between rounded-2xl border border-purple-100 bg-purple-50/70 px-4 py-3 text-left transition-all hover:border-purple-300 hover:bg-purple-50"
+                              >
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-purple-600">
+                                    Group Parent
+                                  </p>
+                                  <p className="mt-1 font-semibold text-slate-900">
+                                    {gp.name}
+                                  </p>
+                                  <p className="text-sm text-purple-600">
+                                    GPID: {gp.code || `GP${gp.id}`}
+                                  </p>
+                                </div>
+                                <FaChevronRight className="h-4 w-4 text-purple-500" />
+                              </button>
+                            ) : null}
+
+                            {gc ? (
+                              <button
+                                type="button"
+                                onClick={() => onViewGC?.(gc)}
+                                className="flex w-full items-center justify-between rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-left transition-all hover:border-blue-300 hover:bg-blue-50"
+                              >
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+                                    Group Customer
+                                  </p>
+                                  <p className="mt-1 font-semibold text-slate-900">
+                                    {gc.name}
+                                  </p>
+                                  <p className="text-sm text-blue-600">
+                                    GCID: {gc.code || `GC${gc.id}`}
+                                  </p>
+                                </div>
+                                <FaChevronRight className="h-4 w-4 text-blue-500" />
+                              </button>
+                            ) : (
+                              <p className="text-sm italic text-slate-500">
+                                Data parent customer belum lengkap.
+                              </p>
+                            )}
+                          </div>
+                        </section>
+
+                        <section className="rounded-3xl border border-orange-100 bg-white p-5 shadow-sm">
+                          <div className="mb-4 flex items-center gap-3">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-500 text-white">
+                              <FaArrowDown className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-500">
+                                Branch Customer
+                              </p>
+                              <p className="text-sm text-slate-500">
+                                {relatedBCsLoading
+                                  ? "Memuat data..."
+                                  : `${relatedBCs.length} data terdaftar`}
+                              </p>
+                            </div>
+                          </div>
+
+                          {relatedBCsError ? (
+                            <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                              {relatedBCsError}
+                            </div>
+                          ) : null}
+
+                          <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
+                            {relatedBCs.length > 0 ? (
+                              relatedBCs.map((item) => {
+                                const isCurrent = Number(item.id) === Number(bc.id);
+                                const content = (
+                                  <>
+                                    <div>
+                                      <p className="font-semibold text-slate-900">
+                                        {item.name || `${gcName} - ${item.branch_city || "-"}`}
+                                      </p>
+                                      <p className="text-xs text-slate-500">
+                                        BCID: {item.code || `BC${item.id}`} •{" "}
+                                        {item.branch_city || item.branch_name || "-"}
+                                      </p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {isCurrent ? (
+                                        <span className="rounded-full bg-orange-100 px-2 py-1 text-[10px] font-bold text-orange-700">
+                                          Current
+                                        </span>
+                                      ) : null}
+                                      <FaChevronRight className="h-4 w-4 text-orange-500" />
+                                    </div>
+                                  </>
+                                );
+
+                                if (onViewBC) {
+                                  return (
+                                    <button
+                                      key={item.id}
+                                      type="button"
+                                      onClick={() => onViewBC(item)}
+                                      className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition-all ${
+                                        isCurrent
+                                          ? "border-orange-300 bg-orange-50"
+                                          : "border-orange-100 bg-orange-50/60 hover:border-orange-300 hover:bg-orange-50"
+                                      }`}
+                                    >
+                                      {content}
+                                    </button>
+                                  );
+                                }
+
+                                return (
+                                  <div
+                                    key={item.id}
+                                    className={`flex items-center justify-between rounded-2xl border px-4 py-3 ${
+                                      isCurrent
+                                        ? "border-orange-300 bg-orange-50"
+                                        : "border-orange-100 bg-orange-50/60"
+                                    }`}
+                                  >
+                                    {content}
+                                  </div>
+                                );
+                              })
+                            ) : (
+                              <p className="text-sm italic text-slate-500">
+                                Belum ada BC terkait pada hierarki ini.
+                              </p>
+                            )}
+                          </div>
+                        </section>
+                      </div>
                     )}
 
                     {addressError && activeTab === "address" && (
@@ -2169,235 +2838,307 @@ export function BCDetailModal({
                           </div>
                         </div>
                         {displayAddressRows.length === 0 ? (
-                    <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
-                      Tidak ada data `customer_address`.
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-                      {displayAddressRows.map((r, idx) => {
-                        const tone = typeTone(r.type);
-                        const typeLabel = (r.type || r.label || "ADDRESS").toUpperCase();
-                        return (
-                          <div
-                            key={r.id}
-                            className={`rounded-xl border border-t-4 p-5 ${tone.card} ${tone.top}`}
-                          >
-                            <div className="mb-3 flex items-start justify-between gap-3">
-                              <p className="text-xs font-bold uppercase tracking-tight text-slate-700">
-                                {(r.label || "Address").toUpperCase()}
-                              </p>
-                              <div className="flex items-center gap-2">
-                                <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${tone.badge}`}>
-                                  {typeLabel}
-                                </span>
-                                {isEditMode && (
-                                  <button
-                                    type="button"
-                                    onClick={() => removeAddress(idx)}
-                                    className="rounded border border-red-200 bg-red-50 p-1 text-red-600 hover:bg-red-100"
-                                    disabled={isSaving}
-                                    title="Hapus alamat"
-                                  >
-                                    <FaTrash className="h-3 w-3" />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            {isEditMode ? (
-                              <textarea
-                                value={r.address || ""}
-                                onChange={(e) =>
-                                  updateEditedRow(r.id, "address", e.target.value)
-                                }
-                                className="mb-3 min-h-[72px] w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-800 focus:border-blue-500 focus:outline-none"
-                                disabled={isSaving}
-                              />
-                            ) : (
-                              <p className="mb-4 text-sm font-medium leading-relaxed text-slate-900">{r.address || "-"}</p>
-                            )}
-                            <div className="space-y-1.5 text-xs text-slate-600">
-                              <div className="flex items-center justify-between">
-                                <span>Province</span>
-                                {isEditMode ? (
-                                  provinces.length > 0 ? (
-                                    <select
-                                      value={shippingAreaStates[idx]?.provinceCode || ""}
-                                      onChange={(e) =>
-                                        void onShippingProvinceChange(idx, e.target.value)
-                                      }
-                                      className="w-36 rounded border border-blue-300 px-1 py-0.5 text-xs"
-                                      disabled={isSaving}
-                                    >
-                                      <option value="">Pilih Provinsi</option>
-                                      {provinces.map((p) => (
-                                        <option key={p.code} value={p.code}>
-                                          {p.name}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  ) : (
-                                    <input
-                                      value={r.province || ""}
-                                      onChange={(e) =>
-                                        updateEditedRow(r.id, "province", e.target.value)
-                                      }
-                                      className="w-28 rounded border border-blue-300 px-1 py-0.5 text-xs"
-                                      disabled={isSaving}
-                                    />
-                                  )
-                                ) : (
-                                  <span className="font-semibold text-slate-900">{r.province || "-"}</span>
-                                )}
-                              </div>
-                              <div className="flex items-center justify-between">
-                                <span>Kelurahan</span>
-                                {isEditMode ? (
-                                  <input
-                                    value={r.village || ""}
-                                    onChange={(e) =>
-                                      updateEditedRow(r.id, "village", e.target.value)
-                                    }
-                                    className="w-28 rounded border border-blue-300 px-1 py-0.5 text-xs"
-                                    disabled={isSaving}
-                                  />
-                                ) : (
-                                  <span className="font-semibold text-slate-900">{r.village || "-"}</span>
-                                )}
-                              </div>
-                              {isEditMode && (
-                                <>
-                                  <div className="flex items-center justify-between">
-                                    <span>City</span>
-                                    {provinces.length > 0 ? (
-                                      <select
-                                        value={shippingAreaStates[idx]?.regencyCode || ""}
-                                        onChange={(e) =>
-                                          void onShippingRegencyChange(idx, e.target.value)
-                                        }
-                                        className="w-36 rounded border border-blue-300 px-1 py-0.5 text-xs"
-                                        disabled={
-                                          isSaving ||
-                                          !shippingAreaStates[idx]?.provinceCode
-                                        }
-                                      >
-                                        <option value="">
-                                          {shippingAreaStates[idx]?.provinceCode
-                                            ? "Pilih Kota/Kabupaten"
-                                            : "Pilih provinsi dulu"}
-                                        </option>
-                                        {(shippingAreaStates[idx]?.regencies || []).map(
-                                          (regency) => (
-                                            <option
-                                              key={regency.code}
-                                              value={regency.code}
-                                            >
-                                              {regency.name}
-                                            </option>
-                                          ),
-                                        )}
-                                      </select>
-                                    ) : (
-                                      <input
-                                        value={r.city || ""}
-                                        onChange={(e) =>
-                                          updateEditedRow(r.id, "city", e.target.value)
-                                        }
-                                        className="w-28 rounded border border-blue-300 px-1 py-0.5 text-xs"
-                                        disabled={isSaving}
-                                      />
-                                    )}
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span>District</span>
-                                    {provinces.length > 0 ? (
-                                      <select
-                                        value={
-                                          (shippingAreaStates[idx]?.districts || []).find(
-                                            (x) =>
-                                              normalizeName(x.name) ===
-                                              normalizeName(r.district),
-                                          )?.code || ""
-                                        }
-                                        onChange={(e) =>
-                                          onShippingDistrictChange(idx, e.target.value)
-                                        }
-                                        className="w-36 rounded border border-blue-300 px-1 py-0.5 text-xs"
-                                        disabled={
-                                          isSaving ||
-                                          !shippingAreaStates[idx]?.regencyCode
-                                        }
-                                      >
-                                        <option value="">
-                                          {shippingAreaStates[idx]?.regencyCode
-                                            ? "Pilih Kecamatan"
-                                            : "Pilih kota dulu"}
-                                        </option>
-                                        {(shippingAreaStates[idx]?.districts || []).map(
-                                          (district) => (
-                                            <option
-                                              key={district.code}
-                                              value={district.code}
-                                            >
-                                              {district.name}
-                                            </option>
-                                          ),
-                                        )}
-                                      </select>
-                                    ) : (
-                                      <input
-                                        value={r.district || ""}
-                                        onChange={(e) =>
-                                          updateEditedRow(r.id, "district", e.target.value)
-                                        }
-                                        className="w-28 rounded border border-blue-300 px-1 py-0.5 text-xs"
-                                        disabled={isSaving}
-                                      />
-                                    )}
-                                  </div>
-                                </>
-                              )}
-                              <div className="mt-2 border-t border-slate-200 pt-2">
-                                {isEditMode ? (
-                                  <div className="space-y-1">
-                                    <input
-                                      value={r.pic_name || ""}
-                                      onChange={(e) =>
-                                        updateEditedRow(r.id, "pic_name", e.target.value)
-                                      }
-                                      className="w-full rounded border border-blue-300 px-1 py-0.5 text-xs"
-                                      placeholder="PIC name"
-                                      disabled={isSaving}
-                                    />
-                                    <input
-                                      value={r.pic_phone || ""}
-                                      onChange={(e) =>
-                                        updateEditedRow(r.id, "pic_phone", e.target.value)
-                                      }
-                                      className="w-full rounded border border-blue-300 px-1 py-0.5 text-xs"
-                                      placeholder="PIC phone"
-                                      disabled={isSaving}
-                                    />
-                                  </div>
-                                ) : (
-                                  <>
-                                    <p className="font-semibold text-slate-900">PIC: {r.pic_name || "-"}</p>
-                                    <p className="text-slate-500">{r.pic_phone || "-"}</p>
-                                  </>
-                                )}
-                              </div>
-                            </div>
+                          <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+                            Tidak ada data `customer_address`.
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                    </section>
+                        ) : (
+                          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+                            {displayAddressRows.map((r, idx) => {
+                              const tone = typeTone(r.type);
+                              const typeLabel = (
+                                r.type ||
+                                r.label ||
+                                "ADDRESS"
+                              ).toUpperCase();
+                              return (
+                                <div
+                                  key={r.id}
+                                  className={`rounded-xl border border-t-4 p-5 ${tone.card} ${tone.top}`}
+                                >
+                                  <div className="mb-3 flex items-start justify-between gap-3">
+                                    <p className="text-xs font-bold uppercase tracking-tight text-slate-700">
+                                      {(r.label || "Address").toUpperCase()}
+                                    </p>
+                                    <div className="flex items-center gap-2">
+                                      <span
+                                        className={`rounded px-2 py-0.5 text-[10px] font-bold ${tone.badge}`}
+                                      >
+                                        {typeLabel}
+                                      </span>
+                                      {isEditMode && (
+                                        <button
+                                          type="button"
+                                          onClick={() => removeAddress(idx)}
+                                          className="rounded border border-red-200 bg-red-50 p-1 text-red-600 hover:bg-red-100"
+                                          disabled={isSaving}
+                                          title="Hapus alamat"
+                                        >
+                                          <FaTrash className="h-3 w-3" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {isEditMode ? (
+                                    <textarea
+                                      value={r.address || ""}
+                                      onChange={(e) =>
+                                        updateEditedRow(
+                                          r.id,
+                                          "address",
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="mb-3 min-h-[72px] w-full rounded-md border border-blue-300 px-2 py-1 text-sm text-slate-800 focus:border-blue-500 focus:outline-none"
+                                      disabled={isSaving}
+                                    />
+                                  ) : (
+                                    <p className="mb-4 text-sm font-medium leading-relaxed text-slate-900">
+                                      {r.address || "-"}
+                                    </p>
+                                  )}
+                                  <div className="space-y-1.5 text-xs text-slate-600">
+                                    <div className="flex items-center justify-between">
+                                      <span>Province</span>
+                                      {isEditMode ? (
+                                        provinces.length > 0 ? (
+                                          <select
+                                            value={
+                                              shippingAreaStates[idx]
+                                                ?.provinceCode || ""
+                                            }
+                                            onChange={(e) =>
+                                              void onShippingProvinceChange(
+                                                idx,
+                                                e.target.value,
+                                              )
+                                            }
+                                            className="w-36 rounded border border-blue-300 px-1 py-0.5 text-xs"
+                                            disabled={isSaving}
+                                          >
+                                            <option value="">
+                                              Pilih Provinsi
+                                            </option>
+                                            {provinces.map((p) => (
+                                              <option
+                                                key={p.code}
+                                                value={p.code}
+                                              >
+                                                {p.name}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        ) : (
+                                          <input
+                                            value={r.province || ""}
+                                            onChange={(e) =>
+                                              updateEditedRow(
+                                                r.id,
+                                                "province",
+                                                e.target.value,
+                                              )
+                                            }
+                                            className="w-28 rounded border border-blue-300 px-1 py-0.5 text-xs"
+                                            disabled={isSaving}
+                                          />
+                                        )
+                                      ) : (
+                                        <span className="font-semibold text-slate-900">
+                                          {r.province || "-"}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                      <span>Kelurahan</span>
+                                      {isEditMode ? (
+                                        <input
+                                          value={r.village || ""}
+                                          onChange={(e) =>
+                                            updateEditedRow(
+                                              r.id,
+                                              "village",
+                                              e.target.value,
+                                            )
+                                          }
+                                          className="w-28 rounded border border-blue-300 px-1 py-0.5 text-xs"
+                                          disabled={isSaving}
+                                        />
+                                      ) : (
+                                        <span className="font-semibold text-slate-900">
+                                          {r.village || "-"}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {isEditMode && (
+                                      <>
+                                        <div className="flex items-center justify-between">
+                                          <span>City</span>
+                                          {provinces.length > 0 ? (
+                                            <select
+                                              value={
+                                                shippingAreaStates[idx]
+                                                  ?.regencyCode || ""
+                                              }
+                                              onChange={(e) =>
+                                                void onShippingRegencyChange(
+                                                  idx,
+                                                  e.target.value,
+                                                )
+                                              }
+                                              className="w-36 rounded border border-blue-300 px-1 py-0.5 text-xs"
+                                              disabled={
+                                                isSaving ||
+                                                !shippingAreaStates[idx]
+                                                  ?.provinceCode
+                                              }
+                                            >
+                                              <option value="">
+                                                {shippingAreaStates[idx]
+                                                  ?.provinceCode
+                                                  ? "Pilih Kota/Kabupaten"
+                                                  : "Pilih provinsi dulu"}
+                                              </option>
+                                              {(
+                                                shippingAreaStates[idx]
+                                                  ?.regencies || []
+                                              ).map((regency) => (
+                                                <option
+                                                  key={regency.code}
+                                                  value={regency.code}
+                                                >
+                                                  {regency.name}
+                                                </option>
+                                              ))}
+                                            </select>
+                                          ) : (
+                                            <input
+                                              value={r.city || ""}
+                                              onChange={(e) =>
+                                                updateEditedRow(
+                                                  r.id,
+                                                  "city",
+                                                  e.target.value,
+                                                )
+                                              }
+                                              className="w-28 rounded border border-blue-300 px-1 py-0.5 text-xs"
+                                              disabled={isSaving}
+                                            />
+                                          )}
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                          <span>District</span>
+                                          {provinces.length > 0 ? (
+                                            <select
+                                              value={
+                                                (
+                                                  shippingAreaStates[idx]
+                                                    ?.districts || []
+                                                ).find(
+                                                  (x) =>
+                                                    normalizeName(x.name) ===
+                                                    normalizeName(r.district),
+                                                )?.code || ""
+                                              }
+                                              onChange={(e) =>
+                                                onShippingDistrictChange(
+                                                  idx,
+                                                  e.target.value,
+                                                )
+                                              }
+                                              className="w-36 rounded border border-blue-300 px-1 py-0.5 text-xs"
+                                              disabled={
+                                                isSaving ||
+                                                !shippingAreaStates[idx]
+                                                  ?.regencyCode
+                                              }
+                                            >
+                                              <option value="">
+                                                {shippingAreaStates[idx]
+                                                  ?.regencyCode
+                                                  ? "Pilih Kecamatan"
+                                                  : "Pilih kota dulu"}
+                                              </option>
+                                              {(
+                                                shippingAreaStates[idx]
+                                                  ?.districts || []
+                                              ).map((district) => (
+                                                <option
+                                                  key={district.code}
+                                                  value={district.code}
+                                                >
+                                                  {district.name}
+                                                </option>
+                                              ))}
+                                            </select>
+                                          ) : (
+                                            <input
+                                              value={r.district || ""}
+                                              onChange={(e) =>
+                                                updateEditedRow(
+                                                  r.id,
+                                                  "district",
+                                                  e.target.value,
+                                                )
+                                              }
+                                              className="w-28 rounded border border-blue-300 px-1 py-0.5 text-xs"
+                                              disabled={isSaving}
+                                            />
+                                          )}
+                                        </div>
+                                      </>
+                                    )}
+                                    <div className="mt-2 border-t border-slate-200 pt-2">
+                                      {isEditMode ? (
+                                        <div className="space-y-1">
+                                          <input
+                                            value={r.pic_name || ""}
+                                            onChange={(e) =>
+                                              updateEditedRow(
+                                                r.id,
+                                                "pic_name",
+                                                e.target.value,
+                                              )
+                                            }
+                                            className="w-full rounded border border-blue-300 px-1 py-0.5 text-xs"
+                                            placeholder="PIC name"
+                                            disabled={isSaving}
+                                          />
+                                          <input
+                                            value={r.pic_phone || ""}
+                                            onChange={(e) =>
+                                              updateEditedRow(
+                                                r.id,
+                                                "pic_phone",
+                                                e.target.value,
+                                              )
+                                            }
+                                            className="w-full rounded border border-blue-300 px-1 py-0.5 text-xs"
+                                            placeholder="PIC phone"
+                                            disabled={isSaving}
+                                          />
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <p className="font-semibold text-slate-900">
+                                            PIC: {r.pic_name || "-"}
+                                          </p>
+                                          <p className="text-slate-500">
+                                            {r.pic_phone || "-"}
+                                          </p>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </section>
                     )}
 
                     {activeTab === "contacts" && (
                       <BCContactRelationsPanel branchCustomerId={bc.id} />
                     )}
-
                   </div>
                 </div>
               </div>
@@ -2445,7 +3186,11 @@ export function BCDetailModal({
                     : "border-blue-200 text-blue-700 hover:bg-blue-50"
                 } disabled:cursor-not-allowed disabled:opacity-50`}
               >
-                {isEditMode ? <FaBan className="text-xs" /> : <FaEdit className="text-xs" />}
+                {isEditMode ? (
+                  <FaBan className="text-xs" />
+                ) : (
+                  <FaEdit className="text-xs" />
+                )}
                 {isEditMode ? "Cancel Edit" : "Edit Details"}
               </button>
               <div className="flex items-center gap-3">

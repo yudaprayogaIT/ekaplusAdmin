@@ -1118,6 +1118,9 @@ export default function CustomerOverviewPage() {
         onClose={() => setSelectedBC(null)}
         bc={selectedBC}
         onBCUpdate={handleBCUpdate}
+        onViewBC={(bc) => {
+          setSelectedBC(bc);
+        }}
         onViewGP={(gp) => {
           setSelectedBC(null);
           setSelectedGP(gp);
