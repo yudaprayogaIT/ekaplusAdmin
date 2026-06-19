@@ -701,7 +701,6 @@ export function CustomerRegistrationList() {
   );
 
   useEffect(() => {
-    setRegistrations([]);
     setCurrentPage(1);
     setHasMore(true);
     void loadDataWithFilters(1, true, filters, sortField, sortDirection);
@@ -715,7 +714,6 @@ export function CustomerRegistrationList() {
   ]);
 
   const refreshList = useCallback(async () => {
-    setRegistrations([]);
     setCurrentPage(1);
     setHasMore(true);
     await loadDataWithFilters(1, true, filters, sortField, sortDirection);
@@ -984,7 +982,7 @@ export function CustomerRegistrationList() {
   };
 
   // Loading state
-  if (loading) {
+  if (loading && registrations.length === 0) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-center">

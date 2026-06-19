@@ -24,6 +24,7 @@ import {
   getQueryUrl,
   getResourceUrl,
 } from "@/config/api";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import {
   CreditChangeRequestDetailModal,
   type CreditChangeRequestListItem,
@@ -122,6 +123,45 @@ function getStatusTone(status: string) {
   return "bg-slate-100 text-slate-700 border-slate-200";
 }
 
+function mapCreditChangeRequestRow(
+  row: CreditChangeRequestApiResponse,
+): CreditChangeRequestListItem {
+  return {
+    id: Number(row.id),
+    code: row.name || `CCR-${row.id}`,
+    policyType: String(row.policy_type || "")
+      .trim()
+      .toLowerCase(),
+    policyTypeLabel: policyTypeLabel(row.policy_type),
+    policyId: Number(row.policy_id || 0),
+    applyToChilds: Boolean(Number(row.apply_to_childs || 0)),
+    currentCreditLimit: row.current_credit_limit ?? null,
+    requestedCreditLimit: row.requested_credit_limit ?? null,
+    currentPaymentTerm: row.current_payment_term ?? null,
+    requestedPaymentTerm: row.requested_payment_term ?? null,
+    currentLimitCustomerOverdue: row.current_limit_customer_overdue ?? null,
+    requestedLimitCustomerOverdue:
+      row.requested_limit_customer_overdue ?? null,
+    identityAttachment: row.identity_attachment || null,
+    customerApprovalAttachment: row.customer_approval_attachment || null,
+    reason: row.reason || null,
+    rejectedNote: row.rejected_note || null,
+    sagaStatus: row.saga_status || null,
+    syncSagaId: row.sync_saga_id || null,
+    syncLastError: row.sync_last_error || null,
+    syncLastRollbackError: row.sync_last_rollback_error || null,
+    status: row.status || "Draft",
+    docstatus: Number(row.docstatus || 0),
+    workflowState: row.workflow_state || null,
+    created_at: row.created_at || null,
+    updated_at: row.updated_at || row.created_at || null,
+    createdAt: row.created_at || new Date(0).toISOString(),
+    updatedAt: row.updated_at || row.created_at || new Date(0).toISOString(),
+    createdBy: resolveUserName(row["created_by.full_name"], row.created_by),
+    updatedBy: resolveUserName(row["updated_by.full_name"], row.updated_by),
+  };
+}
+
 export function CreditChangeRequestList() {
   const { token, isAuthenticated } = useAuth();
   const [items, setItems] = useState<CreditChangeRequestListItem[]>([]);
@@ -168,11 +208,30 @@ export function CreditChangeRequestList() {
         return;
       }
 
+      if (debouncedSearchQuery) {
+        const rows = await fetchAllQueryRows<CreditChangeRequestApiResponse>({
+          endpoint: API_CONFIG.ENDPOINTS.CREDIT_CHANGE_REQUEST,
+          spec: {
+            fields: ["*", "created_by.full_name", "updated_by.full_name"],
+            order_by:
+              sortField === "status"
+                ? [["status", sortDirection]]
+                : [[sortField, sortDirection]],
+          },
+          token,
+          errorMessage: "Failed to fetch credit change request",
+        });
+
+        setItems(rows.map(mapCreditChangeRequestRow));
+        setCurrentPage(1);
+        setHasMore(false);
+        return;
+      }
+
       const response = await apiFetch(
         getQueryUrl(API_CONFIG.ENDPOINTS.CREDIT_CHANGE_REQUEST, {
           fields: ["*", "created_by.full_name", "updated_by.full_name"],
           page,
-          ...(debouncedSearchQuery ? { search: debouncedSearchQuery } : {}),
           order_by:
             sortField === "status"
               ? [["status", sortDirection]]
@@ -193,42 +252,7 @@ export function CreditChangeRequestList() {
         ? (json.data as CreditChangeRequestApiResponse[])
         : [];
       const perPage = Number(json?.meta?.per_page || DEFAULT_PAGE_SIZE);
-
-      const mapped: CreditChangeRequestListItem[] = rows.map((row) => ({
-        id: Number(row.id),
-        code: row.name || `CCR-${row.id}`,
-        policyType: String(row.policy_type || "")
-          .trim()
-          .toLowerCase(),
-        policyTypeLabel: policyTypeLabel(row.policy_type),
-        policyId: Number(row.policy_id || 0),
-        applyToChilds: Boolean(Number(row.apply_to_childs || 0)),
-        currentCreditLimit: row.current_credit_limit ?? null,
-        requestedCreditLimit: row.requested_credit_limit ?? null,
-        currentPaymentTerm: row.current_payment_term ?? null,
-        requestedPaymentTerm: row.requested_payment_term ?? null,
-        currentLimitCustomerOverdue: row.current_limit_customer_overdue ?? null,
-        requestedLimitCustomerOverdue:
-          row.requested_limit_customer_overdue ?? null,
-        identityAttachment: row.identity_attachment || null,
-        customerApprovalAttachment: row.customer_approval_attachment || null,
-        reason: row.reason || null,
-        rejectedNote: row.rejected_note || null,
-        sagaStatus: row.saga_status || null,
-        syncSagaId: row.sync_saga_id || null,
-        syncLastError: row.sync_last_error || null,
-        syncLastRollbackError: row.sync_last_rollback_error || null,
-        status: row.status || "Draft",
-        docstatus: Number(row.docstatus || 0),
-        workflowState: row.workflow_state || null,
-        created_at: row.created_at || null,
-        updated_at: row.updated_at || row.created_at || null,
-        createdAt: row.created_at || new Date(0).toISOString(),
-        updatedAt:
-          row.updated_at || row.created_at || new Date(0).toISOString(),
-        createdBy: resolveUserName(row["created_by.full_name"], row.created_by),
-        updatedBy: resolveUserName(row["updated_by.full_name"], row.updated_by),
-      }));
+      const mapped = rows.map(mapCreditChangeRequestRow);
 
       setItems((current) =>
         replace
@@ -262,30 +286,44 @@ export function CreditChangeRequestList() {
   }, [debouncedSearchQuery, isAuthenticated, sortDirection, sortField, token]);
 
   useEffect(() => {
-    setItems([]);
     setCurrentPage(1);
     setHasMore(true);
     void loadData(1, true);
   }, [loadData]);
 
   const refreshList = useCallback(async () => {
-    setItems([]);
     setCurrentPage(1);
     setHasMore(true);
     await loadData(1, true);
   }, [loadData]);
 
-  const filteredItems = useMemo(() => items, [items]);
+  const filteredItems = useMemo(() => {
+    const query = debouncedSearchQuery.trim().toLowerCase();
+    if (!query) return items;
+
+    return items.filter((item) => {
+      const policyKey = `${item.policyType}:${item.policyId || 0}`;
+      const policyName = policyNameMap[policyKey] || "";
+
+      return (
+        item.code.toLowerCase().includes(query) ||
+        item.policyTypeLabel.toLowerCase().includes(query) ||
+        item.status.toLowerCase().includes(query) ||
+        (item.reason || "").toLowerCase().includes(query) ||
+        policyName.toLowerCase().includes(query)
+      );
+    });
+  }, [debouncedSearchQuery, items, policyNameMap]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadVisiblePolicyNames() {
-      if (!token || !isAuthenticated || filteredItems.length === 0) {
+      if (!token || !isAuthenticated || items.length === 0) {
         return;
       }
 
-      const itemsToResolve = filteredItems.filter((item) => {
+      const itemsToResolve = items.filter((item) => {
         const key = `${item.policyType}:${item.policyId || 0}`;
         return Boolean(item.policyId) && !policyNameMap[key];
       });
@@ -333,7 +371,7 @@ export function CreditChangeRequestList() {
     return () => {
       cancelled = true;
     };
-  }, [filteredItems, isAuthenticated, policyNameMap, token]);
+  }, [isAuthenticated, items, policyNameMap, token]);
 
   useEffect(() => {
     const target = loadMoreRef.current;
@@ -443,7 +481,7 @@ export function CreditChangeRequestList() {
     [refreshList, token],
   );
 
-  if (loading) {
+  if (loading && items.length === 0) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="h-16 w-16 animate-spin rounded-full border-4 border-emerald-200 border-t-emerald-600" />
