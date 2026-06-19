@@ -202,7 +202,7 @@ export function MemberList() {
         fetchNameMap(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, nbIds, "nb_name", token),
         fetchNameMap(API_CONFIG.ENDPOINTS.GROUP_PARENT, gpIds, "gp_name", token),
         fetchNameMap(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, gcIds, "gc_name", token),
-        fetchNameMap(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, bcIds, "bc_name", token),
+        fetchNameMap(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, bcIds, "name", token),
       ]);
 
       const enrichedCustomers = customers.map((row) => {

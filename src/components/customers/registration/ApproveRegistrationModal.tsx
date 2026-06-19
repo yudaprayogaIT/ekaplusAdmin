@@ -398,16 +398,7 @@ export function ApproveRegistrationModal({
       fields: ["id", "name", "gc_name", "gpid"],
     };
     const bcSpec = {
-      fields: [
-        "id",
-        "name",
-        "bcid_name",
-        "gcid",
-        "branch",
-        "branch.branch_name",
-        "branch_owner",
-        "branch_owner_phone",
-      ],
+      fields: ["*", "created_by.full_name", "updated_by.full_name"],
     };
 
     const [gpRows, nbRows, gcRows, bcRows] = await Promise.all([

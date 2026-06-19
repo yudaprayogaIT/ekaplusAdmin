@@ -226,7 +226,7 @@ async function enrichMasterLinkNames(
     fetchNameMap("/api/resource/national_brand", nbIds, "nb_name", tokenValue),
     fetchNameMap("/api/resource/group_parent", gpIds, "gp_name", tokenValue),
     fetchNameMap("/api/resource/group_customer", gcIds, "gc_name", tokenValue),
-    fetchNameMap("/api/resource/branch_customer", bcIds, "bc_name", tokenValue),
+    fetchNameMap("/api/resource/branch_customer", bcIds, "name", tokenValue),
   ]);
 
   return data.map((item) => {
