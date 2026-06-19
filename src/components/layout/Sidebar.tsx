@@ -8,7 +8,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  FaHome,
   FaHeart,
   FaShoppingBag,
   FaBoxes,
@@ -44,14 +43,13 @@ export type MenuItem = {
   requireAuth?: boolean;
 };
 
-// Dashboard - always visible
 const DASHBOARD_MENU: MenuItem[] = [
-  {
-    label: "Dashboard",
-    href: "/",
-    icon: <FaHome className="w-5 h-5" />,
-    category: "Main",
-  },
+  // {
+  //   label: "Dashboard",
+  //   href: "/",
+  //   icon: <FaHome className="w-5 h-5" />,
+  //   category: "Main",
+  // },
 ];
 
 // Main menu - requires auth

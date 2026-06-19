@@ -1,19 +1,20 @@
 // src/app/page.tsx
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   FaUsers,
-  FaShieldAlt,
-  FaProjectDiagram,
-  FaMapMarkerAlt,
   FaArrowRight,
   FaLock,
+  FaMapMarkerAlt,
+  FaProjectDiagram,
+  FaShieldAlt,
 } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
-import { Dashboard } from "@/components/dashboard";
+// import { Dashboard } from "@/components/dashboard";
 
 type QuickAction = {
   name: string;
@@ -64,8 +65,8 @@ function QuickActionCard({ action }: { action: QuickAction }) {
     (action.permission
       ? hasPermission(action.permission)
       : action.permissions
-      ? hasAnyPermission(action.permissions)
-      : true);
+        ? hasAnyPermission(action.permissions)
+        : true);
 
   if (!hasAccess) {
     return (
@@ -106,6 +107,21 @@ function QuickActionCard({ action }: { action: QuickAction }) {
 
 export default function DashboardPage() {
   const { isAuthenticated, isLoading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace("/customers/registrations");
+    }
+  }, [isAuthenticated, isLoading, router]);
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[240px] items-center justify-center">
+        <p className="text-sm text-gray-500">Memuat halaman...</p>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return (
@@ -125,7 +141,7 @@ export default function DashboardPage() {
                 Selamat Datang di EKA+ Admin
               </h1>
               <p className="text-red-100">
-                Silakan login untuk mengakses dashboard
+                Silakan login untuk mengakses EKA+ Admin
               </p>
             </div>
           </motion.div>
@@ -168,5 +184,12 @@ export default function DashboardPage() {
     );
   }
 
-  return <Dashboard />;
+  // return <Dashboard />;
+  return (
+    <div className="flex min-h-[240px] items-center justify-center">
+      <p className="text-sm text-gray-500">
+        Mengarahkan ke Customer Register...
+      </p>
+    </div>
+  );
 }
