@@ -676,16 +676,16 @@ export function GPDetailModal({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="flex h-[94vh] w-full max-w-[92vw] xl:max-w-[1320px] flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+            className="flex h-[94vh] w-full max-w-[96vw] 2xl:max-w-[1320px] flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl md:max-w-[92vw] md:rounded-3xl"
           >
-            <div className="border-b border-purple-200 bg-gradient-to-r from-purple-600 via-purple-500 to-fuchsia-500 px-6 py-5">
+            <div className="border-b border-purple-200 bg-gradient-to-r from-purple-600 via-purple-500 to-fuchsia-500 px-4 py-4 md:px-6 md:py-5">
               <div className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 text-white shadow-lg shadow-purple-900/20 backdrop-blur-sm">
+                <div className="flex min-w-0 items-center gap-3 md:gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-white shadow-lg shadow-purple-900/20 backdrop-blur-sm md:h-14 md:w-14">
                     <FaBuilding className="h-6 w-6" />
                   </div>
                   <div>
-                    <h2 className="mb-2 text-2xl font-bold text-white">
+                    <h2 className="mb-1 text-xl font-bold text-white md:mb-2 md:text-2xl">
                       Group Parent Details
                     </h2>
                     <p className="text-sm text-purple-100">
@@ -694,7 +694,7 @@ export function GPDetailModal({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                {/* <div className="flex items-center gap-2">
                   {!isEditMode && (
                     <button
                       onClick={handleEditClick}
@@ -710,50 +710,54 @@ export function GPDetailModal({
                   >
                     <HiXMark className="h-6 w-6" />
                   </button>
-                </div>
+                </div> */}
               </div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 p-4 md:p-5 xl:p-6">
               <div className="grid min-h-0 gap-5 lg:grid-cols-[210px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)]">
-                <aside className="space-y-3">
-                  {detailTabs.map((tab) => {
-                    const active = activeTab === tab.key;
-                    return (
-                      <button
-                        key={tab.key}
-                        type="button"
-                        onClick={() => setActiveTab(tab.key)}
-                        className={`w-full rounded-2xl border px-4 py-3 text-left transition-all ${
-                          active
-                            ? "border-purple-500 bg-gradient-to-r from-purple-600 to-fuchsia-500 text-white shadow-lg shadow-purple-200/70"
-                            : "border-slate-200 bg-white text-slate-700 hover:border-purple-200 hover:bg-purple-50/70"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-                              active
-                                ? "bg-white/20 text-white"
-                                : "bg-slate-100 text-purple-600"
-                            }`}
-                          >
-                            {tab.icon}
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold">{tab.label}</p>
-                            <p
-                              className={`text-xs ${
-                                active ? "text-purple-100" : "text-slate-500"
+                <aside>
+                  <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:block lg:space-y-3 lg:overflow-visible lg:pb-0">
+                    {detailTabs.map((tab) => {
+                      const active = activeTab === tab.key;
+                      return (
+                        <button
+                          key={tab.key}
+                          type="button"
+                          onClick={() => setActiveTab(tab.key)}
+                          className={`min-w-[190px] shrink-0 rounded-2xl border px-4 py-3 text-left transition-all lg:w-full ${
+                            active
+                              ? "border-purple-500 bg-gradient-to-r from-purple-600 to-fuchsia-500 text-white shadow-lg shadow-purple-200/70"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-purple-200 hover:bg-purple-50/70"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                                active
+                                  ? "bg-white/20 text-white"
+                                  : "bg-slate-100 text-purple-600"
                               }`}
                             >
-                              {tab.caption}
-                            </p>
+                              {tab.icon}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold">
+                                {tab.label}
+                              </p>
+                              <p
+                                className={`text-xs ${
+                                  active ? "text-purple-100" : "text-slate-500"
+                                }`}
+                              >
+                                {tab.caption}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      </button>
-                    );
-                  })}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </aside>
 
                 <div className="min-h-0 space-y-5">
@@ -1318,13 +1322,13 @@ export function GPDetailModal({
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
+            <div className="flex flex-col gap-3 border-t border-slate-200 bg-white px-4 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end md:px-6">
               {isEditMode && (
                 <>
                   <button
                     onClick={handleCancelEdit}
                     disabled={isSaving}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-slate-200 px-5 py-2.5 font-medium text-slate-700 transition-all hover:bg-slate-300 disabled:opacity-50"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-200 px-5 py-2.5 font-medium text-slate-700 transition-all hover:bg-slate-300 disabled:opacity-50 sm:w-auto"
                   >
                     <FaTimes className="h-4 w-4" />
                     Batal
@@ -1332,7 +1336,7 @@ export function GPDetailModal({
                   <button
                     onClick={() => void handleSaveEdit()}
                     disabled={isSaving || !editedName.trim()}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-2.5 font-medium text-white transition-all hover:bg-emerald-700 disabled:opacity-50"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-2.5 font-medium text-white transition-all hover:bg-emerald-700 disabled:opacity-50 sm:w-auto"
                   >
                     <FaSave className="h-4 w-4" />
                     {isSaving ? "Menyimpan..." : "Apply Changes"}
@@ -1342,7 +1346,7 @@ export function GPDetailModal({
               {!isEditMode && (
                 <button
                   onClick={onClose}
-                  className="rounded-2xl bg-slate-200 px-5 py-2.5 font-medium text-slate-700 transition-all hover:bg-slate-300"
+                  className="w-full rounded-2xl bg-slate-200 px-5 py-2.5 font-medium text-slate-700 transition-all hover:bg-slate-300 sm:w-auto"
                 >
                   Close
                 </button>

@@ -668,16 +668,16 @@ export function NBDetailModal({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="flex h-[94vh] w-full max-w-[92vw] xl:max-w-[1320px] flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+            className="flex h-[94vh] w-full max-w-[96vw] 2xl:max-w-[1320px] flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl md:max-w-[92vw] md:rounded-3xl"
           >
-            <div className="border-b border-slate-200 bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 px-6 py-5">
+            <div className="border-b border-slate-200 bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 px-4 py-4 md:px-6 md:py-5">
               <div className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 text-white shadow-lg shadow-indigo-900/20 backdrop-blur-sm">
+                <div className="flex min-w-0 items-center gap-3 md:gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-white shadow-lg shadow-indigo-900/20 backdrop-blur-sm md:h-14 md:w-14">
                     <FaTags className="h-6 w-6" />
                   </div>
                   <div>
-                    <h2 className="mb-2 text-2xl font-bold text-white">
+                    <h2 className="mb-1 text-xl font-bold text-white md:mb-2 md:text-2xl">
                       National Brand Details
                     </h2>
                     <p className="text-sm text-indigo-100">NBID: {item.code}</p>
@@ -695,44 +695,46 @@ export function NBDetailModal({
 
             <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 p-4 md:p-5 xl:p-6">
               <div className="grid min-h-0 gap-5 lg:grid-cols-[210px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)]">
-                <aside className="space-y-3">
-                  {detailTabs.map((tab) => {
-                    const active = activeTab === tab.key;
-                    return (
-                      <button
-                        key={tab.key}
-                        type="button"
-                        onClick={() => setActiveTab(tab.key)}
-                        className={`w-full rounded-2xl border px-4 py-3 text-left transition-all ${
-                          active
-                            ? "border-indigo-500 bg-gradient-to-r from-indigo-600 to-cyan-500 text-white shadow-lg shadow-indigo-200/70"
-                            : "border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:bg-indigo-50/70"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-                              active
-                                ? "bg-white/20 text-white"
-                                : "bg-slate-100 text-indigo-600"
-                            }`}
-                          >
-                            {tab.icon}
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold">{tab.label}</p>
-                            <p
-                              className={`text-xs ${
-                                active ? "text-indigo-100" : "text-slate-500"
+                <aside>
+                  <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:block lg:space-y-3 lg:overflow-visible lg:pb-0">
+                    {detailTabs.map((tab) => {
+                      const active = activeTab === tab.key;
+                      return (
+                        <button
+                          key={tab.key}
+                          type="button"
+                          onClick={() => setActiveTab(tab.key)}
+                          className={`min-w-[190px] shrink-0 rounded-2xl border px-4 py-3 text-left transition-all lg:w-full ${
+                            active
+                              ? "border-indigo-500 bg-gradient-to-r from-indigo-600 to-cyan-500 text-white shadow-lg shadow-indigo-200/70"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:bg-indigo-50/70"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                                active
+                                  ? "bg-white/20 text-white"
+                                  : "bg-slate-100 text-indigo-600"
                               }`}
                             >
-                              {tab.caption}
-                            </p>
+                              {tab.icon}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold">{tab.label}</p>
+                              <p
+                                className={`text-xs ${
+                                  active ? "text-indigo-100" : "text-slate-500"
+                                }`}
+                              >
+                                {tab.caption}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      </button>
-                    );
-                  })}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </aside>
 
                 <div className="min-h-0 space-y-5">
@@ -1082,10 +1084,10 @@ export function NBDetailModal({
               </div>
             </div>
 
-            <div className="flex justify-end border-t border-slate-200 bg-white px-6 py-4">
+            <div className="flex border-t border-slate-200 bg-white px-4 py-4 md:justify-end md:px-6">
               <button
                 onClick={onClose}
-                className="rounded-2xl bg-slate-200 px-5 py-2.5 font-medium text-slate-700 transition-all hover:bg-slate-300"
+                className="w-full rounded-2xl bg-slate-200 px-5 py-2.5 font-medium text-slate-700 transition-all hover:bg-slate-300 md:w-auto"
               >
                 Close
               </button>

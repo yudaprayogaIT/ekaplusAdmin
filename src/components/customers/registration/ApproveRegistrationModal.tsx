@@ -75,6 +75,16 @@ interface BranchCustomerRow {
   branch_owner_phone?: string | null;
 }
 
+const referenceCache = new Map<
+  string,
+  {
+    nationalBrands?: NationalBrandRow[];
+    groupParents?: GroupParentRow[];
+    groupCustomersByGpid: Map<number, GroupCustomerRow[]>;
+    branchCustomersByGcid: Map<number, BranchCustomerRow[]>;
+  }
+>();
+
 type Step = 1 | 2 | 3 | 4 | 5;
 
 // "idle"   = nothing shown yet (initial state)
@@ -226,6 +236,9 @@ export function ApproveRegistrationModal({
   const [gpCreatedViaCreateFlow, setGpCreatedViaCreateFlow] = useState(false);
   const [nbCreatedViaCreateFlow, setNbCreatedViaCreateFlow] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [isGpLoading, setIsGpLoading] = useState(false);
+  const [isGcLoading, setIsGcLoading] = useState(false);
+  const [isBcLoading, setIsBcLoading] = useState(false);
 
   const existingGpid = registration?.gp_id;
   const existingGcid = registration?.gc_id;
@@ -388,51 +401,133 @@ export function ApproveRegistrationModal({
     [pushLog, token],
   );
 
-  const refreshReferenceLists = useCallback(async () => {
-    if (!token) return;
-    const gpSpec = {
-      fields: ["id", "name", "gp_name", "nbid"],
-    };
-    const nbSpec = { fields: ["id", "name", "nb_name"] };
-    const gcSpec = {
-      fields: ["id", "name", "gc_name", "gpid"],
-    };
-    const bcSpec = {
-      fields: ["*", "created_by.full_name", "updated_by.full_name"],
-    };
+  const getReferenceCache = useCallback(() => {
+    if (!token) return null;
+    const cached = referenceCache.get(token);
+    if (cached) return cached;
 
-    const [gpRows, nbRows, gcRows, bcRows] = await Promise.all([
-      fetchAllQueryRows<GroupParentRow>({
-        endpoint: API_CONFIG.ENDPOINTS.GROUP_PARENT,
-        spec: gpSpec,
-        token,
-        errorMessage: "Failed to fetch GP reference list",
-      }),
-      fetchAllQueryRows<NationalBrandRow>({
+    const next = {
+      nationalBrands: undefined,
+      groupParents: undefined,
+      groupCustomersByGpid: new Map<number, GroupCustomerRow[]>(),
+      branchCustomersByGcid: new Map<number, BranchCustomerRow[]>(),
+    };
+    referenceCache.set(token, next);
+    return next;
+  }, [token]);
+
+  const ensureNationalBrands = useCallback(async () => {
+    if (!token) return;
+
+    const cache = getReferenceCache();
+    if (!cache) return;
+
+    if (!cache.nationalBrands) {
+      cache.nationalBrands = await fetchAllQueryRows<NationalBrandRow>({
         endpoint: API_CONFIG.ENDPOINTS.NATIONAL_BRAND,
-        spec: nbSpec,
+        spec: { fields: ["id", "name", "nb_name"] },
         token,
         errorMessage: "Failed to fetch NB reference list",
-      }),
-      fetchAllQueryRows<GroupCustomerRow>({
-        endpoint: API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
-        spec: gcSpec,
-        token,
-        errorMessage: "Failed to fetch GC reference list",
-      }),
-      fetchAllQueryRows<BranchCustomerRow>({
-        endpoint: API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2,
-        spec: bcSpec,
-        token,
-        errorMessage: "Failed to fetch BC reference list",
-      }),
-    ]);
+      });
+    }
 
-    setGroupParents(gpRows);
-    setNationalBrands(nbRows);
-    setGroupCustomers(gcRows);
-    setBranchCustomers(bcRows);
-  }, [token]);
+    setNationalBrands(cache.nationalBrands || []);
+  }, [getReferenceCache, token]);
+
+  const ensureGroupParents = useCallback(async () => {
+    if (!token) return;
+
+    const cache = getReferenceCache();
+    if (!cache) return;
+
+    if (!cache.groupParents) {
+      setIsGpLoading(true);
+      try {
+        cache.groupParents = await fetchAllQueryRows<GroupParentRow>({
+          endpoint: API_CONFIG.ENDPOINTS.GROUP_PARENT,
+          spec: { fields: ["id", "name", "gp_name", "nbid"] },
+          token,
+          errorMessage: "Failed to fetch GP reference list",
+        });
+      } finally {
+        setIsGpLoading(false);
+      }
+    }
+
+    setGroupParents(cache.groupParents || []);
+  }, [getReferenceCache, token]);
+
+  const ensureGroupCustomers = useCallback(
+    async (gpid?: number) => {
+      if (!token || !gpid) {
+        setGroupCustomers([]);
+        return;
+      }
+
+      const cache = getReferenceCache();
+      if (!cache) return;
+
+      const cachedRows = cache.groupCustomersByGpid.get(gpid);
+      if (cachedRows) {
+        setGroupCustomers(cachedRows);
+        return;
+      }
+
+      setIsGcLoading(true);
+      try {
+        const rows = await fetchAllQueryRows<GroupCustomerRow>({
+          endpoint: API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
+          spec: {
+            fields: ["id", "name", "gc_name", "gpid"],
+            filters: [["gpid", "=", gpid]],
+          },
+          token,
+          errorMessage: "Failed to fetch GC reference list",
+        });
+        cache.groupCustomersByGpid.set(gpid, rows);
+        setGroupCustomers(rows);
+      } finally {
+        setIsGcLoading(false);
+      }
+    },
+    [getReferenceCache, token],
+  );
+
+  const ensureBranchCustomers = useCallback(
+    async (gcid?: number) => {
+      if (!token || !gcid) {
+        setBranchCustomers([]);
+        return;
+      }
+
+      const cache = getReferenceCache();
+      if (!cache) return;
+
+      const cachedRows = cache.branchCustomersByGcid.get(gcid);
+      if (cachedRows) {
+        setBranchCustomers(cachedRows);
+        return;
+      }
+
+      setIsBcLoading(true);
+      try {
+        const rows = await fetchAllQueryRows<BranchCustomerRow>({
+          endpoint: API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2,
+          spec: {
+            fields: ["*", "created_by.full_name", "updated_by.full_name"],
+            filters: [["gcid", "=", gcid]],
+          },
+          token,
+          errorMessage: "Failed to fetch BC reference list",
+        });
+        cache.branchCustomersByGcid.set(gcid, rows);
+        setBranchCustomers(rows);
+      } finally {
+        setIsBcLoading(false);
+      }
+    },
+    [getReferenceCache, token],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -477,6 +572,9 @@ export function ApproveRegistrationModal({
       setCreatedBc(null);
       setGpCreatedViaCreateFlow(false);
       setNbCreatedViaCreateFlow(false);
+      setIsGpLoading(false);
+      setIsGcLoading(false);
+      setIsBcLoading(false);
 
       // Reset all modes & searches
       setGpMode(shouldCreateGroupParent ? "create" : "search");
@@ -500,16 +598,32 @@ export function ApproveRegistrationModal({
             ["parent_type", "=", "customer_register"],
           ],
         };
-        const shippingRes = await apiFetch(
+        const shippingPromise = apiFetch(
           getQueryUrl(
             API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER_ADDRESS,
             shippingSpec,
           ),
           { method: "GET", cache: "no-store" },
           token,
-        );
-        const shippingJson = await shippingRes.json().catch(() => null);
-        await refreshReferenceLists();
+        ).then((res) => res.json().catch(() => null));
+
+        const existingGpPromise = registration.gp_id
+          ? apiFetch(
+              getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, {
+                fields: ["*"],
+                filters: [["id", "=", registration.gp_id]],
+                limit: 1,
+              }),
+              { method: "GET", cache: "no-store" },
+              token,
+            ).then((res) => res.json().catch(() => null))
+          : Promise.resolve(null);
+
+        const [shippingJson, gpJson] = await Promise.all([
+          shippingPromise,
+          existingGpPromise,
+          ensureNationalBrands(),
+        ]);
 
         if (!cancelled) {
           setShippingAddresses(
@@ -518,16 +632,6 @@ export function ApproveRegistrationModal({
         }
 
         if (registration.gp_id) {
-          const gpRes = await apiFetch(
-            getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, {
-              fields: ["*"],
-              filters: [["id", "=", registration.gp_id]],
-              limit: 1,
-            }),
-            { method: "GET", cache: "no-store" },
-            token,
-          );
-          const gpJson = await gpRes.json();
           const gpRow = Array.isArray(gpJson?.data) ? gpJson.data[0] : null;
           if (!cancelled && gpRow) setExistingGp(gpRow);
         } else if (!cancelled) {
@@ -550,13 +654,44 @@ export function ApproveRegistrationModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, registration, token, existingNbid, refreshReferenceLists]);
+  }, [ensureNationalBrands, existingNbid, isOpen, registration, token]);
 
   useEffect(() => {
-    if (!isOpen || !token || isPreparing) return;
-    void refreshReferenceLists();
-  }, [isOpen, token, step, isPreparing, refreshReferenceLists]);
+    if (!isOpen || isPreparing || step !== 2) return;
+    void ensureGroupParents();
+  }, [ensureGroupParents, isOpen, isPreparing, step]);
 
+  useEffect(() => {
+    if (!isOpen || isPreparing) return;
+    if (step !== 3 || !canSearchExistingGc || !effectiveGpid) {
+      if (step !== 3) setGroupCustomers([]);
+      return;
+    }
+    void ensureGroupCustomers(effectiveGpid);
+  }, [
+    canSearchExistingGc,
+    effectiveGpid,
+    ensureGroupCustomers,
+    isOpen,
+    isPreparing,
+    step,
+  ]);
+
+  useEffect(() => {
+    if (!isOpen || isPreparing) return;
+    if (step !== 4 || !canSearchExistingBc || !effectiveGcid) {
+      if (step !== 4) setBranchCustomers([]);
+      return;
+    }
+    void ensureBranchCustomers(effectiveGcid);
+  }, [
+    canSearchExistingBc,
+    effectiveGcid,
+    ensureBranchCustomers,
+    isOpen,
+    isPreparing,
+    step,
+  ]);
   useEffect(() => {
     if (isOpen) return;
     setShowCloseConfirm(false);
@@ -1582,6 +1717,11 @@ export function ApproveRegistrationModal({
                         {/* SEARCH mode — create option appears inline when no results */}
                         {gpMode !== "create" && (
                           <div className="space-y-3">
+                            {isGpLoading && (
+                              <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                                Memuat referensi Group Parent...
+                              </div>
+                            )}
                             <div className="flex gap-2">
                               <div className="relative flex-1">
                                 <FaSearch className="absolute left-3 top-3.5 text-gray-400 text-sm" />
@@ -1808,6 +1948,11 @@ export function ApproveRegistrationModal({
                         {/* SEARCH mode */}
                         {gcMode === "search" && canSearchExistingGc && (
                           <div className="space-y-3">
+                            {isGcLoading && (
+                              <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                                Memuat referensi Group Customer...
+                              </div>
+                            )}
                             <div className="flex gap-2">
                               <div className="relative flex-1">
                                 <FaSearch className="absolute left-3 top-3.5 text-gray-400 text-sm" />
@@ -2045,6 +2190,11 @@ export function ApproveRegistrationModal({
                         {/* SEARCH mode */}
                         {bcMode === "search" && canSearchExistingBc && (
                           <div className="space-y-3">
+                            {isBcLoading && (
+                              <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                                Memuat referensi Branch Customer...
+                              </div>
+                            )}
                             <div className="flex gap-2">
                               <div className="relative flex-1">
                                 <FaSearch className="absolute left-3 top-3.5 text-gray-400 text-sm" />
