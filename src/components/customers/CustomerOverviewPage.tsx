@@ -1,10 +1,15 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getApiUrl, getQueryUrl } from "@/config/api";
-import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import type {
   BranchCustomer,
   GroupCustomer,
@@ -29,10 +34,9 @@ import {
   FaChevronDown,
 } from "react-icons/fa";
 
-type CustomerTab = "all" | "nb" | "gp" | "gc" | "bc";
-type CustomerType = Exclude<CustomerTab, "all">;
+type CustomerType = "nb" | "gp" | "gc" | "bc";
 type CustomerStatus = string;
-type CustomerSortField = "created_at" | "code" | "name";
+type CustomerSortField = "updated_at" | "code" | "name";
 type CustomerSortDirection = "desc" | "asc";
 
 interface UnifiedCard {
@@ -87,12 +91,20 @@ interface GroupParentApiResponse {
   name?: string | null;
   gp_name?: string | null;
   nbid?: number | { id?: number | string } | null;
-  owner_name?: string | null;
-  owner_phone?: string | null;
-  owner_email?: string | null;
+  description?: string | null;
+  credit_limit_active?: number | null;
+  credit_limit?: number | null;
+  payment_term_active?: number | null;
+  payment_term?: number | null;
+  limit_customer_overdue_active?: number | null;
+  limit_customer_overdue?: number | null;
   disabled?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
+  "created_by.full_name"?: string | null;
+  "updated_by.full_name"?: string | null;
+  created_by?: number | { id?: number; full_name?: string } | null;
+  updated_by?: number | { id?: number; full_name?: string } | null;
 }
 
 interface GroupCustomerApiResponse {
@@ -138,9 +150,34 @@ interface GroupCustomerLookupRow {
   id: number;
   name?: string | null;
   gc_name?: string | null;
+  gp_name?: string | null;
 }
 
-const ITEMS_PER_BATCH = 20;
+interface QueryMeta {
+  per_page?: number | string | null;
+  total?: number | string | null;
+  total_count?: number | string | null;
+  count?: number | string | null;
+  current_page?: number | string | null;
+  last_page?: number | string | null;
+}
+
+interface TabDataState {
+  cards: UnifiedCard[];
+  currentPage: number;
+  hasMore: boolean;
+}
+
+const DEFAULT_PAGE_SIZE = 20;
+
+function createEmptyTabDataState(): Record<CustomerType, TabDataState> {
+  return {
+    nb: { cards: [], currentPage: 0, hasMore: true },
+    gp: { cards: [], currentPage: 0, hasMore: true },
+    gc: { cards: [], currentPage: 0, hasMore: true },
+    bc: { cards: [], currentPage: 0, hasMore: true },
+  };
+}
 
 function toNumber(value: unknown): number | undefined {
   if (typeof value === "number") return value;
@@ -160,8 +197,84 @@ function extractLinkId(value: unknown): number | undefined {
   return undefined;
 }
 
-function getStatus(disabled: unknown): CustomerStatus {
-  return Number(disabled || 0) === 1 ? "inactive" : "active";
+function getStatus(value: unknown): CustomerStatus {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (normalized) return normalized;
+  return "active";
+}
+
+function getDisabledFromStatus(status: unknown): number {
+  const normalized = String(status || "")
+    .trim()
+    .toLowerCase();
+  return ["inactive", "disabled", "nonactive", "non-active"].includes(
+    normalized,
+  )
+    ? 1
+    : 0;
+}
+
+function extractMetaNumber(
+  meta: QueryMeta | null | undefined,
+  keys: Array<keyof QueryMeta>,
+): number | undefined {
+  for (const key of keys) {
+    const parsed = toNumber(meta?.[key]);
+    if (typeof parsed === "number") return parsed;
+  }
+  return undefined;
+}
+
+function getPerPage(meta: QueryMeta | null | undefined): number {
+  return extractMetaNumber(meta, ["per_page"]) || DEFAULT_PAGE_SIZE;
+}
+
+function getTotalCount(
+  meta: QueryMeta | null | undefined,
+  fallback: number,
+): number {
+  return extractMetaNumber(meta, ["total", "total_count", "count"]) || fallback;
+}
+
+function getHasMore(
+  meta: QueryMeta | null | undefined,
+  pageRowsLength: number,
+): boolean {
+  const currentPage = extractMetaNumber(meta, ["current_page"]);
+  const lastPage = extractMetaNumber(meta, ["last_page"]);
+  if (
+    typeof currentPage === "number" &&
+    typeof lastPage === "number" &&
+    lastPage > 0
+  ) {
+    return currentPage < lastPage;
+  }
+  return pageRowsLength >= getPerPage(meta);
+}
+
+function getOrderField(
+  tab: CustomerType,
+  sortField: CustomerSortField,
+): string {
+  if (sortField === "updated_at") return "updated_at";
+  if (sortField === "code") return "name";
+  if (tab === "nb") return "nb_name";
+  if (tab === "gp") return "gp_name";
+  if (tab === "gc") return "gc_name";
+  return "name";
+}
+
+function resolveUserName(
+  directName: string | null | undefined,
+  value: number | { id?: number; full_name?: string } | null | undefined,
+): string | undefined {
+  if (directName) return directName;
+  if (value && typeof value === "object" && value.full_name) {
+    return value.full_name;
+  }
+  return undefined;
 }
 
 function statusBadgeClass(status: CustomerStatus): string {
@@ -236,16 +349,19 @@ function renderCardIcon(type: CustomerType) {
 
 export default function CustomerOverviewPage() {
   const { token, isAuthenticated } = useAuth();
-  const [activeTab, setActiveTab] = useState<CustomerTab>("bc");
+  const [activeTab, setActiveTab] = useState<CustomerType>("bc");
   const [search, setSearch] = useState("");
-  const [sortField, setSortField] = useState<CustomerSortField>("created_at");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [sortField, setSortField] = useState<CustomerSortField>("updated_at");
   const [sortDirection, setSortDirection] =
     useState<CustomerSortDirection>("desc");
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(ITEMS_PER_BATCH);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [cards, setCards] = useState<UnifiedCard[]>([]);
+  const [tabData, setTabData] = useState<Record<CustomerType, TabDataState>>(
+    createEmptyTabDataState,
+  );
   const [policyByCard, setPolicyByCard] = useState<
     Record<string, CustomerPolicyResponseData | null>
   >({});
@@ -265,397 +381,585 @@ export default function CustomerOverviewPage() {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    setVisibleCount(ITEMS_PER_BATCH);
-  }, [activeTab, search, sortField, sortDirection]);
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 300);
 
-  useEffect(() => {
-    async function loadData() {
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [search]);
+
+  const loadTabPage = useCallback(
+    async (tab: CustomerType, page: number, replace = false) => {
       if (!isAuthenticated || !token) {
-        setCards([]);
+        setTabData(createEmptyTabDataState());
         setTabStats({ nb: 0, gp: 0, gc: 0, bc: 0 });
         setLoading(false);
+        setLoadingMore(false);
         return;
       }
 
-      setLoading(true);
-      setError(null);
+      if (replace) {
+        setLoading(true);
+        setError(null);
+      } else {
+        setLoadingMore(true);
+      }
+
       try {
-        const [nbResult, gpResult, gcResult, bcResult] =
-          await Promise.allSettled([
-            fetchAllQueryRows<NationalBrandApiResponse>({
-              endpoint: API_CONFIG.ENDPOINTS.NATIONAL_BRAND,
-              spec: { fields: ["*"] },
-              token,
-              errorMessage: "Failed to fetch NB",
+        const orderByField = getOrderField(tab, sortField);
+
+        if (tab === "bc") {
+          const baseBcSpec = {
+            page,
+            ...(debouncedSearch ? { search: debouncedSearch } : {}),
+            order_by: [[orderByField, sortDirection]],
+          };
+
+          let bcRes = await apiFetch(
+            getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, {
+              fields: ["id", "name", "branch", "gcid", "status", "updated_at"],
+              ...baseBcSpec,
             }),
-            fetchAllQueryRows<GroupParentApiResponse>({
-              endpoint: API_CONFIG.ENDPOINTS.GROUP_PARENT,
-              spec: {
-                fields: ["*", "created_by.full_name", "updated_by.full_name"],
-              },
+            { method: "GET", cache: "no-store" },
+            token,
+          );
+
+          if (!bcRes.ok && bcRes.status >= 500) {
+            bcRes = await apiFetch(
+              getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, {
+                fields: [
+                  "id",
+                  "name",
+                  "branch",
+                  "gcid",
+                  "disabled",
+                  "updated_at",
+                ],
+                ...baseBcSpec,
+              }),
+              { method: "GET", cache: "no-store" },
               token,
-              errorMessage: "Failed to fetch GP",
-            }),
-            fetchAllQueryRows<GroupCustomerApiResponse>({
-              endpoint: API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
-              spec: {
-                fields: ["*", "created_by.full_name", "updated_by.full_name"],
-              },
-              token,
-              errorMessage: "Failed to fetch GC",
-            }),
-            fetchAllQueryRows<BranchCustomerApiResponse>({
-              endpoint: API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2,
-              spec: {
-                fields: ["*", "created_by.full_name", "updated_by.full_name"],
-              },
-              token,
-              errorMessage: "Failed to fetch BC",
-            }),
+            );
+          }
+
+          if (!bcRes.ok) {
+            throw new Error(`Failed to fetch BC (${bcRes.status})`);
+          }
+
+          const bcJson = await bcRes.json();
+          const bcRows: BranchCustomerApiResponse[] = Array.isArray(
+            bcJson?.data,
+          )
+            ? bcJson.data
+            : [];
+          const meta = (bcJson?.meta || null) as QueryMeta | null;
+
+          const branchIds = Array.from(
+            new Set(
+              bcRows
+                .map((row) =>
+                  row.branch && typeof row.branch === "object"
+                    ? toNumber(row.branch.id)
+                    : toNumber(row.branch),
+                )
+                .filter((id): id is number => typeof id === "number"),
+            ),
+          );
+          const gcIds = Array.from(
+            new Set(
+              bcRows
+                .map((row) =>
+                  row.gcid && typeof row.gcid === "object"
+                    ? toNumber(row.gcid.id)
+                    : toNumber(row.gcid),
+                )
+                .filter((id): id is number => typeof id === "number"),
+            ),
+          );
+
+          const [branchLookupRes, gcLookupRes] = await Promise.allSettled([
+            branchIds.length > 0
+              ? apiFetch(
+                  getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH, {
+                    fields: ["id", "branch_name", "city"],
+                    filters: [["id", "in", branchIds]],
+                    limit: branchIds.length,
+                  }),
+                  { method: "GET", cache: "no-store" },
+                  token,
+                )
+              : Promise.resolve(null),
+            gcIds.length > 0
+              ? apiFetch(
+                  getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, {
+                    fields: ["id", "name", "gc_name"],
+                    filters: [["id", "in", gcIds]],
+                    limit: gcIds.length,
+                  }),
+                  { method: "GET", cache: "no-store" },
+                  token,
+                )
+              : Promise.resolve(null),
           ]);
 
-        const errors: string[] = [];
-        let failedMainRequests = 0;
-
-        const parseRows = async <T,>(
-          result: PromiseSettledResult<T[]>,
-          label: "NB" | "GP" | "GC" | "BC",
-        ): Promise<T[]> => {
-          if (result.status === "rejected") {
-            errors.push(`Failed to fetch ${label} (network error)`);
-            failedMainRequests += 1;
-            return [];
-          }
-          return Array.isArray(result.value) ? result.value : [];
-        };
-
-        const [nbRows, gpRows, gcRows, bcRows] = await Promise.all([
-          parseRows<NationalBrandApiResponse>(nbResult, "NB"),
-          parseRows<GroupParentApiResponse>(gpResult, "GP"),
-          parseRows<GroupCustomerApiResponse>(gcResult, "GC"),
-          parseRows<BranchCustomerApiResponse>(bcResult, "BC"),
-        ]);
-
-        const branchIds = Array.from(
-          new Set(
-            bcRows
-              .map((row) =>
-                row.branch && typeof row.branch === "object"
-                  ? toNumber(row.branch.id)
-                  : toNumber(row.branch),
-              )
-              .filter((id): id is number => typeof id === "number"),
-          ),
-        );
-        const gcIdsForBc = Array.from(
-          new Set(
-            bcRows
-              .map((row) =>
-                row.gcid && typeof row.gcid === "object"
-                  ? toNumber(row.gcid.id)
-                  : toNumber(row.gcid),
-              )
-              .filter((id): id is number => typeof id === "number"),
-          ),
-        );
-
-        const [branchLookupRes, gcLookupRes] = await Promise.allSettled([
-          branchIds.length > 0
-            ? apiFetch(
-                getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH, {
-                  fields: ["id", "branch_name", "city"],
-                  filters: [["id", "in", branchIds]],
-                  limit: branchIds.length,
-                }),
-                { method: "GET", cache: "no-store" },
-                token,
-              )
-            : Promise.resolve(null),
-          gcIdsForBc.length > 0
-            ? apiFetch(
-                getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, {
-                  fields: ["id", "name", "gc_name"],
-                  filters: [["id", "in", gcIdsForBc]],
-                  limit: gcIdsForBc.length,
-                }),
-                { method: "GET", cache: "no-store" },
-                token,
-              )
-            : Promise.resolve(null),
-        ]);
-
-        const branchMap = new Map<number, { name?: string; city?: string }>();
-        if (
-          branchLookupRes.status === "fulfilled" &&
-          branchLookupRes.value &&
-          branchLookupRes.value.ok
-        ) {
-          const branchJson = await branchLookupRes.value.json();
-          const branchRows: BranchLookupRow[] = Array.isArray(branchJson?.data)
-            ? branchJson.data
-            : [];
-          branchRows.forEach((row) => {
-            branchMap.set(Number(row.id), {
-              name: row.branch_name || undefined,
-              city: row.city || undefined,
+          const branchMap = new Map<number, { name?: string; city?: string }>();
+          if (
+            branchLookupRes.status === "fulfilled" &&
+            branchLookupRes.value &&
+            branchLookupRes.value.ok
+          ) {
+            const branchJson = await branchLookupRes.value.json();
+            const branchRows: BranchLookupRow[] = Array.isArray(
+              branchJson?.data,
+            )
+              ? branchJson.data
+              : [];
+            branchRows.forEach((row) => {
+              branchMap.set(Number(row.id), {
+                name: row.branch_name || undefined,
+                city: row.city || undefined,
+              });
             });
+          }
+
+          const gcMap = new Map<number, string>();
+          if (
+            gcLookupRes.status === "fulfilled" &&
+            gcLookupRes.value &&
+            gcLookupRes.value.ok
+          ) {
+            const gcJson = await gcLookupRes.value.json();
+            const gcRows: GroupCustomerLookupRow[] = Array.isArray(gcJson?.data)
+              ? gcJson.data
+              : [];
+            gcRows.forEach((row) => {
+              gcMap.set(Number(row.id), row.gc_name || row.name || "-");
+            });
+          }
+
+          const nextCards = bcRows.map((row) => {
+            const gcId =
+              row.gcid && typeof row.gcid === "object"
+                ? toNumber(row.gcid.id) || 0
+                : toNumber(row.gcid) || 0;
+            const branchId =
+              row.branch && typeof row.branch === "object"
+                ? toNumber(row.branch.id) || 0
+                : toNumber(row.branch) || 0;
+            const directGcName =
+              row.gcid && typeof row.gcid === "object"
+                ? row.gcid.gc_name || row.gcid.name
+                : undefined;
+            const directBranchName =
+              row.branch && typeof row.branch === "object"
+                ? row.branch.branch_name
+                : undefined;
+            const directBranchCity =
+              row.branch && typeof row.branch === "object"
+                ? row.branch.city
+                : undefined;
+            const branchName =
+              directBranchName || branchMap.get(branchId)?.name;
+            const branchCity =
+              directBranchCity || branchMap.get(branchId)?.city;
+            const gcName = directGcName || gcMap.get(gcId) || "";
+            const status =
+              typeof row.status === "string" && row.status.trim()
+                ? getStatus(row.status)
+                : getStatus(
+                    Number(row.disabled || 0) === 1 ? "inactive" : "active",
+                  );
+            const disabled = getDisabledFromStatus(status);
+            const computedName =
+              (gcName && branchCity
+                ? `${gcName} - ${branchCity}`
+                : undefined) ||
+              row.name ||
+              `BC ${row.id}`;
+
+            const bc: BranchCustomer = {
+              id: Number(row.id),
+              code: row.name || undefined,
+              name: computedName,
+              gc_id: gcId,
+              gc_name: gcName || undefined,
+              branch_id: branchId,
+              branch_name: branchName,
+              branch_city: branchCity || undefined,
+              created_at: row.updated_at || new Date(0).toISOString(),
+              updated_at: row.updated_at || new Date(0).toISOString(),
+              disabled,
+            };
+
+            return {
+              id: bc.id,
+              code: bc.code || `BC-${bc.id}`,
+              name: bc.name,
+              contact: "-",
+              branchLocation: bc.branch_city || bc.branch_name || "-",
+              monthlyVolume: "-",
+              status,
+              type: "bc" as const,
+              segment: "Branch",
+              createdAt: bc.updated_at,
+              detail: { kind: "bc" as const, item: bc },
+            };
           });
-        }
 
-        const gcMap = new Map<number, string>();
-        if (
-          gcLookupRes.status === "fulfilled" &&
-          gcLookupRes.value &&
-          gcLookupRes.value.ok
-        ) {
-          const gcLookupJson = await gcLookupRes.value.json();
-          const rows: GroupCustomerLookupRow[] = Array.isArray(
-            gcLookupJson?.data,
-          )
-            ? gcLookupJson.data
-            : [];
-          rows.forEach((row) => {
-            gcMap.set(Number(row.id), row.gc_name || row.name || "-");
-          });
-        }
-
-        const gpByNb = new Map<number, GroupParentApiResponse[]>();
-        gpRows.forEach((gpRow) => {
-          const nbId = extractLinkId(gpRow.nbid);
-          if (!nbId) return;
-          if (!gpByNb.has(nbId)) gpByNb.set(nbId, []);
-          gpByNb.get(nbId)?.push(gpRow);
-        });
-
-        const gcByGp = new Map<number, GroupCustomerApiResponse[]>();
-        gcRows.forEach((gcRow) => {
-          const gpId = extractLinkId(gcRow.gpid);
-          if (!gpId) return;
-          if (!gcByGp.has(gpId)) gcByGp.set(gpId, []);
-          gcByGp.get(gpId)?.push(gcRow);
-        });
-
-        const bcByGc = new Map<number, BranchCustomerApiResponse[]>();
-        bcRows.forEach((bcRow) => {
-          const gcId = extractLinkId(bcRow.gcid);
-          if (!gcId) return;
-          if (!bcByGc.has(gcId)) bcByGc.set(gcId, []);
-          bcByGc.get(gcId)?.push(bcRow);
-        });
-
-        const nbCards: UnifiedCard[] = nbRows.map((row) => {
-          const id = Number(row.id);
-          const code = row.name || `NB-${row.id}`;
-          const name = row.nb_name || row.name || `NB ${row.id}`;
-          const gpCandidates = gpByNb.get(id) || [];
-          const activeGps = gpCandidates.filter(
-            (x) => Number(x.disabled || 0) !== 1,
-          );
-          const gcCandidates = activeGps.flatMap(
-            (x) => gcByGp.get(Number(x.id)) || [],
-          );
-          const activeGcs = gcCandidates.filter(
-            (x) => Number(x.disabled || 0) !== 1,
-          );
-          const bcCandidates = activeGcs.flatMap(
-            (x) => bcByGc.get(Number(x.id)) || [],
-          );
-          const activeBcs = bcCandidates.filter(
-            (x) => Number(x.disabled || 0) !== 1,
-          );
-
-          return {
-            id,
-            code,
-            name,
-            contact: "-",
-            branchLocation: "National",
-            monthlyVolume: "-",
-            status: getStatus(row.disabled),
-            type: "nb",
-            segment: "National",
-            createdAt: row.created_at || new Date(0).toISOString(),
-            detail: {
-              kind: "nb",
-              item: {
-                id,
-                code,
-                name,
-                disabled: Number(row.disabled || 0),
-                created_at: row.created_at || new Date().toISOString(),
-                updated_at:
-                  row.updated_at || row.created_at || new Date().toISOString(),
-                owners: [],
-                active_gp_count: activeGps.length,
-                active_gc_count: activeGcs.length,
-                active_bc_count: activeBcs.length,
-                active_gp_names: activeGps.map(
-                  (x) => x.gp_name || x.name || "-",
-                ),
-                active_gc_names: activeGcs.map(
-                  (x) => x.gc_name || x.name || "-",
-                ),
-                active_bc_names: activeBcs.map(
-                  (x) => x.bcid_name || x.name || "-",
-                ),
-              },
+          setTabData((current) => ({
+            ...current,
+            bc: {
+              cards: replace
+                ? nextCards
+                : [
+                    ...current.bc.cards,
+                    ...nextCards.filter(
+                      (card) =>
+                        !current.bc.cards.some(
+                          (existing) => existing.id === card.id,
+                        ),
+                    ),
+                  ],
+              currentPage: page,
+              hasMore: getHasMore(meta, bcRows.length),
             },
-          };
-        });
+          }));
+          setTabStats((current) => ({
+            ...current,
+            bc: getTotalCount(meta, nextCards.length),
+          }));
+        } else if (tab === "gp") {
+          const gpRes = await apiFetch(
+            getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, {
+              fields: ["*", "created_by.full_name", "updated_by.full_name"],
+              page,
+              ...(debouncedSearch ? { search: debouncedSearch } : {}),
+              order_by: [[orderByField, sortDirection]],
+            }),
+            { method: "GET", cache: "no-store" },
+            token,
+          );
 
-        const gpCards: UnifiedCard[] = gpRows.map((row) => {
-          const gp: GroupParent = {
-            id: Number(row.id),
-            code: row.name || undefined,
-            name: row.gp_name || row.name || "-",
-            owner_name: row.owner_name || undefined,
-            owner_phone: row.owner_phone || undefined,
-            owner_email: row.owner_email || undefined,
-            created_at: row.created_at || new Date(0).toISOString(),
-            updated_at:
-              row.updated_at || row.created_at || new Date(0).toISOString(),
-            disabled: Number(row.disabled || 0),
-          };
+          if (!gpRes.ok) {
+            throw new Error(`Failed to fetch GP (${gpRes.status})`);
+          }
 
-          return {
-            id: gp.id,
-            code: gp.code || `GP-${gp.id}`,
-            name: gp.name,
-            contact: gp.owner_name || "-",
-            branchLocation: "Group Parent",
-            monthlyVolume: "-",
-            status: getStatus(row.disabled),
-            type: "gp",
-            segment: "Group",
-            createdAt: gp.created_at,
-            detail: { kind: "gp", item: gp },
-          };
-        });
+          const gpJson = await gpRes.json();
+          const gpRows: GroupParentApiResponse[] = Array.isArray(gpJson?.data)
+            ? gpJson.data
+            : [];
+          const meta = (gpJson?.meta || null) as QueryMeta | null;
+          const nextCards = gpRows.map((row) => {
+            const gp: GroupParent = {
+              id: Number(row.id),
+              code: row.name || undefined,
+              name: row.gp_name || row.name || "-",
+              description: row.description || undefined,
+              credit_limit_active: Number(row.credit_limit_active || 0),
+              credit_limit: row.credit_limit ?? null,
+              payment_term_active: Number(row.payment_term_active || 0),
+              payment_term: row.payment_term ?? null,
+              limit_customer_overdue_active: Number(
+                row.limit_customer_overdue_active || 0,
+              ),
+              limit_customer_overdue: row.limit_customer_overdue ?? null,
+              created_at: row.created_at || new Date(0).toISOString(),
+              updated_at:
+                row.updated_at || row.created_at || new Date(0).toISOString(),
+              created_by: resolveUserName(
+                row["created_by.full_name"],
+                row.created_by,
+              ),
+              updated_by: resolveUserName(
+                row["updated_by.full_name"],
+                row.updated_by,
+              ),
+              disabled: Number(row.disabled || 0),
+            };
 
-        const gcCards: UnifiedCard[] = gcRows.map((row) => {
-          const gpId = extractLinkId(row.gpid) || 0;
-          const gc: GroupCustomer = {
-            id: Number(row.id),
-            code: row.name || undefined,
-            name: row.gc_name || row.name || "-",
-            gp_id: gpId,
-            gp_name:
-              row.gpid && typeof row.gpid === "object"
-                ? row.gpid.gp_name || row.gpid.name
-                : undefined,
-            owner_name: row.owner_full_name || undefined,
-            owner_phone: row.owner_phone || undefined,
-            owner_email: row.owner_email || undefined,
-            created_at: row.created_at || new Date(0).toISOString(),
-            updated_at:
-              row.updated_at || row.created_at || new Date(0).toISOString(),
-            disabled: Number(row.disabled || 0),
-          };
+            return {
+              id: gp.id,
+              code: gp.code || `GP-${gp.id}`,
+              name: gp.name,
+              contact: "-",
+              branchLocation: "Group Parent",
+              monthlyVolume: "-",
+              status: getStatus(
+                Number(row.disabled || 0) === 1 ? "inactive" : "active",
+              ),
+              type: "gp" as const,
+              segment: "Group",
+              createdAt: gp.updated_at,
+              detail: { kind: "gp" as const, item: gp },
+            };
+          });
 
-          return {
-            id: gc.id,
-            code: gc.code || `GC-${gc.id}`,
-            name: gc.name,
-            contact: gc.owner_name || "-",
-            branchLocation: "Group Customer",
-            monthlyVolume: "-",
-            status: getStatus(row.disabled),
-            type: "gc",
-            segment: "Channel",
-            createdAt: gc.created_at,
-            detail: { kind: "gc", item: gc },
-          };
-        });
+          setTabData((current) => ({
+            ...current,
+            gp: {
+              cards: replace
+                ? nextCards
+                : [
+                    ...current.gp.cards,
+                    ...nextCards.filter(
+                      (card) =>
+                        !current.gp.cards.some(
+                          (existing) => existing.id === card.id,
+                        ),
+                    ),
+                  ],
+              currentPage: page,
+              hasMore: getHasMore(meta, gpRows.length),
+            },
+          }));
+          setTabStats((current) => ({
+            ...current,
+            gp: getTotalCount(meta, nextCards.length),
+          }));
+        } else if (tab === "gc") {
+          const gcRes = await apiFetch(
+            getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, {
+              fields: ["*", "created_by.full_name", "updated_by.full_name"],
+              page,
+              ...(debouncedSearch ? { search: debouncedSearch } : {}),
+              order_by: [[orderByField, sortDirection]],
+            }),
+            { method: "GET", cache: "no-store" },
+            token,
+          );
 
-        const bcCards: UnifiedCard[] = bcRows.map((row) => {
-          const gcId =
-            row.gcid && typeof row.gcid === "object"
-              ? toNumber(row.gcid.id) || 0
-              : toNumber(row.gcid) || 0;
-          const branchId =
-            row.branch && typeof row.branch === "object"
-              ? toNumber(row.branch.id) || 0
-              : toNumber(row.branch) || 0;
+          if (!gcRes.ok) {
+            throw new Error(`Failed to fetch GC (${gcRes.status})`);
+          }
 
-          const directGcName =
-            row.gcid && typeof row.gcid === "object"
-              ? row.gcid.gc_name || row.gcid.name
-              : undefined;
-          const directBranchCity =
-            row.branch && typeof row.branch === "object"
-              ? row.branch.city
-              : undefined;
-          const branchCity = directBranchCity || branchMap.get(branchId)?.city;
-          const gcName = directGcName || gcMap.get(gcId) || "";
+          const gcJson = await gcRes.json();
+          const gcRows: GroupCustomerApiResponse[] = Array.isArray(gcJson?.data)
+            ? gcJson.data
+            : [];
+          const meta = (gcJson?.meta || null) as QueryMeta | null;
+          const gpIds = Array.from(
+            new Set(
+              gcRows
+                .map((row) =>
+                  row.gpid && typeof row.gpid === "object"
+                    ? toNumber(row.gpid.id)
+                    : toNumber(row.gpid),
+                )
+                .filter((id): id is number => typeof id === "number"),
+            ),
+          );
+          const gpMap = new Map<number, { code?: string; name?: string }>();
+          if (gpIds.length > 0) {
+            const gpLookupRes = await apiFetch(
+              getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, {
+                fields: ["id", "name", "gp_name"],
+                filters: [["id", "in", gpIds]],
+                limit: gpIds.length,
+              }),
+              { method: "GET", cache: "no-store" },
+              token,
+            );
+            if (gpLookupRes.ok) {
+              const gpLookupJson = await gpLookupRes.json();
+              const gpLookupRows: GroupCustomerLookupRow[] = Array.isArray(
+                gpLookupJson?.data,
+              )
+                ? gpLookupJson.data
+                : [];
+              gpLookupRows.forEach((row) => {
+                gpMap.set(Number(row.id), {
+                  code: row.name || undefined,
+                  name: row.gp_name || row.name || undefined,
+                });
+              });
+            }
+          }
+          const nextCards = gcRows.map((row) => {
+            const gpId = extractLinkId(row.gpid) || 0;
+            const gc: GroupCustomer = {
+              id: Number(row.id),
+              code: row.name || undefined,
+              name: row.gc_name || row.name || "-",
+              gp_id: gpId,
+              gp_name:
+                row.gpid && typeof row.gpid === "object"
+                  ? row.gpid.gp_name || row.gpid.name
+                  : gpMap.get(gpId)?.name,
+              gp_code:
+                (row.gpid && typeof row.gpid === "object"
+                  ? row.gpid.name
+                  : undefined) || gpMap.get(gpId)?.code,
+              owner_name: row.owner_full_name || undefined,
+              owner_phone: row.owner_phone || undefined,
+              owner_email: row.owner_email || undefined,
+              created_at: row.created_at || new Date(0).toISOString(),
+              updated_at:
+                row.updated_at || row.created_at || new Date(0).toISOString(),
+              disabled: Number(row.disabled || 0),
+            };
 
-          const computedName =
-            row.bcid_name ||
-            (gcName && branchCity ? `${gcName} - ${branchCity}` : undefined) ||
-            row.name ||
-            `BC ${row.id}`;
+            return {
+              id: gc.id,
+              code: gc.code || `GC-${gc.id}`,
+              name: gc.name,
+              contact: gc.owner_name || "-",
+              branchLocation: "Group Customer",
+              monthlyVolume: "-",
+              status: getStatus(
+                Number(row.disabled || 0) === 1 ? "inactive" : "active",
+              ),
+              type: "gc" as const,
+              segment: "Channel",
+              createdAt: gc.updated_at,
+              detail: { kind: "gc" as const, item: gc },
+            };
+          });
 
-          const bc: BranchCustomer = {
-            id: Number(row.id),
-            code: row.name || undefined,
-            name: computedName,
-            gc_id: gcId,
-            gc_name: gcName || undefined,
-            branch_id: branchId,
-            branch_name: branchMap.get(branchId)?.name,
-            branch_city: branchCity || undefined,
-            owner_name: row.branch_owner || undefined,
-            owner_phone: row.branch_owner_phone || undefined,
-            owner_email: row.branch_owner_email || undefined,
-            receipt_delivery_method: row.receipt_delivery_method || undefined,
-            receipt_issued_at: row.receipt_issued_at || undefined,
-            created_at: row.created_at || new Date(0).toISOString(),
-            updated_at:
-              row.updated_at || row.created_at || new Date(0).toISOString(),
-            disabled: Number(row.disabled || 0),
-          };
-
-          return {
-            id: bc.id,
-            code: bc.code || `BC-${bc.id}`,
-            name: bc.name,
-            contact: bc.owner_name || "-",
-            branchLocation: bc.branch_city || bc.branch_name || "-",
-            monthlyVolume: "-",
-            status: row.status || getStatus(row.disabled),
-            type: "bc",
-            segment: "Branch",
-            createdAt: bc.created_at,
-            detail: { kind: "bc", item: bc },
-          };
-        });
-
-        const nextStats: TabStats = {
-          nb: nbCards.length,
-          gp: gpCards.length,
-          gc: gcCards.length,
-          bc: bcCards.length,
-        };
-
-        setTabStats(nextStats);
-        setCards([...nbCards, ...gpCards, ...gcCards, ...bcCards]);
-        setPolicyByCard({});
-        if (failedMainRequests >= 4 && errors.length > 0) {
-          setError(errors.join(" | "));
+          setTabData((current) => ({
+            ...current,
+            gc: {
+              cards: replace
+                ? nextCards
+                : [
+                    ...current.gc.cards,
+                    ...nextCards.filter(
+                      (card) =>
+                        !current.gc.cards.some(
+                          (existing) => existing.id === card.id,
+                        ),
+                    ),
+                  ],
+              currentPage: page,
+              hasMore: getHasMore(meta, gcRows.length),
+            },
+          }));
+          setTabStats((current) => ({
+            ...current,
+            gc: getTotalCount(meta, nextCards.length),
+          }));
         } else {
-          setError(null);
+          const nbRes = await apiFetch(
+            getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, {
+              fields: ["*"],
+              page,
+              ...(debouncedSearch ? { search: debouncedSearch } : {}),
+              order_by: [[orderByField, sortDirection]],
+            }),
+            { method: "GET", cache: "no-store" },
+            token,
+          );
+
+          if (!nbRes.ok) {
+            throw new Error(`Failed to fetch NB (${nbRes.status})`);
+          }
+
+          const nbJson = await nbRes.json();
+          const nbRows: NationalBrandApiResponse[] = Array.isArray(nbJson?.data)
+            ? nbJson.data
+            : [];
+          const meta = (nbJson?.meta || null) as QueryMeta | null;
+          const nextCards = nbRows.map((row) => {
+            const id = Number(row.id);
+            const code = row.name || `NB-${row.id}`;
+            const name = row.nb_name || row.name || `NB ${row.id}`;
+            const disabled = Number(row.disabled || 0);
+
+            return {
+              id,
+              code,
+              name,
+              contact: "-",
+              branchLocation: "National",
+              monthlyVolume: "-",
+              status: getStatus(disabled === 1 ? "inactive" : "active"),
+              type: "nb" as const,
+              segment: "National",
+              createdAt:
+                row.updated_at || row.created_at || new Date(0).toISOString(),
+              detail: {
+                kind: "nb" as const,
+                item: {
+                  id,
+                  code,
+                  name,
+                  disabled,
+                  created_at: row.created_at || new Date(0).toISOString(),
+                  updated_at:
+                    row.updated_at ||
+                    row.created_at ||
+                    new Date(0).toISOString(),
+                  owners: [],
+                  active_gp_count: 0,
+                  active_gc_count: 0,
+                  active_bc_count: 0,
+                  active_gp_names: [],
+                  active_gc_names: [],
+                  active_bc_names: [],
+                },
+              },
+            };
+          });
+
+          setTabData((current) => ({
+            ...current,
+            nb: {
+              cards: replace
+                ? nextCards
+                : [
+                    ...current.nb.cards,
+                    ...nextCards.filter(
+                      (card) =>
+                        !current.nb.cards.some(
+                          (existing) => existing.id === card.id,
+                        ),
+                    ),
+                  ],
+              currentPage: page,
+              hasMore: getHasMore(meta, nbRows.length),
+            },
+          }));
+          setTabStats((current) => ({
+            ...current,
+            nb: getTotalCount(meta, nextCards.length),
+          }));
         }
+
+        setError(null);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Gagal memuat customer data",
         );
-        setCards([]);
+        if (replace) {
+          setTabData((current) => ({
+            ...current,
+            [tab]: { cards: [], currentPage: 0, hasMore: false },
+          }));
+        }
       } finally {
-        setLoading(false);
+        if (replace) {
+          setLoading(false);
+        } else {
+          setLoadingMore(false);
+        }
       }
+    },
+    [debouncedSearch, isAuthenticated, sortDirection, sortField, token],
+  );
+
+  useEffect(() => {
+    if (!isAuthenticated || !token) {
+      setTabData(createEmptyTabDataState());
+      setTabStats({ nb: 0, gp: 0, gc: 0, bc: 0 });
+      setLoading(false);
+      setLoadingMore(false);
+      return;
     }
 
-    void loadData();
-  }, [isAuthenticated, token]);
+    setPolicyByCard({});
+    void loadTabPage(activeTab, 1, true);
+  }, [activeTab, isAuthenticated, loadTabPage, token]);
 
   const tabOptions = useMemo(
     () => [
@@ -672,11 +976,11 @@ export default function CustomerOverviewPage() {
     [tabStats],
   );
 
+  const currentTabData = tabData[activeTab];
+
   const filteredCards = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
-    const filtered = cards.filter((item) => {
-      const matchesTab = item.type === activeTab;
-      if (!matchesTab) return false;
+    const normalizedSearch = debouncedSearch.toLowerCase();
+    return currentTabData.cards.filter((item) => {
       if (!normalizedSearch) return true;
       return (
         item.name.toLowerCase().includes(normalizedSearch) ||
@@ -684,44 +988,17 @@ export default function CustomerOverviewPage() {
         item.branchLocation.toLowerCase().includes(normalizedSearch)
       );
     });
-
-    filtered.sort((left, right) => {
-      if (sortField === "created_at") {
-        const leftValue = new Date(left.createdAt).getTime();
-        const rightValue = new Date(right.createdAt).getTime();
-        return sortDirection === "desc"
-          ? rightValue - leftValue
-          : leftValue - rightValue;
-      }
-
-      const leftValue =
-        sortField === "code"
-          ? left.code.toLowerCase()
-          : left.name.toLowerCase();
-      const rightValue =
-        sortField === "code"
-          ? right.code.toLowerCase()
-          : right.name.toLowerCase();
-
-      const compared = leftValue.localeCompare(rightValue, undefined, {
-        numeric: true,
-        sensitivity: "base",
-      });
-      return sortDirection === "desc" ? -compared : compared;
-    });
-
-    return filtered;
-  }, [activeTab, cards, search, sortDirection, sortField]);
+  }, [currentTabData.cards, debouncedSearch]);
 
   const sortFieldLabel =
-    sortField === "created_at"
-      ? "Tanggal Dibuat"
+    sortField === "updated_at"
+      ? "Terakhir Diupdate"
       : sortField === "code"
         ? "ID Customer"
         : "Nama Customer";
 
-  const visibleCards = filteredCards.slice(0, visibleCount);
-  const hasMoreCards = visibleCards.length < filteredCards.length;
+  const visibleCards = filteredCards;
+  const hasMoreCards = currentTabData.hasMore;
 
   useEffect(() => {
     if (!isAuthenticated || !token || visibleCards.length === 0) return;
@@ -773,8 +1050,7 @@ export default function CustomerOverviewPage() {
         const next = { ...prev };
         results.forEach((result, index) => {
           const key = getPolicyCacheKey(cardsToLoad[index]);
-          next[key] =
-            result.status === "fulfilled" ? result.value.data : null;
+          next[key] = result.status === "fulfilled" ? result.value.data : null;
         });
         return next;
       });
@@ -789,15 +1065,13 @@ export default function CustomerOverviewPage() {
 
   useEffect(() => {
     const target = loadMoreRef.current;
-    if (!target || loading || !hasMoreCards) return;
+    if (!target || loading || loadingMore || !hasMoreCards) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         const [entry] = entries;
         if (!entry?.isIntersecting) return;
-        setVisibleCount((prev) =>
-          Math.min(prev + ITEMS_PER_BATCH, filteredCards.length),
-        );
+        void loadTabPage(activeTab, currentTabData.currentPage + 1, false);
       },
       {
         root: null,
@@ -811,7 +1085,14 @@ export default function CustomerOverviewPage() {
     return () => {
       observer.disconnect();
     };
-  }, [filteredCards.length, hasMoreCards, loading, visibleCount]);
+  }, [
+    activeTab,
+    currentTabData.currentPage,
+    hasMoreCards,
+    loadTabPage,
+    loading,
+    loadingMore,
+  ]);
 
   const openDetail = (card: UnifiedCard) => {
     if (card.detail.kind === "nb") {
@@ -831,72 +1112,44 @@ export default function CustomerOverviewPage() {
 
   const handleGCUpdate = (updatedGC: GroupCustomer) => {
     setSelectedGC(updatedGC);
-    setCards((prev) =>
-      prev.map((card) => {
-        if (card.type === "gc" && card.id === updatedGC.id) {
-          return {
-            ...card,
-            name: updatedGC.name,
-            contact: updatedGC.owner_name || "-",
-            detail: { kind: "gc", item: updatedGC },
-          };
-        }
-        if (card.type === "nb" && card.detail.kind === "nb") {
-          const oldName =
-            prev.find((x) => x.type === "gc" && x.id === updatedGC.id)?.name ||
-            "";
-          return {
-            ...card,
-            detail: {
-              kind: "nb",
-              item: {
-                ...card.detail.item,
-                active_gc_names: card.detail.item.active_gc_names.map((name) =>
-                  name === oldName ? updatedGC.name : name,
-                ),
-              },
-            },
-          };
-        }
-        return card;
-      }),
-    );
+    setTabData((prev) => ({
+      ...prev,
+      gc: {
+        ...prev.gc,
+        cards: prev.gc.cards.map((card) =>
+          card.id === updatedGC.id
+            ? {
+                ...card,
+                name: updatedGC.name,
+                contact: updatedGC.owner_name || "-",
+                detail: { kind: "gc", item: updatedGC },
+              }
+            : card,
+        ),
+      },
+    }));
   };
 
   const handleBCUpdate = (updatedBC: BranchCustomer) => {
     setSelectedBC(updatedBC);
-    setCards((prev) =>
-      prev.map((card) => {
-        if (card.type === "bc" && card.id === updatedBC.id) {
-          return {
-            ...card,
-            name: updatedBC.name,
-            contact: updatedBC.owner_name || "-",
-            branchLocation:
-              updatedBC.branch_city || updatedBC.branch_name || "-",
-            detail: { kind: "bc", item: updatedBC },
-          };
-        }
-        if (card.type === "nb" && card.detail.kind === "nb") {
-          const oldName =
-            prev.find((x) => x.type === "bc" && x.id === updatedBC.id)?.name ||
-            "";
-          return {
-            ...card,
-            detail: {
-              kind: "nb",
-              item: {
-                ...card.detail.item,
-                active_bc_names: card.detail.item.active_bc_names.map((name) =>
-                  name === oldName ? updatedBC.name : name,
-                ),
-              },
-            },
-          };
-        }
-        return card;
-      }),
-    );
+    setTabData((prev) => ({
+      ...prev,
+      bc: {
+        ...prev.bc,
+        cards: prev.bc.cards.map((card) =>
+          card.id === updatedBC.id
+            ? {
+                ...card,
+                name: updatedBC.name,
+                contact: updatedBC.owner_name || "-",
+                branchLocation:
+                  updatedBC.branch_city || updatedBC.branch_name || "-",
+                detail: { kind: "bc", item: updatedBC },
+              }
+            : card,
+        ),
+      },
+    }));
   };
 
   return (
@@ -982,7 +1235,7 @@ export default function CustomerOverviewPage() {
               }`}
             >
               {tab.label}{" "}
-              <span className="text-xs text-slate-400">({tab.count})</span>
+              {/* <span className="text-xs text-slate-400">({tab.count})</span> */}
             </button>
           ))}
         </div>
@@ -1043,8 +1296,8 @@ export default function CustomerOverviewPage() {
                     >
                       {[
                         {
-                          value: "created_at" as CustomerSortField,
-                          label: "Tanggal Dibuat",
+                          value: "updated_at" as CustomerSortField,
+                          label: "Terakhir Diupdate",
                         },
                         {
                           value: "code" as CustomerSortField,
@@ -1146,7 +1399,8 @@ export default function CustomerOverviewPage() {
                               {formatCurrency(creditLimit?.value)}
                             </p>
                             <p className="mt-1 text-[11px] font-semibold text-violet-700">
-                              Level: {policyLevelLabel(creditLimit?.active_level)}
+                              Level:{" "}
+                              {policyLevelLabel(creditLimit?.active_level)}
                             </p>
                           </div>
 
@@ -1158,7 +1412,8 @@ export default function CustomerOverviewPage() {
                               {formatDays(paymentTerm?.value)}
                             </p>
                             <p className="mt-1 text-[11px] font-semibold text-cyan-700">
-                              Level: {policyLevelLabel(paymentTerm?.active_level)}
+                              Level:{" "}
+                              {policyLevelLabel(paymentTerm?.active_level)}
                             </p>
                           </div>
                         </div>
@@ -1195,7 +1450,8 @@ export default function CustomerOverviewPage() {
 
         <div className="flex flex-col gap-3 pt-1 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
           <p>
-            Showing {visibleCards.length} of {filteredCards.length} customers
+            Showing {visibleCards.length} of{" "}
+            {tabStats[activeTab] || filteredCards.length} customers
           </p>
           <p>
             {hasMoreCards
@@ -1209,7 +1465,9 @@ export default function CustomerOverviewPage() {
             ref={loadMoreRef}
             className="flex h-16 items-center justify-center text-sm text-slate-400"
           >
-            Memuat data berikutnya...
+            {loadingMore
+              ? "Memuat data berikutnya..."
+              : "Siap memuat data berikutnya..."}
           </div>
         ) : null}
       </section>
