@@ -17,11 +17,23 @@ export interface FileItem {
   updated_at: string;
 }
 
+export interface FileListMeta {
+  request_id?: string;
+  trace_id?: string;
+  timestamp?: string;
+  processing_time_ms?: number;
+  page: number;
+  per_page: number;
+  total: number;
+  total_pages: number;
+}
+
 export interface FileListResponse {
   status: string;
   code: string;
   message: string;
   data: FileItem[];
+  meta?: FileListMeta;
 }
 
 export interface FileDeleteResponse {
@@ -30,11 +42,28 @@ export interface FileDeleteResponse {
   message: string;
 }
 
+export interface FetchFilesParams {
+  page?: number;
+  limit?: number;
+}
+
 /**
- * Fetch all files
+ * Fetch files by page
  */
-export async function fetchFiles(token: string): Promise<FileItem[]> {
-  const url = getApiUrl(API_CONFIG.ENDPOINTS.FILES);
+export async function fetchFiles(
+  token: string,
+  params: FetchFilesParams = {}
+): Promise<{ data: FileItem[]; meta: FileListMeta | null }> {
+  const page = params.page ?? 1;
+  const limit = params.limit ?? 20;
+  const spec = encodeURIComponent(
+    JSON.stringify({
+      fields: ["*"],
+      page,
+      limit,
+    })
+  );
+  const url = `${getApiUrl(API_CONFIG.ENDPOINTS.FILES)}?spec=${spec}`;
 
   const response = await apiFetch(url, {}, token);
 
@@ -43,7 +72,10 @@ export async function fetchFiles(token: string): Promise<FileItem[]> {
   }
 
   const json: FileListResponse = await response.json();
-  return json.data || [];
+  return {
+    data: json.data || [],
+    meta: json.meta ?? null,
+  };
 }
 
 /**
@@ -74,9 +106,7 @@ export async function deleteFile(
  * Download a file
  */
 export function downloadFile(fileUrl: string, fileName: string): void {
-  const fullUrl = fileUrl.startsWith("http")
-    ? fileUrl
-    : `${API_CONFIG.FILE_BASE_URL}${fileUrl}`;
+  const fullUrl = getFilePreviewUrl(fileUrl);
 
   // Create a temporary anchor element to trigger download
   const link = document.createElement("a");
@@ -92,10 +122,38 @@ export function downloadFile(fileUrl: string, fileName: string): void {
  * Get file preview URL
  */
 export function getFilePreviewUrl(fileUrl: string): string {
+  if (!fileUrl) {
+    return "";
+  }
   if (fileUrl.startsWith("http")) {
     return fileUrl;
   }
-  return `${API_CONFIG.FILE_BASE_URL}${fileUrl}`;
+  if (fileUrl.startsWith("/")) {
+    return `${API_CONFIG.FILE_BASE_URL}${fileUrl}`;
+  }
+  return `${API_CONFIG.FILE_BASE_URL}/files/${fileUrl}`;
+}
+
+/**
+ * Build preview/download URL from file object
+ */
+export function getFileAccessUrl(file: FileItem): string {
+  if (file.file_url) {
+    return getFilePreviewUrl(file.file_url);
+  }
+  return `${API_CONFIG.FILE_BASE_URL}/files/${file.uuid}`;
+}
+
+/**
+ * Build transformed image preview URL from file uuid
+ */
+export function getImagePreviewUrl(
+  file: FileItem,
+  format: string = "rs:fill:500:500/q:80/ext:webp"
+): string {
+  const url = new URL(`${API_CONFIG.FILE_BASE_URL}/files/${file.uuid}`);
+  url.searchParams.set("format", format);
+  return url.toString();
 }
 
 /**

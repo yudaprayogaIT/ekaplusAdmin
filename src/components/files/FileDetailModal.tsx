@@ -1,12 +1,10 @@
 // src/components/files/FileDetailModal.tsx
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaTimes,
-  FaDownload,
-  FaTrash,
   FaFile,
   FaFolder,
   FaCalendar,
@@ -14,12 +12,11 @@ import {
   FaFingerprint,
   FaImage,
 } from "react-icons/fa";
+import FilePreviewImage from "./FilePreviewImage";
 import {
   type FileItem,
-  getFilePreviewUrl,
   formatFileSize,
   isImageFile,
-  downloadFile,
   getFolderBadgeColor,
   getFileTypeBadgeColor,
 } from "@/services/fileService";
@@ -28,21 +25,17 @@ interface FileDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   file: FileItem;
-  onDelete: (file: FileItem) => void;
 }
 
 export default function FileDetailModal({
   isOpen,
   onClose,
   file,
-  onDelete,
 }: FileDetailModalProps) {
   const isImage = isImageFile(file.mime_type);
-  const previewUrl = getFilePreviewUrl(file.file_url);
-
-  const handleDownload = () => {
-    downloadFile(file.file_url, file.file_name);
-  };
+  const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
+  const [imageZoomed, setImageZoomed] = useState(false);
+  const [imageZoomOrigin, setImageZoomOrigin] = useState({ x: 50, y: 50 });
 
   return (
     <AnimatePresence>
@@ -58,7 +51,14 @@ export default function FileDetailModal({
           />
 
           {/* Modal */}
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) {
+                onClose();
+              }
+            }}
+          >
             <motion.div
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -110,11 +110,29 @@ export default function FileDetailModal({
                     </h3>
                     <div className="rounded-2xl overflow-hidden border-2 border-gray-200 bg-gray-50">
                       {isImage ? (
-                        <img
-                          src={previewUrl}
-                          alt={file.file_name}
-                          className="w-full h-auto"
-                        />
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setImagePreviewOpen(true);
+                              setImageZoomed(false);
+                              setImageZoomOrigin({ x: 50, y: 50 });
+                            }}
+                            className="block w-full text-left transition hover:bg-white"
+                          >
+                            <div className="relative aspect-video w-full bg-white">
+                              <FilePreviewImage
+                                file={file}
+                                alt={file.file_name}
+                                fill
+                                className="object-contain"
+                              />
+                            </div>
+                          </button>
+                          <p className="px-4 py-3 text-xs text-gray-500">
+                            Klik gambar untuk melihat preview lebih besar.
+                          </p>
+                        </>
                       ) : (
                         <div className="aspect-video flex items-center justify-center">
                           <div className="text-center">
@@ -162,7 +180,9 @@ export default function FileDetailModal({
                           </div>
                           <div className="flex-1">
                             <p className="text-xs text-gray-600 mb-1">Folder</p>
-                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${getFolderBadgeColor(file.folder)}`}>
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${getFolderBadgeColor(file.folder)}`}
+                            >
                               {file.folder}
                             </span>
                           </div>
@@ -172,13 +192,19 @@ export default function FileDetailModal({
                       {/* File Type & Size */}
                       <div className="grid grid-cols-2 gap-4">
                         <div className="bg-gray-50 rounded-xl p-4">
-                          <p className="text-xs text-gray-600 mb-2">File Type</p>
-                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${getFileTypeBadgeColor(file.mime_type)}`}>
+                          <p className="text-xs text-gray-600 mb-2">
+                            File Type
+                          </p>
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${getFileTypeBadgeColor(file.mime_type)}`}
+                          >
                             {file.mime_type}
                           </span>
                         </div>
                         <div className="bg-gray-50 rounded-xl p-4">
-                          <p className="text-xs text-gray-600 mb-2">File Size</p>
+                          <p className="text-xs text-gray-600 mb-2">
+                            File Size
+                          </p>
                           <p className="font-semibold text-gray-900">
                             {formatFileSize(file.file_size)}
                           </p>
@@ -208,17 +234,23 @@ export default function FileDetailModal({
                             <p className="text-xs text-gray-600">Created</p>
                           </div>
                           <p className="font-semibold text-gray-900 text-sm">
-                            {new Date(file.created_at).toLocaleDateString("id-ID", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                            })}
+                            {new Date(file.created_at).toLocaleDateString(
+                              "id-ID",
+                              {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              },
+                            )}
                           </p>
                           <p className="text-xs text-gray-500 mt-1">
-                            {new Date(file.created_at).toLocaleTimeString("id-ID", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
+                            {new Date(file.created_at).toLocaleTimeString(
+                              "id-ID",
+                              {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              },
+                            )}
                           </p>
                         </div>
                         <div className="bg-gray-50 rounded-xl p-4">
@@ -227,17 +259,23 @@ export default function FileDetailModal({
                             <p className="text-xs text-gray-600">Updated</p>
                           </div>
                           <p className="font-semibold text-gray-900 text-sm">
-                            {new Date(file.updated_at).toLocaleDateString("id-ID", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                            })}
+                            {new Date(file.updated_at).toLocaleDateString(
+                              "id-ID",
+                              {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              },
+                            )}
                           </p>
                           <p className="text-xs text-gray-500 mt-1">
-                            {new Date(file.updated_at).toLocaleTimeString("id-ID", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
+                            {new Date(file.updated_at).toLocaleTimeString(
+                              "id-ID",
+                              {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              },
+                            )}
                           </p>
                         </div>
                       </div>
@@ -245,7 +283,9 @@ export default function FileDetailModal({
                       {/* Description */}
                       {file.description && (
                         <div className="bg-gray-50 rounded-xl p-4">
-                          <p className="text-xs text-gray-600 mb-2">Description</p>
+                          <p className="text-xs text-gray-600 mb-2">
+                            Description
+                          </p>
                           <p className="text-gray-900">{file.description}</p>
                         </div>
                       )}
@@ -255,7 +295,7 @@ export default function FileDetailModal({
               </div>
 
               {/* Footer */}
-              <div className="px-8 py-6 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-4">
+              {/* <div className="px-8 py-6 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-4">
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
@@ -284,9 +324,88 @@ export default function FileDetailModal({
                     Download
                   </motion.button>
                 </div>
-              </div>
+              </div> */}
             </motion.div>
           </div>
+
+          <AnimatePresence>
+            {imagePreviewOpen && isImage && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-100/90 p-4 backdrop-blur-sm"
+                onClick={(event) => {
+                  if (event.target === event.currentTarget) {
+                    setImagePreviewOpen(false);
+                    setImageZoomed(false);
+                    setImageZoomOrigin({ x: 50, y: 50 });
+                  }
+                }}
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.96 }}
+                  className="relative w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImagePreviewOpen(false);
+                      setImageZoomed(false);
+                      setImageZoomOrigin({ x: 50, y: 50 });
+                    }}
+                    className="absolute right-4 top-4 z-10 rounded-xl bg-white/90 p-2 text-slate-700 shadow-sm transition hover:bg-white"
+                  >
+                    <FaTimes className="h-5 w-5" />
+                  </button>
+                  <div
+                    className={`relative h-[80vh] w-full overflow-hidden bg-slate-100 ${
+                      imageZoomed ? "cursor-zoom-out" : "cursor-zoom-in"
+                    }`}
+                    onDoubleClick={(event) => {
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      const x = ((event.clientX - rect.left) / rect.width) * 100;
+                      const y = ((event.clientY - rect.top) / rect.height) * 100;
+
+                      setImageZoomOrigin({ x, y });
+                      setImageZoomed((prev) => !prev);
+                    }}
+                    onMouseMove={(event) => {
+                      if (!imageZoomed) return;
+
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      const x = ((event.clientX - rect.left) / rect.width) * 100;
+                      const y = ((event.clientY - rect.top) / rect.height) * 100;
+
+                      setImageZoomOrigin({
+                        x: Math.min(100, Math.max(0, x)),
+                        y: Math.min(100, Math.max(0, y)),
+                      });
+                    }}
+                  >
+                    <FilePreviewImage
+                      file={file}
+                      alt={file.file_name}
+                      fill
+                      className={`object-contain transition-transform duration-200 ${
+                        imageZoomed ? "scale-[1.8]" : "scale-100"
+                      }`}
+                      style={{
+                        transformOrigin: `${imageZoomOrigin.x}% ${imageZoomOrigin.y}%`,
+                      }}
+                    />
+                    <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-white/85 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm">
+                      {imageZoomed
+                        ? "Arahkan mouse ke area yang ingin dilihat, double click untuk reset zoom."
+                        : "Double click untuk zoom."}
+                    </div>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </>
       )}
     </AnimatePresence>

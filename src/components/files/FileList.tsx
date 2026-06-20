@@ -1,7 +1,7 @@
 // src/components/files/FileList.tsx
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import FileCard from "./FileCard";
 import FileDetailModal from "./FileDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
@@ -19,21 +19,29 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   fetchFiles,
   deleteFile,
+  type FileListMeta,
   type FileItem,
   isImageFile,
 } from "@/services/fileService";
 
 type ViewMode = "grid" | "list";
+const PAGE_SIZE = 20;
 
 export default function FileList() {
   const { token, isAuthenticated } = useAuth();
   const [files, setFiles] = useState<FileItem[]>([]);
+  const [meta, setMeta] = useState<FileListMeta | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [filterFolder, setFilterFolder] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const loaderRef = useRef<HTMLDivElement | null>(null);
+  const isFetchingRef = useRef(false);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<FileItem | null>(null);
@@ -43,59 +51,128 @@ export default function FileList() {
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
 
-  // Load files from API
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
+  const loadFiles = useCallback(
+    async (nextPage: number, replace: boolean) => {
+      if (isFetchingRef.current) {
+        return;
+      }
+
+      if (!isAuthenticated || !token) {
+        setLoading(false);
+        setLoadingMore(false);
+        return;
+      }
+
+      isFetchingRef.current = true;
+
+      if (replace) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+
       setError(null);
 
       try {
-        if (!isAuthenticated || !token) {
-          setLoading(false);
-          return;
-        }
+        const response = await fetchFiles(token, {
+          page: nextPage,
+          limit: PAGE_SIZE,
+        });
 
-        const fileList = await fetchFiles(token);
-        if (!cancelled) {
-          setFiles(fileList);
-        }
+        setFiles((prev) =>
+          replace
+            ? response.data
+            : [...prev, ...response.data.filter((item) => !prev.some((f) => f.uuid === item.uuid))]
+        );
+        setMeta(response.meta);
+        setCurrentPage(nextPage);
+        setHasMore(
+          response.meta
+            ? Number(response.meta.page) < Number(response.meta.total_pages)
+            : response.data.length >= PAGE_SIZE
+        );
       } catch (err: unknown) {
-        if (!cancelled)
-          setError(err instanceof Error ? err.message : String(err));
+        setError(err instanceof Error ? err.message : String(err));
+        if (replace) {
+          setFiles([]);
+        }
+        setHasMore(false);
       } finally {
-        if (!cancelled) setLoading(false);
+        isFetchingRef.current = false;
+        setLoading(false);
+        setLoadingMore(false);
       }
+    },
+    [isAuthenticated, token]
+  );
+
+  useEffect(() => {
+    setFiles([]);
+    setMeta(null);
+    setCurrentPage(1);
+    setHasMore(true);
+    void loadFiles(1, true);
+  }, [loadFiles]);
+
+  useEffect(() => {
+    const node = loaderRef.current;
+    if (!node || loading || loadingMore || !hasMore) {
+      return;
     }
-    load();
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (!entry?.isIntersecting) return;
+        void loadFiles(currentPage + 1, false);
+      },
+      {
+        root: null,
+        rootMargin: "240px 0px",
+        threshold: 0,
+      }
+    );
+
+    observer.observe(node);
+
     return () => {
-      cancelled = true;
+      observer.disconnect();
     };
-  }, [isAuthenticated, token]);
+  }, [currentPage, hasMore, loadFiles, loading, loadingMore]);
 
   // Get unique folders for filter
-  const uniqueFolders = Array.from(new Set(files.map((f) => f.folder))).sort();
+  const uniqueFolders = useMemo(
+    () => Array.from(new Set(files.map((f) => f.folder))).sort(),
+    [files]
+  );
+
+  const imageCount = useMemo(
+    () => files.filter((f) => isImageFile(f.mime_type)).length,
+    [files]
+  );
 
   // Filter and search files
-  const filteredFiles = files.filter((file) => {
-    // Search filter
-    const matchesSearch =
-      searchQuery === "" ||
-      file.file_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      file.folder.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredFiles = useMemo(
+    () =>
+      files.filter((file) => {
+        const matchesSearch =
+          searchQuery === "" ||
+          file.file_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          file.folder.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          file.uuid.toLowerCase().includes(searchQuery.toLowerCase());
 
-    // Folder filter
-    const matchesFolder =
-      filterFolder === "all" || file.folder === filterFolder;
+        const matchesFolder =
+          filterFolder === "all" || file.folder === filterFolder;
 
-    // Type filter
-    const matchesType =
-      filterType === "all" ||
-      (filterType === "image" && isImageFile(file.mime_type)) ||
-      (filterType === "other" && !isImageFile(file.mime_type));
+        const matchesType =
+          filterType === "all" ||
+          (filterType === "image" && isImageFile(file.mime_type)) ||
+          (filterType === "other" && !isImageFile(file.mime_type));
 
-    return matchesSearch && matchesFolder && matchesType;
-  });
+        return matchesSearch && matchesFolder && matchesType;
+      }),
+    [files, filterFolder, filterType, searchQuery]
+  );
 
   // Handle detail view
   const handleViewDetail = (file: FileItem) => {
@@ -114,6 +191,14 @@ export default function FileList() {
         if (!token) throw new Error("Not authenticated");
         await deleteFile(file.uuid, token);
         setFiles((prev) => prev.filter((f) => f.uuid !== file.uuid));
+        setMeta((prev) =>
+          prev
+            ? {
+                ...prev,
+                total: Math.max(0, prev.total - 1),
+              }
+            : prev
+        );
       } catch (err) {
         alert(err instanceof Error ? err.message : "Failed to delete file");
       }
@@ -161,7 +246,9 @@ export default function FileList() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Total Files</p>
-                  <p className="text-2xl font-bold text-gray-900">{files.length}</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {meta?.total ?? files.length}
+                  </p>
                 </div>
               </div>
             </div>
@@ -173,7 +260,7 @@ export default function FileList() {
                 <div>
                   <p className="text-sm text-gray-600">Images</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {files.filter((f) => isImageFile(f.mime_type)).length}
+                    {imageCount}
                   </p>
                 </div>
               </div>
@@ -270,7 +357,7 @@ export default function FileList() {
                 <FaList className="w-4 h-4" />
               </button>
               <span className="ml-auto text-sm text-gray-600">
-                {filteredFiles.length} file(s)
+                {filteredFiles.length} file(s) dari {files.length} loaded
               </span>
             </div>
           </div>
@@ -302,23 +389,40 @@ export default function FileList() {
                 <p className="text-gray-600 text-lg">Tidak ada file ditemukan</p>
               </div>
             ) : (
-              <div
-                className={
-                  viewMode === "grid"
-                    ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-                    : "flex flex-col gap-4"
-                }
-              >
-                {filteredFiles.map((file) => (
-                  <FileCard
-                    key={file.uuid}
-                    file={file}
-                    viewMode={viewMode}
-                    onViewDetail={handleViewDetail}
-                    onDelete={handleDelete}
-                  />
-                ))}
-              </div>
+              <>
+                <div
+                  className={
+                    viewMode === "grid"
+                      ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+                      : "flex flex-col gap-4"
+                  }
+                >
+                  {filteredFiles.map((file) => (
+                    <FileCard
+                      key={file.uuid}
+                      file={file}
+                      viewMode={viewMode}
+                      onViewDetail={handleViewDetail}
+                      onDelete={handleDelete}
+                    />
+                  ))}
+                </div>
+
+                {(hasMore || loadingMore) && (
+                  <div ref={loaderRef} className="py-8 flex justify-center">
+                    {loadingMore ? (
+                      <div className="flex items-center gap-3 text-sm text-gray-600">
+                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-red-200 border-t-red-600" />
+                        Memuat file berikutnya...
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">
+                        Scroll ke bawah untuk memuat lebih banyak file
+                      </p>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
@@ -333,10 +437,6 @@ export default function FileList() {
             setDetailItem(null);
           }}
           file={detailItem}
-          onDelete={(file) => {
-            setDetailOpen(false);
-            handleDelete(file);
-          }}
         />
       )}
 
