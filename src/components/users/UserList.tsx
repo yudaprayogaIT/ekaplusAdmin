@@ -181,7 +181,7 @@ type IntegrationTokensApiResponse = {
 type UserRoleApiRow = Record<string, unknown>;
 
 const USER_EVENT = "ekaplus:users_update";
-const USER_ENDPOINTS = ["/api/resource/users", API_CONFIG.ENDPOINTS.USER];
+const USER_ENDPOINT = API_CONFIG.ENDPOINTS.USERS;
 const USER_ROLE_ENDPOINTS = [
   "/api/resource/user_roles",
   "/api/resource/user_role",
@@ -385,7 +385,6 @@ export default function UserList() {
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
-  const activeEndpointRef = useRef<string>(USER_ENDPOINTS[0]);
   const canViewUsers = hasPermission("user.read");
   const canCreateUsers = hasPermission("user.create");
   const canEditUsers = hasPermission("user.update");
@@ -417,31 +416,17 @@ export default function UserList() {
       return;
     }
 
-    let lastError = "Gagal memuat data users.";
-
-    for (const endpoint of USER_ENDPOINTS) {
-      try {
-        const rows = await fetchAllQueryRows<UsersApiRow>({
-          endpoint,
-          spec: {
-            fields: ["*"],
-          },
-          token,
-          requestInit: {
-            headers: getAuthHeaders(token),
-          },
-        });
-        activeEndpointRef.current = endpoint;
-        setUsers(rows.map(mapUser));
-        return;
-      } catch (error) {
-        lastError =
-          error instanceof Error ? error.message : "Gagal memuat data users.";
-        continue;
-      }
-    }
-
-    throw new Error(lastError);
+    const rows = await fetchAllQueryRows<UsersApiRow>({
+      endpoint: USER_ENDPOINT,
+      spec: {
+        fields: ["*"],
+      },
+      token,
+      requestInit: {
+        headers: getAuthHeaders(token),
+      },
+    });
+    setUsers(rows.map(mapUser));
   }, [token]);
 
   const loadIntegrationTokens = useCallback(async () => {
@@ -895,7 +880,7 @@ export default function UserList() {
       }
 
       const requestUrl = modalInitial
-        ? `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.USER_UPDATE}/${modalInitial.id}`
+        ? `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.USERS}/${modalInitial.id}`
         : `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.USER_CREATE}`;
       const res = await apiFetch(
         requestUrl,
@@ -980,9 +965,8 @@ export default function UserList() {
     setConfirmDesc(`Yakin ingin menghapus user "${user.full_name}"?`);
     actionRef.current = async () => {
       if (!token) return;
-      const endpoint = activeEndpointRef.current;
       const res = await apiFetch(
-        getResourceUrl(endpoint, user.id),
+        getResourceUrl(API_CONFIG.ENDPOINTS.USERS, user.id),
         {
           method: "DELETE",
           headers: getAuthHeaders(token),

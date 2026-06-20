@@ -25,6 +25,7 @@ export const API_CONFIG = {
     WISHLIST: "/api/resource/wishlist",
     BANNER: "/api/resource/ekatalog_banner",
     USER: "/api/resource/user",
+    USERS: "/api/resource/users",
     USER_CREATE: "/api/user/create",
     USER_UPDATE: "/api/user",
     USER_ME: "/api/user/me",

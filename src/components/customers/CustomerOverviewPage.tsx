@@ -413,7 +413,6 @@ export default function CustomerOverviewPage() {
         if (tab === "bc") {
           const baseBcSpec = {
             page,
-            ...(debouncedSearch ? { search: debouncedSearch } : {}),
             order_by: [[orderByField, sortDirection]],
           };
 
