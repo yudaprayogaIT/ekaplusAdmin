@@ -5,7 +5,6 @@ import React, {
   useMemo,
   useEffect,
   useCallback,
-  useRef,
 } from "react";
 import { BCCard } from "./BCCard";
 import { BCDetailModal } from "./BCDetailModal";
@@ -28,10 +27,10 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 
 type SortField = "name" | "branch_city" | "created_at" | "updated_at";
 type SortDirection = "asc" | "desc";
-const DEFAULT_PAGE_SIZE = 20;
 
 interface BranchCustomerApiResponse {
   id: number;
@@ -100,49 +99,34 @@ function toNumber(value: unknown): number | undefined {
   return undefined;
 }
 
+function isBranchCustomerCodeSearch(query: string): boolean {
+  const normalized = query.trim().toUpperCase();
+  if (!normalized || normalized.includes(" ")) return false;
+  return /^[A-Z]{2,}\d{2,}$/.test(normalized);
+}
+
 export default function BCList() {
   const { token, isAuthenticated } = useAuth();
 
   const [bcs, setBcs] = useState<BranchCustomer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [selectedGP, setSelectedGP] = useState<GroupParent | null>(null);
   const [selectedGC, setSelectedGC] = useState<GroupCustomer | null>(null);
   const [selectedBC, setSelectedBC] = useState<BranchCustomer | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
 
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const loadMoreRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedSearchQuery(searchQuery.trim());
-    }, 300);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [searchQuery]);
-
-  const loadData = useCallback(async (page: number, replace = false) => {
-    if (replace) {
-      setLoading(true);
-      setError(null);
-    } else {
-      setLoadingMore(true);
-    }
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
 
     try {
       if (!isAuthenticated || !token) {
         setBcs([]);
-        setHasMore(false);
         return;
       }
 
@@ -153,28 +137,51 @@ export default function BCList() {
             ? "name"
             : sortField;
 
-      const bcSpec = {
+      const trimmedSearchQuery = searchQuery.trim();
+      const isBcidSearch = isBranchCustomerCodeSearch(trimmedSearchQuery);
+      const bcSpec: {
+        fields: string[];
+        order_by: [string, string][];
+        search?: string;
+        filters?: unknown[];
+      } = {
         fields: ["*", "created_by.full_name", "updated_by.full_name"],
-        page,
-        ...(debouncedSearchQuery ? { search: debouncedSearchQuery } : {}),
         order_by: [[orderByField, sortDirection]],
       };
 
-      const bcRes = await apiFetch(
-        getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, bcSpec),
-        { method: "GET", cache: "no-store" },
-        token,
-      );
+      if (trimmedSearchQuery) {
+        if (isBcidSearch) {
+          bcSpec.search = trimmedSearchQuery;
+        } else {
+          const gcSearchRows = await fetchAllQueryRows<GroupCustomerLookupRow>({
+            endpoint: API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
+            spec: {
+              fields: ["id", "name", "gc_name", "gpid"],
+              search: trimmedSearchQuery,
+            },
+            token,
+            errorMessage: "Failed to fetch group customer",
+          });
 
-      if (!bcRes.ok) {
-        throw new Error(`Failed to fetch branch customer (${bcRes.status})`);
+          const matchingGcIds = gcSearchRows
+            .map((row) => toNumber(row.id))
+            .filter((id): id is number => typeof id === "number");
+
+          if (matchingGcIds.length === 0) {
+            setBcs([]);
+            return;
+          }
+
+          bcSpec.filters = [["gcid", "in", matchingGcIds]];
+        }
       }
 
-      const bcJson = await bcRes.json();
-      const bcRows: BranchCustomerApiResponse[] = Array.isArray(bcJson?.data)
-        ? bcJson.data
-        : [];
-      const perPage = Number(bcJson?.meta?.per_page || DEFAULT_PAGE_SIZE);
+      const bcRows = await fetchAllQueryRows<BranchCustomerApiResponse>({
+        endpoint: API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2,
+        spec: bcSpec,
+        token,
+        errorMessage: "Failed to fetch branch customer",
+      });
 
       const gcIds = Array.from(
         new Set(
@@ -374,67 +381,22 @@ export default function BCList() {
         };
       });
 
-      setBcs((current) =>
-        replace
-          ? mapped
-          : [
-              ...current,
-              ...mapped.filter(
-                (bc) => !current.some((existing) => existing.id === bc.id),
-              ),
-            ],
-      );
-      setCurrentPage(page);
-      setHasMore(bcRows.length >= perPage);
+      setBcs(mapped);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-      if (replace) {
-        setBcs([]);
-      }
-      setHasMore(false);
+      setBcs([]);
     } finally {
-      if (replace) {
-        setLoading(false);
-      } else {
-        setLoadingMore(false);
-      }
+      setLoading(false);
     }
-  }, [debouncedSearchQuery, isAuthenticated, sortDirection, sortField, token]);
+  }, [isAuthenticated, searchQuery, sortDirection, sortField, token]);
 
   useEffect(() => {
-    setBcs([]);
-    setCurrentPage(1);
-    setHasMore(true);
-    void loadData(1, true);
+    void loadData();
   }, [loadData]);
 
   const filteredAndSortedBCs = useMemo(() => {
     return [...bcs];
   }, [bcs]);
-
-  useEffect(() => {
-    const target = loadMoreRef.current;
-    if (!target || loading || loadingMore || !hasMore) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const [entry] = entries;
-        if (!entry?.isIntersecting) return;
-        void loadData(currentPage + 1, false);
-      },
-      {
-        root: null,
-        rootMargin: "240px 0px",
-        threshold: 0,
-      },
-    );
-
-    observer.observe(target);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [currentPage, hasMore, loadData, loading, loadingMore]);
 
   const stats = useMemo(() => {
     return {
@@ -519,7 +481,7 @@ export default function BCList() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari BC/GC/GP/branch..."
+              placeholder="Cari nama PT atau BCID..."
               className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all text-sm"
             />
           </div>
@@ -637,26 +599,11 @@ export default function BCList() {
 
           <div className="flex flex-col gap-3 pt-2 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
             <p>
-              Showing {filteredAndSortedBCs.length} loaded branch customers
-              {debouncedSearchQuery ? " matching current search" : ""}
+              Showing {filteredAndSortedBCs.length} branch customers
+              {searchQuery.trim() ? " matching current search" : ""}
             </p>
-            <p>
-              {hasMore
-                ? "Scroll ke bawah untuk memuat lebih banyak"
-                : "Semua data yang tersedia sudah dimuat"}
-            </p>
+            <p>Semua data yang tersedia sudah dimuat</p>
           </div>
-
-          {hasMore ? (
-            <div
-              ref={loadMoreRef}
-              className="flex h-16 items-center justify-center text-sm text-slate-400"
-            >
-              {loadingMore
-                ? "Memuat data berikutnya..."
-                : "Siap memuat data berikutnya..."}
-            </div>
-          ) : null}
         </>
       )}
 

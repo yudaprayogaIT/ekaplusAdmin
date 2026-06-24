@@ -197,6 +197,12 @@ function extractLinkId(value: unknown): number | undefined {
   return undefined;
 }
 
+function isBranchCustomerSearchQuery(query: string): boolean {
+  const normalized = query.trim();
+  if (!normalized) return false;
+  return /\d/.test(normalized);
+}
+
 function getStatus(value: unknown): CustomerStatus {
   const normalized = String(value || "")
     .trim()
@@ -411,15 +417,68 @@ export default function CustomerOverviewPage() {
         const orderByField = getOrderField(tab, sortField);
 
         if (tab === "bc") {
+          const trimmedSearch = debouncedSearch.trim();
           const baseBcSpec = {
             page,
+            ...(trimmedSearch && isBranchCustomerSearchQuery(trimmedSearch)
+              ? { search: trimmedSearch }
+              : {}),
             order_by: [[orderByField, sortDirection]],
           };
+
+          let bcFilters: unknown[] | undefined;
+          if (trimmedSearch && !isBranchCustomerSearchQuery(trimmedSearch)) {
+            const gcSearchRes = await apiFetch(
+              getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, {
+                fields: ["id"],
+                search: trimmedSearch,
+              }),
+              { method: "GET", cache: "no-store" },
+              token,
+            );
+
+            if (!gcSearchRes.ok) {
+              throw new Error(
+                `Failed to fetch group customer (${gcSearchRes.status})`,
+              );
+            }
+
+            const gcSearchJson = await gcSearchRes.json();
+            const gcSearchRows: GroupCustomerLookupRow[] = Array.isArray(
+              gcSearchJson?.data,
+            )
+              ? gcSearchJson.data
+              : [];
+
+            const matchingGcIds = gcSearchRows
+              .map((row) => toNumber(row.id))
+              .filter((id): id is number => typeof id === "number");
+
+            if (matchingGcIds.length === 0) {
+              setTabData((current) => ({
+                ...current,
+                bc: {
+                  cards: [],
+                  currentPage: 1,
+                  hasMore: false,
+                },
+              }));
+              setTabStats((current) => ({
+                ...current,
+                bc: 0,
+              }));
+              setError(null);
+              return;
+            }
+
+            bcFilters = [["gcid", "in", matchingGcIds]];
+          }
 
           let bcRes = await apiFetch(
             getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, {
               fields: ["id", "name", "branch", "gcid", "status", "updated_at"],
               ...baseBcSpec,
+              ...(bcFilters ? { filters: bcFilters } : {}),
             }),
             { method: "GET", cache: "no-store" },
             token,
@@ -437,6 +496,7 @@ export default function CustomerOverviewPage() {
                   "updated_at",
                 ],
                 ...baseBcSpec,
+                ...(bcFilters ? { filters: bcFilters } : {}),
               }),
               { method: "GET", cache: "no-store" },
               token,
