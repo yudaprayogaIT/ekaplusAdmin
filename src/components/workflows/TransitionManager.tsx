@@ -1,7 +1,9 @@
 // src/components/workflows/TransitionManager.tsx
 "use client";
+import { useEffect, useRef, useState } from "react";
 import {
   FaArrowRight,
+  FaChevronDown,
   FaPlus,
   FaTrash,
   FaUser,
@@ -27,7 +29,6 @@ type Props = {
   roles: Role[];
   transitions: TransitionInput[];
   onChange: (transitions: TransitionInput[]) => void;
-  onStateDocstatusChange: (stateId: number, docstatus: number) => void;
 };
 
 export default function TransitionManager({
@@ -35,20 +36,26 @@ export default function TransitionManager({
   roles,
   transitions,
   onChange,
-  onStateDocstatusChange,
 }: Props) {
-  const getDocstatusLabel = (docstatus: number) => {
-    switch (docstatus) {
-      case 0:
-        return "Draft / Editable";
-      case 1:
-        return "Submitted / Locked";
-      case 2:
-        return "Cancelled / Closed";
-      default:
-        return "Custom";
+  const [openRolePickerIndex, setOpenRolePickerIndex] = useState<number | null>(
+    null,
+  );
+  const rolePickerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (
+        openRolePickerIndex !== null &&
+        rolePickerRef.current &&
+        !rolePickerRef.current.contains(event.target as Node)
+      ) {
+        setOpenRolePickerIndex(null);
+      }
     }
-  };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [openRolePickerIndex]);
 
   // Add new transition
   const addTransition = () => {
@@ -99,17 +106,6 @@ export default function TransitionManager({
     });
   };
 
-  // Get state name by ID
-  const getStateName = (stateId: number): string => {
-    const state = selectedStates.find((s) => s.state_id === stateId);
-    return state ? state.state_name : `State #${stateId}`;
-  };
-
-  const getStateDocstatus = (stateId: number): number => {
-    const state = selectedStates.find((s) => s.state_id === stateId);
-    return state?.docstatus ?? 0;
-  };
-
   // Validate transition
   const validateTransition = (transition: TransitionInput): string[] => {
     const errors: string[] = [];
@@ -145,53 +141,40 @@ export default function TransitionManager({
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-bold text-gray-900">Transitions</h3>
+          <h3 className="text-base font-bold text-gray-900">Transitions</h3>
           <p className="text-sm text-gray-600">
             Definisikan transisi antar state dan role yang diizinkan
           </p>
         </div>
-        {/* <button
-          type="button"
-          onClick={addTransition}
-          disabled={selectedStates.length < 2}
-          className="px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-bold hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <FaPlus className="w-3 h-3" />
-          Add Transition
-        </button> */}
       </div>
 
-      {/* Info when no states */}
       {selectedStates.length < 2 && (
-        <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
+        <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-4">
           <p className="text-sm text-yellow-800 font-medium">
             Pilih minimal 2 state terlebih dahulu untuk membuat transitions
           </p>
         </div>
       )}
 
-      {/* Transitions counter */}
       {transitions.length > 0 && (
         <div className="flex items-center gap-2">
-          <span className="px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg text-sm font-bold">
+          <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700">
             {transitions.length} transition
           </span>
-          {transitions.length >= 1 && (
-            <span className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-sm font-bold">
+          {transitions.every((transition) => validateTransition(transition).length === 0) && (
+            <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
               Valid
             </span>
           )}
         </div>
       )}
 
-      {/* No transitions */}
       {transitions.length === 0 && selectedStates.length >= 2 && (
-        <div className="bg-gray-50 border-2 border-gray-200 rounded-2xl p-6 text-center">
-          <FaArrowRight className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-          <h4 className="text-lg font-bold text-gray-900 mb-2">
+        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6 text-center">
+          <FaArrowRight className="mx-auto mb-3 h-10 w-10 text-gray-400" />
+          <h4 className="mb-2 text-base font-bold text-gray-900">
             Belum Ada Transition
           </h4>
           <p className="text-sm text-gray-600 mb-4">
@@ -200,78 +183,59 @@ export default function TransitionManager({
           <button
             type="button"
             onClick={addTransition}
-            className="px-6 py-3 bg-orange-600 text-white rounded-xl font-bold hover:bg-orange-700 transition-all inline-flex items-center gap-2"
+            className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-orange-700"
           >
-            <FaPlus className="w-4 h-4" />
+            <FaPlus className="h-4 w-4" />
             Add First Transition
           </button>
         </div>
       )}
 
-      {/* Transitions list */}
       {transitions.length > 0 && (
-        <div className="space-y-4">
+        <div className="overflow-hidden rounded-2xl border border-red-100 bg-white">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-red-100">
+              <thead className="bg-gray-50/80">
+                <tr className="text-left">
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                    No
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                    Current State
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                    Action Name
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                    Next State
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                    Approval Mode
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                    Allowed Roles
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-red-100 bg-white">
           {transitions.map((transition, index) => {
             const errors = validateTransition(transition);
             const hasErrors = errors.length > 0;
 
             return (
-              <div
-                key={index}
-                className={`border-2 rounded-2xl overflow-hidden ${
-                  hasErrors
-                    ? "border-red-300 bg-red-50"
-                    : "border-gray-200 bg-white"
-                }`}
-              >
-                {/* Header */}
-                <div className="bg-gradient-to-r from-orange-50 to-orange-100 border-b-2 border-orange-200 px-4 py-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <FaArrowRight className="w-4 h-4 text-orange-600" />
-                    <span className="font-bold text-orange-900">
-                      Transition #{index + 1}
-                    </span>
-                    {hasErrors && (
-                      <span className="px-2 py-1 bg-red-100 text-red-700 rounded-lg text-xs font-bold flex items-center gap-1">
-                        <FaExclamationTriangle className="w-3 h-3" />
-                        {errors.length} error
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeTransition(index)}
-                    className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-all"
-                  >
-                    <FaTrash className="w-3 h-3" />
-                  </button>
-                </div>
-
-                {/* Body */}
-                <div className="p-4 space-y-4">
-                  {/* Errors */}
-                  {hasErrors && (
-                    <div className="bg-red-100 border-2 border-red-200 rounded-xl p-3">
-                      <ul className="space-y-1">
-                        {errors.map((error, idx) => (
-                          <li
-                            key={idx}
-                            className="text-sm text-red-800 font-medium flex items-center gap-2"
-                          >
-                            <FaExclamationTriangle className="w-3 h-3 flex-shrink-0" />
-                            {error}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* From/To States */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block font-medium text-gray-900 mb-2">
-                        From State *
-                      </label>
+              <>
+                <tr
+                  key={`row-${index}`}
+                  className={hasErrors ? "bg-red-50/40" : ""}
+                >
+                  <td className="px-4 py-3 align-top text-sm text-gray-500">
+                    {index + 1}
+                  </td>
+                  <td className="px-4 py-3 align-top">
+                    <div className="space-y-1">
                       <select
                         value={transition.from_state_id}
                         onChange={(e) =>
@@ -279,20 +243,31 @@ export default function TransitionManager({
                             from_state_id: parseInt(e.target.value),
                           })
                         }
-                        className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:outline-none"
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
                       >
                         {selectedStates.map((state) => (
                           <option key={state.state_id} value={state.state_id}>
-                            {state.state_name} (Docstatus: {state.docstatus})
+                            {state.state_name}
                           </option>
                         ))}
                       </select>
                     </div>
-
-                    <div>
-                      <label className="block font-medium text-gray-900 mb-2">
-                        To State *
-                      </label>
+                  </td>
+                  <td className="px-4 py-3 align-top">
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        value={transition.action}
+                        onChange={(e) =>
+                          updateTransition(index, { action: e.target.value })
+                        }
+                        placeholder="submit / approve / reject"
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+                      />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 align-top">
+                    <div className="space-y-1">
                       <select
                         value={transition.to_state_id}
                         onChange={(e) =>
@@ -300,233 +275,221 @@ export default function TransitionManager({
                             to_state_id: parseInt(e.target.value),
                           })
                         }
-                        className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:outline-none"
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
                       >
                         {selectedStates.map((state) => (
                           <option key={state.state_id} value={state.state_id}>
-                            {state.state_name} (Docstatus: {state.docstatus})
+                            {state.state_name}
                           </option>
                         ))}
                       </select>
+                      <code className="text-[11px] text-gray-500">
+                        {selectedStates.find(
+                          (state) => state.state_id === transition.to_state_id,
+                        )?.state_name || "-"}
+                      </code>
                     </div>
-                  </div>
-
-                  {/* Flow preview */}
-                  <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                    <div className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm font-bold">
-                      {getStateName(transition.from_state_id)}
-                    </div>
-                    <FaArrowRight className="w-4 h-4 text-gray-400" />
-                    <div className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm font-bold">
-                      {getStateName(transition.to_state_id)}
-                    </div>
-                  </div>
-
-                  {/* Result docstatus */}
-                  <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-xl space-y-3">
-                    <div>
-                      <label className="block font-medium text-blue-900 mb-1">
-                        Docstatus Hasil Transition
-                      </label>
-                      <p className="text-xs text-blue-700">
-                        Nilai ini akan diterapkan ke state tujuan dan menentukan apakah dokumen bisa diedit.
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-[220px,1fr] gap-3">
+                  </td>
+                  <td className="px-4 py-3 align-top">
+                    <div className="space-y-2">
                       <select
-                        value={String(getStateDocstatus(transition.to_state_id))}
-                        onChange={(e) =>
-                          onStateDocstatusChange(
-                            transition.to_state_id,
-                            Number(e.target.value)
-                          )
-                        }
-                        className="w-full px-4 py-2 border-2 border-blue-200 rounded-lg font-mono text-sm focus:border-blue-500 focus:outline-none"
+                        value={transition.mode}
+                        onChange={(e) => {
+                          const nextMode = e.target.value as
+                            | "single"
+                            | "parallel"
+                            | "sequence";
+                          updateTransition(index, {
+                            mode: nextMode,
+                            min_required:
+                              nextMode === "single"
+                                ? 1
+                                : nextMode === "sequence"
+                                  ? transition.allowed_role_ids.length || 1
+                                  : Math.max(transition.min_required, 1),
+                          });
+                        }}
+                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 focus:border-orange-500 focus:outline-none"
                       >
-                        <option value="0">0 - Draft / Editable</option>
-                        <option value="1">1 - Submitted / Locked</option>
-                        <option value="2">2 - Cancelled / Closed</option>
+                        <option value="single">Single</option>
+                        <option value="parallel">Parallel</option>
+                        <option value="sequence">Sequence</option>
                       </select>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-bold">
-                          {getDocstatusLabel(getStateDocstatus(transition.to_state_id))}
-                        </span>
-                        <span
-                          className={`px-3 py-2 rounded-lg text-sm font-bold ${
-                            getStateDocstatus(transition.to_state_id) === 0
-                              ? "bg-green-100 text-green-700"
-                              : "bg-gray-100 text-gray-700"
-                          }`}
+                      <span
+                        className={`inline-flex w-fit items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium ${
+                          transition.mode === "single"
+                            ? "bg-blue-50 text-blue-700"
+                            : transition.mode === "parallel"
+                              ? "bg-orange-50 text-orange-700"
+                              : "bg-purple-50 text-purple-700"
+                        }`}
+                      >
+                        {transition.mode === "single" ? (
+                          <FaUser className="h-3 w-3" />
+                        ) : transition.mode === "parallel" ? (
+                          <FaUsers className="h-3 w-3" />
+                        ) : (
+                          <FaListOl className="h-3 w-3" />
+                        )}
+                        {transition.mode}
+                      </span>
+                      {(transition.mode === "parallel" ||
+                        transition.mode === "sequence") && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-medium text-gray-500">
+                            Min Required
+                          </span>
+                          <input
+                            type="number"
+                            min="1"
+                            max={transition.allowed_role_ids.length || 1}
+                            value={transition.min_required}
+                            onChange={(e) =>
+                              updateTransition(index, {
+                                min_required: parseInt(e.target.value) || 1,
+                              })
+                            }
+                            className="w-20 rounded-md border border-gray-200 px-2 py-1 text-xs focus:border-orange-500 focus:outline-none"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 align-top">
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {transition.allowed_role_ids.length > 0 ? (
+                          <>
+                            {transition.allowed_role_ids
+                              .slice(0, 2)
+                              .map((roleId) => {
+                                const role = roles.find(
+                                  (item) => item.ID === roleId,
+                                );
+                                return (
+                                  <span
+                                    key={`${index}-${roleId}`}
+                                    className="inline-flex rounded-md bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700"
+                                  >
+                                    {role?.Name || `Role #${roleId}`}
+                                  </span>
+                                );
+                              })}
+                            {transition.allowed_role_ids.length > 2 ? (
+                              <span className="inline-flex rounded-md bg-gray-100 px-2 py-1 text-[11px] font-medium text-gray-600">
+                                +{transition.allowed_role_ids.length - 2} lagi
+                              </span>
+                            ) : null}
+                          </>
+                        ) : (
+                          <span className="text-xs text-gray-400">Belum ada role</span>
+                        )}
+                      </div>
+
+                      <div
+                        className="relative"
+                        ref={openRolePickerIndex === index ? rolePickerRef : null}
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOpenRolePickerIndex((current) =>
+                              current === index ? null : index,
+                            )
+                          }
+                          className="flex w-full items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 transition-all hover:bg-gray-50"
                         >
-                          {getStateDocstatus(transition.to_state_id) === 0
-                            ? "Editable: Ya"
-                            : "Editable: Tidak"}
-                        </span>
+                          <span>
+                            {transition.allowed_role_ids.length > 0
+                              ? `${transition.allowed_role_ids.length} role dipilih`
+                              : "Pilih role"}
+                          </span>
+                          <FaChevronDown
+                            className={`h-3 w-3 text-gray-400 transition-transform ${
+                              openRolePickerIndex === index ? "rotate-180" : ""
+                            }`}
+                          />
+                        </button>
+
+                        {openRolePickerIndex === index ? (
+                          <div className="absolute left-0 top-full z-20 mt-2 w-72 rounded-xl border border-gray-200 bg-white p-2 shadow-xl">
+                            <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
+                              {roles.map((role) => {
+                                const isSelected =
+                                  transition.allowed_role_ids.includes(role.ID);
+
+                                return (
+                                  <label
+                                    key={role.ID}
+                                    className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs transition-all ${
+                                      isSelected
+                                        ? "bg-blue-50 text-blue-700"
+                                        : "hover:bg-gray-50 text-gray-700"
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => toggleRole(index, role.ID)}
+                                      className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <span className="flex-1">{role.Name}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
-                  </div>
-
-                  {/* Action */}
-                  <div>
-                    <label className="block font-medium text-gray-900 mb-2">
-                      Action Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={transition.action}
-                      onChange={(e) =>
-                        updateTransition(index, { action: e.target.value })
-                      }
-                      placeholder="e.g., Submit, Approve, Reject"
-                      className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:outline-none"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Nama action yang akan tampil sebagai tombol
-                    </p>
-                  </div>
-
-                  {/* Mode */}
-                  <div>
-                    <label className="block font-medium text-gray-900 mb-2">
-                      Approval Mode *
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          updateTransition(index, {
-                            mode: "single",
-                            min_required: 1,
-                          })
-                        }
-                        className={`px-4 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${
-                          transition.mode === "single"
-                            ? "bg-blue-600 text-white shadow-lg"
-                            : "bg-blue-100 text-blue-700 hover:bg-blue-200"
-                        }`}
-                      >
-                        <FaUser className="w-4 h-4" />
-                        Single
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          updateTransition(index, {
-                            mode: "parallel",
-                            min_required: 1,
-                          })
-                        }
-                        className={`px-4 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${
-                          transition.mode === "parallel"
-                            ? "bg-orange-600 text-white shadow-lg"
-                            : "bg-orange-100 text-orange-700 hover:bg-orange-200"
-                        }`}
-                      >
-                        <FaUsers className="w-4 h-4" />
-                        Parallel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          updateTransition(index, {
-                            mode: "sequence",
-                            min_required: transition.allowed_role_ids.length || 1,
-                          })
-                        }
-                        className={`px-4 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${
-                          transition.mode === "sequence"
-                            ? "bg-purple-600 text-white shadow-lg"
-                            : "bg-purple-100 text-purple-700 hover:bg-purple-200"
-                        }`}
-                      >
-                        <FaListOl className="w-4 h-4" />
-                        Sequence
-                      </button>
-                    </div>
-                    <div className="mt-2 p-3 bg-blue-50 rounded-lg">
-                      <p className="text-xs text-blue-800">
-                        {transition.mode === "single" &&
-                          "Single: 1 approval dari salah satu role yang diizinkan"}
-                        {transition.mode === "parallel" &&
-                          "Parallel: Multiple approvals bersamaan, butuh min_required approval"}
-                        {transition.mode === "sequence" &&
-                          "Sequence: Approval berurutan dari semua role yang diizinkan"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Allowed Roles */}
-                  <div>
-                    <label className="block font-medium text-gray-900 mb-2">
-                      Allowed Roles * ({transition.allowed_role_ids.length} dipilih)
-                    </label>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                      {roles.map((role) => {
-                        const isSelected = transition.allowed_role_ids.includes(
-                          role.ID
-                        );
-
-                        return (
-                          <button
-                            key={role.ID}
-                            type="button"
-                            onClick={() => toggleRole(index, role.ID)}
-                            className={`px-3 py-2 rounded-lg font-medium transition-all text-left ${
-                              isSelected
-                                ? "bg-blue-600 text-white shadow"
-                                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                            }`}
-                          >
-                            {role.Name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Min Required (only for parallel/sequence) */}
-                  {(transition.mode === "parallel" ||
-                    transition.mode === "sequence") && (
-                    <div>
-                      <label className="block font-medium text-gray-900 mb-2">
-                        Minimum Required Approvals *
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max={transition.allowed_role_ids.length || 1}
-                        value={transition.min_required}
-                        onChange={(e) =>
-                          updateTransition(index, {
-                            min_required: parseInt(e.target.value) || 1,
-                          })
-                        }
-                        className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:outline-none"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        {transition.mode === "parallel"
-                          ? "Jumlah minimum approval yang dibutuhkan dari role yang dipilih"
-                          : "Untuk sequence mode, biasanya sama dengan jumlah role"}
-                      </p>
-                    </div>
-                  )}
-                </div>
-                
-              </div>
-              
+                  </td>
+                  <td className="px-4 py-3 align-top">
+                    <button
+                      type="button"
+                      onClick={() => removeTransition(index)}
+                      className="rounded-md p-2 text-red-500 transition-all hover:bg-red-50"
+                    >
+                      <FaTrash className="h-3.5 w-3.5" />
+                    </button>
+                  </td>
+                </tr>
+                {hasErrors ? (
+                  <tr key={`error-${index}`} className="bg-red-50/60">
+                    <td />
+                    <td colSpan={6} className="px-4 pb-3 pt-0">
+                      <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+                        <ul className="space-y-1">
+                          {errors.map((error, idx) => (
+                            <li
+                              key={idx}
+                              className="flex items-center gap-2 text-xs font-medium text-red-700"
+                            >
+                              <FaExclamationTriangle className="h-3 w-3 flex-shrink-0" />
+                              {error}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </td>
+                  </tr>
+                ) : null}
+              </>
             );
           })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
       <button
-          type="button"
-          onClick={addTransition}
-          disabled={selectedStates.length < 2}
-          className="px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-bold hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <FaPlus className="w-3 h-3" />
-          Add Transition
-        </button>
+        type="button"
+        onClick={addTransition}
+        disabled={selectedStates.length < 2}
+        className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-red-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <FaPlus className="h-3 w-3" />
+        Add New Transition
+      </button>
     </div>
   );
 }

@@ -255,20 +255,6 @@ export default function AddWorkflowModal({
     return [...merged, ...appended];
   };
 
-  const handleStateDocstatusChange = (stateId: number, docstatus: number) => {
-    setSelectedStates((current) =>
-      current.map((state) =>
-        state.state_id === stateId
-          ? {
-              ...state,
-              docstatus,
-              editable: docstatus === 0,
-            }
-          : state
-      )
-    );
-  };
-
   // Reset form
   const resetForm = () => {
     setResource("");
@@ -518,17 +504,17 @@ export default function AddWorkflowModal({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-7xl max-h-[90vh] overflow-y-auto"
             onClick={(event) => event.stopPropagation()}
           >
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-100 sticky top-0 bg-white z-10">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-6 py-5">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center">
-                <FaSitemap className="w-6 h-6 text-white" />
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-purple-50 text-purple-600">
+                <FaSitemap className="h-5 w-5" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-gray-800">
+                <h2 className="text-2xl font-bold text-gray-900">
                   {isEdit ? "Edit Workflow" : "Tambah Workflow Baru"}
                 </h2>
                 <p className="text-sm text-gray-600">
@@ -542,24 +528,25 @@ export default function AddWorkflowModal({
                 resetForm();
               }}
               disabled={isBusy}
-              className="p-2 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
+              className="rounded-xl p-2 transition-colors hover:bg-gray-100 disabled:opacity-50"
             >
-              <FaTimes className="w-5 h-5 text-gray-500" />
+              <FaTimes className="h-5 w-5 text-gray-500" />
             </button>
           </div>
 
           <form onSubmit={handleSubmit}>
             {/* Content */}
-            <div className="p-6 space-y-6">
+            <div className="space-y-5 p-6">
               {/* Step indicator */}
-              <div className="flex items-center gap-2">
+              <div className="rounded-2xl border border-gray-100 bg-gray-50/70 p-3">
+                <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setCurrentStep(1)}
-                  className={`px-4 py-2 rounded-lg font-bold transition-all ${
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition-all ${
                     currentStep === 1
-                      ? "bg-purple-600 text-white"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      ? "bg-purple-600 text-white shadow-sm"
+                      : "bg-white text-gray-600 hover:bg-gray-100"
                   }`}
                 >
                   1. Basic Info
@@ -567,10 +554,10 @@ export default function AddWorkflowModal({
                 <button
                   type="button"
                   onClick={() => setCurrentStep(2)}
-                  className={`px-4 py-2 rounded-lg font-bold transition-all ${
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition-all ${
                     currentStep === 2
-                      ? "bg-purple-600 text-white"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      ? "bg-purple-600 text-white shadow-sm"
+                      : "bg-white text-gray-600 hover:bg-gray-100"
                   }`}
                 >
                   2. States
@@ -578,22 +565,34 @@ export default function AddWorkflowModal({
                 <button
                   type="button"
                   onClick={() => setCurrentStep(3)}
-                  className={`px-4 py-2 rounded-lg font-bold transition-all ${
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition-all ${
                     currentStep === 3
-                      ? "bg-purple-600 text-white"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      ? "bg-purple-600 text-white shadow-sm"
+                      : "bg-white text-gray-600 hover:bg-gray-100"
                   }`}
                 >
                   3. Transitions
                 </button>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-500">
+                  <span className="rounded-full bg-white px-2.5 py-1">
+                    Resource: {resource.trim() || "-"}
+                  </span>
+                  <span className="rounded-full bg-white px-2.5 py-1">
+                    States: {selectedStates.length}
+                  </span>
+                  <span className="rounded-full bg-white px-2.5 py-1">
+                    Transitions: {transitions.length}
+                  </span>
+                </div>
               </div>
 
               {/* Validation summary */}
               {validationErrors.length > 0 && !loadingDetail && (
-                <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <FaExclamationTriangle className="w-5 h-5 text-red-600" />
-                    <h4 className="font-bold text-red-900">
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+                  <div className="mb-2 flex items-center gap-2">
+                    <FaExclamationTriangle className="h-4 w-4 text-red-600" />
+                    <h4 className="text-sm font-bold text-red-900">
                       {validationErrors.length} Validation Error
                       {validationErrors.length > 1 ? "s" : ""}
                     </h4>
@@ -612,7 +611,7 @@ export default function AddWorkflowModal({
               )}
 
               {loadingDetail && (
-                <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 text-sm font-medium text-blue-800">
+                <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-800">
                   Memuat detail workflow terbaru untuk mode edit...
                 </div>
               )}
@@ -620,14 +619,14 @@ export default function AddWorkflowModal({
               {/* Step 1: Basic Info */}
               {currentStep === 1 && (
                 <div className="space-y-4">
-                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-200 rounded-2xl p-6">
-                    <h3 className="text-lg font-bold text-purple-900 mb-4">
+                  <div className="rounded-3xl border border-purple-100 bg-purple-50/70 p-5">
+                    <h3 className="mb-4 text-base font-bold text-purple-900">
                       Informasi Dasar Workflow
                     </h3>
 
                     {/* Resource */}
                     <div className="mb-4">
-                      <label className="block font-medium text-purple-900 mb-2">
+                      <label className="mb-2 block text-sm font-medium text-purple-900">
                         Resource Slug *
                       </label>
                       <input
@@ -637,7 +636,7 @@ export default function AddWorkflowModal({
                         placeholder="e.g., customer_register"
                         list="workflow-resource-options"
                         disabled={isEdit || isBusy}
-                        className="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none font-mono disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        className="w-full rounded-xl border border-purple-200 bg-white px-4 py-2.5 font-mono text-sm focus:border-purple-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100"
                       />
                       <datalist id="workflow-resource-options">
                         {sortedResources.map((item) => (
@@ -646,13 +645,13 @@ export default function AddWorkflowModal({
                           </option>
                         ))}
                       </datalist>
-                      <p className="text-xs text-purple-700 mt-1">
+                      <p className="mt-1 text-xs text-purple-700">
                         {isEdit
                           ? "Resource tidak bisa diubah saat edit"
                           : "Pilih slug dari master resources atau ketik manual jika belum tersedia"}
                       </p>
                       {!isEdit && resourceMatch && (
-                        <div className="mt-2 inline-flex flex-wrap items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs text-purple-800 shadow-sm">
+                        <div className="mt-2 inline-flex flex-wrap items-center gap-2 rounded-xl border border-purple-100 bg-white px-3 py-2 text-xs text-purple-800">
                           <span className="rounded-full bg-purple-100 px-2 py-1 font-semibold">
                             Module: {resourceMatch.Module || "-"}
                           </span>
@@ -663,7 +662,7 @@ export default function AddWorkflowModal({
 
                     {/* Name */}
                     <div className="mb-4">
-                      <label className="block font-medium text-purple-900 mb-2">
+                      <label className="mb-2 block text-sm font-medium text-purple-900">
                         Display Name *
                       </label>
                       <input
@@ -672,16 +671,16 @@ export default function AddWorkflowModal({
                         onChange={(e) => setName(e.target.value)}
                         placeholder="e.g., Product Approval, Order Processing"
                         disabled={isBusy}
-                        className="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        className="w-full rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm focus:border-purple-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100"
                       />
-                      <p className="text-xs text-purple-700 mt-1">
+                      <p className="mt-1 text-xs text-purple-700">
                         Nama yang akan ditampilkan di UI
                       </p>
                     </div>
 
                     {/* Description */}
                     <div className="mb-4">
-                      <label className="block font-medium text-purple-900 mb-2">
+                      <label className="mb-2 block text-sm font-medium text-purple-900">
                         Description
                       </label>
                       <textarea
@@ -690,17 +689,17 @@ export default function AddWorkflowModal({
                         placeholder="Deskripsi workflow (optional)"
                         rows={3}
                         disabled={isBusy}
-                        className="w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:border-purple-500 focus:outline-none resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        className="w-full resize-none rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm focus:border-purple-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100"
                       />
                     </div>
 
                     {/* Active toggle */}
-                    <div className="flex items-center justify-between p-4 bg-white rounded-xl">
+                    <div className="flex items-center justify-between rounded-2xl border border-purple-100 bg-white px-4 py-3">
                       <div>
-                        <label className="font-medium text-purple-900">
+                        <label className="text-sm font-medium text-purple-900">
                           Status Workflow
                         </label>
-                        <p className="text-xs text-purple-700 mt-1">
+                        <p className="mt-1 text-xs text-purple-700">
                           Workflow yang aktif akan langsung bisa digunakan
                         </p>
                       </div>
@@ -708,12 +707,12 @@ export default function AddWorkflowModal({
                         type="button"
                         disabled={isBusy}
                         onClick={() => setIsActive(!isActive)}
-                        className={`relative w-16 h-8 rounded-full transition-all ${
+                        className={`relative h-8 w-16 rounded-full transition-all ${
                           isActive ? "bg-green-500" : "bg-gray-300"
                         } disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
                         <div
-                          className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform ${
+                          className={`absolute left-1 top-1 h-6 w-6 rounded-full bg-white transition-transform ${
                             isActive ? "translate-x-8" : ""
                           }`}
                         />
@@ -727,7 +726,7 @@ export default function AddWorkflowModal({
                       type="button"
                       onClick={() => setCurrentStep(2)}
                       disabled={isBusy}
-                      className="px-6 py-3 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="rounded-xl bg-purple-600 px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Next: Select States
                     </button>
@@ -751,7 +750,7 @@ export default function AddWorkflowModal({
                       type="button"
                       onClick={() => setCurrentStep(1)}
                       disabled={isBusy}
-                      className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="rounded-xl bg-gray-100 px-5 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Back: Basic Info
                     </button>
@@ -759,7 +758,7 @@ export default function AddWorkflowModal({
                       type="button"
                       onClick={() => setCurrentStep(3)}
                       disabled={isBusy || selectedStates.length < 2}
-                      className="px-6 py-3 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="rounded-xl bg-purple-600 px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Next: Create Transitions
                     </button>
@@ -775,7 +774,6 @@ export default function AddWorkflowModal({
                     roles={roles}
                     transitions={transitions}
                     onChange={setTransitions}
-                    onStateDocstatusChange={handleStateDocstatusChange}
                   />
 
                   {/* Navigation */}
@@ -784,7 +782,7 @@ export default function AddWorkflowModal({
                       type="button"
                       onClick={() => setCurrentStep(2)}
                       disabled={isBusy}
-                      className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="rounded-xl bg-gray-100 px-5 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Back: States
                     </button>
@@ -794,7 +792,7 @@ export default function AddWorkflowModal({
             </div>
 
             {/* Footer */}
-            <div className="flex gap-3 p-6 border-t border-gray-100 bg-gray-50">
+            <div className="flex gap-3 border-t border-gray-100 bg-gray-50 px-6 py-5">
               <button
                 type="button"
                 onClick={() => {
@@ -802,18 +800,18 @@ export default function AddWorkflowModal({
                   resetForm();
                 }}
                 disabled={isBusy}
-                className="flex-1 px-6 py-3 rounded-xl bg-white border-2 border-gray-300 text-gray-700 font-bold hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={!canSubmit || isBusy}
-                className="flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 text-white font-bold shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 px-5 py-2.5 text-sm font-semibold text-white transition-all hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isBusy ? (
                   <>
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
                     <span>{loadingDetail ? "Memuat data..." : "Menyimpan..."}</span>
                   </>
                 ) : (

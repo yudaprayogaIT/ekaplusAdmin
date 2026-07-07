@@ -1,33 +1,25 @@
 // src/components/workflows/WorkflowList.tsx
 "use client";
 
-import {
-  useEffect,
-  useState,
-} from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import WorkflowCard from "./WorkflowCard";
 import AddWorkflowModal from "./AddWorkflowModal";
 import WorkflowDetailModal from "./WorkflowDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import ActionResultModal from "@/components/ui/ActionResultModal";
+import EntityPageHeader from "@/components/entity-management/EntityPageHeader";
+import EntityTable, {
+  EntityTableColumn,
+} from "@/components/entity-management/EntityTable";
 import {
-  FaPlus,
   FaSearch,
-  FaList,
-  FaTh,
   FaSitemap,
   FaCheckCircle,
   FaTimesCircle,
   FaInfoCircle,
 } from "react-icons/fa";
-import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  getAuthHeaders,
-  API_CONFIG,
-  apiFetch,
-} from "@/config/api";
+import { getAuthHeaders, API_CONFIG, apiFetch } from "@/config/api";
 
 // Types
 export type GlobalState = {
@@ -164,17 +156,20 @@ export default function WorkflowList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalInitial, setModalInitial] = useState<WorkflowWithDetails | null>(null);
+  const [modalInitial, setModalInitial] =
+    useState<WorkflowWithDetails | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [detailWorkflow, setDetailWorkflow] = useState<WorkflowWithDetails | null>(null);
+  const [detailWorkflow, setDetailWorkflow] =
+    useState<WorkflowWithDetails | null>(null);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
-  const [confirmAction, setConfirmAction] = useState<(() => Promise<void>) | null>(null);
+  const [confirmAction, setConfirmAction] = useState<
+    (() => Promise<void>) | null
+  >(null);
   const [resultModal, setResultModal] = useState<{
     isOpen: boolean;
     type: "success" | "error";
@@ -225,29 +220,38 @@ export default function WorkflowList() {
         const headers = getAuthHeaders(token);
 
         // Fetch all data in parallel
-        const [workflowsRes, rolesRes, statesRes, resourcesRes] = await Promise.all([
-          apiFetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW}`, {
-            method: "GET",
-            cache: "no-store",
-            headers,
-          }),
-          apiFetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_ROLE}`, {
-            method: "GET",
-            cache: "no-store",
-            headers,
-          }),
-          apiFetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW_STATE}`, {
-            method: "GET",
-            cache: "no-store",
-            headers,
-          }),
-          apiFetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_RESOURCE}`, {
-            method: "GET",
-            cache: "no-store",
-            headers,
-          }),
-        ]);
-
+        const [workflowsRes, rolesRes, statesRes, resourcesRes] =
+          await Promise.all([
+            apiFetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW}`, {
+              method: "GET",
+              cache: "no-store",
+              headers,
+            }),
+            apiFetch(
+              `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_ROLE}`,
+              {
+                method: "GET",
+                cache: "no-store",
+                headers,
+              },
+            ),
+            apiFetch(
+              `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW_STATE}`,
+              {
+                method: "GET",
+                cache: "no-store",
+                headers,
+              },
+            ),
+            apiFetch(
+              `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_RESOURCE}`,
+              {
+                method: "GET",
+                cache: "no-store",
+                headers,
+              },
+            ),
+          ]);
 
         if (workflowsRes.ok && rolesRes.ok && statesRes.ok && resourcesRes.ok) {
           const workflowsData = await workflowsRes.json();
@@ -312,11 +316,14 @@ export default function WorkflowList() {
 
       try {
         const headers = getAuthHeaders(token);
-        const res = await apiFetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW}`, {
-          method: "GET",
-          cache: "no-store",
-          headers,
-        });
+        const res = await apiFetch(
+          `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW}`,
+          {
+            method: "GET",
+            cache: "no-store",
+            headers,
+          },
+        );
 
         if (res.ok) {
           const response = await res.json();
@@ -353,19 +360,23 @@ export default function WorkflowList() {
   }
 
   function handleWorkflowSaved(payload: {
-    mode: "create" | "update";
-    name: string;
-    resource: string;
-  }) {
+      mode: "create" | "update";
+      name: string;
+      resource: string;
+    }) {
     setResultModal({
       isOpen: true,
       type: "success",
-      title: payload.mode === "create" ? "Workflow Berhasil Dibuat" : "Workflow Berhasil Diperbarui",
+      title:
+        payload.mode === "create"
+          ? "Workflow Berhasil Dibuat"
+          : "Workflow Berhasil Diperbarui",
       message:
         payload.mode === "create"
           ? `Workflow "${payload.name}" berhasil dibuat`
           : `Workflow "${payload.name}" berhasil diperbarui`,
-      description: "Perubahan sudah tersimpan dan daftar workflow akan otomatis diperbarui.",
+      description:
+        "Perubahan sudah tersimpan dan daftar workflow akan otomatis diperbarui.",
       details: [
         { label: "Resource", value: payload.resource || "-" },
         { label: "Nama Workflow", value: payload.name || "-" },
@@ -403,7 +414,9 @@ export default function WorkflowList() {
       }
     } catch (error) {
       alert(
-        error instanceof Error ? error.message : "Gagal menghapus workflow. Silakan coba lagi."
+        error instanceof Error
+          ? error.message
+          : "Gagal menghapus workflow. Silakan coba lagi.",
       );
     }
   }
@@ -433,8 +446,8 @@ export default function WorkflowList() {
   // Show loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-8">
-        <div className="max-w-7xl mx-auto">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-4">
+        <div className="mx-auto">
           <div className="text-center py-16">
             <div className="w-16 h-16 border-4 border-purple-200 border-t-purple-500 rounded-full animate-spin mx-auto mb-4"></div>
             <p className="text-gray-600">Memuat workflows...</p>
@@ -447,8 +460,8 @@ export default function WorkflowList() {
   // Show error state
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-8">
-        <div className="max-w-7xl mx-auto">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-4">
+        <div className="mx-auto">
           <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
             <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <FaSitemap className="w-8 h-8 text-red-500" />
@@ -471,144 +484,136 @@ export default function WorkflowList() {
 
   const activeWorkflows = workflows.filter((wf) => wf.workflow.is_active);
   const inactiveWorkflows = workflows.filter((wf) => !wf.workflow.is_active);
+  const resourceNameBySlug = new Map(
+    resources.map((resource) => [resource.Slug, resource.Name]),
+  );
+
+  const columns: EntityTableColumn<WorkflowWithDetails>[] = [
+    {
+      key: "name",
+      header: "Workflow Name",
+      render: (item) => (
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
+            <FaSitemap className="h-3.5 w-3.5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-gray-900">
+              {item.workflow.name}
+            </p>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                openDetail(item);
+              }}
+              className="text-xs font-medium text-purple-500 hover:text-purple-600"
+            >
+              Lihat detail
+            </button>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "resource",
+      header: "Resource",
+      render: (item) => (
+        <div className="space-y-1">
+          <code className="inline-flex rounded bg-gray-100 px-2 py-1 text-[11px] text-gray-600">
+            {item.workflow.resource}
+          </code>
+          <p className="text-xs text-gray-500">
+            {resourceNameBySlug.get(item.workflow.resource) || "-"}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (item) =>
+        item.workflow.is_active ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
+            <FaCheckCircle className="h-3 w-3" />
+            Active
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">
+            <FaTimesCircle className="h-3 w-3" />
+            Inactive
+          </span>
+        ),
+    },
+    {
+      key: "states",
+      header: "States",
+      className: "whitespace-nowrap",
+      cellClassName: "text-sm text-gray-600 whitespace-nowrap",
+      render: (item) => `${item.document_states.length} state`,
+    },
+    {
+      key: "transitions",
+      header: "Transitions",
+      className: "whitespace-nowrap",
+      cellClassName: "text-sm text-gray-600 whitespace-nowrap",
+      render: (item) => `${item.transitions.length} transisi`,
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
-              Workflows
-            </h1>
-            <p className="text-sm md:text-base text-gray-600">
-              Kelola workflow dan approval flow untuk sistem
-            </p>
-          </div>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-4">
+      <div className="mx-auto space-y-6">
+        <EntityPageHeader
+          icon={<FaSitemap className="w-5 h-5" />}
+          title="Workflows"
+          description="Kelola workflow dan approval flow untuk sistem."
+          addLabel="Tambah Workflow"
+          onAdd={handleAdd}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Cari workflow berdasarkan nama, resource, atau deskripsi..."
+          summary={
+            <>
+              <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 font-medium text-gray-700">
+                Total {workflows.length} workflow
+              </span>
+              <span className="text-gray-500">
+                {activeWorkflows.length} aktif, {inactiveWorkflows.length} nonaktif
+              </span>
+            </>
+          }
+          accentClasses={{
+            iconBg: "bg-purple-50",
+            iconText: "text-purple-600",
+            buttonBg: "bg-gradient-to-r from-purple-600 to-purple-700",
+            buttonShadow: "shadow-purple-200",
+            searchRing: "focus:ring-purple-500",
+          }}
+        />
 
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={handleAdd}
-            className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl shadow-lg shadow-purple-200 hover:shadow-xl transition-all font-medium"
-          >
-            <FaPlus className="w-4 h-4" />
-            <span>Tambah Workflow</span>
-          </motion.button>
-        </div>
-
-        {/* Info Banner - Link to workflow-state */}
         {globalStates.length === 0 && (
-          <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-6 flex items-start gap-4">
-            <FaInfoCircle className="w-6 h-6 text-blue-500 flex-shrink-0 mt-0.5" />
+          <div className="flex items-start gap-4 rounded-3xl border border-blue-200 bg-blue-50 p-5 shadow-sm">
+            <FaInfoCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-500" />
             <div className="flex-1">
-              <h3 className="text-lg font-bold text-blue-900 mb-2">
+              <h3 className="mb-2 text-base font-bold text-blue-900">
                 Belum Ada Global States
               </h3>
-              <p className="text-sm text-blue-700 mb-3">
-                Sebelum membuat workflow, Anda perlu membuat global states terlebih dahulu
-                (Draft, Submitted, Approved, dll).
+              <p className="mb-3 text-sm text-blue-700">
+                Sebelum membuat workflow, Anda perlu membuat global states
+                terlebih dahulu.
               </p>
               <Link
                 href="/workflow-states"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
               >
-                <FaSitemap className="w-4 h-4" />
+                <FaSitemap className="h-4 w-4" />
                 Kelola Global States
               </Link>
             </div>
           </div>
         )}
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl shadow-lg p-6 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-purple-100 text-sm font-medium mb-1">
-                  Total Workflows
-                </p>
-                <p className="text-3xl font-bold">{workflows.length}</p>
-              </div>
-              <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
-                <FaSitemap className="w-7 h-7" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl shadow-lg p-6 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-green-100 text-sm font-medium mb-1">
-                  Active Workflows
-                </p>
-                <p className="text-3xl font-bold">{activeWorkflows.length}</p>
-              </div>
-              <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
-                <FaCheckCircle className="w-7 h-7" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-gray-500 to-gray-600 rounded-2xl shadow-lg p-6 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-100 text-sm font-medium mb-1">
-                  Inactive Workflows
-                </p>
-                <p className="text-3xl font-bold">{inactiveWorkflows.length}</p>
-              </div>
-              <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
-                <FaTimesCircle className="w-7 h-7" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Search and View Toggle */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-4">
-          <div className="flex flex-col md:flex-row gap-4 justify-between">
-            {/* Search Bar */}
-            <div className="relative flex-1 max-w-md">
-              <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari workflow berdasarkan nama, resource..."
-                className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-              />
-            </div>
-
-            {/* View Mode Toggle */}
-            <div className="flex gap-2 bg-gray-100 rounded-xl p-1">
-              <button
-                onClick={() => setViewMode("grid")}
-                className={`px-4 py-3 rounded-xl font-medium transition-all ${
-                  viewMode === "grid"
-                    ? "bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg shadow-purple-200"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-                title="Grid View"
-              >
-                <FaTh className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => setViewMode("list")}
-                className={`px-4 py-3 rounded-xl font-medium transition-all ${
-                  viewMode === "list"
-                    ? "bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg shadow-purple-200"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-                title="List View"
-              >
-                <FaList className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Workflows Display */}
         {displayedWorkflows.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
             <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -624,29 +629,23 @@ export default function WorkflowList() {
             </p>
           </div>
         ) : (
-          <div
-            className={
-              viewMode === "grid"
-                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
-                : "space-y-4"
+          <EntityTable
+            columns={columns}
+            rows={displayedWorkflows}
+            getRowKey={(workflow) =>
+              workflow.workflow.id || workflow.workflow.resource
             }
-          >
-            {displayedWorkflows.map((workflow, index) => (
-              <WorkflowCard
-                key={workflow.workflow.id || index}
-                workflow={workflow}
-                viewMode={viewMode}
-                roles={roles}
-                onEdit={() => handleEdit(workflow)}
-                onDelete={() => promptDeleteWorkflow(workflow)}
-                onView={() => openDetail(workflow)}
-              />
-            ))}
-          </div>
+            onRowClick={openDetail}
+            footer={
+              <>
+                <span>Click row untuk lihat detail workflow</span>
+                <span>Showing {displayedWorkflows.length} workflows</span>
+              </>
+            }
+          />
         )}
       </div>
 
-      {/* Modals */}
       <AddWorkflowModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}

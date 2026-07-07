@@ -1,10 +1,8 @@
 // src/components/workflows/StateManager.tsx
 "use client";
 
-import { useState } from "react";
 import {
   FaCircle,
-  FaEdit,
   FaCheckSquare,
   FaSquare,
   FaExternalLinkAlt,
@@ -43,7 +41,6 @@ export default function StateManager({
   onChange,
   onAddState,
 }: Props) {
-  const [editingStateId, setEditingStateId] = useState<number | null>(null);
   const getDocstatusLabel = (docstatus: number) => {
     switch (docstatus) {
       case 0:
@@ -186,189 +183,104 @@ export default function StateManager({
 
       {/* States list */}
       {globalStates.length > 0 && (
-        <div className="space-y-2">
-          {globalStates.map((globalState) => {
+        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+          <div className="grid grid-cols-[56px_72px_minmax(0,1fr)_280px] border-b border-gray-200 bg-gray-50/80 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+            <div className="px-4 py-3 text-center">Pick</div>
+            <div className="px-4 py-3 text-center">No</div>
+            <div className="px-4 py-3">State</div>
+            <div className="px-4 py-3">Doc Status</div>
+          </div>
+
+          {globalStates.map((globalState, index) => {
             const selected = isSelected(globalState.id);
             const selectedState = getSelectedState(globalState.id);
-            const isEditing = editingStateId === globalState.id;
+            const currentDocstatus =
+              selectedState?.docstatus ?? globalState.docstatus;
+            const currentEditable =
+              selectedState?.editable ?? globalState.docstatus === 0;
 
             return (
               <div
                 key={globalState.id}
-                className={`border-2 rounded-xl transition-all ${
-                  selected
-                    ? "border-purple-300 bg-purple-50"
-                    : "border-gray-200 bg-white"
+                className={`grid grid-cols-[56px_72px_minmax(0,1fr)_280px] items-center border-b border-gray-100 last:border-b-0 ${
+                  selected ? "bg-purple-50/40" : "bg-white"
                 }`}
               >
-                {/* Main row */}
-                <div className="flex items-center gap-4 p-4">
-                  {/* Checkbox */}
+                <div className="flex justify-center px-4 py-3">
                   <button
                     type="button"
                     onClick={() => toggleState(globalState)}
                     className="flex-shrink-0"
                   >
                     {selected ? (
-                      <FaCheckSquare className="w-6 h-6 text-purple-600" />
+                      <FaCheckSquare className="h-5 w-5 text-purple-600" />
                     ) : (
-                      <FaSquare className="w-6 h-6 text-gray-300 hover:text-gray-400" />
+                      <FaSquare className="h-5 w-5 text-gray-300 hover:text-gray-400" />
                     )}
                   </button>
-
-                  {/* Color indicator */}
-                  <div
-                    className="w-4 h-4 rounded-full flex-shrink-0"
-                    style={{
-                      backgroundColor:
-                        (selected && selectedState?.color) ||
-                        globalState.color ||
-                        "#9333ea",
-                    }}
-                  />
-
-                  {/* State info */}
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-gray-900">
-                        {globalState.name}
-                      </span>
-                      <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-bold">
-                        Docstatus: {globalState.docstatus} • {getDocstatusLabel(globalState.docstatus)}
-                      </span>
-                    </div>
-                    {globalState.description && (
-                      <p className="text-sm text-gray-600 mt-1">
-                        {globalState.description}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Customize button */}
-                  {selected && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setEditingStateId(
-                          isEditing ? null : globalState.id
-                        )
-                      }
-                      className="px-3 py-2 bg-orange-100 text-orange-700 rounded-lg font-bold hover:bg-orange-200 transition-all flex items-center gap-2"
-                    >
-                      <FaEdit className="w-3 h-3" />
-                      {isEditing ? "Tutup" : "Customize"}
-                    </button>
-                  )}
                 </div>
 
-                {/* Customization panel */}
-                {selected && isEditing && selectedState && (
-                  <div className="border-t-2 border-purple-200 bg-white p-4 space-y-4">
-                    <h4 className="font-bold text-purple-900 mb-3">
-                      Customize State untuk Workflow Ini
-                    </h4>
+                <div className="px-4 py-3 text-center text-sm font-medium text-gray-700">
+                  {index + 1}
+                </div>
 
-                    <div className="p-3 bg-gray-50 rounded-lg space-y-2">
-                      <div className="font-medium text-gray-900">
-                        Status State di Workflow
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="px-3 py-2 rounded-lg bg-purple-100 text-purple-700 text-sm font-bold">
-                          {getDocstatusLabel(selectedState.docstatus)}
-                        </span>
-                        <span
-                          className={`px-3 py-2 rounded-lg text-sm font-bold ${
-                            selectedState.editable
-                              ? "bg-green-100 text-green-700"
-                              : "bg-gray-100 text-gray-700"
-                          }`}
-                        >
-                          {selectedState.editable
-                            ? "Editable: Ya"
-                            : "Editable: Tidak"}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-500">
-                        Atur `docstatus` final di langkah `Transitions` berdasarkan state tujuan.
+                <div className="min-w-0 px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="h-4 w-4 flex-shrink-0 rounded-full"
+                      style={{
+                        backgroundColor:
+                          (selected && selectedState?.color) ||
+                          globalState.color ||
+                          "#9333ea",
+                      }}
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-lg font-semibold text-gray-900">
+                        {globalState.name}
                       </p>
-                    </div>
-
-                    {/* Color picker */}
-                    <div>
-                      <label className="block font-medium text-gray-900 mb-2">
-                        Custom Color (Optional)
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="color"
-                          value={selectedState.color || globalState.color || "#9333ea"}
-                          onChange={(e) =>
-                            updateState(globalState.id, {
-                              color: e.target.value,
-                            })
-                          }
-                          className="w-12 h-12 rounded-lg border-2 border-gray-300 cursor-pointer"
-                        />
-                        <input
-                          type="text"
-                          value={selectedState.color || globalState.color || ""}
-                          onChange={(e) =>
-                            updateState(globalState.id, {
-                              color: e.target.value,
-                            })
-                          }
-                          placeholder="#9333ea"
-                          className="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg font-mono text-sm focus:border-purple-500 focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateState(globalState.id, {
-                              color: globalState.color,
-                            })
-                          }
-                          className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200"
-                        >
-                          Reset
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Icon input */}
-                    <div>
-                      <label className="block font-medium text-gray-900 mb-2">
-                        Custom Icon (Optional)
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={selectedState.icon || ""}
-                          onChange={(e) =>
-                            updateState(globalState.id, {
-                              icon: e.target.value,
-                            })
-                          }
-                          placeholder="Icon name (e.g., FaCheck)"
-                          className="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateState(globalState.id, {
-                              icon: globalState.icon,
-                            })
-                          }
-                          className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200"
-                        >
-                          Reset
-                        </button>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Kosongkan untuk menggunakan icon dari global state
-                      </p>
+                      {globalState.description ? (
+                        <p className="mt-1 truncate text-sm text-gray-500">
+                          {globalState.description}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
-                )}
+                </div>
+
+                <div className="px-4 py-3">
+                  <div className="space-y-2">
+                    <select
+                      value={String(currentDocstatus)}
+                      disabled={!selected}
+                      onChange={(e) =>
+                        updateState(globalState.id, {
+                          docstatus: Number(e.target.value),
+                          editable: Number(e.target.value) === 0,
+                        })
+                      }
+                      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-800 focus:border-purple-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+                    >
+                      <option value="0">0 - Draft / Editable</option>
+                      <option value="1">1 - Submitted / Locked</option>
+                      <option value="2">2 - Cancelled / Closed</option>
+                    </select>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-md bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-700">
+                        {getDocstatusLabel(currentDocstatus)}
+                      </span>
+                      <span
+                        className={`rounded-md px-2 py-1 text-xs font-semibold ${
+                          currentEditable
+                            ? "bg-green-100 text-green-700"
+                            : "bg-gray-100 text-gray-700"
+                        }`}
+                      >
+                        {currentEditable ? "Editable" : "Locked"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
             );
           })}
