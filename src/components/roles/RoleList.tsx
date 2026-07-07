@@ -1,19 +1,10 @@
-// src/components/roles/RoleList.tsx
 "use client";
 
 import { useEffect, useState } from "react";
-import RoleCard from "./RoleCard";
 import AddRoleModal from "./AddRoleModal";
 import RoleDetailModal from "./RoleDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import {
-  FaPlus,
-  FaSearch,
-  FaList,
-  FaTh,
-  FaUserShield,
-  FaUsers,
-} from "react-icons/fa";
+import { FaPlus, FaSearch, FaUserShield } from "react-icons/fa";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAuthHeaders, API_CONFIG, apiFetch } from "@/config/api";
@@ -47,7 +38,6 @@ export default function RoleList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<Role | null>(null);
@@ -61,7 +51,15 @@ export default function RoleList() {
     (() => Promise<void>) | null
   >(null);
 
-  // Load roles from API
+  const formatUpdatedAt = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -87,17 +85,14 @@ export default function RoleList() {
         if (res.ok) {
           const contentType = res.headers.get("content-type");
           if (!contentType || !contentType.includes("application/json")) {
-            const text = await res.text();
             throw new Error(
               "Server returned non-JSON response. Please check the API endpoint.",
             );
           }
 
           const response = (await res.json()) as RoleAPIResponse;
-          const mappedRoles: Role[] = response.data;
-
           if (!cancelled) {
-            setRoles(mappedRoles);
+            setRoles(response.data);
           }
         } else {
           const errorText = await res.text();
@@ -130,7 +125,6 @@ export default function RoleList() {
     };
   }, [isAuthenticated, token]);
 
-  // Listen for updates
   useEffect(() => {
     async function handler() {
       if (!isAuthenticated || !token) return;
@@ -138,7 +132,6 @@ export default function RoleList() {
       try {
         const headers = getAuthHeaders(token);
         const DATA_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_ROLE}`;
-
 
         const res = await apiFetch(DATA_URL, {
           method: "GET",
@@ -157,7 +150,6 @@ export default function RoleList() {
     return () => window.removeEventListener("ekatalog:roles_update", handler);
   }, [isAuthenticated, token]);
 
-  // Filter roles based on search
   let displayedRoles = roles;
   if (searchQuery.trim()) {
     displayedRoles = displayedRoles.filter(
@@ -168,6 +160,9 @@ export default function RoleList() {
           role.Description.toLowerCase().includes(searchQuery.toLowerCase())),
     );
   }
+
+  const totalRoles = roles.length;
+  const shownRoles = displayedRoles.length;
 
   function handleAdd() {
     setModalInitial(null);
@@ -180,11 +175,6 @@ export default function RoleList() {
   }
 
   function promptDeleteRole(role: Role) {
-    if (role.IsSystem) {
-      alert("System roles cannot be deleted!");
-      return;
-    }
-
     setConfirmTitle("Hapus Role");
     setConfirmDesc(`Yakin ingin menghapus role "${role.Name}"?`);
     setConfirmAction(() => async () => {
@@ -199,7 +189,6 @@ export default function RoleList() {
     try {
       const headers = getAuthHeaders(token);
       const DELETE_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_ROLE}/${role.ID}`;
-
 
       const res = await apiFetch(DELETE_URL, {
         method: "DELETE",
@@ -244,7 +233,6 @@ export default function RoleList() {
     setConfirmOpen(false);
   }
 
-  // Show loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-8">
@@ -258,7 +246,6 @@ export default function RoleList() {
     );
   }
 
-  // Show error state
   if (error) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-8">
@@ -284,123 +271,51 @@ export default function RoleList() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
-              Roles & Permissions
-            </h1>
-            <p className="text-sm md:text-base text-gray-600">
-              Kelola roles dan hak akses pengguna
-            </p>
-          </div>
-
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={handleAdd}
-            className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl shadow-lg shadow-red-200 hover:shadow-xl transition-all font-medium"
-          >
-            <FaPlus className="w-4 h-4" />
-            <span>Tambah Role</span>
-          </motion.button>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg p-6 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-blue-100 text-sm font-medium mb-1">
-                  Total Roles
-                </p>
-                <p className="text-3xl font-bold">{roles.length}</p>
-              </div>
-              <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
-                <FaUserShield className="w-7 h-7" />
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-4">
+      <div className="mx-auto space-y-6">
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5 md:p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center">
+                  <FaUserShield className="w-5 h-5" />
+                </div>
+                <div>
+                  <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+                    Roles
+                  </h1>
+                  <p className="text-sm text-gray-600">
+                    Kelola role yang ada di Ekaplus.
+                  </p>
+                </div>
               </div>
             </div>
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleAdd}
+              className="flex items-center justify-center self-end gap-2 px-3 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg shadow-lg shadow-red-200 hover:shadow-xl transition-all font-medium"
+            >
+              <FaPlus className="w-4 h-4" />
+              <span className="text-sm">Tambah Role</span>
+            </motion.button>
           </div>
 
-          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl shadow-lg p-6 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-green-100 text-sm font-medium mb-1">
-                  System Roles
-                </p>
-                <p className="text-3xl font-bold">
-                  {roles.filter((r) => r.IsSystem).length}
-                </p>
-              </div>
-              <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
-                <FaUserShield className="w-7 h-7" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl shadow-lg p-6 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-purple-100 text-sm font-medium mb-1">
-                  Custom Roles
-                </p>
-                <p className="text-3xl font-bold">
-                  {roles.filter((r) => !r.IsSystem).length}
-                </p>
-              </div>
-              <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
-                <FaUsers className="w-7 h-7" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Search and View Toggle */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-4">
-          <div className="flex flex-col md:flex-row gap-4 justify-between">
-            {/* Search Bar */}
-            <div className="relative flex-1 max-w-md">
+          <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="relative flex-1 max-w-xl">
               <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari role berdasarkan nama, slug..."
-                className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                placeholder="Cari role berdasarkan nama, slug, atau deskripsi..."
+                className="w-full pl-12 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
               />
-            </div>
-
-            {/* View Mode Toggle */}
-            <div className="flex gap-2 bg-gray-100 rounded-xl p-1">
-              <button
-                onClick={() => setViewMode("grid")}
-                className={`px-4 py-3 rounded-xl font-medium transition-all ${
-                  viewMode === "grid"
-                    ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-                title="Grid View"
-              >
-                <FaTh className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => setViewMode("list")}
-                className={`px-4 py-3 rounded-xl font-medium transition-all ${
-                  viewMode === "list"
-                    ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-                title="List View"
-              >
-                <FaList className="w-5 h-5" />
-              </button>
             </div>
           </div>
         </div>
 
-        {/* Roles Display */}
         {displayedRoles.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
             <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -416,28 +331,82 @@ export default function RoleList() {
             </p>
           </div>
         ) : (
-          <div
-            className={
-              viewMode === "grid"
-                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
-                : "space-y-4"
-            }
-          >
-            {displayedRoles.map((role) => (
-              <RoleCard
-                key={role.ID}
-                role={role}
-                viewMode={viewMode}
-                onEdit={() => handleEdit(role)}
-                onDelete={() => promptDeleteRole(role)}
-                onView={() => openDetail(role)}
-              />
-            ))}
+          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-100">
+                <thead className="bg-gray-50/80">
+                  <tr className="text-left">
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                      Role Name
+                    </th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                      Slug
+                    </th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                      Description
+                    </th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500 whitespace-nowrap">
+                      Updated At
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 bg-white">
+                  {displayedRoles.map((role) => (
+                    <tr
+                      key={role.ID}
+                      onClick={() => openDetail(role)}
+                      className="cursor-pointer transition-colors hover:bg-red-50/40"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-50 text-red-600">
+                            <FaUserShield className="h-3.5 w-3.5" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-900">
+                              {role.Name}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openDetail(role);
+                              }}
+                              className="text-xs font-medium text-red-500 hover:text-red-600"
+                            >
+                              Lihat detail
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <code className="inline-flex rounded bg-gray-100 px-2 py-1 text-[11px] text-gray-600">
+                          {role.Slug}
+                        </code>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        <p className="line-clamp-1">
+                          {role.Description || "Belum ada deskripsi role."}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+                        {formatUpdatedAt(role.UpdatedAt)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex items-center justify-end border-t border-gray-100 px-4 py-3 text-sm text-gray-500">
+              <span>
+                Showing {shownRoles} of {totalRoles} roles
+              </span>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Modals */}
       <AddRoleModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
