@@ -7,28 +7,33 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { motion } from "framer-motion";
 import {
-  FaList,
+  FaCheckCircle,
+  FaEnvelope,
+  FaGoogle,
   FaLock,
-  FaPlus,
-  FaSearch,
   FaSortAmountDown,
-  FaTh,
+  FaTimesCircle,
   FaUsers,
+  FaPhone,
+  FaShieldAlt,
 } from "react-icons/fa";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import EntityPageHeader from "@/components/entity-management/EntityPageHeader";
+import EntityTable, {
+  EntityTableColumn,
+} from "@/components/entity-management/EntityTable";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   API_CONFIG,
   apiFetch,
   getAuthHeaders,
   getApiUrl,
+  getQueryUrl,
   getResourceUrl,
 } from "@/config/api";
 import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import AddUserModal from "./AddUserModal";
-import UserCard from "./UserCard";
 import UserDetailModal from "./UserDetailModal";
 
 export type User = {
@@ -160,6 +165,7 @@ type RolesApiResponse = {
 type UsersApiResponse = {
   data?: UsersApiRow[] | UsersApiRow | null;
   message?: string;
+  meta?: Record<string, unknown> | null;
 };
 
 type IntegrationTokenApiRow = {
@@ -182,6 +188,7 @@ type UserRoleApiRow = Record<string, unknown>;
 
 const USER_EVENT = "ekaplus:users_update";
 const USER_ENDPOINT = API_CONFIG.ENDPOINTS.USERS;
+const DEFAULT_USER_PAGE_SIZE = 20;
 const USER_ROLE_ENDPOINTS = [
   "/api/resource/user_roles",
   "/api/resource/user_role",
@@ -238,12 +245,52 @@ function extractServerMessage(json: unknown, fallback: string) {
   return fallback;
 }
 
+function formatDate(value: string | null | undefined): string {
+  if (!value) return "-";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+
+  return date.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 function formatRoleName(role: string): string {
   return role
     .split(/[_\s-]+/)
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function toNumberValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function getUsersOrderBy(sortBy: SortOption): [string, string][] {
+  switch (sortBy) {
+    case "name-asc":
+      return [["full_name", "asc"]];
+    case "name-desc":
+      return [["full_name", "desc"]];
+    case "created-asc":
+      return [["created_at", "asc"]];
+    case "role-asc":
+      return [["role", "asc"]];
+    case "role-desc":
+      return [["role", "desc"]];
+    case "created-desc":
+    default:
+      return [["created_at", "desc"]];
+  }
 }
 
 function mapRole(row: Record<string, unknown>): Role {
@@ -367,13 +414,17 @@ export default function UserList() {
     IntegrationTokenInfo[]
   >([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("created-desc");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [totalUsers, setTotalUsers] = useState<number | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<User | null>(null);
@@ -385,6 +436,7 @@ export default function UserList() {
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const canViewUsers = hasPermission("user.read");
   const canCreateUsers = hasPermission("user.create");
   const canEditUsers = hasPermission("user.update");
@@ -410,24 +462,100 @@ export default function UserList() {
     return Array.isArray(json?.data) ? json.data.map(mapRole) : [];
   }, [token]);
 
-  const loadUsers = useCallback(async () => {
-    if (!token) {
-      setUsers([]);
-      return;
-    }
+  const loadUsersPage = useCallback(
+    async (page: number, replace: boolean) => {
+      if (replace) {
+        setLoading(true);
+        setError(null);
+      } else {
+        setLoadingMore(true);
+      }
 
-    const rows = await fetchAllQueryRows<UsersApiRow>({
-      endpoint: USER_ENDPOINT,
-      spec: {
-        fields: ["*"],
-      },
-      token,
-      requestInit: {
-        headers: getAuthHeaders(token),
-      },
-    });
-    setUsers(rows.map(mapUser));
-  }, [token]);
+      try {
+        if (!isAuthenticated || !token) {
+          setUsers([]);
+          setHasMore(false);
+          setTotalUsers(0);
+          return;
+        }
+
+        const spec = {
+          fields: ["*"],
+          page,
+          ...(debouncedSearchQuery ? { search: debouncedSearchQuery } : {}),
+          order_by: getUsersOrderBy(sortBy),
+        };
+
+        const res = await apiFetch(
+          getQueryUrl(USER_ENDPOINT, spec),
+          {
+            method: "GET",
+            cache: "no-store",
+            headers: getAuthHeaders(token),
+          },
+          token,
+        );
+
+        const json = (await res
+          .json()
+          .catch(() => null)) as UsersApiResponse | null;
+
+        if (!res.ok) {
+          throw new Error(
+            json?.message || `Gagal memuat users (${res.status})`,
+          );
+        }
+
+        const rows = Array.isArray(json?.data) ? json.data : [];
+        const meta = json?.meta ?? null;
+        const perPage =
+          toNumberValue(meta && "per_page" in meta ? meta.per_page : null) ||
+          DEFAULT_USER_PAGE_SIZE;
+        const nextTotal =
+          toNumberValue(meta && "total" in meta ? meta.total : null) ||
+          toNumberValue(
+            meta && "total_count" in meta ? meta.total_count : null,
+          ) ||
+          toNumberValue(meta && "count" in meta ? meta.count : null);
+        const mapped = rows.map(mapUser);
+
+        let appendedCount = 0;
+        setUsers((current) => {
+          if (replace) {
+            appendedCount = mapped.length;
+            return mapped;
+          }
+
+          const nextRows = mapped.filter(
+            (user) => !current.some((existing) => existing.id === user.id),
+          );
+          appendedCount = nextRows.length;
+          return [...current, ...nextRows];
+        });
+        setCurrentPage(page);
+        setHasMore(rows.length >= perPage);
+        setTotalUsers((current) => {
+          if (nextTotal !== null) return nextTotal;
+          if (replace) return mapped.length;
+          return (current ?? 0) + appendedCount;
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Gagal memuat users");
+        if (replace) {
+          setUsers([]);
+          setTotalUsers(0);
+        }
+        setHasMore(false);
+      } finally {
+        if (replace) {
+          setLoading(false);
+        } else {
+          setLoadingMore(false);
+        }
+      }
+    },
+    [debouncedSearchQuery, isAuthenticated, sortBy, token],
+  );
 
   const loadIntegrationTokens = useCallback(async () => {
     if (!token) {
@@ -549,50 +677,87 @@ export default function UserList() {
     return new Map<string, string[]>();
   }, [token]);
 
-  const refreshData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const refreshSupportingData = useCallback(async () => {
     try {
       if (!isAuthenticated || !token) {
-        setUsers([]);
         setRoles([]);
         setIntegrationTokens([]);
+        setUserRoleIdsByUserId(new Map());
         return;
       }
 
       const [nextRoles, nextTokens] = await Promise.all([
         loadRoles(),
         loadIntegrationTokens(),
-        loadUsers(),
         loadUserRoleIds(),
       ]);
       setRoles(nextRoles);
       setIntegrationTokens(nextTokens);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal memuat users");
-    } finally {
-      setLoading(false);
     }
   }, [
     isAuthenticated,
     loadIntegrationTokens,
     loadRoles,
     loadUserRoleIds,
-    loadUsers,
     token,
   ]);
 
   useEffect(() => {
-    void refreshData();
-  }, [refreshData]);
+    const timer = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim());
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    void refreshSupportingData();
+  }, [refreshSupportingData]);
+
+  useEffect(() => {
+    setUsers([]);
+    setCurrentPage(1);
+    setHasMore(true);
+    setTotalUsers(null);
+    void loadUsersPage(1, true);
+  }, [loadUsersPage]);
 
   useEffect(() => {
     const handler = () => {
-      void refreshData();
+      void refreshSupportingData();
+      setUsers([]);
+      setCurrentPage(1);
+      setHasMore(true);
+      setTotalUsers(null);
+      void loadUsersPage(1, true);
     };
     window.addEventListener(USER_EVENT, handler);
     return () => window.removeEventListener(USER_EVENT, handler);
-  }, [refreshData]);
+  }, [loadUsersPage, refreshSupportingData]);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || loading || loadingMore || !hasMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (!entry?.isIntersecting) return;
+        void loadUsersPage(currentPage + 1, false);
+      },
+      {
+        root: null,
+        rootMargin: "240px 0px",
+        threshold: 0,
+      },
+    );
+
+    observer.observe(target);
+
+    return () => observer.disconnect();
+  }, [currentPage, hasMore, loadUsersPage, loading, loadingMore]);
 
   const allRoles = useMemo(
     () => [...roles].sort((a, b) => b.level - a.level),
@@ -604,53 +769,7 @@ export default function UserList() {
     [allRoles],
   );
 
-  const filteredUsers = useMemo(() => {
-    let result = [...users];
-
-    if (searchQuery.trim()) {
-      const query = searchQuery.trim().toLowerCase();
-      result = result.filter((user) =>
-        [
-          user.full_name,
-          user.username,
-          user.email,
-          user.phone,
-          user.role,
-          user.city || "",
-        ].some((value) => value.toLowerCase().includes(query)),
-      );
-    }
-
-    return result.sort((a, b) => {
-      switch (sortBy) {
-        case "name-asc":
-          return a.full_name.localeCompare(b.full_name);
-        case "name-desc":
-          return b.full_name.localeCompare(a.full_name);
-        case "created-asc":
-          return (
-            new Date(a.created_at || 0).getTime() -
-            new Date(b.created_at || 0).getTime()
-          );
-        case "role-asc":
-          return (
-            (getRoleInfo(a.role)?.level || 0) -
-            (getRoleInfo(b.role)?.level || 0)
-          );
-        case "role-desc":
-          return (
-            (getRoleInfo(b.role)?.level || 0) -
-            (getRoleInfo(a.role)?.level || 0)
-          );
-        case "created-desc":
-        default:
-          return (
-            new Date(b.created_at || 0).getTime() -
-            new Date(a.created_at || 0).getTime()
-          );
-      }
-    });
-  }, [getRoleInfo, searchQuery, sortBy, users]);
+  const filteredUsers = useMemo(() => [...users], [users]);
 
   const integrationTokenByUserId = useMemo(() => {
     const tokenMap = new Map<string, IntegrationTokenInfo>();
@@ -678,6 +797,19 @@ export default function UserList() {
 
     return tokenMap;
   }, [integrationTokens]);
+
+  const activeUsersCount = useMemo(
+    () => users.filter((user) => user.status === "active").length,
+    [users],
+  );
+  const systemUsersCount = useMemo(
+    () => users.filter((user) => user.is_system).length,
+    [users],
+  );
+  const verifiedEmailCount = useMemo(
+    () => users.filter((user) => user.is_email_verified).length,
+    [users],
+  );
 
   const closeModal = () => {
     if (saving) return;
@@ -766,6 +898,115 @@ export default function UserList() {
     closeDetail();
     setTimeout(() => promptDeleteUser(user), 80);
   };
+
+  const columns: EntityTableColumn<User>[] = [
+    {
+      key: "user",
+      header: "User",
+      render: (user) => (
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-semibold text-gray-900">
+              {user.full_name}
+            </p>
+            {user.is_system ? (
+              <FaShieldAlt
+                className="h-3.5 w-3.5 flex-shrink-0 text-amber-500"
+                title="System User"
+              />
+            ) : null}
+            {user.google_id ? (
+              <FaGoogle
+                className="h-3.5 w-3.5 flex-shrink-0 text-blue-500"
+                title="Google Account"
+              />
+            ) : null}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+            <span>@{user.username || "-"}</span>
+            <span className="text-gray-300">•</span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openDetail(user);
+              }}
+              className="font-medium text-red-500 hover:text-red-600"
+            >
+              Lihat detail
+            </button>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "contact",
+      header: "Kontak",
+      render: (user) => (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <FaEnvelope className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
+            <span className="truncate">{user.email || "-"}</span>
+            {user.is_email_verified ? (
+              <FaCheckCircle className="h-3 w-3 flex-shrink-0 text-green-500" />
+            ) : (
+              <FaTimesCircle className="h-3 w-3 flex-shrink-0 text-gray-300" />
+            )}
+          </div>
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <FaPhone className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
+            <span>{user.phone || "-"}</span>
+            {user.is_phone_verified ? (
+              <FaCheckCircle className="h-3 w-3 flex-shrink-0 text-green-500" />
+            ) : (
+              <FaTimesCircle className="h-3 w-3 flex-shrink-0 text-gray-300" />
+            )}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "role",
+      header: "Role",
+      className: "whitespace-nowrap",
+      cellClassName: "whitespace-nowrap",
+      render: (user) => {
+        const role = getRoleInfo(user.role);
+        return (
+          <span
+            className="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold text-white"
+            style={{ backgroundColor: role?.color || "#6B7280" }}
+          >
+            {role?.display_name || formatRoleName(user.role)}
+          </span>
+        );
+      },
+    },
+    {
+      key: "status",
+      header: "Status",
+      className: "whitespace-nowrap",
+      cellClassName: "whitespace-nowrap",
+      render: (user) => (
+        <span
+          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+            user.status === "active"
+              ? "bg-emerald-50 text-emerald-700"
+              : "bg-gray-100 text-gray-600"
+          }`}
+        >
+          {user.status === "active" ? "Aktif" : "Nonaktif"}
+        </span>
+      ),
+    },
+    {
+      key: "updated",
+      header: "Updated At",
+      className: "whitespace-nowrap",
+      cellClassName: "text-sm text-gray-500 whitespace-nowrap",
+      render: (user) => formatDate(user.updated_at || user.created_at),
+    },
+  ];
 
   const assignRoleToUser = useCallback(
     async (userId: string, roleIds: string[]) => {
@@ -1060,12 +1301,12 @@ export default function UserList() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center">
-          <div className="mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-4 border-red-200 border-t-red-500" />
-          <p className="text-sm font-medium text-gray-600">
-            Memuat data users...
-          </p>
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-4">
+        <div className="mx-auto">
+          <div className="py-16 text-center">
+            <div className="mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-4 border-red-200 border-t-red-500" />
+            <p className="text-gray-600">Memuat users...</p>
+          </div>
         </div>
       </div>
     );
@@ -1073,237 +1314,193 @@ export default function UserList() {
 
   if (error) {
     return (
-      <div className="space-y-4 py-8">
-        <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-center text-red-600">
-          <span className="text-sm font-medium">Error: {error}</span>
-        </div>
-        <div className="text-center">
-          <button
-            type="button"
-            onClick={() => void refreshData()}
-            className="rounded-xl bg-gradient-to-r from-red-500 to-red-600 px-5 py-3 font-medium text-white shadow-lg shadow-red-200"
-          >
-            Coba Lagi
-          </button>
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-4">
+        <div className="mx-auto">
+          <div className="rounded-xl border border-gray-100 bg-white py-16 text-center shadow-sm">
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-red-100">
+              <FaUsers className="h-8 w-8 text-red-500" />
+            </div>
+            <h3 className="mb-2 text-lg font-semibold text-gray-800">
+              Error Loading Users
+            </h3>
+            <p className="mb-4 text-sm text-gray-500">{error}</p>
+            <button
+              type="button"
+              onClick={() => {
+                void refreshSupportingData();
+                setUsers([]);
+                setCurrentPage(1);
+                setHasMore(true);
+                setTotalUsers(null);
+                void loadUsersPage(1, true);
+              }}
+              className="rounded-xl bg-gradient-to-r from-red-500 to-red-600 px-6 py-2 text-white transition-all hover:shadow-lg"
+            >
+              Reload
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div>
-      {successMessage ? (
-        <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-700 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <span className="text-sm font-medium">{successMessage}</span>
-            <button
-              type="button"
-              onClick={() => setSuccessMessage(null)}
-              className="text-xs font-semibold text-emerald-700 transition-colors hover:text-emerald-900"
-            >
-              Tutup
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      <div className="mb-5 flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
-        <div>
-          <h1 className="mb-1 text-[1.75rem] font-bold leading-tight text-gray-800 md:text-[2rem]">
-            Users
-          </h1>
-          <p className="text-sm text-gray-600">
-            Kelola pengguna aplikasi EKA+ dari resource backend.
-          </p>
-        </div>
-
-        {canCreateUsers ? (
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={handleAdd}
-            className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-500 to-red-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-red-200 transition-all hover:shadow-xl"
-          >
-            <FaPlus className="h-4 w-4" />
-            <span>Tambah User</span>
-          </motion.button>
-        ) : (
-          <div className="flex cursor-not-allowed items-center gap-2 rounded-xl bg-gray-100 px-5 py-2.5 font-medium text-gray-400">
-            <FaLock className="h-4 w-4" />
-            <span>Tambah User</span>
-          </div>
-        )}
-      </div>
-
-      <div className="mb-5 rounded-xl border border-gray-100 bg-white p-4 shadow-sm md:p-5">
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-4 md:flex-row">
-            <div className="relative flex-1 md:max-w-xl">
-              <FaSearch className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Cari nama, email, telepon, username, role, atau kota..."
-                className="w-full rounded-xl border border-gray-200 py-2.5 pl-11 pr-4 text-sm transition-all focus:border-transparent focus:ring-2 focus:ring-red-500"
-              />
-            </div>
-
-            <div className="relative">
-              <FaSortAmountDown className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <select
-                value={sortBy}
-                onChange={(event) =>
-                  setSortBy(event.target.value as SortOption)
-                }
-                className="min-w-[190px] cursor-pointer appearance-none rounded-xl border border-gray-200 bg-white py-2.5 pl-11 pr-10 text-sm font-medium text-gray-700 transition-all focus:border-transparent focus:ring-2 focus:ring-red-500"
-              >
-                <option value="created-desc">Terbaru</option>
-                <option value="created-asc">Terlama</option>
-                <option value="name-asc">Nama: A-Z</option>
-                <option value="name-desc">Nama: Z-A</option>
-                <option value="role-desc">Role: Tertinggi</option>
-                <option value="role-asc">Role: Terendah</option>
-              </select>
-              <svg
-                className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            </div>
-
-            <div className="flex gap-2">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-4">
+      <div className="mx-auto space-y-6">
+        {successMessage ? (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-700 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <span className="text-sm font-medium">{successMessage}</span>
               <button
                 type="button"
-                onClick={() => setViewMode("grid")}
-                className={`rounded-xl px-4 py-2.5 font-medium transition-all ${
-                  viewMode === "grid"
-                    ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
+                onClick={() => setSuccessMessage(null)}
+                className="text-xs font-semibold text-emerald-700 transition-colors hover:text-emerald-900"
               >
-                <FaTh className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("list")}
-                className={`rounded-xl px-4 py-2.5 font-medium transition-all ${
-                  viewMode === "list"
-                    ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                <FaList className="h-5 w-5" />
+                Tutup
               </button>
             </div>
           </div>
-          {searchQuery || sortBy !== "created-desc" ? (
-            <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2">
-              <span className="text-xs font-medium text-gray-500">
-                Filter aktif:
-              </span>
-              {searchQuery ? (
-                <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700">
-                  Pencarian: &quot;{searchQuery}&quot;
-                </span>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchQuery("");
-                  setSortBy("created-desc");
-                }}
-                className="rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-700 transition-colors hover:bg-red-200"
-              >
-                Reset Semua
-              </button>
-            </div>
-          ) : null}
-        </div>
-      </div>
+        ) : null}
 
-      {filteredUsers.length === 0 ? (
-        <div className="rounded-xl border border-gray-100 bg-white py-16 text-center shadow-sm">
-          <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-gray-100">
-            <FaSearch className="h-8 w-8 text-gray-400" />
-          </div>
-          <h3 className="mb-2 text-lg font-semibold text-gray-800">
-            Tidak ada user
-          </h3>
-          <p className="text-sm text-gray-500">
-            {searchQuery
-              ? "Coba ubah kata kunci pencarian"
-              : "Belum ada data user dari API"}
-          </p>
-        </div>
-      ) : (
-        <div
-          className={
-            viewMode === "grid"
-              ? "grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-              : "space-y-4"
+        <EntityPageHeader
+          icon={<FaUsers className="h-5 w-5" />}
+          title="Users"
+          description="Kelola pengguna aplikasi EKA+ dari resource backend."
+          addLabel={canCreateUsers ? "Tambah User" : undefined}
+          onAdd={canCreateUsers ? handleAdd : undefined}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Cari user berdasarkan nama, email, username, role, atau kota..."
+          // summary={
+          //   <>
+          //     <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-600">
+          //       {totalUsers ?? users.length} total
+          //     </span>
+          //     <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+          //       {activeUsersCount} aktif
+          //     </span>
+          //     <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+          //       {systemUsersCount} system
+          //     </span>
+          //     <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+          //       {verifiedEmailCount} email verified
+          //     </span>
+          //   </>
+          // }
+          rightInfo={
+            <div className="flex flex-col items-start gap-2 md:items-end">
+              <div className="relative">
+                <FaSortAmountDown className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                <select
+                  value={sortBy}
+                  onChange={(event) =>
+                    setSortBy(event.target.value as SortOption)
+                  }
+                  className="min-w-[168px] appearance-none rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-8 text-sm text-gray-700 focus:border-transparent focus:ring-2 focus:ring-red-500"
+                >
+                  <option value="created-desc">Terbaru</option>
+                  <option value="created-asc">Terlama</option>
+                  <option value="name-asc">Nama: A-Z</option>
+                  <option value="name-desc">Nama: Z-A</option>
+                  <option value="role-desc">Role: Tertinggi</option>
+                  <option value="role-asc">Role: Terendah</option>
+                </select>
+              </div>
+            </div>
           }
-        >
-          {filteredUsers.map((user) => (
-            <UserCard
-              key={user.id}
-              user={user}
-              role={getRoleInfo(user.role)}
-              integrationToken={integrationTokenByUserId.get(user.id)}
-              viewMode={viewMode}
-              onEdit={() => handleEdit(user)}
-              onDelete={() => promptDeleteUser(user)}
-              onView={() => openDetail(user)}
-              canEdit={canEditUsers}
-              canDelete={canDeleteUsers}
-            />
-          ))}
-        </div>
-      )}
+        />
 
-      <AddUserModal
-        open={modalOpen}
-        onClose={closeModal}
-        onDismissError={() => setModalError(null)}
-        initial={modalInitial}
-        initialRoleIds={modalInitialRoleIds}
-        roles={allRoles}
-        saving={saving}
-        error={modalError}
-        onSubmit={submitUser}
-      />
+        {filteredUsers.length === 0 ? (
+          <div className="rounded-xl border border-gray-100 bg-white py-16 text-center shadow-sm">
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-gray-100">
+              <FaUsers className="h-8 w-8 text-gray-400" />
+            </div>
+            <h3 className="mb-2 text-lg font-semibold text-gray-800">
+              Tidak ada user
+            </h3>
+            <p className="text-sm text-gray-500">
+              {searchQuery
+                ? "Coba ubah kata kunci pencarian"
+                : "Belum ada data user dari API"}
+            </p>
+          </div>
+        ) : (
+          <EntityTable
+            columns={columns}
+            rows={filteredUsers}
+            getRowKey={(user) => user.id}
+            onRowClick={openDetail}
+            footer={
+              <>
+                <span>Click row untuk lihat detail user</span>
+                <span>
+                  Showing {filteredUsers.length}
+                  {typeof totalUsers === "number"
+                    ? ` / ${totalUsers}`
+                    : ""}{" "}
+                  users
+                </span>
+              </>
+            }
+          />
+        )}
 
-      <UserDetailModal
-        open={detailOpen}
-        onClose={closeDetail}
-        user={detailItem}
-        role={detailItem ? getRoleInfo(detailItem.role) : undefined}
-        integrationToken={
-          detailItem ? integrationTokenByUserId.get(detailItem.id) : undefined
-        }
-        onEdit={onDetailEdit}
-        onDelete={onDetailDelete}
-        canEdit={canEditUsers}
-        canDelete={canDeleteUsers}
-      />
+        {!loading && filteredUsers.length > 0 ? (
+          <div className="pb-2">
+            <div
+              ref={loadMoreRef}
+              className="flex min-h-12 items-center justify-center text-sm text-gray-500"
+            >
+              {loadingMore ? (
+                <div className="flex items-center gap-3">
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-red-200 border-t-red-500" />
+                  <span>Memuat user berikutnya...</span>
+                </div>
+              ) : hasMore ? (
+                <span>Scroll ke bawah untuk memuat lebih banyak user</span>
+              ) : (
+                <span>Semua user sudah dimuat</span>
+              )}
+            </div>
+          </div>
+        ) : null}
 
-      <ConfirmDialog
-        open={confirmOpen}
-        title={confirmTitle}
-        description={confirmDesc}
-        onConfirm={confirmOk}
-        onCancel={confirmCancel}
-        confirmLabel="Ya, Hapus"
-        cancelLabel="Batal"
-      />
+        <AddUserModal
+          open={modalOpen}
+          onClose={closeModal}
+          onDismissError={() => setModalError(null)}
+          initial={modalInitial}
+          initialRoleIds={modalInitialRoleIds}
+          roles={allRoles}
+          saving={saving}
+          error={modalError}
+          onSubmit={submitUser}
+        />
+
+        <UserDetailModal
+          open={detailOpen}
+          onClose={closeDetail}
+          user={detailItem}
+          role={detailItem ? getRoleInfo(detailItem.role) : undefined}
+          integrationToken={
+            detailItem ? integrationTokenByUserId.get(detailItem.id) : undefined
+          }
+          onEdit={onDetailEdit}
+          onDelete={onDetailDelete}
+          canEdit={canEditUsers}
+          canDelete={canDeleteUsers}
+        />
+
+        <ConfirmDialog
+          open={confirmOpen}
+          title={confirmTitle}
+          description={confirmDesc}
+          onConfirm={confirmOk}
+          onCancel={confirmCancel}
+          confirmLabel="Ya, Hapus"
+          cancelLabel="Batal"
+        />
+      </div>
     </div>
   );
 }

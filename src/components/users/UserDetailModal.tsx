@@ -1,7 +1,7 @@
 // src/components/users/UserDetailModal.tsx
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   FaTimes,
@@ -20,6 +20,7 @@ import {
   FaClock,
   FaCopy,
   FaKey,
+  FaCheck,
 } from "react-icons/fa";
 import type { IntegrationTokenInfo, User, Role } from "./UserList";
 import Image from "next/image";
@@ -56,6 +57,35 @@ function formatDate(dateStr: string | null): string {
   });
 }
 
+async function copyToClipboard(value: string): Promise<void> {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  if (typeof document === "undefined") {
+    throw new Error("Clipboard tidak tersedia");
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  try {
+    const success = document.execCommand("copy");
+    if (!success) {
+      throw new Error("Gagal menyalin token");
+    }
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
 export default function UserDetailModal({
   open,
   onClose,
@@ -77,14 +107,39 @@ export default function UserDetailModal({
   canEdit?: boolean;
   canDelete?: boolean;
 }) {
+  const [copyState, setCopyState] = useState<"idle" | "success" | "error">(
+    "idle",
+  );
+
+  useEffect(() => {
+    if (copyState === "idle") return;
+
+    const timer = window.setTimeout(() => {
+      setCopyState("idle");
+    }, 2200);
+
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
+
+  useEffect(() => {
+    setCopyState("idle");
+  }, [open, user?.id]);
+
   if (!user) return null;
 
   const bgColor = role?.color || "#6B7280";
-  const avatarUrl = getFileUrl(user.profile_pic || user.picture) || user.profile_pic || user.picture || "";
+  const avatarUrl =
+    getFileUrl(user.profile_pic || user.picture) ||
+    user.profile_pic ||
+    user.picture ||
+    "";
 
   async function copyTokenValue(value: string) {
-    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(value);
+    try {
+      await copyToClipboard(value);
+      setCopyState("success");
+    } catch {
+      setCopyState("error");
     }
   }
 
@@ -98,7 +153,7 @@ export default function UserDetailModal({
           exit={{ opacity: 0 }}
         >
           <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-md"
+            className="absolute inset-0 bg-slate-900/35 backdrop-blur-sm"
             onClick={onClose}
           />
 
@@ -109,19 +164,21 @@ export default function UserDetailModal({
             transition={{ type: "spring", duration: 0.3 }}
             className="relative z-10 w-full max-w-4xl bg-white rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
           >
-            {/* Header with Gradient */}
             <div
-              className="px-8 py-10 text-white relative overflow-hidden"
+              className="relative overflow-hidden border-b border-gray-100 px-8 py-10 text-gray-900"
               style={{
-                background: `linear-gradient(135deg, ${bgColor} 0%, ${bgColor}dd 100%)`,
+                background: `linear-gradient(135deg, #ffffff 0%, ${bgColor}18 100%)`,
               }}
             >
-              <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full -mr-48 -mt-48" />
-              <div className="absolute bottom-0 left-0 w-64 h-64 bg-black/10 rounded-full -ml-32 -mb-32" />
+              <div className="absolute -right-40 -top-40 h-80 w-80 rounded-full bg-white/60" />
+              <div
+                className="absolute -bottom-24 -left-24 h-56 w-56 rounded-full"
+                style={{ backgroundColor: `${bgColor}12` }}
+              />
 
               <button
                 onClick={onClose}
-                className="absolute top-5 right-5 p-2.5 hover:bg-white/20 rounded-xl transition-colors z-10"
+                className="absolute top-5 right-5 z-10 rounded-xl p-2.5 text-gray-500 transition-colors hover:bg-white/80 hover:text-gray-800"
               >
                 <FaTimes className="w-6 h-6" />
               </button>
@@ -129,8 +186,8 @@ export default function UserDetailModal({
               <div className="relative flex items-start gap-6">
                 {/* Avatar */}
                 <div
-                  className="w-28 h-28 rounded-2xl flex items-center justify-center text-white font-bold text-4xl shadow-2xl border-4 border-white/30 flex-shrink-0"
-                  style={{ backgroundColor: "rgba(255,255,255,0.2)" }}
+                  className="flex h-28 w-28 flex-shrink-0 items-center justify-center rounded-2xl border-4 border-white text-4xl font-bold text-white shadow-xl"
+                  style={{ backgroundColor: bgColor }}
                 >
                   {avatarUrl ? (
                     <Image
@@ -148,17 +205,20 @@ export default function UserDetailModal({
                 <div className="flex-1">
                   {/* Badges */}
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="px-4 py-1.5 bg-white/20 backdrop-blur-sm rounded-full text-sm font-semibold">
+                    <span
+                      className="rounded-full px-4 py-1.5 text-sm font-semibold text-white shadow-sm"
+                      style={{ backgroundColor: bgColor }}
+                    >
                       {role?.display_name || user.role}
                     </span>
                     {user.is_system && (
-                      <span className="px-4 py-1.5 bg-amber-500/90 backdrop-blur-sm rounded-full text-sm font-semibold flex items-center gap-1">
+                      <span className="flex items-center gap-1 rounded-full bg-amber-100 px-4 py-1.5 text-sm font-semibold text-amber-700">
                         <FaShieldAlt className="w-3 h-3" />
                         System
                       </span>
                     )}
                     {user.google_id && (
-                      <span className="px-4 py-1.5 bg-white/90 text-blue-600 backdrop-blur-sm rounded-full text-sm font-semibold flex items-center gap-1">
+                      <span className="flex items-center gap-1 rounded-full bg-blue-50 px-4 py-1.5 text-sm font-semibold text-blue-600">
                         <FaGoogle className="w-3 h-3" />
                         Google
                       </span>
@@ -167,7 +227,7 @@ export default function UserDetailModal({
 
                   {/* Title */}
                   <h2 className="text-3xl font-bold mb-2">{user.full_name}</h2>
-                  <p className="text-white/80 text-lg">@{user.username}</p>
+                  <p className="text-lg text-gray-500">@{user.username}</p>
                 </div>
               </div>
             </div>
@@ -360,17 +420,59 @@ export default function UserDetailModal({
                       <button
                         type="button"
                         onClick={() => void copyTokenValue(integrationToken.token)}
-                        className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+                        className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                          copyState === "success"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            : copyState === "error"
+                              ? "border-red-200 bg-red-50 text-red-700"
+                              : "border-amber-200 bg-white text-amber-700 hover:bg-amber-100"
+                        }`}
                       >
-                        <FaCopy className="h-3.5 w-3.5" />
-                        Copy Token
+                        {copyState === "success" ? (
+                          <FaCheck className="h-3.5 w-3.5" />
+                        ) : (
+                          <FaCopy className="h-3.5 w-3.5" />
+                        )}
+                        {copyState === "success"
+                          ? "Token Tersalin"
+                          : copyState === "error"
+                            ? "Copy Gagal"
+                            : "Copy Token"}
                       </button>
                     </div>
-                    <div className="break-all rounded-xl bg-slate-950 px-4 py-3 font-mono text-sm text-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => void copyTokenValue(integrationToken.token)}
+                      className={`w-full cursor-pointer break-all rounded-xl border px-4 py-3 text-left font-mono text-sm shadow-sm transition ${
+                        copyState === "success"
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-900 ring-2 ring-emerald-100"
+                          : copyState === "error"
+                            ? "border-red-300 bg-red-50 text-red-900 ring-2 ring-red-100"
+                            : "border-amber-200 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/40"
+                      }`}
+                      title="Klik untuk menyalin token"
+                    >
                       {integrationToken.token}
-                    </div>
-                    <div className="mt-3 text-xs text-amber-700">
+                    </button>
+                    <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+                      <span
+                        className={
+                          copyState === "success"
+                            ? "font-medium text-emerald-700"
+                            : copyState === "error"
+                              ? "font-medium text-red-700"
+                              : "text-amber-700"
+                        }
+                      >
+                        {copyState === "success"
+                          ? "Token berhasil disalin ke clipboard."
+                          : copyState === "error"
+                            ? "Clipboard tidak tersedia. Coba salin manual."
+                            : "Klik tombol atau nilai token untuk menyalin."}
+                      </span>
+                      <span className="text-amber-700">
                       Preview: {integrationToken.tokenPreview || "-"}
+                      </span>
                     </div>
                   </div>
                 </div>
