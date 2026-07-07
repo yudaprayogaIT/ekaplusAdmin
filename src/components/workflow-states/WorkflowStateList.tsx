@@ -1,26 +1,15 @@
-// src/components/workflow-states/WorkflowStateList.tsx
 "use client";
 
-import React, {
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-import WorkflowStateCard from "./WorkflowStateCard";
+import React, { useEffect, useRef, useState } from "react";
 import AddWorkflowStateModal from "./AddWorkflowStateModal";
 import WorkflowStateDetailModal from "./WorkflowStateDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import {
-  useAuth,
-} from "@/contexts/AuthContext";
-import {
-  FaPlus,
-  FaSearch,
-  FaCircle,
-  FaLock,
-  FaPalette,
-} from "react-icons/fa";
-import { motion } from "framer-motion";
+import EntityPageHeader from "@/components/entity-management/EntityPageHeader";
+import EntityTable, {
+  EntityTableColumn,
+} from "@/components/entity-management/EntityTable";
+import { useAuth } from "@/contexts/AuthContext";
+import { FaCircle, FaLock, FaPalette } from "react-icons/fa";
 import {
   getQueryUrl,
   getResourceUrl,
@@ -39,7 +28,6 @@ export type WorkflowState = {
   updated_by: number;
 };
 
-// API Response structure - returns array directly
 type WorkflowStateAPIResponse = WorkflowState[];
 
 const SNAP_KEY = "ekaplus_workflow_states_snapshot";
@@ -50,21 +38,18 @@ export default function WorkflowStateList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<WorkflowState | null>(null);
-
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<WorkflowState | null>(null);
-
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
 
-  // Load workflow states from API
   useEffect(() => {
     let cancelled = false;
+
     async function load() {
       setLoading(true);
       setError(null);
@@ -75,12 +60,12 @@ export default function WorkflowStateList() {
           return;
         }
 
-        const DATA_URL = getQueryUrl(API_CONFIG.ENDPOINTS.WORKFLOW_STATE, {
+        const dataUrl = getQueryUrl(API_CONFIG.ENDPOINTS.WORKFLOW_STATE, {
           fields: ["*"],
         });
         const headers = getAuthHeaders(token);
 
-        const res = await apiFetch(DATA_URL, {
+        const res = await apiFetch(dataUrl, {
           method: "GET",
           cache: "no-store",
           headers,
@@ -92,18 +77,15 @@ export default function WorkflowStateList() {
             setStates(response);
             try {
               localStorage.setItem(SNAP_KEY, JSON.stringify(response));
-            } catch {
-            }
+            } catch {}
           }
-        } else {
-          if (!cancelled) {
-            if (res.status === 401) {
-              setError("Session expired. Silakan login kembali.");
-            } else if (res.status === 403) {
-              setError("Akses ditolak. Anda tidak memiliki izin.");
-            } else {
-              setError(`Failed to fetch workflow states (${res.status})`);
-            }
+        } else if (!cancelled) {
+          if (res.status === 401) {
+            setError("Session expired. Silakan login kembali.");
+          } else if (res.status === 403) {
+            setError("Akses ditolak. Anda tidak memiliki izin.");
+          } else {
+            setError(`Failed to fetch workflow states (${res.status})`);
           }
         }
       } catch (err: unknown) {
@@ -111,7 +93,7 @@ export default function WorkflowStateList() {
           const errorMessage = err instanceof Error ? err.message : String(err);
           if (errorMessage.includes("Failed to fetch")) {
             setError(
-              "Tidak dapat terhubung ke server. Periksa koneksi Anda atau pastikan backend berjalan."
+              "Tidak dapat terhubung ke server. Periksa koneksi Anda atau pastikan backend berjalan.",
             );
           } else {
             setError(errorMessage);
@@ -121,24 +103,24 @@ export default function WorkflowStateList() {
         if (!cancelled) setLoading(false);
       }
     }
+
     load();
     return () => {
       cancelled = true;
     };
   }, [isAuthenticated, token]);
 
-  // Listen for updates
   useEffect(() => {
     async function handler() {
       if (!isAuthenticated || !token) return;
 
       try {
-        const DATA_URL = getQueryUrl(API_CONFIG.ENDPOINTS.WORKFLOW_STATE, {
+        const dataUrl = getQueryUrl(API_CONFIG.ENDPOINTS.WORKFLOW_STATE, {
           fields: ["*"],
         });
         const headers = getAuthHeaders(token);
 
-        const res = await apiFetch(DATA_URL, {
+        const res = await apiFetch(dataUrl, {
           method: "GET",
           cache: "no-store",
           headers,
@@ -149,8 +131,7 @@ export default function WorkflowStateList() {
           setStates(response);
           localStorage.setItem(SNAP_KEY, JSON.stringify(response));
         }
-      } catch {
-      }
+      } catch {}
     }
 
     window.addEventListener("ekaplus:workflow_states_update", handler);
@@ -170,28 +151,24 @@ export default function WorkflowStateList() {
     setConfirmDesc(`Yakin ingin menghapus state "${state.name}"?`);
     actionRef.current = async () => {
       try {
-        if (!token) {
-          throw new Error("Not authenticated");
-        }
+        if (!token) throw new Error("Not authenticated");
 
         const headers = getAuthHeaders(token);
-
         const response = await apiFetch(
           getResourceUrl(API_CONFIG.ENDPOINTS.WORKFLOW_STATE, state.id),
           {
             method: "DELETE",
             headers,
-          }
+          },
         );
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.message || `Failed to delete state (${response.status})`
+            errorData.message || `Failed to delete state (${response.status})`,
           );
         }
 
-        // Remove from local state
         const next = states.filter((x) => x.id !== state.id);
         setStates(next);
         saveSnapshot(next);
@@ -246,38 +223,113 @@ export default function WorkflowStateList() {
     setConfirmOpen(false);
   }
 
-  // Filter states
   let filteredStates = states;
-
   if (searchQuery.trim()) {
     filteredStates = filteredStates.filter((state) =>
-      state.name.toLowerCase().includes(searchQuery.toLowerCase())
+      state.name.toLowerCase().includes(searchQuery.toLowerCase()),
     );
   }
 
-  // Get unique colors count
   const uniqueColors = Array.from(
-    new Set(states.map((s) => s.color).filter(Boolean))
+    new Set(states.map((s) => s.color).filter(Boolean)),
   );
+  const activeStates = states.filter((s) => s.docstatus === 1).length;
 
-  // Early returns AFTER all hooks
+  const columns: EntityTableColumn<WorkflowState>[] = [
+    {
+      key: "name",
+      header: "State Name",
+      render: (state) => (
+        <div className="flex items-center gap-3">
+          <div
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-white"
+            style={{ backgroundColor: state.color || "#6B7280" }}
+          >
+            {state.icon ? state.icon.slice(0, 1).toUpperCase() : <FaCircle className="h-3.5 w-3.5" />}
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-gray-900">{state.name}</p>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openDetail(state);
+              }}
+              className="text-xs font-medium text-red-500 hover:text-red-600"
+            >
+              Lihat detail
+            </button>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (state) => (
+        <span
+          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+            state.docstatus === 1
+              ? "bg-green-100 text-green-700"
+              : "bg-gray-100 text-gray-700"
+          }`}
+        >
+          {state.docstatus === 1 ? "Active" : "Draft"}
+        </span>
+      ),
+    },
+    {
+      key: "color",
+      header: "Color",
+      render: (state) => (
+        <div className="flex items-center gap-2">
+          <span
+            className="h-4 w-4 rounded-md border border-white shadow-sm"
+            style={{ backgroundColor: state.color || "#6B7280" }}
+          />
+          <code className="text-[11px] text-gray-600">
+            {(state.color || "#6B7280").toUpperCase()}
+          </code>
+        </div>
+      ),
+    },
+    {
+      key: "icon",
+      header: "Icon",
+      render: (state) => (
+        <code className="inline-flex rounded bg-gray-100 px-2 py-1 text-[11px] text-gray-600">
+          {state.icon || "-"}
+        </code>
+      ),
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      className: "whitespace-nowrap",
+      cellClassName: "text-sm text-gray-500 whitespace-nowrap",
+      render: (state) => `User #${state.updated_by}`,
+    },
+  ];
+
   if (!isAuthenticated) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center max-w-md mx-auto">
-          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <FaLock className="w-10 h-10 text-red-500" />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-3">
-            Login Diperlukan
-          </h2>
-          <p className="text-gray-600 mb-6">
-            Silakan login terlebih dahulu untuk mengakses data Workflow States.
-            Klik tombol Login di pojok kanan atas.
-          </p>
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 rounded-xl border border-amber-200 text-sm">
-            <FaCircle className="w-4 h-4" />
-            <span>Data workflow states dilindungi untuk keamanan</span>
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-4">
+        <div className="mx-auto flex items-center justify-center py-20">
+          <div className="mx-auto max-w-md text-center">
+            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-red-100">
+              <FaLock className="h-10 w-10 text-red-500" />
+            </div>
+            <h2 className="mb-3 text-2xl font-bold text-gray-800">
+              Login Diperlukan
+            </h2>
+            <p className="mb-6 text-gray-600">
+              Silakan login terlebih dahulu untuk mengakses data Workflow
+              States. Klik tombol Login di pojok kanan atas.
+            </p>
+            <div className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">
+              <FaCircle className="h-4 w-4" />
+              <span>Data workflow states dilindungi untuk keamanan</span>
+            </div>
           </div>
         </div>
       </div>
@@ -286,12 +338,12 @@ export default function WorkflowStateList() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-red-200 border-t-red-500 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-sm text-gray-600 font-medium">
-            Memuat data workflow states...
-          </p>
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-4">
+        <div className="mx-auto">
+          <div className="text-center py-16">
+            <div className="mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-4 border-red-200 border-t-red-500"></div>
+            <p className="text-gray-600">Memuat workflow states...</p>
+          </div>
         </div>
       </div>
     );
@@ -299,123 +351,89 @@ export default function WorkflowStateList() {
 
   if (error) {
     return (
-      <div className="py-8 text-center">
-        <div className="inline-flex flex-col items-center gap-3 px-6 py-4 bg-red-50 text-red-600 rounded-xl border border-red-100 max-w-md">
-          <span className="text-sm font-medium">{error}</span>
-          {error.includes("terhubung") && (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-4">
+        <div className="mx-auto">
+          <div className="rounded-xl border border-gray-100 bg-white py-16 text-center shadow-sm">
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-red-100">
+              <FaPalette className="h-8 w-8 text-red-500" />
+            </div>
+            <h3 className="mb-2 text-lg font-semibold text-gray-800">
+              Error Loading Workflow States
+            </h3>
+            <p className="mb-4 text-sm text-gray-500">{error}</p>
             <button
               onClick={() => window.location.reload()}
-              className="mt-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-medium"
+              className="rounded-xl bg-gradient-to-r from-red-500 to-red-600 px-6 py-2 text-white transition-all hover:shadow-lg"
             >
-              Coba Lagi
+              Reload
             </button>
-          )}
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div>
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">
-            Workflow States
-          </h1>
-          <p className="text-sm md:text-base text-gray-600">
-            Kelola state untuk workflow system
-          </p>
-        </div>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-4">
+      <div className="mx-auto space-y-6">
+        <EntityPageHeader
+          icon={<FaPalette className="w-5 h-5" />}
+          title="Workflow States"
+          description="Kelola state untuk workflow system."
+          addLabel="Tambah State"
+          onAdd={handleAdd}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Cari workflow state..."
+          summary={
+            <>
+              <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 font-medium text-gray-700">
+                Total {states.length} state
+              </span>
+              <span className="text-gray-500">
+                {activeStates} active, {uniqueColors.length} warna digunakan
+              </span>
+            </>
+          }
+          accentClasses={{
+            iconBg: "bg-red-50",
+            iconText: "text-red-600",
+            buttonBg: "bg-gradient-to-r from-red-600 to-red-700",
+            buttonShadow: "shadow-red-200",
+            searchRing: "focus:ring-red-500",
+          }}
+        />
 
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={handleAdd}
-          className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl shadow-lg shadow-red-200 hover:shadow-xl transition-all font-medium"
-        >
-          <FaPlus className="w-4 h-4" />
-          <span>Tambah State</span>
-        </motion.button>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border-2 border-blue-200">
-          <div className="flex items-center gap-2 mb-2">
-            <FaCircle className="w-5 h-5 text-blue-600" />
-            <span className="text-sm text-blue-700 font-medium">
-              Total States
-            </span>
+        {filteredStates.length === 0 ? (
+          <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
+            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <FaCircle className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">
+              Tidak ada workflow state
+            </h3>
+            <p className="text-sm text-gray-500">
+              {searchQuery
+                ? "Coba ubah kata kunci pencarian"
+                : "Belum ada workflow state yang ditambahkan"}
+            </p>
           </div>
-          <div className="text-3xl font-bold text-blue-900">
-            {states.length}
-          </div>
-        </div>
-        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-5 border-2 border-green-200">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
-            <span className="text-sm text-green-700 font-medium">Active</span>
-          </div>
-          <div className="text-3xl font-bold text-green-900">
-            {states.filter((s) => s.docstatus === 1).length}
-          </div>
-        </div>
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-5 border-2 border-purple-200">
-          <div className="flex items-center gap-2 mb-2">
-            <FaPalette className="w-5 h-5 text-purple-600" />
-            <span className="text-sm text-purple-700 font-medium">Colors</span>
-          </div>
-          <div className="text-3xl font-bold text-purple-900">
-            {uniqueColors.length}
-          </div>
-        </div>
-      </div>
-
-      {/* Search Bar */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 mb-6">
-        <div className="relative">
-          <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cari workflow state..."
-            className="w-full pl-11 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+        ) : (
+          <EntityTable
+            columns={columns}
+            rows={filteredStates}
+            getRowKey={(state) => state.id}
+            onRowClick={openDetail}
+            footer={
+              <>
+                <span>Click row untuk lihat detail workflow state</span>
+                <span>Showing {filteredStates.length} states</span>
+              </>
+            }
           />
-        </div>
+        )}
       </div>
 
-      {/* States Display */}
-      {filteredStates.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
-          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <FaCircle className="w-8 h-8 text-gray-400" />
-          </div>
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">
-            Tidak ada workflow state
-          </h3>
-          <p className="text-sm text-gray-500">
-            {searchQuery
-              ? "Coba ubah kata kunci pencarian"
-              : "Belum ada workflow state yang ditambahkan"}
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredStates.map((state) => (
-            <WorkflowStateCard
-              key={state.id}
-              state={state}
-              onEdit={() => handleEdit(state)}
-              onDelete={() => promptDeleteState(state)}
-              onView={() => openDetail(state)}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Modals */}
       <AddWorkflowStateModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}

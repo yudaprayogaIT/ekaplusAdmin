@@ -1,5 +1,6 @@
 "use client";
 
+import EntityCard from "@/components/entity-management/EntityCard";
 import { motion } from "framer-motion";
 import { FaBoxes, FaEye, FaLayerGroup, FaTag } from "react-icons/fa";
 import {
@@ -63,57 +64,50 @@ export default function ResourceCard({ resource, viewMode, onView }: Props) {
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-lg transition-all group"
-    >
-      <div className="flex items-start justify-between mb-4">
-        <div className="w-14 h-14 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center">
-          <FaBoxes className="w-7 h-7 text-white" />
-        </div>
-        <button
-          onClick={onView}
-          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
-          title="View Details"
-        >
-          <FaEye className="w-4 h-4" />
-        </button>
-      </div>
-
-      <div className="mb-4">
-        <div className="flex items-center gap-2 mb-2">
-          <h3 className="text-xl font-bold text-gray-800 truncate">
-            {resource.Name}
-          </h3>
+    <EntityCard
+      icon={<FaBoxes className="w-5 h-5" />}
+      title={resource.Name}
+      subtitle={
+        <div className="flex items-center gap-2">
+          <code className="text-sm text-gray-500 font-mono truncate">
+            {resource.Slug}
+          </code>
           <span className="px-2 py-1 bg-cyan-100 text-cyan-700 rounded-lg text-xs font-bold">
             #{resource.ID}
           </span>
         </div>
-        <p className="text-sm text-gray-500 font-mono truncate mb-3">
-          {resource.Slug}
-        </p>
-        <p className="text-sm text-gray-600 line-clamp-2">{description}</p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl bg-cyan-50 p-3">
-          <div className="flex items-center gap-2 text-cyan-700 mb-1">
-            <FaLayerGroup className="w-3 h-3" />
-            <span className="text-xs font-semibold">Module</span>
+      }
+      description={<p className="line-clamp-2">{description}</p>}
+      onView={onView}
+      accentClasses={{
+        iconBg: "bg-cyan-50",
+        iconText: "text-cyan-600",
+        hoverBorder: "hover:border-cyan-200",
+        hoverText: "group-hover:text-cyan-600",
+        detailText: "text-cyan-600 hover:text-cyan-700",
+      }}
+      actions={
+        <div className="grid grid-cols-2 gap-3 w-full">
+          <div className="rounded-xl bg-cyan-50 p-3">
+            <div className="flex items-center gap-2 text-cyan-700 mb-1">
+              <FaLayerGroup className="w-3 h-3" />
+              <span className="text-xs font-semibold">Module</span>
+            </div>
+            <p className="text-sm font-bold text-cyan-900 truncate">
+              {moduleName}
+            </p>
           </div>
-          <p className="text-sm font-bold text-cyan-900 truncate">{moduleName}</p>
-        </div>
-        <div className="rounded-xl bg-slate-50 p-3">
-          <div className="flex items-center gap-2 text-slate-700 mb-1">
-            <FaTag className="w-3 h-3" />
-            <span className="text-xs font-semibold">Slug</span>
+          <div className="rounded-xl bg-slate-50 p-3">
+            <div className="flex items-center gap-2 text-slate-700 mb-1">
+              <FaTag className="w-3 h-3" />
+              <span className="text-xs font-semibold">Slug</span>
+            </div>
+            <p className="text-sm font-bold text-slate-900 truncate">
+              {resource.Slug}
+            </p>
           </div>
-          <p className="text-sm font-bold text-slate-900 truncate">
-            {resource.Slug}
-          </p>
         </div>
-      </div>
-    </motion.div>
+      }
+    />
   );
 }

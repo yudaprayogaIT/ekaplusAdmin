@@ -1,20 +1,14 @@
-// src/components/permissions/PermissionList.tsx
 "use client";
 
 import { useEffect, useState } from "react";
-import PermissionCard from "./PermissionCard";
 import AddPermissionModal from "./AddPermissionModal";
 import PermissionDetailModal from "./PermissionDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import {
-  FaPlus,
-  FaSearch,
-  FaList,
-  FaTh,
-  FaShieldAlt,
-  FaKey,
-} from "react-icons/fa";
-import { motion } from "framer-motion";
+import EntityPageHeader from "@/components/entity-management/EntityPageHeader";
+import EntityTable, {
+  EntityTableColumn,
+} from "@/components/entity-management/EntityTable";
+import { FaShieldAlt } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAuthHeaders, API_CONFIG, apiFetch } from "@/config/api";
 
@@ -45,15 +39,12 @@ export default function PermissionList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<Permission | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailPermission, setDetailPermission] = useState<Permission | null>(
     null,
   );
-
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
@@ -61,7 +52,15 @@ export default function PermissionList() {
     (() => Promise<void>) | null
   >(null);
 
-  // Load permissions from API
+  const formatUpdatedAt = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -76,32 +75,28 @@ export default function PermissionList() {
         }
 
         const headers = getAuthHeaders(token);
-        const DATA_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_PERMISSION}`;
-
-        const res = await apiFetch(DATA_URL, {
+        const dataUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_PERMISSION}`;
+        const res = await apiFetch(dataUrl, {
           method: "GET",
           cache: "no-store",
           headers,
         });
 
-        if (res.ok) {
-          const contentType = res.headers.get("content-type");
-          if (!contentType || !contentType.includes("application/json")) {
-            const text = await res.text();
-            throw new Error(
-              "Server returned non-JSON response. Please check the API endpoint.",
-            );
-          }
-
-          const response = (await res.json()) as PermissionAPIResponse;
-          const mappedPermissions: Permission[] = response.data;
-
-          if (!cancelled) {
-            setPermissions(mappedPermissions);
-          }
-        } else {
+        if (!res.ok) {
           const errorText = await res.text();
           throw new Error(`HTTP ${res.status}: ${errorText}`);
+        }
+
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          throw new Error(
+            "Server returned non-JSON response. Please check the API endpoint.",
+          );
+        }
+
+        const response = (await res.json()) as PermissionAPIResponse;
+        if (!cancelled) {
+          setPermissions(response.data);
         }
       } catch (err: unknown) {
         if (!cancelled) {
@@ -124,22 +119,19 @@ export default function PermissionList() {
     }
 
     load();
-
     return () => {
       cancelled = true;
     };
   }, [isAuthenticated, token]);
 
-  // Listen for updates
   useEffect(() => {
     async function handler() {
       if (!isAuthenticated || !token) return;
 
       try {
         const headers = getAuthHeaders(token);
-        const DATA_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_PERMISSION}`;
-
-        const res = await apiFetch(DATA_URL, {
+        const dataUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_PERMISSION}`;
+        const res = await apiFetch(dataUrl, {
           method: "GET",
           cache: "no-store",
           headers,
@@ -149,9 +141,7 @@ export default function PermissionList() {
           const response = (await res.json()) as PermissionAPIResponse;
           setPermissions(response.data);
         }
-      } catch (error) {
-        // console.error("Failed to reload permissions:", error);
-      }
+      } catch {}
     }
 
     window.addEventListener("ekatalog:permissions_update", handler);
@@ -159,7 +149,6 @@ export default function PermissionList() {
       window.removeEventListener("ekatalog:permissions_update", handler);
   }, [isAuthenticated, token]);
 
-  // Filter permissions based on search
   let displayedPermissions = permissions;
   if (searchQuery.trim()) {
     displayedPermissions = displayedPermissions.filter(
@@ -193,9 +182,8 @@ export default function PermissionList() {
 
     try {
       const headers = getAuthHeaders(token);
-      const DELETE_URL = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_PERMISSION}/${permission.ID}`;
-
-      const res = await apiFetch(DELETE_URL, {
+      const deleteUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_PERMISSION}/${permission.ID}`;
+      const res = await apiFetch(deleteUrl, {
         method: "DELETE",
         headers,
       });
@@ -238,13 +226,57 @@ export default function PermissionList() {
     setConfirmOpen(false);
   }
 
-  // Show loading state
+  const columns: EntityTableColumn<Permission>[] = [
+    {
+      key: "name",
+      header: "Permission Name",
+      render: (permission) => (
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
+            <FaShieldAlt className="h-3.5 w-3.5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-gray-900">
+              {permission.Name}
+            </p>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openDetail(permission);
+              }}
+              className="text-xs font-medium text-purple-500 hover:text-purple-600"
+            >
+              Lihat detail
+            </button>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "slug",
+      header: "Slug",
+      render: (permission) => (
+        <code className="inline-flex rounded bg-gray-100 px-2 py-1 text-[11px] text-gray-600">
+          {permission.Slug}
+        </code>
+      ),
+    },
+    {
+      key: "updated",
+      header: "Updated At",
+      className: "whitespace-nowrap",
+      cellClassName: "text-sm text-gray-500 whitespace-nowrap",
+      render: (permission) => formatUpdatedAt(permission.UpdatedAt),
+    },
+  ];
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center py-16">
-            <div className="w-16 h-16 border-4 border-red-200 border-t-red-500 rounded-full animate-spin mx-auto mb-4"></div>
+            <div className="w-16 h-16 border-4 border-purple-200 border-t-purple-500 rounded-full animate-spin mx-auto mb-4"></div>
             <p className="text-gray-600">Memuat permissions...</p>
           </div>
         </div>
@@ -252,7 +284,6 @@ export default function PermissionList() {
     );
   }
 
-  // Show error state
   if (error) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-8">
@@ -267,7 +298,7 @@ export default function PermissionList() {
             <p className="text-sm text-gray-500 mb-4">{error}</p>
             <button
               onClick={() => window.location.reload()}
-              className="px-6 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:shadow-lg transition-all"
+              className="px-6 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all"
             >
               Reload
             </button>
@@ -278,111 +309,30 @@ export default function PermissionList() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
-              Permissions
-            </h1>
-            <p className="text-sm md:text-base text-gray-600">
-              Kelola permission untuk sistem authorization
-            </p>
-          </div>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-4">
+      <div className="mx-auto space-y-6">
+        <EntityPageHeader
+          icon={<FaShieldAlt className="w-5 h-5" />}
+          title="Permissions"
+          description="Kelola permission untuk sistem authorization."
+          addLabel="Tambah Permission"
+          onAdd={handleAdd}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Cari permission berdasarkan nama atau slug..."
+          accentClasses={{
+            iconBg: "bg-purple-50",
+            iconText: "text-purple-600",
+            buttonBg: "bg-gradient-to-r from-purple-600 to-purple-700",
+            buttonShadow: "shadow-purple-200",
+            searchRing: "focus:ring-purple-500",
+          }}
+        />
 
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={handleAdd}
-            className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl shadow-lg shadow-red-200 hover:shadow-xl transition-all font-medium"
-          >
-            <FaPlus className="w-4 h-4" />
-            <span>Tambah Permission</span>
-          </motion.button>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl shadow-lg p-6 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-purple-100 text-sm font-medium mb-1">
-                  Total Permissions
-                </p>
-                <p className="text-3xl font-bold">{permissions.length}</p>
-              </div>
-              <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
-                <FaShieldAlt className="w-7 h-7" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg p-6 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-blue-100 text-sm font-medium mb-1">
-                  Active Permissions
-                </p>
-                <p className="text-3xl font-bold">
-                  {displayedPermissions.length}
-                </p>
-              </div>
-              <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
-                <FaKey className="w-7 h-7" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Search and View Toggle */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-4">
-          <div className="flex flex-col md:flex-row gap-4 justify-between">
-            {/* Search Bar */}
-            <div className="relative flex-1 max-w-md">
-              <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari permission berdasarkan nama, slug..."
-                className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
-              />
-            </div>
-
-            {/* View Mode Toggle */}
-            <div className="flex gap-2 bg-gray-100 rounded-xl p-1">
-              <button
-                onClick={() => setViewMode("grid")}
-                className={`px-4 py-3 rounded-xl font-medium transition-all ${
-                  viewMode === "grid"
-                    ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-                title="Grid View"
-              >
-                <FaTh className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => setViewMode("list")}
-                className={`px-4 py-3 rounded-xl font-medium transition-all ${
-                  viewMode === "list"
-                    ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-                title="List View"
-              >
-                <FaList className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Permissions Display */}
         {displayedPermissions.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
             <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <FaSearch className="w-8 h-8 text-gray-400" />
+              <FaShieldAlt className="w-8 h-8 text-gray-400" />
             </div>
             <h3 className="text-lg font-semibold text-gray-800 mb-2">
               Tidak ada permission
@@ -394,28 +344,21 @@ export default function PermissionList() {
             </p>
           </div>
         ) : (
-          <div
-            className={
-              viewMode === "grid"
-                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
-                : "space-y-4"
+          <EntityTable
+            columns={columns}
+            rows={displayedPermissions}
+            getRowKey={(permission) => permission.ID}
+            onRowClick={openDetail}
+            footer={
+              <>
+                <span>Click row untuk lihat detail permission</span>
+                <span>Showing {displayedPermissions.length} permissions</span>
+              </>
             }
-          >
-            {displayedPermissions.map((permission) => (
-              <PermissionCard
-                key={permission.ID}
-                permission={permission}
-                viewMode={viewMode}
-                onEdit={() => handleEdit(permission)}
-                onDelete={() => promptDeletePermission(permission)}
-                onView={() => openDetail(permission)}
-              />
-            ))}
-          </div>
+          />
         )}
       </div>
 
-      {/* Modals */}
       <AddPermissionModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
