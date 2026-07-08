@@ -23,6 +23,11 @@ import {
   expandPermissionCandidates,
   extractPermissionRules,
 } from "@/lib/authz";
+import {
+  isFeatureTourSeen,
+  profileFeatureTourConfig,
+  setPendingFeatureTourStep,
+} from "@/lib/featureTour";
 
 export type User = {
   id: string;
@@ -732,6 +737,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ]);
 
       applyResolvedSession(resolved, authToken);
+      if (
+        typeof window !== "undefined" &&
+        !isFeatureTourSeen(profileFeatureTourConfig)
+      ) {
+        setPendingFeatureTourStep(profileFeatureTourConfig, "menu");
+      }
       return { success: true };
     } catch (error) {
       return {
