@@ -189,7 +189,9 @@ export default function LoginForm({
                 </div>
                 <input
                   id="user"
+                  name="username"
                   type="text"
+                  autoComplete="username"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   placeholder="Masukkan email, username atau nomor telepon"
@@ -214,6 +216,8 @@ export default function LoginForm({
                 </div>
                 <input
                   id="password"
+                  name="password"
+                  autoComplete="current-password"
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
