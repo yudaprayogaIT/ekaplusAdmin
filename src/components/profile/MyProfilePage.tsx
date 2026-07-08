@@ -15,7 +15,6 @@ import {
   FaArrowRight,
   FaCalendarAlt,
   FaCheckCircle,
-  FaChevronRight,
   FaEdit,
   FaEye,
   FaEyeSlash,
@@ -123,7 +122,6 @@ type EditProfileFormState = {
 };
 
 type ResetPasswordFormState = {
-  currentPassword: string;
   newPassword: string;
   confirmPassword: string;
 };
@@ -289,7 +287,6 @@ function createEditForm(profile: ProfileData): EditProfileFormState {
 
 function createEmptyResetForm(): ResetPasswordFormState {
   return {
-    currentPassword: "",
     newPassword: "",
     confirmPassword: "",
   };
@@ -514,23 +511,15 @@ function TimelineItem({
 function PasswordStrength({ value }: { value: string }) {
   const hasMinLength = value.length >= 8;
   const hasNumber = /\d/.test(value);
-  const hasSpecial = /[^A-Za-z0-9]/.test(value);
-  const score = [hasMinLength, hasNumber, hasSpecial].filter(Boolean).length;
+  const score = [hasMinLength, hasNumber].filter(Boolean).length;
   const widthClass =
     score === 0
       ? "w-0"
       : score === 1
-        ? "w-1/3"
-        : score === 2
-          ? "w-2/3"
-          : "w-full";
-  const label = score <= 1 ? "Weak" : score === 2 ? "Fair" : "Strong";
-  const colorClass =
-    score <= 1
-      ? "bg-amber-400"
-      : score === 2
-        ? "bg-indigo-500"
-        : "bg-emerald-500";
+        ? "w-1/2"
+        : "w-full";
+  const label = score <= 1 ? "Weak" : "Strong";
+  const colorClass = score <= 1 ? "bg-amber-400" : "bg-emerald-500";
 
   return (
     <div>
@@ -553,12 +542,6 @@ function PasswordStrength({ value }: { value: string }) {
             className={`h-3 w-3 rounded-full border ${hasNumber ? "border-indigo-500 bg-indigo-500" : "border-slate-400"}`}
           />
           <span>At least one number</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span
-            className={`h-3 w-3 rounded-full border ${hasSpecial ? "border-indigo-500 bg-indigo-500" : "border-slate-400"}`}
-          />
-          <span>At least one special character</span>
         </div>
       </div>
     </div>
@@ -625,7 +608,6 @@ export default function MyProfilePage() {
   const [resetError, setResetError] = useState<string | null>(null);
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [resetSubmitting, setResetSubmitting] = useState(false);
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [provinces, setProvinces] = useState<WilayahOption[]>([]);
@@ -719,11 +701,7 @@ export default function MyProfilePage() {
   }, [editForm, profile, selectedProfileFile]);
 
   const isResetDirty = useMemo(() => {
-    return Boolean(
-      resetForm.currentPassword ||
-      resetForm.newPassword ||
-      resetForm.confirmPassword,
-    );
+    return Boolean(resetForm.newPassword || resetForm.confirmPassword);
   }, [resetForm]);
 
   useEffect(() => {
@@ -842,7 +820,6 @@ export default function MyProfilePage() {
   const openResetModal = useCallback(() => {
     setResetError(null);
     setResetForm(createEmptyResetForm());
-    setShowCurrentPassword(false);
     setShowNewPassword(false);
     setShowConfirmPassword(false);
     setResetOpen(true);
@@ -864,7 +841,6 @@ export default function MyProfilePage() {
     setPendingCloseTarget(null);
     setResetError(null);
     setResetForm(createEmptyResetForm());
-    setShowCurrentPassword(false);
     setShowNewPassword(false);
     setShowConfirmPassword(false);
   }, []);
@@ -1163,11 +1139,7 @@ export default function MyProfilePage() {
 
       setResetError(null);
 
-      const { currentPassword, newPassword, confirmPassword } = resetForm;
-      if (!currentPassword.trim()) {
-        setResetError("Current password wajib diisi.");
-        return;
-      }
+      const { newPassword, confirmPassword } = resetForm;
       if (newPassword.length < 8) {
         setResetError("New password minimal 8 karakter.");
         return;
@@ -1176,19 +1148,12 @@ export default function MyProfilePage() {
         setResetError("New password harus mengandung minimal satu angka.");
         return;
       }
-      if (!/[^A-Za-z0-9]/.test(newPassword)) {
-        setResetError(
-          "New password harus mengandung minimal satu karakter spesial.",
-        );
-        return;
-      }
       if (newPassword !== confirmPassword) {
         setResetError("Confirm password belum sama dengan new password.");
         return;
       }
 
       const payload = {
-        current_password: currentPassword,
         new_password: newPassword,
         confirm_password: confirmPassword,
         password: newPassword,
@@ -1844,35 +1809,6 @@ export default function MyProfilePage() {
               {resetError}
             </div>
           ) : null}
-
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">
-              Current Password
-            </span>
-            <div className="relative">
-              <input
-                type={showCurrentPassword ? "text" : "password"}
-                value={resetForm.currentPassword}
-                onChange={(e) =>
-                  setResetField("currentPassword", e.target.value)
-                }
-                placeholder="••••••••"
-                className="w-full rounded-xl border border-[#e8c9c6] py-2.5 pl-10 pr-11 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-100"
-              />
-              <FaLock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <button
-                type="button"
-                onClick={() => setShowCurrentPassword((current) => !current)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-              >
-                {showCurrentPassword ? (
-                  <FaEyeSlash className="h-4 w-4" />
-                ) : (
-                  <FaEye className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-          </label>
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-slate-700">
