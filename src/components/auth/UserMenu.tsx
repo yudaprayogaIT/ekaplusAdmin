@@ -1,66 +1,21 @@
 // src/components/auth/UserMenu.tsx
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useState } from "react";
+import Image from "next/image";
+import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import LoginForm from "./LoginForm";
 import { useRouter } from "next/navigation";
-import {
-  FaSignInAlt,
-  FaSignOutAlt,
-  FaKey,
-  FaChevronDown,
-  FaUserCircle,
-  FaCog,
-} from "react-icons/fa";
+import { getFileUrl } from "@/config/api";
+import { FaKey, FaSignInAlt } from "react-icons/fa";
 
 export default function UserMenu() {
-  const { currentUser, currentRole, permissions, isAuthenticated, isLoading, logout } = useAuth();
+  const { currentUser, currentRole, permissions, isAuthenticated, isLoading } =
+    useAuth();
   const router = useRouter();
   const [showLoginForm, setShowLoginForm] = useState(false);
-  const [showDropdown, setShowDropdown] = useState(false);
-  
-  // Ref for click outside detection
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Click outside handler
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowDropdown(false);
-      }
-    }
-
-    // Add event listener when dropdown is open
-    if (showDropdown) {
-      // Use mousedown for better UX - closes before the click completes
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [showDropdown]);
-
-  // Close dropdown on escape key
-  useEffect(() => {
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setShowDropdown(false);
-      }
-    }
-
-    if (showDropdown) {
-      document.addEventListener("keydown", handleEscape);
-    }
-
-    return () => {
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [showDropdown]);
-
-  // Get initials for avatar
   const getInitials = (name: string) => {
     return name
       .split(" ")
@@ -70,13 +25,16 @@ export default function UserMenu() {
       .slice(0, 2);
   };
 
+  const avatarUrl =
+    getFileUrl(currentUser?.profile_pic) || currentUser?.profile_pic || "";
+
   if (isLoading) {
     return (
       <div className="flex items-center gap-2">
-        <div className="w-10 h-10 bg-gray-200 rounded-xl animate-pulse" />
-        <div className="hidden md:block space-y-1">
-          <div className="w-24 h-4 bg-gray-200 rounded animate-pulse" />
-          <div className="w-16 h-3 bg-gray-200 rounded animate-pulse" />
+        <div className="h-10 w-10 animate-pulse rounded-xl bg-gray-200" />
+        <div className="hidden space-y-1 md:block">
+          <div className="h-4 w-24 animate-pulse rounded bg-gray-200" />
+          <div className="h-3 w-16 animate-pulse rounded bg-gray-200" />
         </div>
       </div>
     );
@@ -89,9 +47,9 @@ export default function UserMenu() {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={() => setShowLoginForm(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl shadow-lg shadow-red-200 hover:shadow-xl transition-all font-medium text-sm"
+          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-red-500 to-red-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-red-200 transition-all hover:shadow-xl"
         >
-          <FaSignInAlt className="w-4 h-4" />
+          <FaSignInAlt className="h-4 w-4" />
           <span>Login</span>
         </motion.button>
 
@@ -105,144 +63,55 @@ export default function UserMenu() {
 
   return (
     <>
-      <div className="relative" ref={dropdownRef}>
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => setShowDropdown(!showDropdown)}
-          className={`flex items-center gap-3 px-3 py-2 bg-white rounded-xl border shadow-sm hover:shadow-md transition-all ${
-            showDropdown ? "border-red-300 ring-2 ring-red-100" : "border-gray-200"
-          }`}
+      <motion.button
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        onClick={() => router.push("/profile")}
+        className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm transition-all hover:shadow-md cursor-pointer"
+      >
+        <div
+          className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg text-sm font-bold text-white"
+          style={{
+            backgroundColor:
+              currentUser?.profile_bg_color || currentRole?.color || "#6B7280",
+          }}
         >
-          {/* Avatar */}
-          <div
-            className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-sm"
-            style={{
-              backgroundColor:
-                currentUser?.profile_bg_color || currentRole?.color || "#6B7280",
-            }}
-          >
-            {currentUser ? getInitials(currentUser.full_name) : "?"}
-          </div>
-
-          {/* User Info */}
-          <div className="hidden md:block text-left">
-            <p className="text-sm font-semibold text-gray-800 leading-tight">
-              {currentUser?.full_name}
-            </p>
-            <p
-              className="text-xs font-medium leading-tight"
-              style={{ color: currentRole?.color || "#6B7280" }}
-            >
-              {currentRole?.display_name}
-            </p>
-          </div>
-
-          {/* Permission count badge */}
-          <div className="hidden lg:flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-lg">
-            <FaKey className="w-3 h-3 text-gray-500" />
-            <span className="text-xs font-medium text-gray-600">
-              {permissions.length}
-            </span>
-          </div>
-
-          <FaChevronDown
-            className={`w-3 h-3 text-gray-400 transition-transform duration-200 ${
-              showDropdown ? "rotate-180" : ""
-            }`}
-          />
-        </motion.button>
-
-        {/* Dropdown Menu */}
-        <AnimatePresence>
-          {showDropdown && (
-            <motion.div
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 10, scale: 0.95 }}
-              transition={{ duration: 0.15, ease: "easeOut" }}
-              className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-50"
-            >
-              {/* User Info Header */}
-              <div className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold"
-                    style={{
-                      backgroundColor:
-                        currentUser?.profile_bg_color ||
-                        currentRole?.color ||
-                        "#6B7280",
-                    }}
-                  >
-                    {currentUser ? getInitials(currentUser.full_name) : "?"}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-800 truncate">
-                      {currentUser?.full_name}
-                    </p>
-                    <p className="text-xs text-gray-500 truncate">
-                      {currentUser?.email}
-                    </p>
-                    <span
-                      className="inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded-full"
-                      style={{
-                        backgroundColor: `${currentRole?.color}20`,
-                        color: currentRole?.color,
-                      }}
-                    >
-                      {currentRole?.display_name}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Menu Items */}
-              <div className="py-2">
-                <button
-                  onClick={() => {
-                    setShowDropdown(false);
-                    router.push("/profile");
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  <FaUserCircle className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm">Profil Saya</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setShowDropdown(false);
-                    // Navigate to settings
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  <FaCog className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm">Pengaturan</span>
-                </button>
-
-                <div className="my-2 border-t border-gray-100" />
-
-                <button
-                  onClick={() => {
-                    setShowDropdown(false);
-                    logout();
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-red-600 hover:bg-red-50 transition-colors"
-                >
-                  <FaSignOutAlt className="w-4 h-4" />
-                  <span className="text-sm font-medium">Logout</span>
-                </button>
-              </div>
-            </motion.div>
+          {avatarUrl ? (
+            <Image
+              src={avatarUrl}
+              alt={currentUser?.full_name || "User avatar"}
+              width={36}
+              height={36}
+              className="h-full w-full object-cover"
+            />
+          ) : currentUser ? (
+            getInitials(currentUser.full_name)
+          ) : (
+            "?"
           )}
-        </AnimatePresence>
-      </div>
+        </div>
 
-      <LoginForm
-        open={showLoginForm}
-        onClose={() => setShowLoginForm(false)}
-      />
+        <div className="hidden text-left md:block">
+          <p className="text-sm font-semibold leading-tight text-gray-800">
+            {currentUser?.full_name}
+          </p>
+          <p
+            className="text-xs font-medium leading-tight"
+            style={{ color: currentRole?.color || "#6B7280" }}
+          >
+            {currentRole?.display_name}
+          </p>
+        </div>
+
+        <div className="hidden items-center gap-1 rounded-lg bg-gray-100 px-2 py-1 lg:flex">
+          <FaKey className="h-3 w-3 text-gray-500" />
+          <span className="text-xs font-medium text-gray-600">
+            {permissions.length}
+          </span>
+        </div>
+      </motion.button>
+
+      <LoginForm open={showLoginForm} onClose={() => setShowLoginForm(false)} />
     </>
   );
 }
