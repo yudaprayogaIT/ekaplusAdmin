@@ -12,6 +12,7 @@ interface RegistrationCardProps {
   isSyncing?: boolean;
   syncLabel?: string;
   syncReadOnly?: boolean;
+  tourMode?: boolean;
 }
 
 export function RegistrationCard({
@@ -21,6 +22,7 @@ export function RegistrationCard({
   isSyncing = false,
   syncLabel = "Sync",
   syncReadOnly = false,
+  tourMode = false,
 }: RegistrationCardProps) {
   const getStatusBadgeClass = (docstatus?: number) => {
     if (docstatus === 1) return "bg-green-100 text-green-700 border-green-200";
@@ -51,6 +53,7 @@ export function RegistrationCard({
 
   return (
     <motion.div
+      data-tour={tourMode ? "customer-register-demo-card" : undefined}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{
@@ -153,6 +156,7 @@ export function RegistrationCard({
 
         {/* View Details Button */}
         <motion.button
+          data-tour={tourMode ? "customer-register-view-details" : undefined}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={(e) => {
@@ -168,6 +172,5 @@ export function RegistrationCard({
     </motion.div>
   );
 }
-
 
 

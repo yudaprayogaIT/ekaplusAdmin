@@ -2,9 +2,11 @@
 "use client";
 
 import React, { ReactNode, useEffect, useState } from "react";
+import "driver.js/dist/driver.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import Sidebar, { useSidebarCollapse } from "./Sidebar";
 import Header from "./Header";
+import DriverTourStyles from "@/components/tour/DriverTourStyles";
 
 function LayoutContent({ children }: { children: ReactNode }) {
   const { collapsed, setCollapsed } = useSidebarCollapse();
@@ -56,6 +58,7 @@ function LayoutContent({ children }: { children: ReactNode }) {
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <AuthProvider>
+      <DriverTourStyles />
       <LayoutContent>{children}</LayoutContent>
     </AuthProvider>
   );

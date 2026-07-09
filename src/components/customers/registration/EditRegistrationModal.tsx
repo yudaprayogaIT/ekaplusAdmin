@@ -2,11 +2,19 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaEdit, FaSave, FaPlus, FaTrash } from "react-icons/fa";
+import { FaEdit, FaSave, FaTrash } from "react-icons/fa";
 import { HiXMark } from "react-icons/hi2";
-import type { CustomerRegistration, CustomerRegistrationShippingAddress } from "@/types/customerRegistration";
+import type {
+  CustomerRegistration,
+  CustomerRegistrationShippingAddress,
+} from "@/types/customerRegistration";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_CONFIG, apiFetch, getQueryUrl, getResourceUrl } from "@/config/api";
+import {
+  API_CONFIG,
+  apiFetch,
+  getQueryUrl,
+  getResourceUrl,
+} from "@/config/api";
 import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 
 interface EditRegistrationModalProps {
@@ -14,6 +22,8 @@ interface EditRegistrationModalProps {
   onClose: () => void;
   registration: CustomerRegistration | null;
   onSuccess: () => void;
+  demoMode?: boolean;
+  onDemoSave?: (registration: CustomerRegistration) => void;
 }
 
 interface BranchOption {
@@ -26,6 +36,7 @@ interface ShippingApiRow {
   id?: number;
   parent_id?: number;
   label?: string | null;
+  type?: string | null;
   address?: string | null;
   city?: string | null;
   province?: string | null;
@@ -46,8 +57,11 @@ interface WilayahOption {
 interface ShippingAreaState {
   provinceCode: string;
   regencyCode: string;
+  districtCode: string;
+  villageCode: string;
   regencies: WilayahOption[];
   districts: WilayahOption[];
+  villages: WilayahOption[];
 }
 
 interface FormState {
@@ -73,14 +87,13 @@ interface FormState {
   company_city: string;
   company_district: string;
   company_village: string;
-  same_as_company_address: boolean;
   shipping_addresses: CustomerRegistrationShippingAddress[];
 }
 
 const COMPANY_TYPE_OPTIONS = ["Company", "Individual"];
 const COMPANY_TITLE_OPTIONS_BY_TYPE: Record<string, string[]> = {
   Individual: ["Home Industri", "Toko", "Freelance"],
-  Company: ["PT", "CV", "UD"],
+  Company: ["PT", "CV", "UD", "Toko"],
 };
 const COMPANY_SUFFIX_OPTIONS_BY_TITLE: Record<string, string[]> = {
   "Home Industri": ["HI"],
@@ -91,6 +104,15 @@ const COMPANY_SUFFIX_OPTIONS_BY_TITLE: Record<string, string[]> = {
   UD: ["UD"],
 };
 const PRODUCT_NEED_OPTIONS = ["Bahan Baku Springbed & Sofa", "Furniture"];
+const ADDRESS_TYPE_OPTIONS = [
+  "Shipping",
+  "Billing",
+  "Other",
+  "Warehouse",
+  "Office",
+  "Personal",
+  "Shop",
+];
 const WILAYAH_BASE_URL = "https://www.emsifa.com/api-wilayah-indonesia/api";
 
 function toInputDate(value?: string) {
@@ -100,30 +122,32 @@ function toInputDate(value?: string) {
   return value.split("T")[0] || "";
 }
 
-function emptyShipping(): CustomerRegistrationShippingAddress {
-  return {
-    label: "",
-    address: "",
-    city: "",
-    province: "",
-    district: "",
-    village: "",
-    pic_name: "",
-    pic_phone: "",
-    is_default: 0,
-  };
+function cleanInputValue(value?: string | null) {
+  if (!value || value === "-") return "";
+  return value;
+}
+
+function toNullableText(value?: string | null) {
+  const normalized = cleanInputValue(value).trim();
+  return normalized ? normalized : null;
+}
+
+function isCompanyAddressShippingRow(row?: ShippingApiRow | null) {
+  const label = normalizeName(row?.label);
+  return label === "alamat perusahaan" || label === "alamatperusahaan";
 }
 
 function payloadShipping(addr: CustomerRegistrationShippingAddress) {
   return {
-    label: addr.label || "",
-    pic_name: addr.pic_name || "",
-    pic_phone: addr.pic_phone || "",
-    address: addr.address || "",
-    city: addr.city || "",
-    district: addr.district || "",
-    village: addr.village || "",
-    province: addr.province || "",
+    label: cleanInputValue(addr.label).trim(),
+    type: cleanInputValue(addr.type) || "Shipping",
+    pic_name: toNullableText(addr.pic_name),
+    pic_phone: toNullableText(addr.pic_phone),
+    address: cleanInputValue(addr.address).trim(),
+    city: cleanInputValue(addr.city).trim(),
+    district: cleanInputValue(addr.district).trim(),
+    village: cleanInputValue(addr.village).trim(),
+    province: cleanInputValue(addr.province).trim(),
     is_default: addr.is_default ? 1 : 0,
   };
 }
@@ -181,11 +205,7 @@ async function fetchWilayah(path: string): Promise<WilayahOption[]> {
   }
   const json = await res.json();
   const rows: Array<{ code?: string; id?: string; name?: string }> =
-    Array.isArray(json?.data)
-      ? json.data
-      : Array.isArray(json)
-        ? json
-        : [];
+    Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
   const mapped: WilayahOption[] = rows.map((row) => ({
     code: String(row.code || row.id || ""),
     name: String(row.name || ""),
@@ -197,12 +217,85 @@ function emptyShippingAreaState(): ShippingAreaState {
   return {
     provinceCode: "",
     regencyCode: "",
+    districtCode: "",
+    villageCode: "",
     regencies: [],
     districts: [],
+    villages: [],
   };
 }
 
-export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess }: EditRegistrationModalProps) {
+const sectionCardClass =
+  "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm";
+const fieldClass =
+  "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100";
+const readOnlyFieldClass =
+  "w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2.5 text-slate-700";
+const checkboxClass =
+  "h-4 w-4 rounded border-slate-300 text-orange-500 focus:ring-orange-400";
+
+function getBranchLabel(
+  branches: BranchOption[],
+  branchId: number | null | undefined,
+) {
+  if (!branchId) return "-";
+  const branch = branches.find((item) => item.id === branchId);
+  if (!branch) return String(branchId);
+  return `${branch.branch_name}${branch.city ? ` - ${branch.city}` : ""}`;
+}
+
+function isShippingSameAsCompanyAddress(
+  company: Pick<
+    FormState,
+    | "company_address"
+    | "company_city"
+    | "company_province"
+    | "company_district"
+    | "company_village"
+  >,
+  shipping: CustomerRegistrationShippingAddress,
+) {
+  return (
+    normalizeName(company.company_address) === normalizeName(shipping.address) &&
+    normalizeName(company.company_city) === normalizeName(shipping.city) &&
+    normalizeName(company.company_province) === normalizeName(shipping.province) &&
+    normalizeName(company.company_district) === normalizeName(shipping.district) &&
+    normalizeName(company.company_village) === normalizeName(shipping.village)
+  );
+}
+
+function isSameAsOwnerInitialState(form: Pick<
+  FormState,
+  | "owner_full_name"
+  | "owner_phone"
+  | "owner_email"
+  | "owner_place_of_birth"
+  | "owner_date_of_birth"
+  | "branch_owner"
+  | "branch_owner_phone"
+  | "branch_owner_email"
+  | "branch_owner_place_of_birth"
+  | "branch_owner_date_of_birth"
+>) {
+  return (
+    cleanInputValue(form.owner_full_name) === cleanInputValue(form.branch_owner) &&
+    cleanInputValue(form.owner_phone) === cleanInputValue(form.branch_owner_phone) &&
+    cleanInputValue(form.owner_email) === cleanInputValue(form.branch_owner_email) &&
+    cleanInputValue(form.owner_place_of_birth) ===
+      cleanInputValue(form.branch_owner_place_of_birth) &&
+    cleanInputValue(form.owner_date_of_birth) ===
+      cleanInputValue(form.branch_owner_date_of_birth)
+  );
+}
+
+export function EditRegistrationModal({
+  isOpen,
+  onClose,
+  registration,
+  onSuccess,
+  demoMode = false,
+  onDemoSave,
+}: EditRegistrationModalProps) {
   const { token, isAuthenticated } = useAuth();
   const [form, setForm] = useState<FormState | null>(null);
   const [snapshot, setSnapshot] = useState("");
@@ -210,9 +303,17 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
   const [provinces, setProvinces] = useState<WilayahOption[]>([]);
   const [companyProvinceCode, setCompanyProvinceCode] = useState("");
   const [companyRegencyCode, setCompanyRegencyCode] = useState("");
+  const [companyDistrictCode, setCompanyDistrictCode] = useState("");
+  const [companyVillageCode, setCompanyVillageCode] = useState("");
   const [companyRegencies, setCompanyRegencies] = useState<WilayahOption[]>([]);
   const [companyDistricts, setCompanyDistricts] = useState<WilayahOption[]>([]);
-  const [shippingAreaStates, setShippingAreaStates] = useState<ShippingAreaState[]>([]);
+  const [companyVillages, setCompanyVillages] = useState<WilayahOption[]>([]);
+  const [shippingAreaStates, setShippingAreaStates] = useState<
+    ShippingAreaState[]
+  >([]);
+  const [sameAsCompanyAddressItems, setSameAsCompanyAddressItems] = useState<
+    boolean[]
+  >([]);
   const [isLoadingWilayah, setIsLoadingWilayah] = useState(false);
   const [sameAsOwner, setSameAsOwner] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -224,13 +325,39 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
     return JSON.stringify(form) !== snapshot;
   }, [form, snapshot]);
   const isWilayahApiAvailable = provinces.length > 0;
+  const shippingAddressesLength = form?.shipping_addresses.length ?? 0;
+  const sameAsCompanyAddressItemsKey = sameAsCompanyAddressItems
+    .map((value) => (value ? "1" : "0"))
+    .join(",");
+  const companyAreaOptionsKey = [
+    companyProvinceCode,
+    companyRegencyCode,
+    companyDistrictCode,
+    companyVillageCode,
+    companyRegencies.length,
+    companyDistricts.length,
+    companyVillages.length,
+  ].join("|");
 
   const regencyCache = useRef<Record<string, WilayahOption[]>>({});
   const districtCache = useRef<Record<string, WilayahOption[]>>({});
+  const villageCache = useRef<Record<string, WilayahOption[]>>({});
+  const formRef = useRef<FormState | null>(null);
+  const sameAsCompanyAddressItemsRef = useRef<boolean[]>([]);
+  const companyAreaSnapshotRef = useRef({
+    companyProvinceCode: "",
+    companyRegencyCode: "",
+    companyDistrictCode: "",
+    companyVillageCode: "",
+    companyRegencies: [] as WilayahOption[],
+    companyDistricts: [] as WilayahOption[],
+    companyVillages: [] as WilayahOption[],
+  });
 
   const getRegencies = async (provinceCode: string) => {
     if (!provinceCode) return [];
-    if (regencyCache.current[provinceCode]) return regencyCache.current[provinceCode];
+    if (regencyCache.current[provinceCode])
+      return regencyCache.current[provinceCode];
     const rows = await fetchWilayah(`regencies/${provinceCode}.json`);
     regencyCache.current[provinceCode] = rows;
     return rows;
@@ -238,20 +365,110 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
 
   const getDistricts = async (regencyCode: string) => {
     if (!regencyCode) return [];
-    if (districtCache.current[regencyCode]) return districtCache.current[regencyCode];
+    if (districtCache.current[regencyCode])
+      return districtCache.current[regencyCode];
     const rows = await fetchWilayah(`districts/${regencyCode}.json`);
     districtCache.current[regencyCode] = rows;
+    return rows;
+  };
+
+  const getVillages = async (districtCode: string) => {
+    if (!districtCode) return [];
+    if (villageCache.current[districtCode])
+      return villageCache.current[districtCode];
+    const rows = await fetchWilayah(`villages/${districtCode}.json`);
+    villageCache.current[districtCode] = rows;
     return rows;
   };
 
   useEffect(() => {
     let cancelled = false;
     async function loadData() {
-      if (!isOpen || !registration || !token || !isAuthenticated) return;
+      if (!isOpen || !registration) return;
       setIsLoading(true);
       setIsLoadingWilayah(true);
       setError(null);
       try {
+        if (demoMode) {
+          const shipping = (registration.shipping_addresses || []).map((x) => ({
+            id: x.id,
+            parent_id: x.parent_id,
+            label: cleanInputValue(x.label),
+            type: cleanInputValue(x.type) || "Shipping",
+            address: cleanInputValue(x.address),
+            city: cleanInputValue(x.city),
+            province: cleanInputValue(x.province),
+            district: cleanInputValue(x.district),
+            village: cleanInputValue(x.village),
+            country: cleanInputValue(x.country),
+            pic_name: cleanInputValue(x.pic_name),
+            pic_phone: cleanInputValue(x.pic_phone),
+            is_default: x.is_default ? 1 : 0,
+          }));
+
+          const initial: FormState = {
+            owner_full_name: cleanInputValue(registration.user.full_name),
+            owner_phone: cleanInputValue(registration.user.phone),
+            owner_email: cleanInputValue(registration.user.email),
+            owner_place_of_birth: cleanInputValue(registration.user.place_of_birth),
+            owner_date_of_birth: toInputDate(registration.user.date_of_birth),
+            branch_owner: cleanInputValue(registration.branch_owner?.full_name),
+            branch_owner_phone: cleanInputValue(registration.branch_owner?.phone),
+            branch_owner_email: cleanInputValue(registration.branch_owner?.email),
+            branch_owner_place_of_birth: cleanInputValue(
+              registration.branch_owner?.place_of_birth,
+            ),
+            branch_owner_date_of_birth: toInputDate(
+              registration.branch_owner?.date_of_birth,
+            ),
+            company_type: cleanInputValue(registration.company.company_type),
+            company_title: cleanInputValue(registration.company.company_title),
+            ...splitCompanyName(
+              cleanInputValue(registration.company.name),
+              cleanInputValue(registration.company.company_title),
+            ),
+            product_need: cleanInputValue(registration.company.product_need),
+            branch_id: registration.company.branch_id || null,
+            company_address: cleanInputValue(registration.address.full_address),
+            company_province: cleanInputValue(registration.address.province_name),
+            company_city: cleanInputValue(registration.address.city_name),
+            company_district: cleanInputValue(registration.address.district_name),
+            company_village: cleanInputValue(registration.address.village_name),
+            shipping_addresses: shipping,
+          };
+
+          if (!cancelled) {
+            setBranches([
+              {
+                id: registration.company.branch_id,
+                branch_name: registration.company.branch_name,
+                city: registration.company.branch_city,
+              },
+            ]);
+            setProvinces([]);
+            setCompanyProvinceCode("");
+            setCompanyRegencyCode("");
+            setCompanyDistrictCode("");
+            setCompanyVillageCode("");
+            setCompanyRegencies([]);
+            setCompanyDistricts([]);
+            setCompanyVillages([]);
+            setShippingAreaStates(
+              initial.shipping_addresses.map(() => emptyShippingAreaState()),
+            );
+            setSameAsCompanyAddressItems(
+              shipping.map((addr) =>
+                isShippingSameAsCompanyAddress(initial, addr),
+              ),
+            );
+            setSameAsOwner(isSameAsOwnerInitialState(initial));
+            setForm(initial);
+            setSnapshot(JSON.stringify(initial));
+          }
+          return;
+        }
+        if (!token || !isAuthenticated) return;
+
         const shippingSpec = {
           fields: ["*"],
           filters: [["parent_id", "=", Number(registration.id)]],
@@ -259,9 +476,12 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
         const branchSpec = { fields: ["id", "branch_name", "city"] };
         const [shippingRes, branchRes, provinceRows] = await Promise.all([
           apiFetch(
-            getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER_ADDRESS, shippingSpec),
+            getQueryUrl(
+              API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER_ADDRESS,
+              shippingSpec,
+            ),
             { method: "GET", cache: "no-store" },
-            token
+            token,
           ),
           fetchAllQueryRows<BranchOption>({
             endpoint: API_CONFIG.ENDPOINTS.BRANCH,
@@ -275,13 +495,17 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
         let shippingRows: ShippingApiRow[] = [];
         if (shippingRes.ok) {
           const shippingJson = await shippingRes.json();
-          shippingRows = Array.isArray(shippingJson?.data) ? shippingJson.data : [];
+          shippingRows = Array.isArray(shippingJson?.data)
+            ? shippingJson.data
+            : [];
         } else {
           // Fallback: some backend deployments reject filters, fetch all then filter client-side
           const fallbackRes = await apiFetch(
-            getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER_ADDRESS, { fields: ["*"] }),
+            getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER_ADDRESS, {
+              fields: ["*"],
+            }),
             { method: "GET", cache: "no-store" },
-            token
+            token,
           );
           if (!fallbackRes.ok) {
             throw new Error(`Failed to fetch shipping (${shippingRes.status})`);
@@ -291,108 +515,171 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
             ? fallbackJson.data
             : [];
           shippingRows = allRows.filter(
-            (row) => Number(row.parent_id || 0) === Number(registration.id)
+            (row) => Number(row.parent_id || 0) === Number(registration.id),
           );
         }
 
-        const branchRows: BranchOption[] = Array.isArray(branchRes) ? branchRes : [];
+        const branchRows: BranchOption[] = Array.isArray(branchRes)
+          ? branchRes
+          : [];
 
-        const shipping = shippingRows.map((x) => ({
-          id: x.id,
-          parent_id: x.parent_id,
-          label: x.label || "",
-          address: x.address || "",
-          city: x.city || "",
-          province: x.province || "",
-          district: x.district || "",
-          village: x.village || "",
-          country: x.country || "",
-          pic_name: x.pic_name || "",
-          pic_phone: x.pic_phone || "",
-          is_default: x.is_default ? 1 : 0,
-        }));
+        const shipping = shippingRows
+          .filter((row) => !isCompanyAddressShippingRow(row))
+          .map((x) => ({
+            id: x.id,
+            parent_id: x.parent_id,
+            label: cleanInputValue(x.label),
+            type: cleanInputValue(x.type) || "Shipping",
+            address: cleanInputValue(x.address),
+            city: cleanInputValue(x.city),
+            province: cleanInputValue(x.province),
+            district: cleanInputValue(x.district),
+            village: cleanInputValue(x.village),
+            country: cleanInputValue(x.country),
+            pic_name: cleanInputValue(x.pic_name),
+            pic_phone: cleanInputValue(x.pic_phone),
+            is_default: x.is_default ? 1 : 0,
+          }));
 
         const initial: FormState = {
-          owner_full_name: registration.user.full_name || "",
-          owner_phone: registration.user.phone || "",
-          owner_email: registration.user.email || "",
-          owner_place_of_birth: registration.user.place_of_birth || "",
+          owner_full_name: cleanInputValue(registration.user.full_name),
+          owner_phone: cleanInputValue(registration.user.phone),
+          owner_email: cleanInputValue(registration.user.email),
+          owner_place_of_birth: cleanInputValue(registration.user.place_of_birth),
           owner_date_of_birth: toInputDate(registration.user.date_of_birth),
-          branch_owner: registration.branch_owner?.full_name || "",
-          branch_owner_phone: registration.branch_owner?.phone || "",
-          branch_owner_email: registration.branch_owner?.email || "",
-          branch_owner_place_of_birth: registration.branch_owner?.place_of_birth || "",
-          branch_owner_date_of_birth: toInputDate(registration.branch_owner?.date_of_birth),
-          company_type: registration.company.company_type || "",
-          company_title: registration.company.company_title || "",
-          ...splitCompanyName(
-            registration.company.name || "",
-            registration.company.company_title || "",
+          branch_owner: cleanInputValue(registration.branch_owner?.full_name),
+          branch_owner_phone: cleanInputValue(registration.branch_owner?.phone),
+          branch_owner_email: cleanInputValue(registration.branch_owner?.email),
+          branch_owner_place_of_birth: cleanInputValue(
+            registration.branch_owner?.place_of_birth,
           ),
-          product_need: registration.company.product_need || "",
+          branch_owner_date_of_birth: toInputDate(
+            registration.branch_owner?.date_of_birth,
+          ),
+          company_type: cleanInputValue(registration.company.company_type),
+          company_title: cleanInputValue(registration.company.company_title),
+          ...splitCompanyName(
+            cleanInputValue(registration.company.name),
+            cleanInputValue(registration.company.company_title),
+          ),
+          product_need: cleanInputValue(registration.company.product_need),
           branch_id: registration.company.branch_id || null,
-          company_address: registration.address.full_address || "",
-          company_province: registration.address.province_name || "",
-          company_city: registration.address.city_name || "",
-          company_district: registration.address.district_name || "",
-          company_village: registration.address.village_name || "",
-          same_as_company_address: Boolean(registration.same_as_company_address),
+          company_address: cleanInputValue(registration.address.full_address),
+          company_province: cleanInputValue(registration.address.province_name),
+          company_city: cleanInputValue(registration.address.city_name),
+          company_district: cleanInputValue(registration.address.district_name),
+          company_village: cleanInputValue(registration.address.village_name),
           shipping_addresses: shipping,
         };
 
-        const companyProvince = matchByName(provinceRows, initial.company_province);
+        const companyProvince = matchByName(
+          provinceRows,
+          initial.company_province,
+        );
         const nextCompanyProvinceCode = companyProvince?.code || "";
         let nextCompanyRegencies: WilayahOption[] = [];
         let nextCompanyRegencyCode = "";
         let nextCompanyDistricts: WilayahOption[] = [];
+        let nextCompanyDistrictCode = "";
+        let nextCompanyVillages: WilayahOption[] = [];
+        let nextCompanyVillageCode = "";
         if (nextCompanyProvinceCode && provinceRows.length > 0) {
           nextCompanyRegencies = await getRegencies(nextCompanyProvinceCode);
-          const companyRegency = matchByName(nextCompanyRegencies, initial.company_city);
+          const companyRegency = matchByName(
+            nextCompanyRegencies,
+            initial.company_city,
+          );
           nextCompanyRegencyCode = companyRegency?.code || "";
           if (nextCompanyRegencyCode) {
             nextCompanyDistricts = await getDistricts(nextCompanyRegencyCode);
+            const companyDistrict = matchByName(
+              nextCompanyDistricts,
+              initial.company_district,
+            );
+            nextCompanyDistrictCode = companyDistrict?.code || "";
+            if (nextCompanyDistrictCode) {
+              nextCompanyVillages = await getVillages(nextCompanyDistrictCode);
+              const companyVillage = matchByName(
+                nextCompanyVillages,
+                initial.company_village,
+              );
+              nextCompanyVillageCode = companyVillage?.code || "";
+            }
           }
         }
 
-        const nextShippingAreaStates: ShippingAreaState[] = provinceRows.length > 0
-          ? await Promise.all(
-              initial.shipping_addresses.map(async (addr) => {
-                const province = matchByName(provinceRows, addr.province);
-                if (!province) return emptyShippingAreaState();
-                const regencies = await getRegencies(province.code);
-                const regency = matchByName(regencies, addr.city);
-                if (!regency) {
+        const nextShippingAreaStates: ShippingAreaState[] =
+          provinceRows.length > 0
+            ? await Promise.all(
+                initial.shipping_addresses.map(async (addr) => {
+                  const province = matchByName(provinceRows, addr.province);
+                  if (!province) return emptyShippingAreaState();
+                  const regencies = await getRegencies(province.code);
+                  const regency = matchByName(regencies, addr.city);
+                  if (!regency) {
+                    return {
+                      provinceCode: province.code,
+                      regencyCode: "",
+                      districtCode: "",
+                      villageCode: "",
+                      regencies,
+                      districts: [],
+                      villages: [],
+                    };
+                  }
+                  const districts = await getDistricts(regency.code);
+                  const district = matchByName(districts, addr.district);
+                  if (!district) {
+                    return {
+                      provinceCode: province.code,
+                      regencyCode: regency.code,
+                      districtCode: "",
+                      villageCode: "",
+                      regencies,
+                      districts,
+                      villages: [],
+                    };
+                  }
+                  const villages = await getVillages(district.code);
+                  const village = matchByName(villages, addr.village);
                   return {
                     provinceCode: province.code,
-                    regencyCode: "",
+                    regencyCode: regency.code,
+                    districtCode: district.code,
+                    villageCode: village?.code || "",
                     regencies,
-                    districts: [],
+                    districts,
+                    villages,
                   };
-                }
-                const districts = await getDistricts(regency.code);
-                return {
-                  provinceCode: province.code,
-                  regencyCode: regency.code,
-                  regencies,
-                  districts,
-                };
-              })
-            )
-          : initial.shipping_addresses.map(() => emptyShippingAreaState());
+                }),
+              )
+            : initial.shipping_addresses.map(() => emptyShippingAreaState());
 
         if (!cancelled) {
           setBranches(branchRows);
           setProvinces(provinceRows);
           setCompanyProvinceCode(nextCompanyProvinceCode);
           setCompanyRegencyCode(nextCompanyRegencyCode);
+          setCompanyDistrictCode(nextCompanyDistrictCode);
+          setCompanyVillageCode(nextCompanyVillageCode);
           setCompanyRegencies(nextCompanyRegencies);
           setCompanyDistricts(nextCompanyDistricts);
+          setCompanyVillages(nextCompanyVillages);
           setShippingAreaStates(nextShippingAreaStates);
+          setSameAsCompanyAddressItems(
+            shipping.map((addr) =>
+              isShippingSameAsCompanyAddress(initial, addr),
+            ),
+          );
+          setSameAsOwner(isSameAsOwnerInitialState(initial));
           setForm(initial);
           setSnapshot(JSON.stringify(initial));
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Gagal memuat data edit");
+        if (!cancelled)
+          setError(
+            err instanceof Error ? err.message : "Gagal memuat data edit",
+          );
       } finally {
         if (!cancelled) {
           setIsLoading(false);
@@ -404,7 +691,35 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
     return () => {
       cancelled = true;
     };
-  }, [isOpen, registration, token, isAuthenticated]);
+  }, [demoMode, isOpen, registration, token, isAuthenticated]);
+
+  useEffect(() => {
+    formRef.current = form;
+  }, [form]);
+
+  useEffect(() => {
+    sameAsCompanyAddressItemsRef.current = sameAsCompanyAddressItems;
+  }, [sameAsCompanyAddressItems]);
+
+  useEffect(() => {
+    companyAreaSnapshotRef.current = {
+      companyProvinceCode,
+      companyRegencyCode,
+      companyDistrictCode,
+      companyVillageCode,
+      companyRegencies,
+      companyDistricts,
+      companyVillages,
+    };
+  }, [
+    companyProvinceCode,
+    companyRegencyCode,
+    companyDistrictCode,
+    companyVillageCode,
+    companyRegencies,
+    companyDistricts,
+    companyVillages,
+  ]);
 
   useEffect(() => {
     if (!sameAsOwner) return;
@@ -419,47 +734,191 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
         branch_owner_date_of_birth: prev.owner_date_of_birth,
       };
     });
-  }, [sameAsOwner, form?.owner_full_name, form?.owner_phone, form?.owner_email, form?.owner_place_of_birth, form?.owner_date_of_birth]);
+  }, [
+    sameAsOwner,
+    form?.owner_full_name,
+    form?.owner_phone,
+    form?.owner_email,
+    form?.owner_place_of_birth,
+    form?.owner_date_of_birth,
+  ]);
 
   useEffect(() => {
-    if (!form) return;
     setShippingAreaStates((prev) => {
-      if (prev.length === form.shipping_addresses.length) return prev;
+      if (prev.length === shippingAddressesLength) return prev;
       const next = [...prev];
-      while (next.length < form.shipping_addresses.length) {
+      while (next.length < shippingAddressesLength) {
         next.push(emptyShippingAreaState());
       }
-      return next.slice(0, form.shipping_addresses.length);
+      return next.slice(0, shippingAddressesLength);
     });
-  }, [form]);
+    setSameAsCompanyAddressItems((prev) => {
+      if (prev.length === shippingAddressesLength) return prev;
+      const next = [...prev];
+      while (next.length < shippingAddressesLength) {
+        next.push(false);
+      }
+      return next.slice(0, shippingAddressesLength);
+    });
+  }, [shippingAddressesLength]);
+
+  useEffect(() => {
+    const currentForm = formRef.current;
+    const sameAsItems = sameAsCompanyAddressItemsRef.current;
+    const companyAreaSnapshot = companyAreaSnapshotRef.current;
+    if (!currentForm) return;
+    if (!sameAsItems.some(Boolean)) return;
+    setForm((prev) => {
+      if (!prev) return prev;
+      const nextShippingAddresses = prev.shipping_addresses.map((address, idx) =>
+        sameAsItems[idx]
+          ? {
+              ...address,
+              address: prev.company_address,
+              city: prev.company_city,
+              province: prev.company_province,
+              district: prev.company_district,
+              village: prev.company_village,
+            }
+          : address,
+      );
+      const hasChanged = nextShippingAddresses.some(
+        (address, idx) =>
+          address.address !== prev.shipping_addresses[idx]?.address ||
+          address.city !== prev.shipping_addresses[idx]?.city ||
+          address.province !== prev.shipping_addresses[idx]?.province ||
+          address.district !== prev.shipping_addresses[idx]?.district ||
+          address.village !== prev.shipping_addresses[idx]?.village,
+      );
+      if (!hasChanged) return prev;
+      return {
+        ...prev,
+        shipping_addresses: nextShippingAddresses,
+      };
+    });
+    setShippingAreaStates((prev) => {
+      let hasChanged = false;
+      const next = prev.map((state, idx) => {
+        if (!sameAsItems[idx]) return state;
+        const updatedState = {
+          ...state,
+          provinceCode: companyAreaSnapshot.companyProvinceCode,
+          regencyCode: companyAreaSnapshot.companyRegencyCode,
+          districtCode: companyAreaSnapshot.companyDistrictCode,
+          villageCode: companyAreaSnapshot.companyVillageCode,
+          regencies: companyAreaSnapshot.companyRegencies,
+          districts: companyAreaSnapshot.companyDistricts,
+          villages: companyAreaSnapshot.companyVillages,
+        };
+        if (
+          updatedState.provinceCode !== state.provinceCode ||
+          updatedState.regencyCode !== state.regencyCode ||
+          updatedState.districtCode !== state.districtCode ||
+          updatedState.villageCode !== state.villageCode ||
+          updatedState.regencies !== state.regencies ||
+          updatedState.districts !== state.districts ||
+          updatedState.villages !== state.villages
+        ) {
+          hasChanged = true;
+        }
+        return updatedState;
+      });
+      return hasChanged ? next : prev;
+    });
+  }, [
+    form?.company_address,
+    form?.company_city,
+    form?.company_province,
+    form?.company_district,
+    form?.company_village,
+    shippingAddressesLength,
+    sameAsCompanyAddressItemsKey,
+    companyAreaOptionsKey,
+  ]);
 
   if (!registration || !form) return null;
 
-  const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
-  const updateShip = (idx: number, patch: Partial<CustomerRegistrationShippingAddress>) => setForm((prev) => {
-    if (!prev) return prev;
-    const next = [...prev.shipping_addresses];
-    next[idx] = { ...next[idx], ...patch };
-    return { ...prev, shipping_addresses: next };
-  });
-  const addShip = () => {
-    setForm((prev) => prev ? { ...prev, shipping_addresses: [...prev.shipping_addresses, emptyShipping()] } : prev);
-    setShippingAreaStates((prev) => [...prev, emptyShippingAreaState()]);
-  };
+  const setField = <K extends keyof FormState>(key: K, value: FormState[K]) =>
+    setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
+  const updateShip = (
+    idx: number,
+    patch: Partial<CustomerRegistrationShippingAddress>,
+  ) =>
+    setForm((prev) => {
+      if (!prev) return prev;
+      const next = [...prev.shipping_addresses];
+      next[idx] = { ...next[idx], ...patch };
+      return { ...prev, shipping_addresses: next };
+    });
   const removeShip = (idx: number) => {
-    setForm((prev) => prev ? { ...prev, shipping_addresses: prev.shipping_addresses.filter((_, i) => i !== idx) } : prev);
+    setForm((prev) =>
+      prev
+        ? {
+            ...prev,
+            shipping_addresses: prev.shipping_addresses.filter(
+              (_, i) => i !== idx,
+            ),
+          }
+        : prev,
+    );
     setShippingAreaStates((prev) => prev.filter((_, i) => i !== idx));
+    setSameAsCompanyAddressItems((prev) => prev.filter((_, i) => i !== idx));
   };
-  const setDefaultShip = (idx: number) => setForm((prev) => prev ? { ...prev, shipping_addresses: prev.shipping_addresses.map((x, i) => ({ ...x, is_default: i === idx ? 1 : 0 })) } : prev);
+  const setDefaultShip = (idx: number) =>
+    setForm((prev) =>
+      prev
+        ? {
+            ...prev,
+            shipping_addresses: prev.shipping_addresses.map((x, i) => ({
+              ...x,
+              is_default: i === idx ? 1 : 0,
+            })),
+          }
+        : prev,
+    );
+
+  const toggleSameAsCompanyAddressItem = (idx: number, checked: boolean) => {
+    setSameAsCompanyAddressItems((prev) => {
+      const next = [...prev];
+      next[idx] = checked;
+      return next;
+    });
+    if (!checked) return;
+    updateShip(idx, {
+      address: form.company_address,
+      city: form.company_city,
+      province: form.company_province,
+      district: form.company_district,
+      village: form.company_village,
+    });
+    setShippingAreaStates((prev) => {
+      const next = [...prev];
+      next[idx] = {
+        ...(next[idx] || emptyShippingAreaState()),
+        provinceCode: companyProvinceCode,
+        regencyCode: companyRegencyCode,
+        districtCode: companyDistrictCode,
+        villageCode: companyVillageCode,
+        regencies: companyRegencies,
+        districts: companyDistricts,
+        villages: companyVillages,
+      };
+      return next;
+    });
+  };
 
   const onCompanyProvinceChange = async (provinceCode: string) => {
     const selected = provinces.find((x) => x.code === provinceCode) || null;
     setCompanyProvinceCode(provinceCode);
     setCompanyRegencyCode("");
+    setCompanyDistrictCode("");
+    setCompanyVillageCode("");
     setCompanyDistricts([]);
+    setCompanyVillages([]);
     setField("company_province", selected?.name || "");
     setField("company_city", "");
     setField("company_district", "");
+    setField("company_village", "");
     if (!provinceCode) {
       setCompanyRegencies([]);
       return;
@@ -474,10 +933,15 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
   };
 
   const onCompanyRegencyChange = async (regencyCode: string) => {
-    const selected = companyRegencies.find((x) => x.code === regencyCode) || null;
+    const selected =
+      companyRegencies.find((x) => x.code === regencyCode) || null;
     setCompanyRegencyCode(regencyCode);
+    setCompanyDistrictCode("");
+    setCompanyVillageCode("");
+    setCompanyVillages([]);
     setField("company_city", selected?.name || "");
     setField("company_district", "");
+    setField("company_village", "");
     if (!regencyCode) {
       setCompanyDistricts([]);
       return;
@@ -491,21 +955,53 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
     }
   };
 
-  const onCompanyDistrictChange = (districtCode: string) => {
-    const selected = companyDistricts.find((x) => x.code === districtCode) || null;
+  const onCompanyDistrictChange = async (districtCode: string) => {
+    const selected =
+      companyDistricts.find((x) => x.code === districtCode) || null;
+    setCompanyDistrictCode(districtCode);
+    setCompanyVillageCode("");
     setField("company_district", selected?.name || "");
+    setField("company_village", "");
+    if (!districtCode) {
+      setCompanyVillages([]);
+      return;
+    }
+    try {
+      const rows = await getVillages(districtCode);
+      setCompanyVillages(rows);
+    } catch (e) {
+      setCompanyVillages([]);
+      setError(e instanceof Error ? e.message : "Gagal memuat kelurahan");
+    }
   };
 
-  const onShippingProvinceChange = async (idx: number, provinceCode: string) => {
+  const onCompanyVillageChange = (villageCode: string) => {
+    const selected = companyVillages.find((x) => x.code === villageCode) || null;
+    setCompanyVillageCode(villageCode);
+    setField("company_village", selected?.name || "");
+  };
+
+  const onShippingProvinceChange = async (
+    idx: number,
+    provinceCode: string,
+  ) => {
     const selected = provinces.find((x) => x.code === provinceCode) || null;
-    updateShip(idx, { province: selected?.name || "", city: "", district: "" });
+    updateShip(idx, {
+      province: selected?.name || "",
+      city: "",
+      district: "",
+      village: "",
+    });
     setShippingAreaStates((prev) => {
       const next = [...prev];
       next[idx] = {
         provinceCode,
         regencyCode: "",
+        districtCode: "",
+        villageCode: "",
         regencies: [],
         districts: [],
+        villages: [],
       };
       return next;
     });
@@ -517,26 +1013,37 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
         next[idx] = {
           provinceCode,
           regencyCode: "",
+          districtCode: "",
+          villageCode: "",
           regencies,
           districts: [],
+          villages: [],
         };
         return next;
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Gagal memuat kota/kabupaten alamat pengiriman");
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Gagal memuat kota/kabupaten alamat pengiriman",
+      );
     }
   };
 
   const onShippingRegencyChange = async (idx: number, regencyCode: string) => {
     const state = shippingAreaStates[idx] || emptyShippingAreaState();
-    const selected = state.regencies.find((x) => x.code === regencyCode) || null;
-    updateShip(idx, { city: selected?.name || "", district: "" });
+    const selected =
+      state.regencies.find((x) => x.code === regencyCode) || null;
+    updateShip(idx, { city: selected?.name || "", district: "", village: "" });
     setShippingAreaStates((prev) => {
       const next = [...prev];
       next[idx] = {
         ...state,
         regencyCode,
+        districtCode: "",
+        villageCode: "",
         districts: [],
+        villages: [],
       };
       return next;
     });
@@ -549,22 +1056,74 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
         next[idx] = {
           ...current,
           regencyCode,
+          districtCode: "",
+          villageCode: "",
           districts,
+          villages: [],
         };
         return next;
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Gagal memuat kecamatan alamat pengiriman");
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Gagal memuat kecamatan alamat pengiriman",
+      );
     }
   };
 
-  const onShippingDistrictChange = (idx: number, districtCode: string) => {
+  const onShippingDistrictChange = async (idx: number, districtCode: string) => {
     const state = shippingAreaStates[idx] || emptyShippingAreaState();
-    const selected = state.districts.find((x) => x.code === districtCode) || null;
-    updateShip(idx, { district: selected?.name || "" });
+    const selected =
+      state.districts.find((x) => x.code === districtCode) || null;
+    updateShip(idx, { district: selected?.name || "", village: "" });
+    setShippingAreaStates((prev) => {
+      const next = [...prev];
+      next[idx] = {
+        ...state,
+        districtCode,
+        villageCode: "",
+        villages: [],
+      };
+      return next;
+    });
+    if (!districtCode) return;
+    try {
+      const villages = await getVillages(districtCode);
+      setShippingAreaStates((prev) => {
+        const next = [...prev];
+        const current = next[idx] || emptyShippingAreaState();
+        next[idx] = {
+          ...current,
+          districtCode,
+          villageCode: "",
+          villages,
+        };
+        return next;
+      });
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Gagal memuat kelurahan alamat pengiriman",
+      );
+    }
   };
 
-  const companyTitleOptions = COMPANY_TITLE_OPTIONS_BY_TYPE[form.company_type] || [];
+  const onShippingVillageChange = (idx: number, villageCode: string) => {
+    const state = shippingAreaStates[idx] || emptyShippingAreaState();
+    const selected = state.villages.find((x) => x.code === villageCode) || null;
+    updateShip(idx, { village: selected?.name || "" });
+    setShippingAreaStates((prev) => {
+      const next = [...prev];
+      next[idx] = {
+        ...state,
+        villageCode,
+      };
+      return next;
+    });
+  };
+
+  const companyTitleOptions =
+    COMPANY_TITLE_OPTIONS_BY_TYPE[form.company_type] || [];
   const currentSuffixOptions =
     COMPANY_SUFFIX_OPTIONS_BY_TITLE[form.company_title] || [];
   const isSuffixEditable = form.company_title === "Freelance";
@@ -625,34 +1184,39 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
   const validate = () => {
     if (!form.owner_full_name.trim()) return "Nama pemilik wajib diisi";
     if (!form.owner_phone.trim()) return "No HP pemilik wajib diisi";
-    if (!form.owner_email.trim()) return "Email pemilik wajib diisi";
     if (!form.branch_owner.trim()) return "Nama PIC branch wajib diisi";
     if (!form.branch_owner_phone.trim()) return "No PIC branch wajib diisi";
-    if (!form.branch_owner_email.trim()) return "Email PIC branch wajib diisi";
     if (!form.company_type.trim()) return "Jenis perusahaan wajib diisi";
     if (!form.company_title.trim()) return "Gelar perusahaan wajib diisi";
     if (!form.company_name_base.trim()) return "Nama perusahaan wajib diisi";
-    if (!form.company_name_suffix.trim()) return "Sebutan perusahaan wajib diisi";
+    if (!form.company_name_suffix.trim())
+      return "Sebutan perusahaan wajib diisi";
     if (!form.product_need.trim()) return "Kebutuhan produk wajib diisi";
     if (!form.branch_id) return "Cabang wajib dipilih";
     if (!form.company_address.trim()) return "Alamat perusahaan wajib diisi";
     if (!form.company_province.trim()) return "Provinsi perusahaan wajib diisi";
     if (!form.company_city.trim()) return "Kota perusahaan wajib diisi";
-    if (!form.company_district.trim()) return "Kecamatan perusahaan wajib diisi";
+    if (!form.company_district.trim())
+      return "Kecamatan perusahaan wajib diisi";
     if (!form.company_village.trim()) return "Kelurahan perusahaan wajib diisi";
-    if (!form.same_as_company_address) {
-      for (let i = 0; i < form.shipping_addresses.length; i += 1) {
-        const s = form.shipping_addresses[i];
-        if (!s.label?.trim() || !s.address?.trim() || !s.city?.trim() || !s.province?.trim()) {
-          return `Data alamat pengiriman #${i + 1} belum lengkap`;
-        }
+    for (let i = 0; i < form.shipping_addresses.length; i += 1) {
+      const s = form.shipping_addresses[i];
+      if (
+        !s.label?.trim() ||
+        !s.type?.trim() ||
+        !s.address?.trim() ||
+        !s.city?.trim() ||
+        !s.province?.trim() ||
+        !s.district?.trim() ||
+        !s.village?.trim()
+      ) {
+        return `Data alamat pengiriman #${i + 1} belum lengkap`;
       }
     }
     return null;
   };
 
   const handleSave = async () => {
-    if (!token || !isAuthenticated) return;
     const err = validate();
     if (err) {
       setError(err);
@@ -661,6 +1225,61 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
     setError(null);
     setIsSaving(true);
     try {
+      const nextCompanyName = buildCompanyName(
+        form.company_name_base,
+        form.company_name_suffix,
+      );
+      if (demoMode) {
+        const selectedBranch = branches.find((item) => item.id === form.branch_id);
+        const nextRegistration: CustomerRegistration = {
+          ...registration,
+          user: {
+            ...registration.user,
+            full_name: form.owner_full_name.trim(),
+            phone: form.owner_phone.trim(),
+            email: form.owner_email.trim(),
+            place_of_birth: form.owner_place_of_birth.trim(),
+            date_of_birth: form.owner_date_of_birth || registration.user.date_of_birth,
+          },
+          company: {
+            ...registration.company,
+            company_type: form.company_type.trim(),
+            company_title: form.company_title.trim(),
+            business_type: `${form.company_type.trim()} - ${form.company_title.trim()}`,
+            name: nextCompanyName,
+            product_need: form.product_need.trim(),
+            branch_id: form.branch_id || registration.company.branch_id,
+            branch_name: selectedBranch?.branch_name || registration.company.branch_name,
+            branch_city: selectedBranch?.city || registration.company.branch_city,
+          },
+          address: {
+            ...registration.address,
+            full_address: form.company_address.trim(),
+            province_name: form.company_province.trim(),
+            city_name: form.company_city.trim(),
+            district_name: form.company_district.trim(),
+            village_name: form.company_village.trim(),
+          },
+          branch_owner: {
+            full_name: form.branch_owner.trim(),
+            phone: form.branch_owner_phone.trim(),
+            email: form.branch_owner_email.trim(),
+            place_of_birth: form.branch_owner_place_of_birth.trim(),
+            date_of_birth:
+              form.branch_owner_date_of_birth ||
+              registration.branch_owner?.date_of_birth ||
+              "",
+          },
+          shipping_addresses: form.shipping_addresses,
+          updated_at: new Date().toISOString(),
+        };
+        onDemoSave?.(nextRegistration);
+        onSuccess();
+        onClose();
+        return;
+      }
+      if (!token || !isAuthenticated) return;
+
       const rawApplicantOwnerId = registration.ekaplus_user?.id;
       const applicantOwnerId =
         typeof rawApplicantOwnerId === "number"
@@ -676,41 +1295,46 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
             : fallbackOwnerId > 0
               ? fallbackOwnerId
               : undefined,
-        owner_full_name: form.owner_full_name,
-        owner_phone: form.owner_phone,
-        owner_email: form.owner_email,
-        owner_place_of_birth: form.owner_place_of_birth,
+        owner_full_name: form.owner_full_name.trim(),
+        owner_phone: form.owner_phone.trim(),
+        owner_email: toNullableText(form.owner_email),
+        owner_place_of_birth: toNullableText(form.owner_place_of_birth),
         owner_date_of_birth: form.owner_date_of_birth || null,
-        branch_owner: form.branch_owner,
-        branch_owner_phone: form.branch_owner_phone,
-        branch_owner_email: form.branch_owner_email,
-        branch_owner_place_of_birth: form.branch_owner_place_of_birth || null,
-        branch_owner_date_of_birth: form.branch_owner_date_of_birth || null,
-        company_type: form.company_type,
-        company_title: form.company_title,
-        company_name: buildCompanyName(
-          form.company_name_base,
-          form.company_name_suffix,
+        branch_owner: form.branch_owner.trim(),
+        branch_owner_phone: form.branch_owner_phone.trim(),
+        branch_owner_email: toNullableText(form.branch_owner_email),
+        branch_owner_place_of_birth: toNullableText(
+          form.branch_owner_place_of_birth,
         ),
-        product_need: form.product_need,
+        branch_owner_date_of_birth: form.branch_owner_date_of_birth || null,
+        company_type: form.company_type.trim(),
+        company_title: form.company_title.trim(),
+        company_name: nextCompanyName,
+        product_need: form.product_need.trim(),
         branch_id: form.branch_id,
-        company_address: form.company_address,
-        company_province: form.company_province,
-        company_city: form.company_city,
-        company_district: form.company_district,
-        company_village: form.company_village,
-        same_as_company_address: form.same_as_company_address ? 1 : 0,
-        customer_shipping_address: form.same_as_company_address ? [] : form.shipping_addresses.map(payloadShipping),
+        company_address: form.company_address.trim(),
+        company_province: form.company_province.trim(),
+        company_city: form.company_city.trim(),
+        company_district: form.company_district.trim(),
+        company_village: form.company_village.trim(),
+        same_as_company_address: 0,
+        customer_shipping_address: form.shipping_addresses.map(payloadShipping),
       };
 
       const res = await apiFetch(
         getResourceUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER, registration.id),
         { method: "PUT", cache: "no-store", body: JSON.stringify(payload) },
-        token
+        token,
       );
       if (!res.ok) {
         const json = await res.json().catch(() => null);
-        const msg = (json && typeof json === "object" && "message" in json && typeof json.message === "string" && json.message) || `Failed to update registration (${res.status})`;
+        const msg =
+          (json &&
+            typeof json === "object" &&
+            "message" in json &&
+            typeof json.message === "string" &&
+            json.message) ||
+          `Failed to update registration (${res.status})`;
         throw new Error(msg);
       }
       window.dispatchEvent(new Event("ekatalog:customer_registrations_update"));
@@ -733,137 +1357,275 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
           }}
         >
           <motion.div
+            data-tour={demoMode ? "customer-register-edit-modal" : undefined}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-hidden flex flex-col"
+            className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl"
           >
-            <div className="bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-5 flex items-center justify-between">
+            <div className="flex items-center justify-between bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-5">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20">
                   <FaEdit className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-white">Edit Data Registrasi</h2>
+                  <h2 className="text-xl font-bold text-white">
+                    Edit Data Registrasi
+                  </h2>
                   <p className="text-sm text-orange-100">
                     No: {registration.registration_number || registration.id}
                   </p>
                 </div>
               </div>
-              <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-lg">
+              <button
+                data-tour={
+                  demoMode ? "customer-register-close-edit-button" : undefined
+                }
+                onClick={onClose}
+                className="rounded-lg p-2 transition hover:bg-white/20"
+              >
                 <HiXMark className="w-6 h-6 text-white" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 bg-gray-50 space-y-5">
-              <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 text-sm text-blue-800">
-                Admin bisa edit semua field untuk verifikasi ulang via telepon.
-              </div>
-
-              <div className="bg-white border border-gray-200 rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+            <div className="flex-1 space-y-5 overflow-y-auto bg-slate-50 p-6">
+              <div className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm md:grid-cols-3">
                 <div>
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">User ID</div>
-                  <div className="font-medium">{registration.ekaplus_user?.id || "-"}</div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    User ID
+                  </div>
+                  <div className="font-medium">
+                    {registration.ekaplus_user?.id || "-"}
+                  </div>
                 </div>
                 <div>
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Nama User</div>
-                  <div className="font-medium">{registration.ekaplus_user?.full_name || "-"}</div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Nama User
+                  </div>
+                  <div className="font-medium">
+                    {registration.ekaplus_user?.full_name || "-"}
+                  </div>
                 </div>
                 <div>
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Email User</div>
-                  <div className="font-medium">{registration.ekaplus_user?.email || "-"}</div>
-                </div>
-              </div>
-
-              <div className="bg-white border border-gray-200 rounded-xl p-4">
-                <h3 className="font-bold mb-3">Identitas Pemilik/Pimpinan</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">Nama Pemilik *</label>
-                    <input value={form.owner_full_name} onChange={(e) => setField("owner_full_name", e.target.value)} className="w-full px-3 py-2.5 border rounded-lg" />
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Email User
                   </div>
-                  <div>
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">No. Handphone Pemilik *</label>
-                    <input value={form.owner_phone} onChange={(e) => setField("owner_phone", e.target.value)} className="w-full px-3 py-2.5 border rounded-lg" />
-                  </div>
-                  <div>
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">Email Pemilik *</label>
-                    <input value={form.owner_email} onChange={(e) => setField("owner_email", e.target.value)} className="w-full px-3 py-2.5 border rounded-lg" />
-                  </div>
-                  <div>
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">Tempat Lahir Pemilik *</label>
-                    <input value={form.owner_place_of_birth} onChange={(e) => setField("owner_place_of_birth", e.target.value)} className="w-full px-3 py-2.5 border rounded-lg" />
-                  </div>
-                  <div>
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">Tanggal Lahir Pemilik *</label>
-                    <input type="date" value={form.owner_date_of_birth} onChange={(e) => setField("owner_date_of_birth", e.target.value)} className="w-full px-3 py-2.5 border rounded-lg" />
+                  <div className="font-medium">
+                    {registration.ekaplus_user?.email || "-"}
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white border border-gray-200 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-bold">Identitas PIC Branch</h3>
-                  <label className="text-sm inline-flex items-center gap-2">
-                    <input type="checkbox" checked={sameAsOwner} onChange={(e) => setSameAsOwner(e.target.checked)} />
+              <div className={sectionCardClass}>
+                <h3 className="mb-4 text-lg font-bold text-slate-900">
+                  Identitas Pemilik
+                </h3>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Nama Pemilik <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      value={form.owner_full_name}
+                      onChange={(e) =>
+                        setField("owner_full_name", e.target.value)
+                      }
+                      className={fieldClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      No. Handphone Pemilik{" "}
+                      <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      value={form.owner_phone}
+                      onChange={(e) => setField("owner_phone", e.target.value)}
+                      className={fieldClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Email Pemilik
+                    </label>
+                    <input
+                      value={form.owner_email}
+                      onChange={(e) => setField("owner_email", e.target.value)}
+                      className={fieldClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Tempat Lahir Pemilik
+                    </label>
+                    <input
+                      value={form.owner_place_of_birth}
+                      onChange={(e) =>
+                        setField("owner_place_of_birth", e.target.value)
+                      }
+                      className={fieldClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Tanggal Lahir Pemilik{" "}
+                      <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={form.owner_date_of_birth}
+                      onChange={(e) =>
+                        setField("owner_date_of_birth", e.target.value)
+                      }
+                      className={fieldClass}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className={sectionCardClass}>
+                <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Identitas PIC Branch
+                  </h3>
+                  <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={sameAsOwner}
+                      onChange={(e) => setSameAsOwner(e.target.checked)}
+                      className={checkboxClass}
+                    />
                     Sama dengan pemilik
                   </label>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">Nama PIC Branch *</label>
-                    <input value={form.branch_owner} onChange={(e) => setField("branch_owner", e.target.value)} className="w-full px-3 py-2.5 border rounded-lg" />
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Nama PIC Branch <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      value={form.branch_owner}
+                      onChange={(e) => setField("branch_owner", e.target.value)}
+                      className={sameAsOwner ? readOnlyFieldClass : fieldClass}
+                      readOnly={sameAsOwner}
+                      disabled={sameAsOwner}
+                    />
                   </div>
                   <div>
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">Nomor PIC Branch *</label>
-                    <input value={form.branch_owner_phone} onChange={(e) => setField("branch_owner_phone", e.target.value)} className="w-full px-3 py-2.5 border rounded-lg" />
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Nomor PIC Branch <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      value={form.branch_owner_phone}
+                      onChange={(e) =>
+                        setField("branch_owner_phone", e.target.value)
+                      }
+                      className={sameAsOwner ? readOnlyFieldClass : fieldClass}
+                      readOnly={sameAsOwner}
+                      disabled={sameAsOwner}
+                    />
                   </div>
                   <div>
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">Email PIC Branch *</label>
-                    <input value={form.branch_owner_email} onChange={(e) => setField("branch_owner_email", e.target.value)} className="w-full px-3 py-2.5 border rounded-lg" />
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Email PIC Branch
+                    </label>
+                    <input
+                      value={form.branch_owner_email}
+                      onChange={(e) =>
+                        setField("branch_owner_email", e.target.value)
+                      }
+                      className={sameAsOwner ? readOnlyFieldClass : fieldClass}
+                      readOnly={sameAsOwner}
+                      disabled={sameAsOwner}
+                    />
                   </div>
                   <div>
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">Tempat Lahir PIC Branch</label>
-                    <input value={form.branch_owner_place_of_birth} onChange={(e) => setField("branch_owner_place_of_birth", e.target.value)} className="w-full px-3 py-2.5 border rounded-lg" />
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Tempat Lahir PIC Branch
+                    </label>
+                    <input
+                      value={form.branch_owner_place_of_birth}
+                      onChange={(e) =>
+                        setField("branch_owner_place_of_birth", e.target.value)
+                      }
+                      className={sameAsOwner ? readOnlyFieldClass : fieldClass}
+                      readOnly={sameAsOwner}
+                      disabled={sameAsOwner}
+                    />
                   </div>
                   <div>
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">Tanggal Lahir PIC Branch</label>
-                    <input type="date" value={form.branch_owner_date_of_birth} onChange={(e) => setField("branch_owner_date_of_birth", e.target.value)} className="w-full px-3 py-2.5 border rounded-lg" />
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Tanggal Lahir PIC Branch
+                    </label>
+                    <input
+                      type="date"
+                      value={form.branch_owner_date_of_birth}
+                      onChange={(e) =>
+                        setField("branch_owner_date_of_birth", e.target.value)
+                      }
+                      className={sameAsOwner ? readOnlyFieldClass : fieldClass}
+                      disabled={sameAsOwner}
+                    />
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white border border-gray-200 rounded-xl p-4">
-                <h3 className="font-bold mb-3">Informasi Perusahaan</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className={sectionCardClass}>
+                <h3 className="mb-4 text-lg font-bold text-slate-900">
+                  Informasi Perusahaan
+                </h3>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">Jenis Perusahaan *</label>
-                    <select value={form.company_type} onChange={(e) => setCompanyType(e.target.value)} className="w-full px-3 py-2.5 border rounded-lg bg-white">
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Jenis Perusahaan <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={form.company_type}
+                      onChange={(e) => setCompanyType(e.target.value)}
+                      className={fieldClass}
+                    >
                       <option value="">Pilih Jenis Perusahaan</option>
-                      {COMPANY_TYPE_OPTIONS.map((x) => <option key={x}>{x}</option>)}
+                      {COMPANY_TYPE_OPTIONS.map((x) => (
+                        <option key={x}>{x}</option>
+                      ))}
                     </select>
                   </div>
                   <div>
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">Gelar Perusahaan *</label>
-                    <select value={form.company_title} onChange={(e) => setCompanyTitle(e.target.value)} className="w-full px-3 py-2.5 border rounded-lg bg-white">
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Gelar Perusahaan <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={form.company_title}
+                      onChange={(e) => setCompanyTitle(e.target.value)}
+                      className={fieldClass}
+                    >
                       <option value="">Pilih Gelar Perusahaan</option>
-                      {companyTitleOptions.map((x) => <option key={x}>{x}</option>)}
+                      {companyTitleOptions.map((x) => (
+                        <option key={x}>{x}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="md:col-span-2">
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">Nama Perusahaan *</label>
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Nama Perusahaan <span className="text-red-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-12">
                       <input
+                        data-tour={
+                          demoMode
+                            ? "customer-register-company-name-input"
+                            : undefined
+                        }
                         value={form.company_name_base}
                         onChange={(e) => setCompanyNameBase(e.target.value)}
-                        className="md:col-span-8 w-full px-3 py-2.5 border rounded-lg"
+                        className={`md:col-span-8 ${fieldClass}`}
                         placeholder="Nama inti perusahaan"
                       />
                       {isSuffixEditable ? (
                         <select
                           value={form.company_name_suffix}
                           onChange={(e) => setCompanyNameSuffix(e.target.value)}
-                          className="md:col-span-4 w-full px-3 py-2.5 border rounded-lg bg-white"
+                          className={`md:col-span-4 ${fieldClass}`}
                         >
                           <option value="">Pilih Sebutan</option>
                           {currentSuffixOptions.map((suffix) => (
@@ -876,12 +1638,12 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
                         <input
                           value={form.company_name_suffix}
                           readOnly
-                          className="md:col-span-4 w-full px-3 py-2.5 border rounded-lg bg-gray-100"
+                          className={`md:col-span-4 ${readOnlyFieldClass}`}
                           placeholder="Sebutan"
                         />
                       )}
                     </div>
-                    <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 font-semibold text-amber-900">
+                    <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 font-semibold text-amber-900">
                       {buildCompanyName(
                         form.company_name_base,
                         form.company_name_suffix,
@@ -889,275 +1651,532 @@ export function EditRegistrationModal({ isOpen, onClose, registration, onSuccess
                     </div>
                   </div>
                   <div>
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">Kebutuhan Produk *</label>
-                    <select value={form.product_need} onChange={(e) => setField("product_need", e.target.value)} className="w-full px-3 py-2.5 border rounded-lg bg-white">
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Kebutuhan Produk <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={form.product_need}
+                      onChange={(e) => setField("product_need", e.target.value)}
+                      className={fieldClass}
+                    >
                       <option value="">Pilih Kebutuhan Produk</option>
-                      {PRODUCT_NEED_OPTIONS.map((x) => <option key={x}>{x}</option>)}
+                      {PRODUCT_NEED_OPTIONS.map((x) => (
+                        <option key={x}>{x}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="md:col-span-2">
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">Pilih Cabang *</label>
-                    <select value={form.branch_id ?? ""} onChange={(e) => setField("branch_id", e.target.value ? Number(e.target.value) : null)} className="w-full px-3 py-2.5 border rounded-lg bg-white">
-                      <option value="">Pilih Cabang</option>
-                      {branches.map((b) => <option key={b.id} value={b.id}>{b.branch_name}{b.city ? ` - ${b.city}` : ""}</option>)}
-                    </select>
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Cabang
+                    </label>
+                    <input
+                      value={getBranchLabel(branches, form.branch_id)}
+                      readOnly
+                      className={readOnlyFieldClass}
+                    />
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white border border-gray-200 rounded-xl p-4">
-                <h3 className="font-bold mb-3">Alamat Perusahaan</h3>
+              <div className={sectionCardClass}>
+                <h3 className="mb-4 text-lg font-bold text-slate-900">
+                  Alamat Perusahaan
+                </h3>
                 {!isLoadingWilayah && !isWilayahApiAvailable && (
-                  <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
-                    API wilayah tidak bisa diakses dari browser ini (CORS). Gunakan input manual.
+                  <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                    API wilayah tidak bisa diakses dari browser ini. Gunakan
+                    input manual.
                   </div>
                 )}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="md:col-span-2">
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">Alamat Lengkap *</label>
-                    <textarea rows={3} value={form.company_address} onChange={(e) => setField("company_address", e.target.value)} className="w-full px-3 py-2.5 border rounded-lg" />
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Alamat Lengkap <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={form.company_address}
+                      onChange={(e) =>
+                        setField("company_address", e.target.value)
+                      }
+                      className={fieldClass}
+                    />
                   </div>
                   <div>
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">Provinsi *</label>
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Provinsi <span className="text-red-500">*</span>
+                    </label>
                     {isWilayahApiAvailable ? (
                       <select
                         value={companyProvinceCode}
-                        onChange={(e) => void onCompanyProvinceChange(e.target.value)}
-                        className="w-full px-3 py-2.5 border rounded-lg bg-white"
+                        onChange={(e) =>
+                          void onCompanyProvinceChange(e.target.value)
+                        }
+                        className={fieldClass}
                         disabled={isLoadingWilayah}
                       >
-                        <option value="">{isLoadingWilayah ? "Memuat provinsi..." : "Pilih Provinsi"}</option>
+                        <option value="">
+                          {isLoadingWilayah
+                            ? "Memuat provinsi..."
+                            : "Pilih Provinsi"}
+                        </option>
                         {provinces.map((p) => (
-                          <option key={p.code} value={p.code}>{p.name}</option>
+                          <option key={p.code} value={p.code}>
+                            {p.name}
+                          </option>
                         ))}
                       </select>
                     ) : (
                       <input
                         value={form.company_province}
-                        onChange={(e) => setField("company_province", e.target.value)}
-                        className="w-full px-3 py-2.5 border rounded-lg"
+                        onChange={(e) =>
+                          setField("company_province", e.target.value)
+                        }
+                        className={fieldClass}
                       />
                     )}
                   </div>
                   <div>
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">Kota/Kabupaten *</label>
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Kabupaten/Kota <span className="text-red-500">*</span>
+                    </label>
                     {isWilayahApiAvailable ? (
                       <select
                         value={companyRegencyCode}
-                        onChange={(e) => void onCompanyRegencyChange(e.target.value)}
-                        className="w-full px-3 py-2.5 border rounded-lg bg-white"
+                        onChange={(e) =>
+                          void onCompanyRegencyChange(e.target.value)
+                        }
+                        className={fieldClass}
                         disabled={!companyProvinceCode}
                       >
-                        <option value="">{companyProvinceCode ? "Pilih Kota/Kabupaten" : "Pilih provinsi terlebih dahulu"}</option>
+                        <option value="">
+                          {companyProvinceCode
+                            ? "Pilih Kota/Kabupaten"
+                            : "Pilih provinsi terlebih dahulu"}
+                        </option>
                         {companyRegencies.map((city) => (
-                          <option key={city.code} value={city.code}>{city.name}</option>
+                          <option key={city.code} value={city.code}>
+                            {city.name}
+                          </option>
                         ))}
                       </select>
                     ) : (
                       <input
                         value={form.company_city}
-                        onChange={(e) => setField("company_city", e.target.value)}
-                        className="w-full px-3 py-2.5 border rounded-lg"
+                        onChange={(e) =>
+                          setField("company_city", e.target.value)
+                        }
+                        className={fieldClass}
                       />
                     )}
                   </div>
                   <div>
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">Kecamatan *</label>
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Kecamatan <span className="text-red-500">*</span>
+                    </label>
                     {isWilayahApiAvailable ? (
                       <select
                         value={
-                          companyDistricts.find((x) => normalizeName(x.name) === normalizeName(form.company_district))?.code || ""
+                          companyDistrictCode
                         }
-                        onChange={(e) => onCompanyDistrictChange(e.target.value)}
-                        className="w-full px-3 py-2.5 border rounded-lg bg-white"
+                        onChange={(e) =>
+                          void onCompanyDistrictChange(e.target.value)
+                        }
+                        className={fieldClass}
                         disabled={!companyRegencyCode}
                       >
-                        <option value="">{companyRegencyCode ? "Pilih Kecamatan" : "Pilih kota/kabupaten terlebih dahulu"}</option>
+                        <option value="">
+                          {companyRegencyCode
+                            ? "Pilih Kecamatan"
+                            : "Pilih kota/kabupaten terlebih dahulu"}
+                        </option>
                         {companyDistricts.map((district) => (
-                          <option key={district.code} value={district.code}>{district.name}</option>
+                          <option key={district.code} value={district.code}>
+                            {district.name}
+                          </option>
                         ))}
                       </select>
                     ) : (
                       <input
                         value={form.company_district}
-                        onChange={(e) => setField("company_district", e.target.value)}
-                        className="w-full px-3 py-2.5 border rounded-lg"
+                        onChange={(e) =>
+                          setField("company_district", e.target.value)
+                        }
+                        className={fieldClass}
                       />
                     )}
                   </div>
                   <div>
-                    <label className="text-sm font-semibold text-gray-700 block mb-1">Kelurahan *</label>
-                    <input value={form.company_village} onChange={(e) => setField("company_village", e.target.value)} className="w-full px-3 py-2.5 border rounded-lg" />
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Kelurahan <span className="text-red-500">*</span>
+                    </label>
+                    {isWilayahApiAvailable ? (
+                      <select
+                        value={companyVillageCode}
+                        onChange={(e) => onCompanyVillageChange(e.target.value)}
+                        className={fieldClass}
+                        disabled={!companyDistrictCode}
+                      >
+                        <option value="">
+                          {companyDistrictCode
+                            ? "Pilih Kelurahan"
+                            : "Pilih kecamatan terlebih dahulu"}
+                        </option>
+                        {companyVillages.map((village) => (
+                          <option key={village.code} value={village.code}>
+                            {village.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        value={form.company_village}
+                        onChange={(e) =>
+                          setField("company_village", e.target.value)
+                        }
+                        className={fieldClass}
+                      />
+                    )}
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white border border-gray-200 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-3">
+              <div className={sectionCardClass}>
+                <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <h3 className="font-bold">Alamat Pengiriman</h3>
-                    <p className="text-xs text-gray-500 mt-1">Data dari API customer_register_address: {form.shipping_addresses.length} alamat</p>
+                    <h3 className="text-lg font-bold text-slate-900">
+                      Alamat Pengiriman
+                    </h3>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Data aktif untuk pengiriman:{" "}
+                      {form.shipping_addresses.length} alamat
+                    </p>
                   </div>
-                  <label className="text-sm inline-flex items-center gap-2">
-                    <input type="checkbox" checked={form.same_as_company_address} onChange={(e) => setField("same_as_company_address", e.target.checked)} />
-                    Sama dengan alamat perusahaan
-                  </label>
                 </div>
-                {form.same_as_company_address ? (
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700 mb-2">
-                      Alamat Pengiriman Mengikuti Alamat Perusahaan
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                      <div className="md:col-span-2">
-                        <div className="text-xs font-semibold text-gray-500 uppercase">Alamat Lengkap</div>
-                        <div className="font-medium text-gray-900">{form.company_address || "-"}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs font-semibold text-gray-500 uppercase">Provinsi</div>
-                        <div className="font-medium text-gray-900">{form.company_province || "-"}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs font-semibold text-gray-500 uppercase">Kota/Kabupaten</div>
-                        <div className="font-medium text-gray-900">{form.company_city || "-"}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs font-semibold text-gray-500 uppercase">Kecamatan</div>
-                        <div className="font-medium text-gray-900">{form.company_district || "-"}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs font-semibold text-gray-500 uppercase">Kelurahan</div>
-                        <div className="font-medium text-gray-900">{form.company_village || "-"}</div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
+                <div className="space-y-4">
                     {form.shipping_addresses.map((s, i) => (
-                      <div key={`${s.id || "new"}-${i}`} className="border rounded-lg p-3 bg-gray-50">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="font-semibold text-sm">Alamat Pengiriman {i + 1}</div>
-                          <div className="flex items-center gap-2">
-                            <label className="text-xs inline-flex items-center gap-1">
-                              <input type="checkbox" checked={Boolean(s.is_default)} onChange={() => setDefaultShip(i)} />
+                      <div
+                        key={`${s.id || "new"}-${i}`}
+                        className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                      >
+                        <div className="mb-3 flex items-center justify-between">
+                          <div className="text-sm font-semibold text-slate-900">
+                            Alamat Pengiriman {i + 1}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <label className="inline-flex items-center gap-2 text-xs text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(sameAsCompanyAddressItems[i])}
+                                onChange={(e) =>
+                                  toggleSameAsCompanyAddressItem(
+                                    i,
+                                    e.target.checked,
+                                  )
+                                }
+                                className={checkboxClass}
+                              />
+                              Sama dengan alamat perusahaan
+                            </label>
+                            <label className="inline-flex items-center gap-1 text-xs text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(s.is_default)}
+                                onChange={() => setDefaultShip(i)}
+                                className={checkboxClass}
+                              />
                               Default
                             </label>
-                            <button onClick={() => removeShip(i)} className="p-1.5 text-red-600 hover:bg-red-100 rounded">
+                            <button
+                              onClick={() => removeShip(i)}
+                              className="rounded-lg p-1.5 text-red-600 transition hover:bg-red-100"
+                            >
                               <FaTrash className="w-3 h-3" />
                             </button>
                           </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                           <div>
-                            <label className="text-xs font-semibold text-gray-600 block mb-1">Label Alamat</label>
-                            <input value={s.label || ""} onChange={(e) => updateShip(i, { label: e.target.value })} className="w-full px-3 py-2 border rounded" />
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">
+                              Label Alamat
+                            </label>
+                            <input
+                              value={s.label || ""}
+                              onChange={(e) =>
+                                updateShip(i, { label: e.target.value })
+                              }
+                              className={fieldClass}
+                              disabled={Boolean(sameAsCompanyAddressItems[i])}
+                            />
                           </div>
                           <div>
-                            <label className="text-xs font-semibold text-gray-600 block mb-1">Nama Penanggung Jawab</label>
-                            <input value={s.pic_name || ""} onChange={(e) => updateShip(i, { pic_name: e.target.value })} className="w-full px-3 py-2 border rounded" />
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">
+                              Tipe Alamat
+                            </label>
+                            <select
+                              value={s.type || "Shipping"}
+                              onChange={(e) =>
+                                updateShip(i, { type: e.target.value })
+                              }
+                              className={fieldClass}
+                              disabled={Boolean(sameAsCompanyAddressItems[i])}
+                            >
+                              {ADDRESS_TYPE_OPTIONS.map((option) => (
+                                <option key={option} value={option}>
+                                  {option}
+                                </option>
+                              ))}
+                            </select>
                           </div>
                           <div>
-                            <label className="text-xs font-semibold text-gray-600 block mb-1">No HP Penanggung Jawab</label>
-                            <input value={s.pic_phone || ""} onChange={(e) => updateShip(i, { pic_phone: e.target.value })} className="w-full px-3 py-2 border rounded" />
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">
+                              Nama Penanggung Jawab
+                            </label>
+                            <input
+                              value={s.pic_name || ""}
+                              onChange={(e) =>
+                                updateShip(i, { pic_name: e.target.value })
+                              }
+                              className={fieldClass}
+                              disabled={Boolean(sameAsCompanyAddressItems[i])}
+                            />
                           </div>
                           <div>
-                            <label className="text-xs font-semibold text-gray-600 block mb-1">Kelurahan</label>
-                            <input value={s.village || ""} onChange={(e) => updateShip(i, { village: e.target.value })} className="w-full px-3 py-2 border rounded" />
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">
+                              No HP Penanggung Jawab
+                            </label>
+                            <input
+                              value={s.pic_phone || ""}
+                              onChange={(e) =>
+                                updateShip(i, { pic_phone: e.target.value })
+                              }
+                              className={fieldClass}
+                              disabled={Boolean(sameAsCompanyAddressItems[i])}
+                            />
                           </div>
+                          <div className="md:col-span-2">
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">
+                              Alamat Lengkap
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={s.address || ""}
+                              onChange={(e) =>
+                                updateShip(i, { address: e.target.value })
+                              }
+                              className={fieldClass}
+                              disabled={Boolean(sameAsCompanyAddressItems[i])}
+                            />
+                          </div>
+
                           <div>
-                            <label className="text-xs font-semibold text-gray-600 block mb-1">Provinsi</label>
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">
+                              Provinsi
+                            </label>
                             {isWilayahApiAvailable ? (
                               <select
-                                value={shippingAreaStates[i]?.provinceCode || ""}
-                                onChange={(e) => void onShippingProvinceChange(i, e.target.value)}
-                                className="w-full px-3 py-2 border rounded bg-white"
-                                disabled={isLoadingWilayah}
+                                value={
+                                  shippingAreaStates[i]?.provinceCode || ""
+                                }
+                                onChange={(e) =>
+                                  void onShippingProvinceChange(
+                                    i,
+                                    e.target.value,
+                                  )
+                                }
+                                className={fieldClass}
+                                disabled={
+                                  isLoadingWilayah ||
+                                  Boolean(sameAsCompanyAddressItems[i])
+                                }
                               >
-                                <option value="">{isLoadingWilayah ? "Memuat provinsi..." : "Pilih Provinsi"}</option>
+                                <option value="">
+                                  {isLoadingWilayah
+                                    ? "Memuat provinsi..."
+                                    : "Pilih Provinsi"}
+                                </option>
                                 {provinces.map((p) => (
-                                  <option key={p.code} value={p.code}>{p.name}</option>
+                                  <option key={p.code} value={p.code}>
+                                    {p.name}
+                                  </option>
                                 ))}
                               </select>
                             ) : (
                               <input
                                 value={s.province || ""}
-                                onChange={(e) => updateShip(i, { province: e.target.value })}
-                                className="w-full px-3 py-2 border rounded"
+                                onChange={(e) =>
+                                  updateShip(i, { province: e.target.value })
+                                }
+                                className={fieldClass}
+                                disabled={Boolean(sameAsCompanyAddressItems[i])}
                               />
                             )}
                           </div>
                           <div>
-                            <label className="text-xs font-semibold text-gray-600 block mb-1">Kota/Kabupaten</label>
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">
+                              Kabupaten/Kota
+                            </label>
                             {isWilayahApiAvailable ? (
                               <select
                                 value={shippingAreaStates[i]?.regencyCode || ""}
-                                onChange={(e) => void onShippingRegencyChange(i, e.target.value)}
-                                className="w-full px-3 py-2 border rounded bg-white"
-                                disabled={!shippingAreaStates[i]?.provinceCode}
+                                onChange={(e) =>
+                                  void onShippingRegencyChange(
+                                    i,
+                                    e.target.value,
+                                  )
+                                }
+                                className={fieldClass}
+                                disabled={
+                                  !shippingAreaStates[i]?.provinceCode ||
+                                  Boolean(sameAsCompanyAddressItems[i])
+                                }
                               >
                                 <option value="">
-                                  {shippingAreaStates[i]?.provinceCode ? "Pilih Kota/Kabupaten" : "Pilih provinsi terlebih dahulu"}
+                                  {shippingAreaStates[i]?.provinceCode
+                                    ? "Pilih Kota/Kabupaten"
+                                    : "Pilih provinsi terlebih dahulu"}
                                 </option>
-                                {(shippingAreaStates[i]?.regencies || []).map((city) => (
-                                  <option key={city.code} value={city.code}>{city.name}</option>
-                                ))}
+                                {(shippingAreaStates[i]?.regencies || []).map(
+                                  (city) => (
+                                    <option key={city.code} value={city.code}>
+                                      {city.name}
+                                    </option>
+                                  ),
+                                )}
                               </select>
                             ) : (
                               <input
                                 value={s.city || ""}
-                                onChange={(e) => updateShip(i, { city: e.target.value })}
-                                className="w-full px-3 py-2 border rounded"
+                                onChange={(e) =>
+                                  updateShip(i, { city: e.target.value })
+                                }
+                                className={fieldClass}
+                                disabled={Boolean(sameAsCompanyAddressItems[i])}
                               />
                             )}
                           </div>
                           <div>
-                            <label className="text-xs font-semibold text-gray-600 block mb-1">Kecamatan</label>
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">
+                              Kecamatan
+                            </label>
                             {isWilayahApiAvailable ? (
                               <select
-                                value={
-                                  (shippingAreaStates[i]?.districts || []).find((x) => normalizeName(x.name) === normalizeName(s.district))?.code || ""
+                                value={shippingAreaStates[i]?.districtCode || ""}
+                                onChange={(e) =>
+                                  void onShippingDistrictChange(i, e.target.value)
                                 }
-                                onChange={(e) => onShippingDistrictChange(i, e.target.value)}
-                                className="w-full px-3 py-2 border rounded bg-white"
-                                disabled={!shippingAreaStates[i]?.regencyCode}
+                                className={fieldClass}
+                                disabled={
+                                  !shippingAreaStates[i]?.regencyCode ||
+                                  Boolean(sameAsCompanyAddressItems[i])
+                                }
                               >
                                 <option value="">
-                                  {shippingAreaStates[i]?.regencyCode ? "Pilih Kecamatan" : "Pilih kota/kabupaten terlebih dahulu"}
+                                  {shippingAreaStates[i]?.regencyCode
+                                    ? "Pilih Kecamatan"
+                                    : "Pilih kota/kabupaten terlebih dahulu"}
                                 </option>
-                                {(shippingAreaStates[i]?.districts || []).map((district) => (
-                                  <option key={district.code} value={district.code}>{district.name}</option>
-                                ))}
+                                {(shippingAreaStates[i]?.districts || []).map(
+                                  (district) => (
+                                    <option
+                                      key={district.code}
+                                      value={district.code}
+                                    >
+                                      {district.name}
+                                    </option>
+                                  ),
+                                )}
                               </select>
                             ) : (
                               <input
                                 value={s.district || ""}
-                                onChange={(e) => updateShip(i, { district: e.target.value })}
-                                className="w-full px-3 py-2 border rounded"
+                                onChange={(e) =>
+                                  updateShip(i, { district: e.target.value })
+                                }
+                                className={fieldClass}
+                                disabled={Boolean(sameAsCompanyAddressItems[i])}
                               />
                             )}
                           </div>
-                          <div className="md:col-span-2">
-                            <label className="text-xs font-semibold text-gray-600 block mb-1">Alamat Lengkap</label>
-                            <textarea rows={2} value={s.address || ""} onChange={(e) => updateShip(i, { address: e.target.value })} className="w-full px-3 py-2 border rounded" />
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">
+                              Kelurahan
+                            </label>
+                            {isWilayahApiAvailable ? (
+                              <select
+                                value={shippingAreaStates[i]?.villageCode || ""}
+                                onChange={(e) =>
+                                  onShippingVillageChange(i, e.target.value)
+                                }
+                                className={fieldClass}
+                                disabled={
+                                  !shippingAreaStates[i]?.districtCode ||
+                                  Boolean(sameAsCompanyAddressItems[i])
+                                }
+                              >
+                                <option value="">
+                                  {shippingAreaStates[i]?.districtCode
+                                    ? "Pilih Kelurahan"
+                                    : "Pilih kecamatan terlebih dahulu"}
+                                </option>
+                                {(shippingAreaStates[i]?.villages || []).map(
+                                  (village) => (
+                                    <option
+                                      key={village.code}
+                                      value={village.code}
+                                    >
+                                      {village.name}
+                                    </option>
+                                  ),
+                                )}
+                              </select>
+                            ) : (
+                              <input
+                                value={s.village || ""}
+                                onChange={(e) =>
+                                  updateShip(i, { village: e.target.value })
+                                }
+                                className={fieldClass}
+                                disabled={Boolean(sameAsCompanyAddressItems[i])}
+                              />
+                            )}
                           </div>
                         </div>
                       </div>
                     ))}
-                    <button onClick={addShip} className="w-full px-4 py-2.5 border-2 border-dashed border-orange-300 rounded-lg text-orange-700 hover:bg-orange-50 flex items-center justify-center gap-2">
-                      <FaPlus className="w-3.5 h-3.5" />
-                      Tambah Alamat Pengiriman
-                    </button>
-                  </div>
-                )}
+                </div>
               </div>
 
-              {error && <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">{error}</div>}
-              {hasChanges && <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-sm text-yellow-700">Ada perubahan yang belum disimpan</div>}
+              {error && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+              {hasChanges && (
+                <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-700">
+                  Ada perubahan yang belum disimpan
+                </div>
+              )}
             </div>
 
-            <div className="bg-white px-6 py-4 border-t border-gray-200 flex justify-between items-center gap-3">
-              <button onClick={onClose} disabled={isSaving} className="px-5 py-2.5 bg-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-300 disabled:opacity-50">Batal</button>
-              <motion.button whileHover={!isSaving ? { scale: 1.02 } : {}} whileTap={!isSaving ? { scale: 0.98 } : {}} onClick={handleSave} disabled={isSaving || !hasChanges || isLoading} className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-medium rounded-xl disabled:opacity-50 flex items-center gap-2">
+            <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-6 py-4">
+              <button
+                onClick={onClose}
+                disabled={isSaving}
+                className="rounded-xl bg-slate-200 px-5 py-2.5 font-medium text-slate-700 transition hover:bg-slate-300 disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <motion.button
+                data-tour={
+                  demoMode ? "customer-register-save-edit-button" : undefined
+                }
+                whileHover={!isSaving ? { scale: 1.02 } : {}}
+                whileTap={!isSaving ? { scale: 0.98 } : {}}
+                onClick={handleSave}
+                disabled={isSaving || !hasChanges || isLoading}
+                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-2.5 font-medium text-white disabled:opacity-50"
+              >
                 {isSaving ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />

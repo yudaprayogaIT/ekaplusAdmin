@@ -9,7 +9,9 @@ export type FeatureTourConfig = {
 };
 
 export const profileFeatureTourConfig: FeatureTourConfig = {
-  debugEnabled: process.env.NEXT_PUBLIC_PROFILE_TOUR_DEBUG === "true",
+  debugEnabled:
+    process.env.NODE_ENV !== "production" ||
+    process.env.NEXT_PUBLIC_PROFILE_TOUR_DEBUG === "true",
   pendingKey: "ekaplus-profile-feature-tour-pending",
   seenKey: "ekaplus-profile-feature-tour-v2",
 };
@@ -48,5 +50,5 @@ export function clearPendingFeatureTourStep(config: FeatureTourConfig) {
 }
 
 function isFeatureTourStep(value: string | null): value is FeatureTourStep {
-  return value === "menu" || value === "edit" || value === "photo" || value === "password";
+  return value === "menu" || value === "edit" || value === "password";
 }

@@ -31,6 +31,8 @@ interface RegistrationDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   registration: CustomerRegistration | null;
+  demoMode?: boolean;
+  onDemoRegistrationChange?: (registration: CustomerRegistration) => void;
   onApprove?: (registration: CustomerRegistration) => void;
   onReject?: (registration: CustomerRegistration) => void;
   onEdit?: () => void;
@@ -60,10 +62,23 @@ interface CustomerRegisterAddressApiResponse {
   is_default?: number | boolean | null;
 }
 
+function normalizeShippingLabel(value?: string | null) {
+  return (value || "").trim().toLowerCase();
+}
+
+function isCompanyAddressShippingRow(
+  row?: CustomerRegisterAddressApiResponse | null,
+) {
+  const label = normalizeShippingLabel(row?.label);
+  return label === "alamat perusahaan" || label === "alamatperusahaan";
+}
+
 export function RegistrationDetailModal({
   isOpen,
   onClose,
   registration,
+  demoMode = false,
+  onDemoRegistrationChange,
   onApprove,
   onReject,
   onEdit,
@@ -93,7 +108,31 @@ export function RegistrationDetailModal({
     let cancelled = false;
 
     async function loadShippingAddresses() {
-      if (!isOpen || !registration?.id || !token) return;
+      if (!isOpen || !registration?.id) return;
+      if (demoMode) {
+        setShippingAddresses(
+          (registration.shipping_addresses || [])
+            .map((item, index) => ({
+              id: item.id || index + 1,
+              parent_id: Number(registration.id) || index + 1,
+              label: item.label,
+              address: item.address,
+              city: item.city,
+              province: item.province,
+              district: item.district || null,
+              village: item.village || null,
+              postal_code: item.postal_code || null,
+              pic_name: item.pic_name || null,
+              pic_phone: item.pic_phone || null,
+              is_default: item.is_default || null,
+            }))
+            .filter((item) => !isCompanyAddressShippingRow(item)),
+        );
+        setShippingLoading(false);
+        setShippingError(null);
+        return;
+      }
+      if (!token) return;
 
       setShippingLoading(true);
       setShippingError(null);
@@ -119,7 +158,14 @@ export function RegistrationDetailModal({
 
         const json = await res.json();
         if (!cancelled) {
-          setShippingAddresses(Array.isArray(json.data) ? json.data : []);
+          setShippingAddresses(
+            Array.isArray(json.data)
+              ? json.data.filter(
+                  (item: CustomerRegisterAddressApiResponse) =>
+                    !isCompanyAddressShippingRow(item),
+                )
+              : [],
+          );
         }
       } catch (err) {
         if (!cancelled) {
@@ -142,13 +188,23 @@ export function RegistrationDetailModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, registration?.id, token]);
+  }, [demoMode, isOpen, registration, registration?.id, token]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadPaymentAccount() {
-      if (!isOpen || !token || !registration?.id || !registration.support_data.payment_account) {
+      if (demoMode) {
+        setPaymentAccountInfo(null);
+        setPaymentAccountError(null);
+        return;
+      }
+      if (
+        !isOpen ||
+        !token ||
+        !registration?.id ||
+        !registration.support_data.payment_account
+      ) {
         setPaymentAccountInfo(null);
         setPaymentAccountError(null);
         return;
@@ -181,12 +237,23 @@ export function RegistrationDetailModal({
       cancelled = true;
     };
   }, [
+    demoMode,
     isOpen,
     registration?.id,
     registration?.company.branch_id,
     registration?.support_data.payment_account,
     token,
   ]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setIsEditModalOpen(false);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    setIsEditModalOpen(false);
+  }, [registration?.id]);
 
   const formatPhoneNumber = (phone: string) => {
     if (!phone || phone === "-") return "-";
@@ -245,26 +312,9 @@ export function RegistrationDetailModal({
   const effectiveShippingAddresses = useMemo(() => {
     if (!registration) return [] as CustomerRegisterAddressApiResponse[];
     if (registration.same_as_company_address) {
-      return [
-        {
-          id: -1,
-          parent_id: Number(registration.id),
-          label: "Alamat Perusahaan",
-          address: registration.address.full_address,
-          city: registration.address.city_name,
-          province: registration.address.province_name,
-          district: registration.address.district_name,
-          village: registration.address.village_name,
-          postal_code: registration.address.postal_code,
-          pic_name:
-            registration.branch_owner?.full_name || registration.user.full_name,
-          pic_phone:
-            registration.branch_owner?.phone || registration.user.phone,
-          is_default: 1,
-        },
-      ];
+      return [];
     }
-    return shippingAddresses;
+    return shippingAddresses.filter((item) => !isCompanyAddressShippingRow(item));
   }, [registration, shippingAddresses]);
 
   if (!isOpen || !registration) return null;
@@ -282,7 +332,10 @@ export function RegistrationDetailModal({
             &#8203;
           </span>
 
-          <div className="inline-block relative w-full max-w-4xl transform overflow-hidden rounded-2xl bg-white text-left align-bottom shadow-xl transition-all sm:my-8 sm:align-middle">
+          <div
+            data-tour={demoMode ? "customer-register-detail-modal" : undefined}
+            className="inline-block relative w-full max-w-4xl transform overflow-hidden rounded-2xl bg-white text-left align-bottom shadow-xl transition-all sm:my-8 sm:align-middle"
+          >
             <div className="bg-gradient-to-r from-red-500 to-red-600 px-6 py-5 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
@@ -344,7 +397,9 @@ export function RegistrationDetailModal({
                     }`}
                   >
                     <FaTimesCircle />
-                    <span>{isRollbacking ? "Rolling back..." : rollbackLabel}</span>
+                    <span>
+                      {isRollbacking ? "Rolling back..." : rollbackLabel}
+                    </span>
                   </button>
                 )}
                 <button
@@ -687,7 +742,9 @@ export function RegistrationDetailModal({
                         ERP Customer Group
                       </label>
                       <p className="text-sm text-gray-900 font-medium">
-                        {displayValue(registration.support_data.erp_customer_group)}
+                        {displayValue(
+                          registration.support_data.erp_customer_group,
+                        )}
                       </p>
                     </div>
                     <div className="md:col-span-2">
@@ -840,7 +897,9 @@ export function RegistrationDetailModal({
                     !shippingError &&
                     effectiveShippingAddresses.length === 0 && (
                       <div className="text-sm text-gray-500">
-                        Tidak ada alamat pengiriman.
+                        {registration.same_as_company_address
+                          ? "Alamat pengiriman mengikuti alamat perusahaan."
+                          : "Tidak ada alamat pengiriman."}
                       </div>
                     )}
 
@@ -1143,6 +1202,9 @@ export function RegistrationDetailModal({
               {canManageRegistration && (
                 <div className="flex gap-3">
                   <motion.button
+                    data-tour={
+                      demoMode ? "customer-register-edit-button" : undefined
+                    }
                     type="button"
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
@@ -1169,6 +1231,9 @@ export function RegistrationDetailModal({
                   </motion.button>
 
                   <motion.button
+                    data-tour={
+                      demoMode ? "customer-register-approve-button" : undefined
+                    }
                     type="button"
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
@@ -1207,6 +1272,8 @@ export function RegistrationDetailModal({
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
         registration={registration}
+        demoMode={demoMode}
+        onDemoSave={onDemoRegistrationChange}
         onSuccess={() => {
           setIsEditModalOpen(false);
           onEdit?.();

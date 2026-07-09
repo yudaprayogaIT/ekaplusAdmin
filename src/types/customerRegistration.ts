@@ -146,6 +146,7 @@ export interface CustomerRegistration {
 export interface CustomerRegistrationShippingAddress {
   id?: number;
   label: string;
+  type?: string;
   address: string;
   city: string;
   province: string;

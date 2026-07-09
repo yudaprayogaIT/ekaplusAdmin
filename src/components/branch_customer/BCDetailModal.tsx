@@ -2973,7 +2973,7 @@ export function BCDetailModal({
                                   )}
                                   <div className="space-y-1.5 text-xs text-slate-600">
                                     <div className="flex items-center justify-between">
-                                      <span>Province</span>
+                                      <span>Provinsi</span>
                                       {isEditMode ? (
                                         provinces.length > 0 ? (
                                           <select
@@ -3023,14 +3023,14 @@ export function BCDetailModal({
                                       )}
                                     </div>
                                     <div className="flex items-center justify-between">
-                                      <span>Kelurahan</span>
+                                      <span>Kabupaten/Kota</span>
                                       {isEditMode ? (
                                         <input
-                                          value={r.village || ""}
+                                          value={r.city || ""}
                                           onChange={(e) =>
                                             updateEditedRow(
                                               r.id,
-                                              "village",
+                                              "city",
                                               e.target.value,
                                             )
                                           }
@@ -3039,7 +3039,7 @@ export function BCDetailModal({
                                         />
                                       ) : (
                                         <span className="font-semibold text-slate-900">
-                                          {r.village || "-"}
+                                          {r.city || "-"}
                                         </span>
                                       )}
                                     </div>

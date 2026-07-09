@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
 import { RegistrationCard } from "./RegistrationCard";
 import { RegistrationDetailModal } from "./RegistrationDetailModal";
 import { ApproveRegistrationModal } from "./ApproveRegistrationModal";
@@ -12,6 +18,7 @@ import {
   FaSortAmountUp,
   FaSortAmountDown,
   FaChevronDown,
+  FaPlayCircle,
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,6 +28,16 @@ import { useFilters } from "@/hooks/useFilters";
 import { CUSTOMER_REGISTER_FILTER_FIELDS } from "@/config/filterFields";
 import { FilterTriple } from "@/types/filter";
 import { getTaxStatusLabel } from "@/utils/paymentAccount";
+import {
+  consumePendingCustomerRegistrationApproveTour,
+  customerRegistrationApproveTourDummy,
+} from "@/lib/customerRegistrationApproveTour";
+import {
+  createDriverTour,
+  waitForElement,
+  waitForElementToDisappear,
+} from "@/lib/driverTour";
+import type { Driver } from "driver.js";
 
 type SortField =
   | "company_name"
@@ -298,11 +315,29 @@ export function CustomerRegistrationList() {
   const [rollbackingIds, setRollbackingIds] = useState<Record<string, boolean>>(
     {},
   );
+  const [approveTourActive, setApproveTourActive] = useState(false);
+  const [tourRegistration, setTourRegistration] =
+    useState<CustomerRegistration>(customerRegistrationApproveTourDummy);
+  const tourDriverRef = useRef<Driver | null>(null);
+  const tourStartedRef = useRef(false);
+  const tourRegistrationRef = useRef<CustomerRegistration>(
+    customerRegistrationApproveTourDummy,
+  );
 
   // Use filter system
   const { filters, setFilters } = useFilters({
     entity: "customer_register",
   });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!consumePendingCustomerRegistrationApproveTour()) return;
+    setApproveTourActive(true);
+  }, []);
+
+  useEffect(() => {
+    tourRegistrationRef.current = tourRegistration;
+  }, [tourRegistration]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -667,9 +702,9 @@ export function CustomerRegistrationList() {
           const enrichedPage = await enrichMasterLinkNames(mapped, token);
           const perPage = Number(response?.meta?.per_page || DEFAULT_PAGE_SIZE);
           let nextRegistrations: CustomerRegistration[] = [];
-          setRegistrations((current) =>
-            (nextRegistrations =
-              replace
+          setRegistrations(
+            (current) =>
+              (nextRegistrations = replace
                 ? enrichedPage
                 : [
                     ...current,
@@ -677,7 +712,7 @@ export function CustomerRegistrationList() {
                       (item) =>
                         !current.some((existing) => existing.id === item.id),
                     ),
-                  ])
+                  ]),
           );
           setCurrentPage(page);
           setHasMore(enrichedPage.length >= perPage);
@@ -772,8 +807,13 @@ export function CustomerRegistrationList() {
 
   // Filter locally based on search and status
   const filteredRegistrations = useMemo(() => {
-    return [...registrations];
-  }, [registrations]);
+    const liveRows = [...registrations];
+    if (!approveTourActive) return liveRows;
+    return [
+      tourRegistration,
+      ...liveRows.filter((item) => item.id !== tourRegistration.id),
+    ];
+  }, [approveTourActive, registrations, tourRegistration]);
 
   const handleViewDetails = (registration: CustomerRegistration) => {
     setSelectedRegistration(registration);
@@ -796,6 +836,545 @@ export function CustomerRegistrationList() {
     setIsDetailModalOpen(false); // Close detail modal
     setIsRejectModalOpen(true);
   };
+
+  const handleStartApproveTour = useCallback(() => {
+    if (approveTourActive) return;
+    setApproveTourActive(true);
+  }, [approveTourActive]);
+
+  const handleDemoRegistrationChange = useCallback(
+    (nextRegistration: CustomerRegistration) => {
+      setTourRegistration(nextRegistration);
+      setSelectedRegistration((current) =>
+        current?.id === nextRegistration.id ? nextRegistration : current,
+      );
+      setSelectedForAction((current) =>
+        current?.id === nextRegistration.id ? nextRegistration : current,
+      );
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!approveTourActive || tourStartedRef.current) return;
+
+    let cancelled = false;
+
+    const driveTour = async () => {
+      const card = await waitForElement(
+        "[data-tour='customer-register-demo-card']",
+      );
+      if (!card || cancelled) return;
+
+      const goToNextStep = async (selector: string, clickSelector?: string) => {
+        if (clickSelector) {
+          document.querySelector<HTMLElement>(clickSelector)?.click();
+        }
+        const target = await waitForElement(selector, { timeout: 5000 });
+        if (!target || cancelled) return;
+        tourDriverRef.current?.moveNext();
+      };
+
+      const goToPreviousStep = async (
+        selector: string,
+        action?: () => void,
+        clickSelector?: string,
+      ) => {
+        action?.();
+        if (clickSelector) {
+          document.querySelector<HTMLElement>(clickSelector)?.click();
+        }
+        const target = await waitForElement(selector, { timeout: 5000 });
+        if (!target || cancelled) return;
+        tourDriverRef.current?.movePrevious();
+      };
+
+      const setInputValue = (selector: string, value: string) => {
+        const input = document.querySelector<HTMLInputElement>(selector);
+        if (!input) return;
+        const nativeSetter = Object.getOwnPropertyDescriptor(
+          HTMLInputElement.prototype,
+          "value",
+        )?.set;
+        nativeSetter?.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      };
+
+      const showGpExistingSelection = async () => {
+        setInputValue(
+          "[data-tour='approve-registration-gp-search-input']",
+          "A 2 SOFA GROUP",
+        );
+        const result = await waitForElement(
+          "[data-tour^='approve-registration-gp-result-']",
+          { timeout: 5000 },
+        );
+        result?.click();
+        await waitForElement(
+          "[data-tour='approve-registration-gp-selected-badge']",
+          { timeout: 5000 },
+        );
+      };
+
+      const showGpCreateOption = async () => {
+        document
+          .querySelector<HTMLElement>(
+            "[data-tour='approve-registration-gp-change-button']",
+          )
+          ?.click();
+        await waitForElement("[data-tour='approve-registration-gp-search-input']", {
+          timeout: 5000,
+        });
+        setInputValue(
+          "[data-tour='approve-registration-gp-search-input']",
+          "DEMO SEJAHTERA ABADI GROUP",
+        );
+        await waitForElement(
+          "[data-tour='approve-registration-gp-create-trigger']",
+          { timeout: 5000 },
+        );
+      };
+
+      const showGpCreatePanel = async () => {
+        document
+          .querySelector<HTMLElement>(
+            "[data-tour='approve-registration-gp-create-trigger']",
+          )
+          ?.click();
+        await waitForElement(
+          "[data-tour='approve-registration-gp-create-input']",
+          { timeout: 5000 },
+        );
+      };
+
+      tourDriverRef.current = createDriverTour({
+        onDestroyed: () => {
+          setApproveTourActive(false);
+          setIsDetailModalOpen(false);
+          setIsApproveModalOpen(false);
+          setSelectedRegistration(null);
+          setSelectedForAction(null);
+          tourStartedRef.current = false;
+          tourDriverRef.current = null;
+        },
+        steps: [
+          {
+            element: "[data-tour='customer-register-demo-card']",
+            popover: {
+              title: "Data Dummy Registrasi",
+              description:
+                "Panduan ini memakai data contoh agar bisa dijalankan kapan saja.",
+              side: "left",
+              align: "start",
+            },
+          },
+          {
+            element: "[data-tour='customer-register-view-details']",
+            popover: {
+              title: "Masuk ke Detail Registrasi",
+              description:
+                "                Klik View Details untuk membuka rincian pengajuan customer.",
+              side: "right",
+              align: "center",
+              onNextClick: () => {
+                setSelectedRegistration(tourRegistrationRef.current);
+                setIsDetailModalOpen(true);
+                void goToNextStep(
+                  "[data-tour='customer-register-detail-modal']",
+                );
+              },
+            },
+          },
+          {
+            element: "[data-tour='customer-register-detail-modal']",
+            popover: {
+              title: "Review Informasi Customer",
+              description:
+                "Cek terlebih dahulu identitas pemilik, identitas perusahaan, alamat dan data pendukung lainnya sebelum memutuskan untuk approve atau reject.",
+              side: "left",
+              align: "start",
+              onPrevClick: () => {
+                setIsDetailModalOpen(false);
+                void goToPreviousStep(
+                  "[data-tour='customer-register-view-details']",
+                );
+              },
+            },
+          },
+          {
+            element: "[data-tour='customer-register-edit-button']",
+            popover: {
+              title: "Perbaiki Penamaan Jika Belum Sesuai",
+              description:
+                "Kalau nama perusahaan belum sesuai konsep penamaan, buka menu Edit dulu sebelum masuk ke flow approve.",
+              side: "top",
+              align: "center",
+              onPrevClick: () => {
+                void tourDriverRef.current?.movePrevious();
+              },
+              onNextClick: () => {
+                document
+                  .querySelector<HTMLElement>(
+                    "[data-tour='customer-register-edit-button']",
+                  )
+                  ?.click();
+                void goToNextStep("[data-tour='customer-register-edit-modal']");
+              },
+            },
+          },
+          {
+            element: "[data-tour='customer-register-company-name-input']",
+            popover: {
+              title: "Sesuaikan Nama Perusahaan",
+              description:
+                "Ubah nama menjadi DEMO SEJAHTERA ABADI. Suffix TK tetap dipakai karena sudah mewakili Toko, jadi tidak perlu kata Toko di depan.",
+              side: "bottom",
+              align: "start",
+              onPrevClick: () => {
+                void (async () => {
+                  document
+                    .querySelector<HTMLElement>(
+                      "[data-tour='customer-register-close-edit-button']",
+                    )
+                    ?.click();
+                  await waitForElementToDisappear(
+                    "[data-tour='customer-register-edit-modal']",
+                    { timeout: 5000 },
+                  );
+                  await goToPreviousStep(
+                    "[data-tour='customer-register-edit-button']",
+                  );
+                })();
+              },
+              onNextClick: () => {
+                const input = document.querySelector<HTMLInputElement>(
+                  "[data-tour='customer-register-company-name-input']",
+                );
+                if (input) {
+                  const nativeSetter = Object.getOwnPropertyDescriptor(
+                    HTMLInputElement.prototype,
+                    "value",
+                  )?.set;
+                  nativeSetter?.call(input, "DEMO SEJAHTERA ABADI");
+                  input.dispatchEvent(new Event("input", { bubbles: true }));
+                }
+                void goToNextStep(
+                  "[data-tour='customer-register-save-edit-button']",
+                );
+              },
+            },
+          },
+          {
+            element: "[data-tour='customer-register-save-edit-button']",
+            popover: {
+              title: "Simpan Perubahan",
+              description:
+                "Kalau penamaannya sudah sesuai, simpan perubahan terlebih dahulu baru lanjutkan proses approve.",
+              side: "top",
+              align: "center",
+              onPrevClick: () => {
+                void goToPreviousStep(
+                  "[data-tour='customer-register-company-name-input']",
+                );
+              },
+              onNextClick: () => {
+                void (async () => {
+                  document
+                    .querySelector<HTMLElement>(
+                      "[data-tour='customer-register-save-edit-button']",
+                    )
+                    ?.click();
+                  await waitForElementToDisappear(
+                    "[data-tour='customer-register-edit-modal']",
+                    { timeout: 5000 },
+                  );
+                  await goToNextStep(
+                    "[data-tour='customer-register-approve-button']",
+                  );
+                })();
+              },
+            },
+          },
+          {
+            element: "[data-tour='customer-register-approve-button']",
+            popover: {
+              title: "Lanjut ke Flow Approve",
+              description:
+                "Setelah semua data perusahaan sudah sesuai dan tidak ada yang ingin diedit lagi, klik Approve untuk melanjutkan proses registrasi customer.",
+              side: "top",
+              align: "center",
+              onPrevClick: () => {
+                void goToPreviousStep(
+                  "[data-tour='customer-register-save-edit-button']",
+                );
+              },
+              onNextClick: () => {
+                setSelectedForAction(tourRegistrationRef.current);
+                setIsDetailModalOpen(false);
+                setIsApproveModalOpen(true);
+                void goToNextStep("[data-tour='approve-registration-modal']");
+              },
+            },
+          },
+          {
+            element: "[data-tour='approve-registration-demo-banner']",
+            popover: {
+              title: "Mode Demo Aman",
+              description:
+                "Selama tour aktif, semua request create dan approve disimulasikan. Tidak ada data asli yang diubah.",
+              side: "bottom",
+              align: "start",
+              onPrevClick: () => {
+                setIsApproveModalOpen(false);
+                setSelectedForAction(null);
+                setSelectedRegistration(tourRegistrationRef.current);
+                setIsDetailModalOpen(true);
+                void goToPreviousStep(
+                  "[data-tour='customer-register-approve-button']",
+                );
+              },
+            },
+          },
+          {
+            element: "[data-tour='approve-registration-step-1']",
+            popover: {
+              title: "Step 1: National Brand",
+              description:
+                "Step ini opsional. Approver bisa memilih NB existing atau lanjut tanpa NB jika memang tidak diperlukan.",
+              side: "left",
+              align: "start",
+            },
+          },
+          {
+            element: "[data-tour='approve-registration-next-button']",
+            popover: {
+              title: "Lanjut ke Step Berikutnya",
+              description:
+                "Jika sudah selesai dibagian National Brand, klik Next untuk melanjutkan ke Step Selanjutnya.",
+              side: "top",
+              align: "end",
+              onNextClick: () => {
+                void goToNextStep(
+                  "[data-tour='approve-registration-step-2']",
+                  "[data-tour='approve-registration-next-button']",
+                );
+              },
+            },
+          },
+          {
+            element: "[data-tour='approve-registration-step-2']",
+            popover: {
+              title: "Step 2: Group Parent",
+              description:
+                "Di sini approver memetakan customer ke Group Parent yang existing atau membuat GP baru bila belum ada.",
+              side: "left",
+              align: "start",
+              onPrevClick: () => {
+                void goToPreviousStep(
+                  "[data-tour='approve-registration-next-button']",
+                  undefined,
+                  "[data-tour='approve-registration-prev-button']",
+                );
+              },
+            },
+          },
+          {
+            element: "[data-tour='approve-registration-gp-search-input']",
+            popover: {
+              title: "Cari Group Parent Existing",
+              description:
+                "Kalau sudah ada Group Parent yang sesuai, ketik nama atau kodenya lalu pilih dari hasil pencarian.",
+              side: "bottom",
+              align: "start",
+              onNextClick: () => {
+                document
+                  .querySelector<HTMLElement>(
+                    "[data-tour^='approve-registration-gp-result-']",
+                  )
+                  ?.click();
+                void goToNextStep(
+                  "[data-tour='approve-registration-gp-selected-badge']",
+                );
+              },
+            },
+          },
+          {
+            element: "[data-tour='approve-registration-gp-selected-badge']",
+            popover: {
+              title: "Hasil Jika GP Existing Dipilih",
+              description:
+                "Jika Group Parent yang dicari sudah ada, hasilnya akan tampil seperti ini. User masih bisa klik Ganti bila ingin mencari atau membuat GP lain.",
+              side: "top",
+              align: "start",
+              onPrevClick: () => {
+                void goToPreviousStep(
+                  "[data-tour='approve-registration-gp-search-input']",
+                  () => {
+                    document
+                      .querySelector<HTMLElement>(
+                        "[data-tour='approve-registration-gp-change-button']",
+                      )
+                      ?.click();
+                  },
+                );
+              },
+              onNextClick: () => {
+                void (async () => {
+                  await showGpCreateOption();
+                  tourDriverRef.current?.moveNext();
+                })();
+              },
+            },
+          },
+          {
+            element: "[data-tour='approve-registration-gp-create-trigger']",
+            popover: {
+              title: "Jika Ingin Membuat Group Parent Baru",
+              description:
+                "Kalau hasil pencarian tidak menemukan GP yang cocok, klik Buat GP Baru untuk membuka form pembuatan Group Parent.",
+              side: "top",
+              align: "center",
+              onPrevClick: () => {
+                void (async () => {
+                  await showGpExistingSelection();
+                  tourDriverRef.current?.movePrevious();
+                })();
+              },
+              onNextClick: () => {
+                void (async () => {
+                  await showGpCreatePanel();
+                  tourDriverRef.current?.moveNext();
+                })();
+              },
+            },
+          },
+          {
+            element: "[data-tour='approve-registration-gp-create-input']",
+            popover: {
+              title: "Isi Form Group Parent Baru",
+              description:
+                "Di form ini user mengisi nama Group Parent baru. Pada demo ini nama otomatis mengikuti pencarian yang tadi tidak ditemukan.",
+              side: "bottom",
+              align: "start",
+              onPrevClick: () => {
+                void (async () => {
+                  document
+                    .querySelector<HTMLElement>(
+                      "[data-tour='approve-registration-gp-create-cancel']",
+                    )
+                    ?.click();
+                  await waitForElement(
+                    "[data-tour='approve-registration-gp-create-trigger']",
+                    { timeout: 5000 },
+                  );
+                  tourDriverRef.current?.movePrevious();
+                })();
+              },
+              onNextClick: () => {
+                void goToNextStep(
+                  "[data-tour='approve-registration-step-3']",
+                  "[data-tour='approve-registration-next-button']",
+                );
+              },
+            },
+          },
+          {
+            element: "[data-tour='approve-registration-step-3']",
+            popover: {
+              title: "Step 3: Group Customer",
+              description:
+                "Setelah GP siap, approver menentukan Group Customer yang terkait dengan perusahaan pendaftar.",
+              side: "left",
+              align: "start",
+              onPrevClick: () => {
+                void goToPreviousStep(
+                  "[data-tour='approve-registration-gp-create-panel']",
+                  undefined,
+                  "[data-tour='approve-registration-prev-button']",
+                );
+              },
+            },
+          },
+          {
+            element: "[data-tour='approve-registration-next-button']",
+            popover: {
+              title: "Lanjut ke Branch Customer",
+              description:
+                "Jika bagian Group Customer sudah sesuai, klik Next untuk melanjutkan ke Step Branch Customer.",
+              side: "top",
+              align: "end",
+              onNextClick: () => {
+                void goToNextStep(
+                  "[data-tour='approve-registration-step-4']",
+                  "[data-tour='approve-registration-next-button']",
+                );
+              },
+            },
+          },
+          {
+            element: "[data-tour='approve-registration-step-4']",
+            popover: {
+              title: "Step 4: Branch Customer",
+              description:
+                "Di step ini approver menentukan apakah Branch Customer memakai data existing atau dibuat baru dari hasil approval.",
+              side: "left",
+              align: "start",
+              onPrevClick: () => {
+                void goToPreviousStep(
+                  "[data-tour='approve-registration-step-3']",
+                  undefined,
+                  "[data-tour='approve-registration-prev-button']",
+                );
+              },
+            },
+          },
+          {
+            element: "[data-tour='approve-registration-next-button']",
+            popover: {
+              title: "Masuk ke Final Review",
+              description:
+                "Tombol ini membawa approver ke ringkasan akhir sebelum commit approve.",
+              side: "top",
+              align: "end",
+              onNextClick: () => {
+                void goToNextStep(
+                  "[data-tour='approve-registration-step-5']",
+                  "[data-tour='approve-registration-next-button']",
+                );
+              },
+            },
+          },
+          {
+            element: "[data-tour='approve-registration-commit-button']",
+            popover: {
+              title: "Final Commit Approve",
+              description:
+                "Di produksi, tombol ini akan mengubah status register ke Syncing. Di mode demo, aksi ini hanya simulasi.",
+              side: "top",
+              align: "center",
+              onPrevClick: () => {
+                void goToPreviousStep(
+                  "[data-tour='approve-registration-next-button']",
+                  undefined,
+                  "[data-tour='approve-registration-prev-button']",
+                );
+              },
+            },
+          },
+        ],
+      });
+
+      tourStartedRef.current = true;
+      tourDriverRef.current.drive();
+    };
+
+    void driveTour();
+
+    return () => {
+      cancelled = true;
+      tourDriverRef.current?.destroy();
+    };
+  }, [approveTourActive]);
 
   const handleApproveSuccess = (message: string) => {
     const active = selectedForAction;
@@ -1025,6 +1604,15 @@ export function CustomerRegistrationList() {
             Kelola pengajuan registrasi member dari customer
           </p>
         </div>
+        <button
+          type="button"
+          onClick={handleStartApproveTour}
+          disabled={approveTourActive}
+          className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <FaPlayCircle className="h-4 w-4" />
+          <span>Tour Approve Customer Register</span>
+        </button>
       </div>
 
       {/* Statistics Cards */}
@@ -1237,6 +1825,9 @@ export function CustomerRegistrationList() {
               <RegistrationCard
                 key={registration.id}
                 registration={registration}
+                tourMode={
+                  approveTourActive && registration.id === tourRegistration.id
+                }
                 onViewDetails={() => handleViewDetails(registration)}
                 onSync={() => handleSync(registration)}
                 isSyncing={Boolean(syncingIds[registration.id])}
@@ -1274,6 +1865,10 @@ export function CustomerRegistrationList() {
         isOpen={isDetailModalOpen}
         onClose={() => setIsDetailModalOpen(false)}
         registration={selectedRegistration}
+        demoMode={
+          approveTourActive && selectedRegistration?.id === tourRegistration.id
+        }
+        onDemoRegistrationChange={handleDemoRegistrationChange}
         onApprove={handleApprove}
         onReject={handleReject}
         onSync={(registration) => handleSync(registration)}
@@ -1306,6 +1901,9 @@ export function CustomerRegistrationList() {
           setSelectedForAction(null);
         }}
         registration={selectedForAction}
+        demoMode={
+          approveTourActive && selectedForAction?.id === tourRegistration.id
+        }
         onSuccess={handleApproveSuccess}
       />
 

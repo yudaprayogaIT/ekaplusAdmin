@@ -59,46 +59,45 @@ export default function WorkflowDetailModal({
   if (!open || !workflow) return null;
 
   const { workflow: wf, document_states, transitions } = workflow;
-  const sortedStates = [...document_states].sort(
-    (a, b) => a.state_id - b.state_id,
-  );
+  const orderedStates = [...document_states];
 
   const getRoleName = (roleId: number) => {
     const role = roles.find((item) => item.ID === roleId);
     return role ? role.Name : `Role #${roleId}`;
   };
 
-  const rows = sortedStates.flatMap((state) => {
-    const stateTransitions = transitions.filter(
-      (transition) => transition.from_state_id === state.state_id,
-    );
+  const statesWithoutTransitions = orderedStates.filter(
+    (state) =>
+      !transitions.some(
+        (transition) => transition.from_state_id === state.state_id,
+      ),
+  );
 
-    if (stateTransitions.length === 0) {
-      return [
-        {
-          rowKey: `state-${state.state_id}-empty`,
-          state,
-          nextAction: "-",
-          toState: "-",
-          allowedRoleIds: [] as number[],
-        },
-      ];
-    }
-
-    return stateTransitions.map((transition, index) => {
+  const rows = [
+    ...transitions.map((transition, index) => {
+      const state = document_states.find(
+        (item) => item.state_id === transition.from_state_id,
+      );
       const toState = document_states.find(
         (item) => item.state_id === transition.to_state_id,
       );
 
       return {
-        rowKey: `state-${state.state_id}-transition-${transition.id || index}`,
+        rowKey: `transition-${transition.id || index}`,
         state,
         nextAction: transition.action || "-",
         toState: toState?.state_name || `#${transition.to_state_id}`,
         allowedRoleIds: transition.allowed_role_ids || [],
       };
-    });
-  });
+    }),
+    ...statesWithoutTransitions.map((state) => ({
+      rowKey: `state-${state.state_id}-empty`,
+      state,
+      nextAction: "-",
+      toState: "-",
+      allowedRoleIds: [] as number[],
+    })),
+  ];
 
   return (
     <EntityDetailModal
@@ -173,7 +172,7 @@ export default function WorkflowDetailModal({
           <span>State Flow</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {sortedStates.map((state, index) => (
+          {orderedStates.map((state, index) => (
             <div key={state.state_id} className="flex items-center gap-2">
               <span className="inline-flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-medium text-gray-800">
                 <span
@@ -182,7 +181,7 @@ export default function WorkflowDetailModal({
                 />
                 {state.state_name}
               </span>
-              {index < sortedStates.length - 1 ? (
+              {index < orderedStates.length - 1 ? (
                 <FaArrowRight className="h-3 w-3 text-gray-400" />
               ) : null}
             </div>
@@ -223,6 +222,7 @@ export default function WorkflowDetailModal({
               </thead>
               <tbody className="divide-y divide-red-100 bg-white">
                 {rows.map((row) => {
+                  if (!row.state) return null;
                   return (
                     <tr key={row.rowKey}>
                       <td className="px-4 py-3 align-top">

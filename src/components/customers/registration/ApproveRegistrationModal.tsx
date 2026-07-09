@@ -27,6 +27,7 @@ interface ApproveRegistrationModalProps {
   onClose: () => void;
   registration: CustomerRegistration | null;
   onSuccess: (message: string) => void;
+  demoMode?: boolean;
 }
 
 interface CustomerRegisterAddressApiResponse {
@@ -184,6 +185,7 @@ export function ApproveRegistrationModal({
   onClose,
   registration,
   onSuccess,
+  demoMode = false,
 }: ApproveRegistrationModalProps) {
   const { token } = useAuth();
 
@@ -239,6 +241,55 @@ export function ApproveRegistrationModal({
   const [isGpLoading, setIsGpLoading] = useState(false);
   const [isGcLoading, setIsGcLoading] = useState(false);
   const [isBcLoading, setIsBcLoading] = useState(false);
+  const demoNationalBrands = useMemo<NationalBrandRow[]>(
+    () => [
+      { id: 9101, name: "NB9101", nb_name: "EKA TOUR" },
+      { id: 9102, name: "NB9102", nb_name: "EKA DISTRIBUTOR" },
+    ],
+    [],
+  );
+  const demoGroupParents = useMemo<GroupParentRow[]>(
+    () => [
+      {
+        id: 9201,
+        name: "GP9201",
+        gp_name: "DEMO SEJAHTERA GROUP",
+        nbid: 9101,
+      },
+      {
+        id: 9202,
+        name: "GP9202",
+        gp_name: "SURABAYA RETAIL NETWORK",
+        nbid: 9102,
+      },
+    ],
+    [],
+  );
+  const demoGroupCustomers = useMemo<GroupCustomerRow[]>(
+    () => [
+      {
+        id: 9301,
+        name: "GC9301",
+        gc_name: "PT DEMO SEJAHTERA ABADI",
+        gpid: 9201,
+      },
+    ],
+    [],
+  );
+  const demoBranchCustomers = useMemo<BranchCustomerRow[]>(
+    () => [
+      {
+        id: 9401,
+        name: "BC9401",
+        bcid_name: "PT DEMO SEJAHTERA ABADI - SURABAYA",
+        gcid: 9301,
+        branch: { id: 77, branch_name: "Cabang Surabaya", city: "Surabaya" },
+        branch_owner: "Rina Wulandari",
+        branch_owner_phone: "081298765432",
+      },
+    ],
+    [],
+  );
 
   const existingGpid = registration?.gp_id;
   const existingGcid = registration?.gc_id;
@@ -312,19 +363,19 @@ export function ApproveRegistrationModal({
       if (shippingAddresses.length > 0) {
         return shippingAddresses;
       }
-        return [
-          {
-            id: -1,
-            parent_id: Number(registration.id),
-            label: "Alamat Perusahaan",
-            address: registration.address.full_address,
-            city: registration.address.city_name,
-            province: registration.address.province_name,
-            district: registration.address.district_name,
-            village: registration.address.village_name,
-            pic_name:
-              registration.branch_owner?.full_name || registration.user.full_name,
-            pic_phone:
+      return [
+        {
+          id: -1,
+          parent_id: Number(registration.id),
+          label: "Alamat Perusahaan",
+          address: registration.address.full_address,
+          city: registration.address.city_name,
+          province: registration.address.province_name,
+          district: registration.address.district_name,
+          village: registration.address.village_name,
+          pic_name:
+            registration.branch_owner?.full_name || registration.user.full_name,
+          pic_phone:
             registration.branch_owner?.phone || registration.user.phone,
           is_default: 1,
         },
@@ -344,6 +395,52 @@ export function ApproveRegistrationModal({
       method: "GET" | "POST" | "PUT",
       body?: unknown,
     ) => {
+      if (demoMode) {
+        pushLog({
+          stage,
+          status: "started",
+          message: `[Tour] ${method} ${url}`,
+          payload: body,
+        });
+
+        const lowerStage = stage.toLowerCase();
+        let demoResponse: unknown = { data: {} };
+
+        if (lowerStage.includes("national brand")) {
+          demoResponse = {
+            data: { id: 9101, name: "NB9101", nb_name: "EKA TOUR" },
+          };
+        } else if (lowerStage.includes("group parent")) {
+          demoResponse = {
+            data: {
+              id: 9201,
+              name: "GP9201",
+              gp_name: "DEMO SEJAHTERA GROUP",
+              nbid: 9101,
+            },
+          };
+        } else if (lowerStage.includes("group customer")) {
+          demoResponse = {
+            data: {
+              id: 9301,
+              name: "GC9301",
+              gc_name: "PT DEMO SEJAHTERA ABADI",
+              gpid: 9201,
+            },
+          };
+        }
+
+        pushLog({
+          stage,
+          status: "success",
+          message: `${stage} success (tour demo)`,
+          response: demoResponse,
+          http_status: 200,
+        });
+
+        return demoResponse;
+      }
+
       pushLog({
         stage,
         status: "started",
@@ -398,7 +495,7 @@ export function ApproveRegistrationModal({
       });
       return json;
     },
-    [pushLog, token],
+    [demoMode, pushLog, token],
   );
 
   const getReferenceCache = useCallback(() => {
@@ -417,6 +514,10 @@ export function ApproveRegistrationModal({
   }, [token]);
 
   const ensureNationalBrands = useCallback(async () => {
+    if (demoMode) {
+      setNationalBrands(demoNationalBrands);
+      return;
+    }
     if (!token) return;
 
     const cache = getReferenceCache();
@@ -432,9 +533,13 @@ export function ApproveRegistrationModal({
     }
 
     setNationalBrands(cache.nationalBrands || []);
-  }, [getReferenceCache, token]);
+  }, [demoMode, demoNationalBrands, getReferenceCache, token]);
 
   const ensureGroupParents = useCallback(async () => {
+    if (demoMode) {
+      setGroupParents(demoGroupParents);
+      return;
+    }
     if (!token) return;
 
     const cache = getReferenceCache();
@@ -455,10 +560,18 @@ export function ApproveRegistrationModal({
     }
 
     setGroupParents(cache.groupParents || []);
-  }, [getReferenceCache, token]);
+  }, [demoGroupParents, demoMode, getReferenceCache, token]);
 
   const ensureGroupCustomers = useCallback(
     async (gpid?: number) => {
+      if (demoMode) {
+        setGroupCustomers(
+          demoGroupCustomers.filter(
+            (row) => !gpid || Number(row.gpid || 0) === Number(gpid),
+          ),
+        );
+        return;
+      }
       if (!token || !gpid) {
         setGroupCustomers([]);
         return;
@@ -490,11 +603,19 @@ export function ApproveRegistrationModal({
         setIsGcLoading(false);
       }
     },
-    [getReferenceCache, token],
+    [demoGroupCustomers, demoMode, getReferenceCache, token],
   );
 
   const ensureBranchCustomers = useCallback(
     async (gcid?: number) => {
+      if (demoMode) {
+        setBranchCustomers(
+          demoBranchCustomers.filter(
+            (row) => !gcid || Number(row.gcid || 0) === Number(gcid),
+          ),
+        );
+        return;
+      }
       if (!token || !gcid) {
         setBranchCustomers([]);
         return;
@@ -526,14 +647,14 @@ export function ApproveRegistrationModal({
         setIsBcLoading(false);
       }
     },
-    [getReferenceCache, token],
+    [demoBranchCustomers, demoMode, getReferenceCache, token],
   );
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadPreparationData() {
-      if (!isOpen || !registration || !token) return;
+      if (!isOpen || !registration) return;
 
       setStep(1);
       const initialNbName = getInitialNbName(registration);
@@ -590,6 +711,38 @@ export function ApproveRegistrationModal({
       setIsPreparing(true);
 
       try {
+        if (demoMode) {
+          setShippingAddresses(
+            (registration.shipping_addresses || []).map((item, index) => ({
+              id: item.id || index + 1,
+              parent_id: Number(registration.id) || index + 1,
+              label: item.label,
+              address: item.address,
+              city: item.city,
+              province: item.province,
+              district: item.district || null,
+              village: item.village || null,
+              postal_code: item.postal_code || null,
+              pic_name: item.pic_name || null,
+              pic_phone: item.pic_phone || null,
+              is_default: item.is_default || null,
+            })),
+          );
+          setNationalBrands(demoNationalBrands);
+          setGroupParents(demoGroupParents);
+          setExistingGp(null);
+          setSelectedNbid(null);
+          setSelectedGpid(null);
+          setSelectedGcid(null);
+          setSelectedBcid(null);
+          setCreateNationalBrand(false);
+          setGpMode("search");
+          setGcMode("idle");
+          setBcMode("idle");
+          return;
+        }
+        if (!token) return;
+
         const regId = Number(registration.id);
         const shippingSpec = {
           fields: ["*"],
@@ -654,7 +807,16 @@ export function ApproveRegistrationModal({
     return () => {
       cancelled = true;
     };
-  }, [ensureNationalBrands, existingNbid, isOpen, registration, token]);
+  }, [
+    demoGroupParents,
+    demoMode,
+    demoNationalBrands,
+    ensureNationalBrands,
+    existingNbid,
+    isOpen,
+    registration,
+    token,
+  ]);
 
   useEffect(() => {
     if (!isOpen || isPreparing || step !== 2) return;
@@ -766,14 +928,16 @@ export function ApproveRegistrationModal({
       return {
         gc_name: normalizeEntityName(gcName),
         gpid,
-        ...buildCreditPolicyPayload(registration as typeof registration & {
-          credit_limit_active?: unknown;
-          credit_limit?: unknown;
-          payment_term_active?: unknown;
-          payment_term?: unknown;
-          limit_customer_overdue_active?: unknown;
-          limit_customer_overdue?: unknown;
-        }),
+        ...buildCreditPolicyPayload(
+          registration as typeof registration & {
+            credit_limit_active?: unknown;
+            credit_limit?: unknown;
+            payment_term_active?: unknown;
+            payment_term?: unknown;
+            limit_customer_overdue_active?: unknown;
+            limit_customer_overdue?: unknown;
+          },
+        ),
         owner_full_name: registration.user.full_name,
         owner_phone: normalizePhone(registration.user.phone),
         owner_email: registration.user.email,
@@ -893,6 +1057,45 @@ export function ApproveRegistrationModal({
   };
 
   const handleNextStep = async () => {
+    if (demoMode) {
+      setError(null);
+
+      if (step === 1 && !effectiveNbid) {
+        setSelectedNbid(demoNationalBrands[0]?.id || null);
+      }
+
+      if (step === 2 && !effectiveGpid) {
+        const demoGp = demoGroupParents[0];
+        if (demoGp) {
+          setSelectedGpid(demoGp.id);
+          setCreatedGpid(null);
+          setGpMode("search");
+        }
+      }
+
+      if (step === 3 && !effectiveGcid) {
+        const demoGc = demoGroupCustomers[0];
+        if (demoGc) {
+          setSelectedGcid(demoGc.id);
+          setCreatedGcid(null);
+          setGcMode("search");
+        }
+      }
+
+      if (step === 4 && !effectiveBcid) {
+        const demoBc = demoBranchCustomers[0];
+        if (demoBc) {
+          setSelectedBcid(demoBc.id);
+          setCreatedBc(demoBc);
+          setCreatedBcid(demoBc.id);
+          setBcMode("create");
+        }
+      }
+
+      setStep((prev) => Math.min(5, prev + 1) as Step);
+      return;
+    }
+
     const validationError = validateCurrentStep();
     if (validationError) {
       setError(validationError);
@@ -916,14 +1119,16 @@ export function ApproveRegistrationModal({
             "POST",
             {
               nb_name: normalizeEntityName(nbName),
-              ...buildCreditPolicyPayload(registration as typeof registration & {
-                credit_limit_active?: unknown;
-                credit_limit?: unknown;
-                payment_term_active?: unknown;
-                payment_term?: unknown;
-                limit_customer_overdue_active?: unknown;
-                limit_customer_overdue?: unknown;
-              }),
+              ...buildCreditPolicyPayload(
+                registration as typeof registration & {
+                  credit_limit_active?: unknown;
+                  credit_limit?: unknown;
+                  payment_term_active?: unknown;
+                  payment_term?: unknown;
+                  limit_customer_overdue_active?: unknown;
+                  limit_customer_overdue?: unknown;
+                },
+              ),
             },
           );
           const newNbid = extractIdFromResourceResponse(nbJson);
@@ -953,14 +1158,16 @@ export function ApproveRegistrationModal({
           const gpPayload = {
             gp_name: normalizeEntityName(gpName),
             ...(effectiveNbid ? { nbid: effectiveNbid } : {}),
-            ...buildCreditPolicyPayload(registration as typeof registration & {
-              credit_limit_active?: unknown;
-              credit_limit?: unknown;
-              payment_term_active?: unknown;
-              payment_term?: unknown;
-              limit_customer_overdue_active?: unknown;
-              limit_customer_overdue?: unknown;
-            }),
+            ...buildCreditPolicyPayload(
+              registration as typeof registration & {
+                credit_limit_active?: unknown;
+                credit_limit?: unknown;
+                payment_term_active?: unknown;
+                payment_term?: unknown;
+                limit_customer_overdue_active?: unknown;
+                limit_customer_overdue?: unknown;
+              },
+            ),
           };
           const gpJson = await apiJsonRequest(
             "creating Group Parent",
@@ -1047,6 +1254,18 @@ export function ApproveRegistrationModal({
   };
 
   const handleSubmitApproval = async () => {
+    if (demoMode && registration) {
+      setIsSubmitting(true);
+      setError(null);
+      window.setTimeout(() => {
+        setIsSubmitting(false);
+        onSuccess(
+          `Registrasi "${registration.company.name}" berhasil diproses ke Syncing.\n\nGROUP PARENT: GP9201\nGROUP CUSTOMER: GC9301\nBRANCH CUSTOMER: BC9401\nNATIONAL BRAND: NB9101`,
+        );
+      }, 450);
+      return;
+    }
+
     if (!registration || !token) {
       setError("Data tidak lengkap");
       return;
@@ -1259,7 +1478,10 @@ export function ApproveRegistrationModal({
   const renderSelectedGpBadge = () => {
     if (!selectedGpid) return null;
     return (
-      <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 text-sm">
+      <div
+        data-tour="approve-registration-gp-selected-badge"
+        className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 text-sm"
+      >
         <span className="text-blue-800 font-medium">
           {selectedGpRow?.gp_name || "-"}{" "}
           <span className="text-blue-500">
@@ -1267,6 +1489,7 @@ export function ApproveRegistrationModal({
           </span>
         </span>
         <button
+          data-tour="approve-registration-gp-change-button"
           type="button"
           className="text-xs text-red-500 hover:underline ml-2"
           onClick={() => {
@@ -1385,6 +1608,7 @@ export function ApproveRegistrationModal({
           }}
         >
           <motion.div
+            data-tour={demoMode ? "approve-registration-modal" : undefined}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
@@ -1409,6 +1633,15 @@ export function ApproveRegistrationModal({
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {demoMode && (
+                <div
+                  data-tour="approve-registration-demo-banner"
+                  className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+                >
+                  Mode tour aktif. Semua data di dialog ini adalah dummy dan
+                  tidak akan mengubah data customer asli.
+                </div>
+              )}
               <div className="bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl p-4">
                 <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1">
                   Registrasi Customer
@@ -1436,7 +1669,10 @@ export function ApproveRegistrationModal({
 
               {/* ===================== STEP 1: NATIONAL BRAND ===================== */}
               {!isPreparing && step === 1 && (
-                <section className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                <section
+                  data-tour="approve-registration-step-1"
+                  className="grid grid-cols-1 md:grid-cols-12 gap-4"
+                >
                   <aside className="md:col-span-4 rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
                     <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">
                       Registration Details
@@ -1640,7 +1876,10 @@ export function ApproveRegistrationModal({
 
               {/* ===================== STEP 2: GROUP PARENT ===================== */}
               {!isPreparing && step === 2 && (
-                <section className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                <section
+                  data-tour="approve-registration-step-2"
+                  className="grid grid-cols-1 md:grid-cols-12 gap-4"
+                >
                   <aside className="md:col-span-4 rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
                     <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">
                       Registration Details
@@ -1726,6 +1965,7 @@ export function ApproveRegistrationModal({
                               <div className="relative flex-1">
                                 <FaSearch className="absolute left-3 top-3.5 text-gray-400 text-sm" />
                                 <input
+                                  data-tour="approve-registration-gp-search-input"
                                   autoFocus
                                   value={gpSearch}
                                   onChange={(e) => setGpSearch(e.target.value)}
@@ -1755,6 +1995,7 @@ export function ApproveRegistrationModal({
                                 <div className="max-h-56 overflow-y-auto divide-y divide-gray-100">
                                   {filteredGroupParents.map((gp) => (
                                     <button
+                                      data-tour={`approve-registration-gp-result-${gp.id}`}
                                       key={gp.id}
                                       type="button"
                                       className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 text-left transition-colors"
@@ -1796,6 +2037,7 @@ export function ApproveRegistrationModal({
                                     &quot;
                                   </p>
                                   <button
+                                    data-tour="approve-registration-gp-create-trigger"
                                     type="button"
                                     onClick={() => {
                                       setGpName(normalizeEntityName(gpSearch));
@@ -1829,12 +2071,16 @@ export function ApproveRegistrationModal({
 
                         {/* CREATE mode */}
                         {gpMode === "create" && (
-                          <div className="space-y-3 border-2 border-green-200 rounded-xl p-4 bg-green-50">
+                          <div
+                            data-tour="approve-registration-gp-create-panel"
+                            className="space-y-3 border-2 border-green-200 rounded-xl p-4 bg-green-50"
+                          >
                             <div className="flex items-center justify-between mb-1">
                               <p className="text-sm font-bold text-green-800">
                                 Buat Group Parent Baru
                               </p>
                               <button
+                                data-tour="approve-registration-gp-create-cancel"
                                 type="button"
                                 onClick={() => setGpMode("search")}
                                 className="text-xs text-gray-500 hover:underline"
@@ -1848,6 +2094,7 @@ export function ApproveRegistrationModal({
                                 <span className="text-red-500">*</span>
                               </label>
                               <input
+                                data-tour="approve-registration-gp-create-input"
                                 value={gpName}
                                 onChange={(e) =>
                                   setGpName(toUpperInput(e.target.value))
@@ -1869,7 +2116,10 @@ export function ApproveRegistrationModal({
 
               {/* ===================== STEP 3: GROUP CUSTOMER ===================== */}
               {!isPreparing && step === 3 && (
-                <section className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                <section
+                  data-tour="approve-registration-step-3"
+                  className="grid grid-cols-1 md:grid-cols-12 gap-4"
+                >
                   <aside className="md:col-span-4 space-y-3">
                     {renderProcessHistory({
                       showNb: true,
@@ -2131,7 +2381,10 @@ export function ApproveRegistrationModal({
 
               {/* ===================== STEP 4: BRANCH CUSTOMER ===================== */}
               {!isPreparing && step === 4 && (
-                <section className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                <section
+                  data-tour="approve-registration-step-4"
+                  className="grid grid-cols-1 md:grid-cols-12 gap-4"
+                >
                   <aside className="md:col-span-4 space-y-3">
                     {renderProcessHistory({
                       showNb: true,
@@ -2343,7 +2596,10 @@ export function ApproveRegistrationModal({
               )}
 
               {!isPreparing && step === 5 && (
-                <section className="space-y-4">
+                <section
+                  data-tour="approve-registration-step-5"
+                  className="space-y-4"
+                >
                   <div className="bg-green-50 border border-green-200 rounded-xl p-4">
                     <p className="text-sm font-semibold text-green-800">
                       Semua resource sudah diproses.
@@ -2429,6 +2685,7 @@ export function ApproveRegistrationModal({
             <div className="bg-gray-50 px-6 py-4 flex justify-between gap-3 border-t border-gray-200">
               {step > 1 ? (
                 <button
+                  data-tour="approve-registration-prev-button"
                   onClick={() =>
                     setStep((prev) => Math.max(1, prev - 1) as Step)
                   }
@@ -2450,6 +2707,7 @@ export function ApproveRegistrationModal({
 
               {step < 5 ? (
                 <motion.button
+                  data-tour="approve-registration-next-button"
                   whileHover={!isSubmitting ? { scale: 1.02 } : {}}
                   whileTap={!isSubmitting ? { scale: 0.98 } : {}}
                   onClick={() => void handleNextStep()}
@@ -2460,6 +2718,7 @@ export function ApproveRegistrationModal({
                 </motion.button>
               ) : (
                 <motion.button
+                  data-tour="approve-registration-commit-button"
                   whileHover={!isSubmitting ? { scale: 1.02 } : {}}
                   whileTap={!isSubmitting ? { scale: 0.98 } : {}}
                   onClick={handleSubmitApproval}

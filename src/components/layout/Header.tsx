@@ -2,8 +2,10 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { FaBars } from "react-icons/fa";
+import { FaBars, FaCircleQuestion } from "react-icons/fa6";
 import { RiMenuFoldLine, RiMenuUnfoldLine } from "react-icons/ri";
 import UserMenu from "@/components/auth/UserMenu";
 import MenuSearch from "./MenuSearch";
@@ -17,6 +19,8 @@ interface HeaderProps {
 
 export default function Header({ onToggleSidebar, isMobile, sidebarCollapsed = false }: HeaderProps) {
   const allMenuItems = getAllMenuItems();
+  const pathname = usePathname();
+  const isHelpPage = pathname === "/help";
 
   return (
     <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-gray-100">
@@ -48,6 +52,20 @@ export default function Header({ onToggleSidebar, isMobile, sidebarCollapsed = f
 
         {/* Right side - User Menu */}
         <div className="flex items-center gap-3">
+          <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+            <Link
+              href="/help"
+              className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium shadow-sm transition-all ${
+                isHelpPage
+                  ? "border-red-200 bg-red-50 text-red-700"
+                  : "border-gray-200 bg-white text-gray-600 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+              }`}
+              title="Buka halaman bantuan"
+            >
+              <FaCircleQuestion className="h-4 w-4" />
+              <span className="hidden sm:inline">Help</span>
+            </Link>
+          </motion.div>
           <UserMenu />
         </div>
       </div>
