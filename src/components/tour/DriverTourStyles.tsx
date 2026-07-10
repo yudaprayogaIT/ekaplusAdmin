@@ -59,8 +59,8 @@ export default function DriverTourStyles() {
         font-size: 11px !important;
         font-weight: 800 !important;
         line-height: 1 !important;
-        letter-spacing: 0.04em !important;
-        text-transform: uppercase !important;
+        letter-spacing: 0 !important;
+        text-transform: none !important;
       }
 
       .app-driver-popover .driver-popover-navigation-btns {

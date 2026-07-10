@@ -30,6 +30,15 @@ export const helpTopics: HelpTopic[] = [
     step: "edit",
   },
   {
+    id: "reset-password",
+    title: "Reset Password User",
+    description:
+      "Pelajari alur mengganti password akun dari halaman profile, mulai dari membuka modal hingga mengisi password baru dengan benar.",
+    route: "/profile",
+    action: "profile-tour",
+    step: "password",
+  },
+  {
     id: "approve-customer-register",
     title: "Approve Customer Register",
     description:

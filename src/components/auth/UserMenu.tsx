@@ -35,6 +35,7 @@ import {
   createProfileHeaderTourSteps,
   PROFILE_TOUR_TOTAL_STEPS,
 } from "@/lib/profileFeatureTour";
+import { RESET_PASSWORD_TOUR_TOTAL_STEPS } from "@/lib/resetPasswordTour";
 import { OPEN_LOGIN_MODAL_EVENT } from "@/lib/loginPrompt";
 import { FaArrowRight, FaKey, FaSignInAlt } from "react-icons/fa";
 import type { Driver } from "driver.js";
@@ -232,6 +233,12 @@ export default function UserMenu() {
       if (cancelled || !target) return;
 
       profileTourDriverRef.current?.destroy();
+      const followUpStep = getFeatureTourFollowUpStep(profileFeatureTourConfig);
+      const headerSteps = createProfileHeaderTourSteps({
+        openProfile: openProfileFromTour,
+        skipTour: skipProfileTourFromHeader,
+      });
+
       profileTourDriverRef.current = createDriverTour({
         doneBtnText: "Buka Profile",
         onDestroyed: () => {
@@ -250,16 +257,12 @@ export default function UserMenu() {
           clearPendingFeatureTourStep(profileFeatureTourConfig);
           clearFeatureTourFollowUpStep(profileFeatureTourConfig);
         },
-        steps: createDriverSteps(
-          createProfileHeaderTourSteps({
-            openProfile: openProfileFromTour,
-            skipTour: skipProfileTourFromHeader,
-          }),
-          {
-            totalSteps: PROFILE_TOUR_TOTAL_STEPS,
-            stepOffset: 0,
-          },
-        ),
+        steps: createDriverSteps(headerSteps, {
+          totalSteps:
+            followUpStep === "password"
+              ? RESET_PASSWORD_TOUR_TOTAL_STEPS
+              : PROFILE_TOUR_TOTAL_STEPS,
+        }),
       });
 
       profileTourDriverRef.current.drive();

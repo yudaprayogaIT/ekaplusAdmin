@@ -2,7 +2,6 @@
 
 import type React from "react";
 import type { DriveStep, Driver } from "driver.js";
-import type { FeatureTourStep } from "@/lib/featureTour";
 
 export const PROFILE_TOUR_TOTAL_STEPS = 5;
 
@@ -14,10 +13,7 @@ export const PROFILE_TOUR_SELECTORS = {
   save: "[data-tour='profile-save-action']",
 } as const;
 
-export type ProfilePageTourStep = Extract<
-  FeatureTourStep,
-  "edit" | "photo" | "form" | "save"
->;
+export type ProfilePageTourStep = "edit" | "photo" | "form" | "save";
 
 type HeaderTourActions = {
   openProfile: () => void;
@@ -54,7 +50,7 @@ export function createProfileHeaderTourSteps(
       popover: {
         title: "Masuk ke Menu Profile",
         description:
-          "Klik menu profile untuk membuka halaman profil sebelum lanjut ke langkah edit berikutnya.",
+          "Klik menu profile untuk membuka halaman profil sebelum lanjut ke panduan berikutnya.",
         side: "left",
         align: "start",
         doneBtnText: "Buka Profile",

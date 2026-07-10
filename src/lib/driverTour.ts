@@ -9,7 +9,7 @@ export function createDriverSteps(
     stepOffset?: number;
   },
 ): DriveStep[] {
-  const totalSteps = options?.totalSteps;
+  const totalSteps = options?.totalSteps ?? steps.length;
   const stepOffset = options?.stepOffset ?? 0;
 
   return steps.map((step, index) => ({
@@ -19,9 +19,7 @@ export function createDriverSteps(
           showProgress: step.popover.showProgress ?? true,
           progressText:
             step.popover.progressText ??
-            (typeof totalSteps === "number"
-              ? `${stepOffset + index + 1} of ${totalSteps}`
-              : "{{current}} of {{total}}"),
+            `${stepOffset + index + 1} dari ${totalSteps}`,
           ...step.popover,
         }
       : step.popover,
@@ -40,7 +38,7 @@ export function createDriverTour(config?: Config): Driver {
     stagePadding: 10,
     stageRadius: 18,
     showProgress: true,
-    progressText: "{{current}} of {{total}}",
+    progressText: "{{current}} dari {{total}}",
     nextBtnText: "Lanjut",
     prevBtnText: "Sebelumnya",
     doneBtnText: "Selesai",

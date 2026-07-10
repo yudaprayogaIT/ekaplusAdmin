@@ -24,14 +24,20 @@ import {
   createDriverSteps,
   createDriverTour,
   waitForElement,
+  waitForElementToDisappear,
 } from "@/lib/driverTour";
 import {
+  createProfileHeaderTourSteps,
   createProfilePageTourSteps,
   getProfilePageTourStartIndex,
   PROFILE_TOUR_SELECTORS,
-  PROFILE_TOUR_TOTAL_STEPS,
   type ProfilePageTourStep,
 } from "@/lib/profileFeatureTour";
+import {
+  createResetPasswordTourSteps,
+  getResetPasswordTourStartIndex,
+  RESET_PASSWORD_TOUR_SELECTORS,
+} from "@/lib/resetPasswordTour";
 import ActionResultModal from "@/components/ui/ActionResultModal";
 import type { Driver } from "driver.js";
 import {
@@ -158,6 +164,7 @@ type ResultState = {
 };
 
 type PendingCloseTarget = "edit" | "reset" | null;
+type ProfileFeatureTourEntryStep = ProfilePageTourStep | "password";
 
 type WilayahOption = {
   code: string;
@@ -324,6 +331,7 @@ function ModalShell({
   children,
   widthClass = "max-w-2xl",
   centered = false,
+  dataTour,
 }: {
   open: boolean;
   onClose: () => void;
@@ -333,6 +341,7 @@ function ModalShell({
   children: React.ReactNode;
   widthClass?: string;
   centered?: boolean;
+  dataTour?: string;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -356,6 +365,7 @@ function ModalShell({
         <div
           className={`relative w-full ${widthClass} max-h-[calc(100vh-4rem)] overflow-hidden rounded-[20px] bg-white shadow-2xl md:max-h-[calc(100vh-5rem)]`}
           onClick={(event) => event.stopPropagation()}
+          data-tour={dataTour}
         >
           <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
             <div className="flex items-start gap-3">
@@ -651,7 +661,7 @@ export default function MyProfilePage() {
     useState<PendingCloseTarget>(null);
   const [featureTourOpen, setFeatureTourOpen] = useState(false);
   const [featureTourEntryStep, setFeatureTourEntryStep] =
-    useState<ProfilePageTourStep>("edit");
+    useState<ProfileFeatureTourEntryStep>("edit");
   const [hasSeenFeatureTour, setHasSeenFeatureTour] = useState(true);
   const [resultState, setResultState] = useState<ResultState>({
     isOpen: false,
@@ -707,7 +717,8 @@ export default function MyProfilePage() {
       pendingStep === "edit" ||
       pendingStep === "photo" ||
       pendingStep === "form" ||
-      pendingStep === "save"
+      pendingStep === "save" ||
+      pendingStep === "password"
     ) {
       setHasSeenFeatureTour(false);
 
@@ -1064,7 +1075,22 @@ export default function MyProfilePage() {
     };
 
     const startTour = async () => {
-      if (featureTourEntryStep === "photo") {
+      if (featureTourEntryStep === "password") {
+        closeEditImmediately();
+        closeResetImmediately();
+      } else if (featureTourEntryStep === "edit") {
+        closeEditImmediately();
+        closeResetImmediately();
+        await waitForElementToDisappear("[data-tour='profile-edit-modal']", {
+          timeout: 1000,
+          interval: 50,
+        });
+        const editTarget = await waitForElement(PROFILE_TOUR_SELECTORS.edit, {
+          timeout: 4000,
+          interval: 100,
+        });
+        if (cancelled || !editTarget) return;
+      } else if (featureTourEntryStep === "photo") {
         openEditModal();
         const photoTarget = await waitForElement(PROFILE_TOUR_SELECTORS.photo, {
           timeout: 4000,
@@ -1091,6 +1117,211 @@ export default function MyProfilePage() {
 
       if (cancelled) return;
 
+      const goBackToProfileMenuStep = () => {
+        closeEditImmediately();
+        closeResetImmediately();
+        setPendingFeatureTourStep(featureTourEntryStep);
+        window.setTimeout(() => {
+          profileTourDriverRef.current?.movePrevious();
+        }, 50);
+      };
+
+      const headerSteps = createProfileHeaderTourSteps({
+        openProfile: () => {
+          profileTourDriverRef.current?.moveNext();
+        },
+        skipTour: finishTour,
+      });
+
+      const pageSteps =
+        featureTourEntryStep === "password"
+          ? createResetPasswordTourSteps({
+              driverRef: profileTourDriverRef,
+              backToMenu: goBackToProfileMenuStep,
+              goToResetModal: async () => {
+                closeEditImmediately();
+                openResetModal();
+                setPendingFeatureTourStep("password");
+                const target = await waitForElement(
+                  RESET_PASSWORD_TOUR_SELECTORS.modal,
+                  {
+                    timeout: 4000,
+                    interval: 100,
+                  },
+                );
+                return Boolean(target);
+              },
+              goToResetForm: async () => {
+                openResetModal();
+                setPendingFeatureTourStep("password");
+                const target = await waitForElement(
+                  RESET_PASSWORD_TOUR_SELECTORS.newPassword,
+                  {
+                    timeout: 4000,
+                    interval: 100,
+                  },
+                );
+                return Boolean(target);
+              },
+              goToResetConfirm: async () => {
+                openResetModal();
+                setPendingFeatureTourStep("password");
+                const target = await waitForElement(
+                  RESET_PASSWORD_TOUR_SELECTORS.confirmPassword,
+                  {
+                    timeout: 4000,
+                    interval: 100,
+                  },
+                );
+                return Boolean(target);
+              },
+              goToResetSubmit: async () => {
+                openResetModal();
+                setPendingFeatureTourStep("password");
+                const target = await waitForElement(
+                  RESET_PASSWORD_TOUR_SELECTORS.submit,
+                  {
+                    timeout: 4000,
+                    interval: 100,
+                  },
+                );
+                return Boolean(target);
+              },
+              backToResetButton: async () => {
+                closeResetImmediately();
+                closeEditImmediately();
+                setPendingFeatureTourStep("password");
+                const target = await waitForElement(
+                  RESET_PASSWORD_TOUR_SELECTORS.trigger,
+                  {
+                    timeout: 4000,
+                    interval: 100,
+                  },
+                );
+                return Boolean(target);
+              },
+              backToResetModal: async () => {
+                closeEditImmediately();
+                openResetModal();
+                setPendingFeatureTourStep("password");
+                const target = await waitForElement(
+                  RESET_PASSWORD_TOUR_SELECTORS.modal,
+                  {
+                    timeout: 4000,
+                    interval: 100,
+                  },
+                );
+                return Boolean(target);
+              },
+              backToResetNewPassword: async () => {
+                closeEditImmediately();
+                openResetModal();
+                setPendingFeatureTourStep("password");
+                const target = await waitForElement(
+                  RESET_PASSWORD_TOUR_SELECTORS.newPassword,
+                  {
+                    timeout: 4000,
+                    interval: 100,
+                  },
+                );
+                return Boolean(target);
+              },
+              backToResetConfirm: async () => {
+                closeEditImmediately();
+                openResetModal();
+                setPendingFeatureTourStep("password");
+                const target = await waitForElement(
+                  RESET_PASSWORD_TOUR_SELECTORS.confirmPassword,
+                  {
+                    timeout: 4000,
+                    interval: 100,
+                  },
+                );
+                return Boolean(target);
+              },
+              finishTour,
+            })
+          : createProfilePageTourSteps({
+              driverRef: profileTourDriverRef,
+              backToMenu: goBackToProfileMenuStep,
+              goToPhoto: async () => {
+                openEditModal();
+                setPendingFeatureTourStep("photo");
+                const target = await waitForElement(
+                  PROFILE_TOUR_SELECTORS.photo,
+                  {
+                    timeout: 4000,
+                    interval: 100,
+                  },
+                );
+                return Boolean(target);
+              },
+              goToForm: async () => {
+                openEditModal();
+                setPendingFeatureTourStep("form");
+                const target = await waitForElement(
+                  PROFILE_TOUR_SELECTORS.form,
+                  {
+                    timeout: 4000,
+                    interval: 100,
+                  },
+                );
+                return Boolean(target);
+              },
+              goToSave: async () => {
+                openEditModal();
+                setPendingFeatureTourStep("save");
+                const target = await waitForElement(
+                  PROFILE_TOUR_SELECTORS.save,
+                  {
+                    timeout: 4000,
+                    interval: 100,
+                  },
+                );
+                return Boolean(target);
+              },
+              backToEdit: async () => {
+                closeEditImmediately();
+                closeResetImmediately();
+                setPendingFeatureTourStep("edit");
+                const target = await waitForElement(
+                  PROFILE_TOUR_SELECTORS.edit,
+                  {
+                    timeout: 4000,
+                    interval: 100,
+                  },
+                );
+                return Boolean(target);
+              },
+              backToPhoto: async () => {
+                closeResetImmediately();
+                openEditModal();
+                setPendingFeatureTourStep("photo");
+                const target = await waitForElement(
+                  PROFILE_TOUR_SELECTORS.photo,
+                  {
+                    timeout: 4000,
+                    interval: 100,
+                  },
+                );
+                return Boolean(target);
+              },
+              backToForm: async () => {
+                closeResetImmediately();
+                openEditModal();
+                setPendingFeatureTourStep("form");
+                const target = await waitForElement(
+                  PROFILE_TOUR_SELECTORS.form,
+                  {
+                    timeout: 4000,
+                    interval: 100,
+                  },
+                );
+                return Boolean(target);
+              },
+              finishTour,
+            });
+
       profileTourDriverRef.current?.destroy();
       profileTourDriverRef.current = createDriverTour({
         onDestroyed: () => {
@@ -1102,82 +1333,14 @@ export default function MyProfilePage() {
             persistFeatureTour();
           }
         },
-        steps: createDriverSteps(
-          createProfilePageTourSteps({
-            driverRef: profileTourDriverRef,
-            backToMenu: () => {
-              setPendingFeatureTourStep("edit");
-              profileTourFinalizingRef.current = false;
-              profileTourDriverRef.current?.destroy();
-              profileTourDriverRef.current = null;
-              setFeatureTourOpen(false);
-              router.push("/help");
-            },
-            goToPhoto: async () => {
-              openEditModal();
-              setPendingFeatureTourStep("photo");
-              const target = await waitForElement(PROFILE_TOUR_SELECTORS.photo, {
-                timeout: 4000,
-                interval: 100,
-              });
-              return Boolean(target);
-            },
-            goToForm: async () => {
-              openEditModal();
-              setPendingFeatureTourStep("form");
-              const target = await waitForElement(PROFILE_TOUR_SELECTORS.form, {
-                timeout: 4000,
-                interval: 100,
-              });
-              return Boolean(target);
-            },
-            goToSave: async () => {
-              openEditModal();
-              setPendingFeatureTourStep("save");
-              const target = await waitForElement(PROFILE_TOUR_SELECTORS.save, {
-                timeout: 4000,
-                interval: 100,
-              });
-              return Boolean(target);
-            },
-            backToEdit: async () => {
-              closeEditImmediately();
-              setPendingFeatureTourStep("edit");
-              const target = await waitForElement(PROFILE_TOUR_SELECTORS.edit, {
-                timeout: 4000,
-                interval: 100,
-              });
-              return Boolean(target);
-            },
-            backToPhoto: async () => {
-              openEditModal();
-              setPendingFeatureTourStep("photo");
-              const target = await waitForElement(PROFILE_TOUR_SELECTORS.photo, {
-                timeout: 4000,
-                interval: 100,
-              });
-              return Boolean(target);
-            },
-            backToForm: async () => {
-              openEditModal();
-              setPendingFeatureTourStep("form");
-              const target = await waitForElement(PROFILE_TOUR_SELECTORS.form, {
-                timeout: 4000,
-                interval: 100,
-              });
-              return Boolean(target);
-            },
-            finishTour,
-          }),
-          {
-            totalSteps: PROFILE_TOUR_TOTAL_STEPS,
-            stepOffset: 1,
-          },
-        ),
+        steps: createDriverSteps([...headerSteps, ...pageSteps]),
       });
 
       profileTourDriverRef.current.drive(
-        getProfilePageTourStartIndex(featureTourEntryStep),
+        featureTourEntryStep === "password"
+          ? getResetPasswordTourStartIndex() + headerSteps.length
+          : getProfilePageTourStartIndex(featureTourEntryStep) +
+              headerSteps.length,
       );
     };
 
@@ -1195,6 +1358,7 @@ export default function MyProfilePage() {
     featureTourEntryStep,
     featureTourOpen,
     openEditModal,
+    openResetModal,
     persistFeatureTour,
     router,
     setPendingFeatureTourStep,
@@ -1474,11 +1638,11 @@ export default function MyProfilePage() {
                 onClick={openEditModal}
               >
                 Edit Profile
-                {!hasSeenFeatureTour ? (
+                {/* {!hasSeenFeatureTour ? (
                   <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700">
                     New
                   </span>
-                ) : null}
+                ) : null} */}
               </ActionButton>
             </div>
             <div
@@ -1492,11 +1656,11 @@ export default function MyProfilePage() {
                 onClick={openResetModal}
               >
                 Reset Password
-                {!hasSeenFeatureTour ? (
+                {/* {!hasSeenFeatureTour ? (
                   <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.18em] text-white">
                     New
                   </span>
-                ) : null}
+                ) : null} */}
               </ActionButton>
             </div>
           </div>
@@ -1715,6 +1879,7 @@ export default function MyProfilePage() {
         subtitle="Perbarui informasi profil akun kamu."
         icon={<FaEdit className="h-4 w-4" />}
         widthClass="max-w-5xl"
+        dataTour="profile-edit-modal"
       >
         <form onSubmit={handleEditSubmit} className="px-5 py-5 md:px-6 md:py-6">
           {editError ? (
@@ -2048,6 +2213,7 @@ export default function MyProfilePage() {
         icon={<FaLock className="h-4 w-4" />}
         widthClass="max-w-md"
         centered
+        dataTour="profile-reset-modal"
       >
         <form onSubmit={handleResetSubmit} className="space-y-5 px-5 py-5">
           {resetError ? (
@@ -2066,6 +2232,7 @@ export default function MyProfilePage() {
                 value={resetForm.newPassword}
                 onChange={(e) => setResetField("newPassword", e.target.value)}
                 placeholder="Enter new password"
+                data-tour="profile-reset-new-password"
                 className="w-full rounded-xl border border-[#e8c9c6] py-2.5 pl-10 pr-11 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-100"
               />
               <FaLock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -2097,6 +2264,7 @@ export default function MyProfilePage() {
                   setResetField("confirmPassword", e.target.value)
                 }
                 placeholder="Re-enter new password"
+                data-tour="profile-reset-confirm-password"
                 className="w-full rounded-xl border border-[#e8c9c6] py-2.5 pl-10 pr-11 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-100"
               />
               <FaLock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -2126,6 +2294,7 @@ export default function MyProfilePage() {
             <button
               type="submit"
               disabled={resetSubmitting}
+              data-tour="profile-reset-submit"
               className="inline-flex items-center gap-2 rounded-xl bg-red-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-800 disabled:opacity-70"
             >
               {resetSubmitting ? (
