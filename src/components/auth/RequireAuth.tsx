@@ -3,10 +3,8 @@
 
 import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-import { FaLock, FaSignInAlt, FaHome } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
-import Link from "next/link";
+import { dispatchOpenLoginModal } from "@/lib/loginPrompt";
 
 type RequireAuthProps = {
   children: React.ReactNode;
@@ -23,7 +21,7 @@ export default function RequireAuth({
   permissions,
   requireAll = false,
   fallbackUrl = "/",
-  showAccessDenied = true,
+  showAccessDenied = false,
 }: RequireAuthProps) {
   const router = useRouter();
   const {
@@ -56,12 +54,12 @@ export default function RequireAuth({
 
   const hasRequiredPermissions = isAuthenticated && checkPermissions();
 
-  // Redirect if not authenticated and showAccessDenied is false
   useEffect(() => {
-    if (!isLoading && !isAuthenticated && !showAccessDenied) {
-      router.push(fallbackUrl);
+    if (!isLoading && !isAuthenticated) {
+      router.replace(fallbackUrl);
+      dispatchOpenLoginModal();
     }
-  }, [isLoading, isAuthenticated, showAccessDenied, router, fallbackUrl]);
+  }, [isLoading, isAuthenticated, router, fallbackUrl]);
 
   // Loading state
   if (isLoading) {
@@ -75,49 +73,8 @@ export default function RequireAuth({
     );
   }
 
-  // Not authenticated - show login required
   if (!isAuthenticated) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-center min-h-[60vh] p-4"
-      >
-        <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-8 max-w-md w-full text-center">
-          <div className="w-20 h-20 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <FaLock className="w-10 h-10 text-red-500" />
-          </div>
-
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            Login Diperlukan
-          </h2>
-
-          <p className="text-gray-600 mb-6">
-            Anda harus login terlebih dahulu untuk mengakses halaman ini.
-          </p>
-
-          <div className="space-y-3">
-            <p className="text-sm text-gray-500">
-              Klik tombol <strong className="text-red-600">Login</strong> di
-              pojok kanan atas
-            </p>
-
-            <div className="pt-4 border-t border-gray-100">
-              <Link href="/">
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors"
-                >
-                  <FaHome className="w-4 h-4" />
-                  Kembali ke Dashboard
-                </motion.button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </motion.div>
-    );
+    return null;
   }
 
   // Authenticated but no permission - show access denied

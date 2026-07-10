@@ -3,7 +3,6 @@
 
 import React, { useEffect } from "react";
 import { motion } from "framer-motion";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   FaUsers,
@@ -14,6 +13,7 @@ import {
   FaShieldAlt,
 } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
+import { dispatchOpenLoginModal } from "@/lib/loginPrompt";
 // import { Dashboard } from "@/components/dashboard";
 
 type QuickAction = {
@@ -59,6 +59,7 @@ const quickActions: QuickAction[] = [
 
 function QuickActionCard({ action }: { action: QuickAction }) {
   const { hasPermission, hasAnyPermission, isAuthenticated } = useAuth();
+  const router = useRouter();
 
   const hasAccess =
     !isAuthenticated ||
@@ -82,26 +83,34 @@ function QuickActionCard({ action }: { action: QuickAction }) {
   }
 
   return (
-    <Link href={action.href}>
-      <motion.div
-        whileHover={{ y: -4, boxShadow: "0 20px 40px -10px rgba(0,0,0,0.1)" }}
-        className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer group"
+    <motion.button
+      type="button"
+      whileHover={{ y: -4, boxShadow: "0 20px 40px -10px rgba(0,0,0,0.1)" }}
+      onClick={() => {
+        if (!isAuthenticated) {
+          router.replace("/");
+          dispatchOpenLoginModal();
+          return;
+        }
+
+        router.push(action.href);
+      }}
+      className="w-full bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer group text-left"
+    >
+      <div
+        className={`w-14 h-14 rounded-xl ${action.color} flex items-center justify-center mb-4 text-white shadow-lg group-hover:scale-110 transition-transform`}
       >
-        <div
-          className={`w-14 h-14 rounded-xl ${action.color} flex items-center justify-center mb-4 text-white shadow-lg group-hover:scale-110 transition-transform`}
-        >
-          {action.icon}
-        </div>
-        <h3 className="font-bold text-gray-800 text-lg mb-1 group-hover:text-red-600 transition-colors">
-          {action.name}
-        </h3>
-        <p className="text-sm text-gray-500 mb-4">{action.description}</p>
-        <div className="flex items-center text-red-500 text-sm font-medium group-hover:translate-x-1 transition-transform">
-          <span>Buka</span>
-          <FaArrowRight className="w-3 h-3 ml-2" />
-        </div>
-      </motion.div>
-    </Link>
+        {action.icon}
+      </div>
+      <h3 className="font-bold text-gray-800 text-lg mb-1 group-hover:text-red-600 transition-colors">
+        {action.name}
+      </h3>
+      <p className="text-sm text-gray-500 mb-4">{action.description}</p>
+      <div className="flex items-center text-red-500 text-sm font-medium group-hover:translate-x-1 transition-transform">
+        <span>Buka</span>
+        <FaArrowRight className="w-3 h-3 ml-2" />
+      </div>
+    </motion.button>
   );
 }
 

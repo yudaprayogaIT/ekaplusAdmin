@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaShieldAlt,
@@ -15,6 +16,7 @@ import {
 } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/config/api";
+import { dispatchOpenLoginModal } from "@/lib/loginPrompt";
 
 // Demo password untuk quick login
 const DEMO_PASSWORD = "admin123";
@@ -63,6 +65,7 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 export default function LoginSelector() {
+  const router = useRouter();
   const {
     currentUser,
     currentRole,
@@ -241,7 +244,11 @@ export default function LoginSelector() {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={logout}
+              onClick={() => {
+                logout();
+                router.push("/");
+                dispatchOpenLoginModal();
+              }}
               className="p-3 bg-red-500 text-white rounded-xl shadow-lg hover:bg-red-600 transition-colors"
               title="Logout"
             >

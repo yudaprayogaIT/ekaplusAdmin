@@ -7,6 +7,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
+import { dispatchOpenLoginModal } from "@/lib/loginPrompt";
 import {
   FaHeart,
   FaShoppingBag,
@@ -787,7 +788,11 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
           {isAuthenticated && (
             <button
               type="button"
-              onClick={logout}
+              onClick={() => {
+                logout();
+                router.push("/");
+                dispatchOpenLoginModal();
+              }}
               className={`mb-3 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-red-600 transition-all hover:bg-red-50 ${
                 collapsed && !isMobile ? "justify-center px-2" : ""
               }`}

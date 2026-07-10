@@ -10,6 +10,7 @@ import { RiMenuFoldLine, RiMenuUnfoldLine } from "react-icons/ri";
 import UserMenu from "@/components/auth/UserMenu";
 import MenuSearch from "./MenuSearch";
 import { getAllMenuItems } from "./Sidebar";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -17,10 +18,15 @@ interface HeaderProps {
   sidebarCollapsed?: boolean;
 }
 
-export default function Header({ onToggleSidebar, isMobile, sidebarCollapsed = false }: HeaderProps) {
+export default function Header({
+  onToggleSidebar,
+  isMobile,
+  sidebarCollapsed = false,
+}: HeaderProps) {
   const allMenuItems = getAllMenuItems();
   const pathname = usePathname();
   const isHelpPage = pathname === "/help";
+  const { isAuthenticated } = useAuth();
 
   return (
     <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-gray-100">
@@ -33,7 +39,13 @@ export default function Header({ onToggleSidebar, isMobile, sidebarCollapsed = f
             whileTap={{ scale: 0.95 }}
             onClick={onToggleSidebar}
             className="p-2.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 group"
-            title={isMobile ? "Open menu" : sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={
+              isMobile
+                ? "Open menu"
+                : sidebarCollapsed
+                  ? "Expand sidebar"
+                  : "Collapse sidebar"
+            }
           >
             {isMobile ? (
               <FaBars className="w-5 h-5" />
@@ -45,27 +57,30 @@ export default function Header({ onToggleSidebar, isMobile, sidebarCollapsed = f
           </motion.button>
 
           {/* Search Bar */}
-          <div className="hidden md:block">
+          <div className={isAuthenticated ? "hidden md:block" : "hidden"}>
             <MenuSearch allMenuItems={allMenuItems} />
           </div>
         </div>
 
         {/* Right side - User Menu */}
         <div className="flex items-center gap-3">
-          <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-            <Link
-              href="/help"
-              className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium shadow-sm transition-all ${
-                isHelpPage
-                  ? "border-red-200 bg-red-50 text-red-700"
-                  : "border-gray-200 bg-white text-gray-600 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-              }`}
-              title="Buka halaman bantuan"
-            >
-              <FaCircleQuestion className="h-4 w-4" />
-              <span className="hidden sm:inline">Help</span>
-            </Link>
-          </motion.div>
+          {isAuthenticated ? (
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+              <Link
+                href="/help"
+                data-tour="help-center-button"
+                className={`flex items-center gap-2 rounded-xl  px-4 py-3 text-sm font-medium  transition-all ${
+                  isHelpPage
+                    ? "border-red-200 bg-red-50 text-red-700"
+                    : "border-gray-200 bg-white text-gray-600  hover:text-red-600"
+                }`}
+                title="Buka halaman bantuan"
+              >
+                <FaCircleQuestion className="h-4 w-4" />
+                <span className="hidden sm:inline">Help</span>
+              </Link>
+            </motion.div>
+          ) : null}
           <UserMenu />
         </div>
       </div>
