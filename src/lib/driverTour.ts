@@ -1,6 +1,32 @@
 "use client";
 
-import { driver, type Config, type Driver } from "driver.js";
+import { driver, type Config, type DriveStep, type Driver } from "driver.js";
+
+export function createDriverSteps(
+  steps: DriveStep[],
+  options?: {
+    totalSteps?: number;
+    stepOffset?: number;
+  },
+): DriveStep[] {
+  const totalSteps = options?.totalSteps;
+  const stepOffset = options?.stepOffset ?? 0;
+
+  return steps.map((step, index) => ({
+    ...step,
+    popover: step.popover
+      ? {
+          showProgress: step.popover.showProgress ?? true,
+          progressText:
+            step.popover.progressText ??
+            (typeof totalSteps === "number"
+              ? `${stepOffset + index + 1} of ${totalSteps}`
+              : "{{current}} of {{total}}"),
+          ...step.popover,
+        }
+      : step.popover,
+  }));
+}
 
 export function createDriverTour(config?: Config): Driver {
   const customOnPopoverRender = config?.onPopoverRender;
@@ -14,6 +40,7 @@ export function createDriverTour(config?: Config): Driver {
     stagePadding: 10,
     stageRadius: 18,
     showProgress: true,
+    progressText: "{{current}} of {{total}}",
     nextBtnText: "Lanjut",
     prevBtnText: "Sebelumnya",
     doneBtnText: "Selesai",

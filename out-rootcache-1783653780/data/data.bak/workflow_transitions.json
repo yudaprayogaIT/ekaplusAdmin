@@ -1,0 +1,385 @@
+{
+  "workflow_transitions": [
+    {
+      "id": "wt_001",
+      "workflow_id": "wf_001",
+      "name": "submit",
+      "display_name": "Submit Pengajuan",
+      "from_state": "draft",
+      "to_state": "pending_verification",
+      "allowed_roles": ["customer", "admin_cabang", "admin_pusat", "administrator"],
+      "required_permissions": [],
+      "conditions": [],
+      "actions": [
+        {
+          "type": "notification",
+          "target": "admin_cabang",
+          "template": "new_member_request"
+        }
+      ],
+      "button_label": "Submit",
+      "button_color": "primary",
+      "button_icon": "send",
+      "confirm_message": "Apakah Anda yakin ingin submit pengajuan ini?",
+      "requires_comment": false,
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "wt_002",
+      "workflow_id": "wf_001",
+      "name": "verify",
+      "display_name": "Verifikasi",
+      "from_state": "pending_verification",
+      "to_state": "pending_approval",
+      "allowed_roles": ["admin_cabang", "admin_pusat", "administrator"],
+      "required_permissions": ["customers.verify"],
+      "conditions": [
+        {
+          "field": "ktp_image",
+          "operator": "is_not_null",
+          "message": "Foto KTP harus diupload"
+        }
+      ],
+      "actions": [
+        {
+          "type": "notification",
+          "target": "admin_pusat",
+          "template": "member_verified"
+        },
+        {
+          "type": "update_field",
+          "field": "verified_by",
+          "value": "$current_user"
+        },
+        {
+          "type": "update_field",
+          "field": "verified_at",
+          "value": "$now"
+        }
+      ],
+      "button_label": "Verifikasi",
+      "button_color": "info",
+      "button_icon": "check",
+      "confirm_message": "Apakah data customer sudah sesuai dan valid?",
+      "requires_comment": false,
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "wt_003",
+      "workflow_id": "wf_001",
+      "name": "approve",
+      "display_name": "Approve",
+      "from_state": "pending_approval",
+      "to_state": "approved",
+      "allowed_roles": ["admin_pusat", "administrator"],
+      "required_permissions": ["customers.approve"],
+      "conditions": [],
+      "actions": [
+        {
+          "type": "notification",
+          "target": "customer",
+          "template": "member_approved"
+        },
+        {
+          "type": "update_field",
+          "field": "approved_by",
+          "value": "$current_user"
+        },
+        {
+          "type": "update_field",
+          "field": "approved_at",
+          "value": "$now"
+        },
+        {
+          "type": "update_field",
+          "field": "status",
+          "value": "active"
+        },
+        {
+          "type": "generate_code",
+          "code_type": "bcid"
+        },
+        {
+          "type": "create_membership",
+          "tier": "silver"
+        }
+      ],
+      "button_label": "Approve",
+      "button_color": "success",
+      "button_icon": "badge-check",
+      "confirm_message": "Apakah Anda yakin ingin menyetujui pengajuan member ini?",
+      "requires_comment": false,
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "wt_004",
+      "workflow_id": "wf_001",
+      "name": "reject_verification",
+      "display_name": "Tolak",
+      "from_state": "pending_verification",
+      "to_state": "rejected",
+      "allowed_roles": ["admin_cabang", "admin_pusat", "administrator"],
+      "required_permissions": ["customers.reject"],
+      "conditions": [],
+      "actions": [
+        {
+          "type": "notification",
+          "target": "customer",
+          "template": "member_rejected"
+        }
+      ],
+      "button_label": "Tolak",
+      "button_color": "danger",
+      "button_icon": "x",
+      "confirm_message": "Apakah Anda yakin ingin menolak pengajuan ini?",
+      "requires_comment": true,
+      "comment_label": "Alasan Penolakan",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "wt_005",
+      "workflow_id": "wf_001",
+      "name": "reject_approval",
+      "display_name": "Tolak",
+      "from_state": "pending_approval",
+      "to_state": "rejected",
+      "allowed_roles": ["admin_pusat", "administrator"],
+      "required_permissions": ["customers.reject"],
+      "conditions": [],
+      "actions": [
+        {
+          "type": "notification",
+          "target": "customer",
+          "template": "member_rejected"
+        }
+      ],
+      "button_label": "Tolak",
+      "button_color": "danger",
+      "button_icon": "x",
+      "confirm_message": "Apakah Anda yakin ingin menolak pengajuan ini?",
+      "requires_comment": true,
+      "comment_label": "Alasan Penolakan",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "wt_006",
+      "workflow_id": "wf_001",
+      "name": "request_revision",
+      "display_name": "Minta Revisi",
+      "from_state": "pending_verification",
+      "to_state": "revision_required",
+      "allowed_roles": ["admin_cabang", "admin_pusat", "administrator"],
+      "required_permissions": ["customers.verify"],
+      "conditions": [],
+      "actions": [
+        {
+          "type": "notification",
+          "target": "customer",
+          "template": "revision_required"
+        }
+      ],
+      "button_label": "Minta Revisi",
+      "button_color": "warning",
+      "button_icon": "edit",
+      "confirm_message": null,
+      "requires_comment": true,
+      "comment_label": "Detail yang perlu direvisi",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "wt_007",
+      "workflow_id": "wf_001",
+      "name": "resubmit",
+      "display_name": "Submit Ulang",
+      "from_state": "revision_required",
+      "to_state": "pending_verification",
+      "allowed_roles": ["user", "admin_cabang", "admin_pusat", "administrator"],
+      "required_permissions": [],
+      "conditions": [],
+      "actions": [
+        {
+          "type": "notification",
+          "target": "admin_cabang",
+          "template": "member_resubmitted"
+        }
+      ],
+      "button_label": "Submit Ulang",
+      "button_color": "primary",
+      "button_icon": "refresh-cw",
+      "confirm_message": "Apakah Anda yakin data sudah diperbaiki?",
+      "requires_comment": false,
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "wt_010",
+      "workflow_id": "wf_002",
+      "name": "submit_review",
+      "display_name": "Submit untuk Review",
+      "from_state": "draft",
+      "to_state": "pending_review",
+      "allowed_roles": ["admin_pusat", "administrator"],
+      "required_permissions": ["items.create"],
+      "conditions": [],
+      "actions": [
+        {
+          "type": "notification",
+          "target": "admin_pusat",
+          "template": "item_pending_review"
+        }
+      ],
+      "button_label": "Submit Review",
+      "button_color": "primary",
+      "button_icon": "send",
+      "confirm_message": "Submit item untuk direview?",
+      "requires_comment": false,
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "wt_011",
+      "workflow_id": "wf_002",
+      "name": "approve_item",
+      "display_name": "Approve Item",
+      "from_state": "pending_review",
+      "to_state": "approved",
+      "allowed_roles": ["admin_pusat", "administrator"],
+      "required_permissions": ["items.edit"],
+      "conditions": [],
+      "actions": [
+        {
+          "type": "update_field",
+          "field": "status",
+          "value": "active"
+        }
+      ],
+      "button_label": "Approve",
+      "button_color": "success",
+      "button_icon": "badge-check",
+      "confirm_message": "Approve item ini?",
+      "requires_comment": false,
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "wt_012",
+      "workflow_id": "wf_002",
+      "name": "reject_item",
+      "display_name": "Tolak Item",
+      "from_state": "pending_review",
+      "to_state": "rejected",
+      "allowed_roles": ["admin_pusat", "administrator"],
+      "required_permissions": ["items.edit"],
+      "conditions": [],
+      "actions": [],
+      "button_label": "Tolak",
+      "button_color": "danger",
+      "button_icon": "x",
+      "confirm_message": "Tolak item ini?",
+      "requires_comment": true,
+      "comment_label": "Alasan Penolakan",
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "wt_020",
+      "workflow_id": "wf_003",
+      "name": "submit_credit",
+      "display_name": "Submit Pengajuan",
+      "from_state": "draft",
+      "to_state": "pending_verification",
+      "allowed_roles": ["admin_cabang", "admin_pusat", "administrator"],
+      "required_permissions": ["credits.view"],
+      "conditions": [],
+      "actions": [
+        {
+          "type": "notification",
+          "target": "admin_cabang",
+          "template": "credit_request_new"
+        }
+      ],
+      "button_label": "Submit",
+      "button_color": "primary",
+      "button_icon": "send",
+      "confirm_message": "Submit pengajuan kredit?",
+      "requires_comment": false,
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "wt_021",
+      "workflow_id": "wf_003",
+      "name": "verify_credit",
+      "display_name": "Verifikasi",
+      "from_state": "pending_verification",
+      "to_state": "pending_approval",
+      "allowed_roles": ["admin_cabang", "admin_pusat", "administrator"],
+      "required_permissions": ["credits.view"],
+      "conditions": [],
+      "actions": [
+        {
+          "type": "notification",
+          "target": "admin_pusat",
+          "template": "credit_verified"
+        }
+      ],
+      "button_label": "Verifikasi",
+      "button_color": "info",
+      "button_icon": "check",
+      "confirm_message": "Verifikasi pengajuan kredit?",
+      "requires_comment": false,
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "wt_022",
+      "workflow_id": "wf_003",
+      "name": "approve_credit",
+      "display_name": "Approve",
+      "from_state": "pending_approval",
+      "to_state": "approved",
+      "allowed_roles": ["admin_pusat", "administrator"],
+      "required_permissions": ["credits.set_limit"],
+      "conditions": [],
+      "actions": [
+        {
+          "type": "notification",
+          "target": "customer",
+          "template": "credit_approved"
+        },
+        {
+          "type": "update_credit_limit"
+        }
+      ],
+      "button_label": "Approve",
+      "button_color": "success",
+      "button_icon": "badge-check",
+      "confirm_message": "Approve limit kredit?",
+      "requires_comment": false,
+      "created_at": "2025-01-01T00:00:00.000000"
+    },
+    {
+      "id": "wt_023",
+      "workflow_id": "wf_003",
+      "name": "reject_credit",
+      "display_name": "Tolak",
+      "from_state": "pending_approval",
+      "to_state": "rejected",
+      "allowed_roles": ["admin_pusat", "administrator"],
+      "required_permissions": ["credits.set_limit"],
+      "conditions": [],
+      "actions": [
+        {
+          "type": "notification",
+          "target": "customer",
+          "template": "credit_rejected"
+        }
+      ],
+      "button_label": "Tolak",
+      "button_color": "danger",
+      "button_icon": "x",
+      "confirm_message": "Tolak pengajuan kredit?",
+      "requires_comment": true,
+      "comment_label": "Alasan Penolakan",
+      "created_at": "2025-01-01T00:00:00.000000"
+    }
+  ],
+  "meta": {
+    "last_updated": "2025-01-01T00:00:00.000000",
+    "total_transitions": 15
+  }
+}

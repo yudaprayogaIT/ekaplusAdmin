@@ -3,25 +3,37 @@
 import React, {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import Image from "next/image";
-import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getApiUrl, getFileUrl } from "@/config/api";
 import {
   FeatureTourStep,
+  clearPendingFeatureTourStep,
   getPendingFeatureTourStep,
   isFeatureTourSeen,
   markFeatureTourSeen,
   profileFeatureTourConfig,
   setPendingFeatureTourStep as storePendingFeatureTourStep,
 } from "@/lib/featureTour";
+import {
+  createDriverSteps,
+  createDriverTour,
+  waitForElement,
+} from "@/lib/driverTour";
+import {
+  createProfilePageTourSteps,
+  getProfilePageTourStartIndex,
+  PROFILE_TOUR_SELECTORS,
+  PROFILE_TOUR_TOTAL_STEPS,
+  type ProfilePageTourStep,
+} from "@/lib/profileFeatureTour";
 import ActionResultModal from "@/components/ui/ActionResultModal";
+import type { Driver } from "driver.js";
 import {
   FaArrowRight,
   FaCalendarAlt,
@@ -150,13 +162,6 @@ type PendingCloseTarget = "edit" | "reset" | null;
 type WilayahOption = {
   code: string;
   name: string;
-};
-
-type TourBubblePosition = {
-  top: number;
-  left: number;
-  arrowLeft: number;
-  placement: "top" | "bottom";
 };
 
 const WILAYAH_BASE_URL = "https://www.emsifa.com/api-wilayah-indonesia/api";
@@ -605,118 +610,14 @@ function UnsavedChangesModal({
   );
 }
 
-function FeatureTourCoachmark({
-  open,
-  title,
-  description,
-  stepLabel,
-  primaryLabel,
-  showPrevious,
-  isLastStep,
-  position,
-  onNext,
-  onPrevious,
-  onSkip,
-}: {
-  open: boolean;
-  title: string;
-  description: string;
-  stepLabel: string;
-  primaryLabel?: string;
-  showPrevious?: boolean;
-  isLastStep: boolean;
-  position: TourBubblePosition | null;
-  onNext: () => void;
-  onPrevious: () => void;
-  onSkip: () => void;
-}) {
-  return (
-    <AnimatePresence>
-      {open && position ? (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[94] bg-slate-950/30 backdrop-blur-[2px]"
-          />
-          <motion.div
-            initial={{
-              opacity: 0,
-              y: position.placement === "bottom" ? -10 : 10,
-            }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: position.placement === "bottom" ? -10 : 10 }}
-            transition={{ duration: 0.2 }}
-            className="fixed z-[97] w-[min(340px,calc(100vw-2rem))]"
-            style={{
-              top: position.top,
-              left: position.left,
-            }}
-          >
-            <div className="relative rounded-2xl border border-red-100 bg-white p-4 shadow-2xl">
-              <div
-                className={`absolute h-4 w-4 rotate-45 border-red-100 bg-white ${
-                  position.placement === "bottom"
-                    ? "-top-2 border-l border-t"
-                    : "-bottom-2 border-b border-r"
-                }`}
-                style={{ left: position.arrowLeft }}
-              />
-              <div className="flex items-center justify-between gap-3">
-                <span className="rounded-full bg-red-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-red-500">
-                  {stepLabel}
-                </span>
-                <button
-                  type="button"
-                  onClick={onSkip}
-                  className="text-xs font-semibold text-slate-400 transition hover:text-slate-600"
-                >
-                  Lewati
-                </button>
-              </div>
-              <h4 className="mt-3 text-base font-semibold text-slate-950">
-                {title}
-              </h4>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                {description}
-              </p>
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <div>
-                  {showPrevious ? (
-                    <button
-                      type="button"
-                      onClick={onPrevious}
-                      className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                    >
-                      Sebelumnya
-                    </button>
-                  ) : null}
-                </div>
-                <button
-                  type="button"
-                  onClick={onNext}
-                  className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700"
-                >
-                  {primaryLabel || (isLastStep ? "Selesai" : "Lanjut")}
-                  <FaArrowRight className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </>
-      ) : null}
-    </AnimatePresence>
-  );
-}
-
 export default function MyProfilePage() {
   const { token, currentUser } = useAuth();
+  const router = useRouter();
   const profileFileInputRef = useRef<HTMLInputElement | null>(null);
   const editActionRef = useRef<HTMLDivElement | null>(null);
   const resetActionRef = useRef<HTMLDivElement | null>(null);
   const photoActionRef = useRef<HTMLButtonElement | null>(null);
-  const photoSpotlightRef = useRef<HTMLDivElement | null>(null);
+  const profileTourDriverRef = useRef<Driver | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -749,18 +650,9 @@ export default function MyProfilePage() {
   const [pendingCloseTarget, setPendingCloseTarget] =
     useState<PendingCloseTarget>(null);
   const [featureTourOpen, setFeatureTourOpen] = useState(false);
-  const [featureTourStep, setFeatureTourStep] =
-    useState<FeatureTourStep>("edit");
+  const [featureTourEntryStep, setFeatureTourEntryStep] =
+    useState<ProfilePageTourStep>("edit");
   const [hasSeenFeatureTour, setHasSeenFeatureTour] = useState(true);
-  const [tourBubblePosition, setTourBubblePosition] =
-    useState<TourBubblePosition | null>(null);
-  const [mounted, setMounted] = useState(false);
-  const [photoSpotlightRect, setPhotoSpotlightRect] = useState<{
-    top: number;
-    left: number;
-    width: number;
-    height: number;
-  } | null>(null);
   const [resultState, setResultState] = useState<ResultState>({
     isOpen: false,
     type: "success",
@@ -770,6 +662,7 @@ export default function MyProfilePage() {
   const regencyCache = useRef<Record<string, WilayahOption[]>>({});
   const districtCache = useRef<Record<string, WilayahOption[]>>({});
   const villageCache = useRef<Record<string, WilayahOption[]>>({});
+  const profileTourFinalizingRef = useRef(false);
 
   const loadProfile = useCallback(async () => {
     if (!token) {
@@ -802,37 +695,36 @@ export default function MyProfilePage() {
   }, [token]);
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
     void loadProfile();
   }, [loadProfile]);
 
   useEffect(() => {
     if (!profile || typeof window === "undefined") return;
-    const hasSeenTour = isFeatureTourSeen(profileFeatureTourConfig);
     const pendingStep = getPendingFeatureTourStep(profileFeatureTourConfig);
+    const hasSeenTour = isFeatureTourSeen(profileFeatureTourConfig);
+
+    if (
+      pendingStep === "edit" ||
+      pendingStep === "photo" ||
+      pendingStep === "form" ||
+      pendingStep === "save"
+    ) {
+      setHasSeenFeatureTour(false);
+
+      const timer = window.setTimeout(() => {
+        setFeatureTourEntryStep(pendingStep);
+        setFeatureTourOpen(true);
+      }, 450);
+
+      return () => window.clearTimeout(timer);
+    }
+
     if (hasSeenTour) {
       setHasSeenFeatureTour(true);
       return;
     }
 
     setHasSeenFeatureTour(false);
-    if (
-      pendingStep !== "edit" &&
-      pendingStep !== "photo" &&
-      pendingStep !== "password"
-    ) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setFeatureTourStep(pendingStep);
-      setFeatureTourOpen(true);
-    }, 450);
-
-    return () => window.clearTimeout(timer);
   }, [profile]);
 
   const avatarUrl = useMemo(() => {
@@ -1156,143 +1048,157 @@ export default function MyProfilePage() {
     setHasSeenFeatureTour(true);
   }, []);
 
-  const closeFeatureTour = useCallback(() => {
-    setFeatureTourOpen(false);
-    setTourBubblePosition(null);
-    persistFeatureTour();
-  }, [persistFeatureTour]);
+  useEffect(() => {
+    if (!featureTourOpen || typeof window === "undefined") return;
 
-  const handleFeatureTourNext = useCallback(() => {
-    if (featureTourStep === "edit") {
-      setPendingFeatureTourStep("photo");
-      setFeatureTourStep("photo");
-      openEditModal();
-      return;
-    }
-    if (featureTourStep === "photo") {
+    let cancelled = false;
+    profileTourFinalizingRef.current = false;
+
+    const finishTour = () => {
+      profileTourFinalizingRef.current = true;
+      clearPendingFeatureTourStep(profileFeatureTourConfig);
       closeEditImmediately();
-      setPendingFeatureTourStep("password");
-      setFeatureTourStep("password");
-      return;
-    }
-    closeFeatureTour();
-  }, [
-    closeEditImmediately,
-    closeFeatureTour,
-    featureTourStep,
-    openEditModal,
-    setPendingFeatureTourStep,
-  ]);
-
-  const handleFeatureTourPrevious = useCallback(() => {
-    if (featureTourStep === "password") {
-      setPendingFeatureTourStep("photo");
-      setFeatureTourStep("photo");
       closeResetImmediately();
-      openEditModal();
-      return;
-    }
-    if (featureTourStep === "photo") {
-      closeEditImmediately();
-      setPendingFeatureTourStep("edit");
-      setFeatureTourStep("edit");
-    }
+      profileTourDriverRef.current?.destroy();
+      profileTourDriverRef.current = null;
+    };
+
+    const startTour = async () => {
+      if (featureTourEntryStep === "photo") {
+        openEditModal();
+        const photoTarget = await waitForElement(PROFILE_TOUR_SELECTORS.photo, {
+          timeout: 4000,
+          interval: 100,
+        });
+        if (cancelled || !photoTarget) return;
+      } else if (featureTourEntryStep === "form") {
+        openEditModal();
+        const formTarget = await waitForElement(PROFILE_TOUR_SELECTORS.form, {
+          timeout: 4000,
+          interval: 100,
+        });
+        if (cancelled || !formTarget) return;
+      } else if (featureTourEntryStep === "save") {
+        openEditModal();
+        const saveTarget = await waitForElement(PROFILE_TOUR_SELECTORS.save, {
+          timeout: 4000,
+          interval: 100,
+        });
+        if (cancelled || !saveTarget) return;
+      } else if (featureTourEntryStep !== "edit") {
+        closeEditImmediately();
+      }
+
+      if (cancelled) return;
+
+      profileTourDriverRef.current?.destroy();
+      profileTourDriverRef.current = createDriverTour({
+        onDestroyed: () => {
+          profileTourDriverRef.current = null;
+
+          if (profileTourFinalizingRef.current) {
+            profileTourFinalizingRef.current = false;
+            setFeatureTourOpen(false);
+            persistFeatureTour();
+          }
+        },
+        steps: createDriverSteps(
+          createProfilePageTourSteps({
+            driverRef: profileTourDriverRef,
+            backToMenu: () => {
+              setPendingFeatureTourStep("edit");
+              profileTourFinalizingRef.current = false;
+              profileTourDriverRef.current?.destroy();
+              profileTourDriverRef.current = null;
+              setFeatureTourOpen(false);
+              router.push("/help");
+            },
+            goToPhoto: async () => {
+              openEditModal();
+              setPendingFeatureTourStep("photo");
+              const target = await waitForElement(PROFILE_TOUR_SELECTORS.photo, {
+                timeout: 4000,
+                interval: 100,
+              });
+              return Boolean(target);
+            },
+            goToForm: async () => {
+              openEditModal();
+              setPendingFeatureTourStep("form");
+              const target = await waitForElement(PROFILE_TOUR_SELECTORS.form, {
+                timeout: 4000,
+                interval: 100,
+              });
+              return Boolean(target);
+            },
+            goToSave: async () => {
+              openEditModal();
+              setPendingFeatureTourStep("save");
+              const target = await waitForElement(PROFILE_TOUR_SELECTORS.save, {
+                timeout: 4000,
+                interval: 100,
+              });
+              return Boolean(target);
+            },
+            backToEdit: async () => {
+              closeEditImmediately();
+              setPendingFeatureTourStep("edit");
+              const target = await waitForElement(PROFILE_TOUR_SELECTORS.edit, {
+                timeout: 4000,
+                interval: 100,
+              });
+              return Boolean(target);
+            },
+            backToPhoto: async () => {
+              openEditModal();
+              setPendingFeatureTourStep("photo");
+              const target = await waitForElement(PROFILE_TOUR_SELECTORS.photo, {
+                timeout: 4000,
+                interval: 100,
+              });
+              return Boolean(target);
+            },
+            backToForm: async () => {
+              openEditModal();
+              setPendingFeatureTourStep("form");
+              const target = await waitForElement(PROFILE_TOUR_SELECTORS.form, {
+                timeout: 4000,
+                interval: 100,
+              });
+              return Boolean(target);
+            },
+            finishTour,
+          }),
+          {
+            totalSteps: PROFILE_TOUR_TOTAL_STEPS,
+            stepOffset: 1,
+          },
+        ),
+      });
+
+      profileTourDriverRef.current.drive(
+        getProfilePageTourStartIndex(featureTourEntryStep),
+      );
+    };
+
+    void startTour();
+
+    return () => {
+      cancelled = true;
+      profileTourFinalizingRef.current = false;
+      profileTourDriverRef.current?.destroy();
+      profileTourDriverRef.current = null;
+    };
   }, [
     closeEditImmediately,
     closeResetImmediately,
-    featureTourStep,
+    featureTourEntryStep,
+    featureTourOpen,
     openEditModal,
+    persistFeatureTour,
+    router,
     setPendingFeatureTourStep,
   ]);
-
-  useEffect(() => {
-    if (!featureTourOpen) return;
-    if (featureTourStep !== "photo") return;
-    if (editOpen) return;
-    openEditModal();
-  }, [editOpen, featureTourOpen, featureTourStep, openEditModal]);
-
-  useLayoutEffect(() => {
-    if (
-      !mounted ||
-      !featureTourOpen ||
-      featureTourStep !== "photo" ||
-      !editOpen ||
-      typeof window === "undefined"
-    ) {
-      setPhotoSpotlightRect(null);
-      return;
-    }
-
-    const updatePhotoSpotlightRect = () => {
-      const rect = photoSpotlightRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      setPhotoSpotlightRect({
-        top: rect.top,
-        left: rect.left,
-        width: rect.width,
-        height: rect.height,
-      });
-    };
-
-    updatePhotoSpotlightRect();
-    window.addEventListener("resize", updatePhotoSpotlightRect);
-    window.addEventListener("scroll", updatePhotoSpotlightRect, true);
-
-    return () => {
-      window.removeEventListener("resize", updatePhotoSpotlightRect);
-      window.removeEventListener("scroll", updatePhotoSpotlightRect, true);
-    };
-  }, [editOpen, featureTourOpen, featureTourStep, mounted]);
-
-  useEffect(() => {
-    if (!featureTourOpen || typeof window === "undefined") {
-      return;
-    }
-
-    const getTarget = () => {
-      if (featureTourStep === "edit") return editActionRef.current;
-      if (featureTourStep === "photo") return photoActionRef.current;
-      return resetActionRef.current;
-    };
-
-    const updatePosition = () => {
-      const target = getTarget();
-      if (!target) return;
-
-      const rect = target.getBoundingClientRect();
-      const bubbleWidth = Math.min(320, window.innerWidth - 32);
-      const horizontalPadding = 16;
-      const left = Math.min(
-        Math.max(
-          rect.left + rect.width / 2 - bubbleWidth / 2,
-          horizontalPadding,
-        ),
-        window.innerWidth - bubbleWidth - horizontalPadding,
-      );
-      const anchorCenter = rect.left + rect.width / 2;
-      const showBelow = rect.bottom + 220 < window.innerHeight;
-
-      setTourBubblePosition({
-        top: showBelow ? rect.bottom + 14 : Math.max(16, rect.top - 190),
-        left,
-        arrowLeft: Math.min(
-          Math.max(anchorCenter - left - 8, 24),
-          bubbleWidth - 24,
-        ),
-        placement: showBelow ? "bottom" : "top",
-      });
-    };
-
-    updatePosition();
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-
-    return () => {
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-    };
-  }, [editOpen, featureTourOpen, featureTourStep]);
 
   const onProfileFileChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1560,9 +1466,8 @@ export default function MyProfilePage() {
           <div className="flex flex-wrap gap-3">
             <div
               ref={editActionRef}
-              className={`relative ${
-                featureTourOpen && featureTourStep === "edit" ? "z-[96]" : ""
-              }`}
+              data-tour="profile-edit-action"
+              className="relative"
             >
               <ActionButton
                 icon={<FaEdit className="h-3.5 w-3.5" />}
@@ -1578,11 +1483,8 @@ export default function MyProfilePage() {
             </div>
             <div
               ref={resetActionRef}
-              className={`relative ${
-                featureTourOpen && featureTourStep === "password"
-                  ? "z-[96]"
-                  : ""
-              }`}
+              data-tour="profile-reset-action"
+              className="relative"
             >
               <ActionButton
                 icon={<FaLock className="h-3.5 w-3.5" />}
@@ -1840,6 +1742,7 @@ export default function MyProfilePage() {
                 Cancel
               </button>
               <button
+                data-tour="profile-save-action"
                 type="submit"
                 disabled={editSubmitting}
                 className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-red-700 disabled:opacity-70"
@@ -1857,7 +1760,7 @@ export default function MyProfilePage() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
             <div className="lg:col-span-4">
               <div className="flex w-full flex-col items-center rounded-2xl border border-slate-300 bg-[#fbfbfc] p-6 text-center shadow-sm">
-                <div ref={photoSpotlightRef} className="relative mb-4">
+                <div className="relative mb-4">
                   <input
                     ref={profileFileInputRef}
                     type="file"
@@ -1890,13 +1793,10 @@ export default function MyProfilePage() {
                   </div>
                   <button
                     ref={photoActionRef}
+                    data-tour="profile-photo-action"
                     type="button"
                     onClick={() => profileFileInputRef.current?.click()}
-                    className={`absolute bottom-0 right-0 flex h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-red-600 cursor-pointer text-white shadow-lg transition hover:bg-red-700 ${
-                      featureTourOpen && featureTourStep === "photo"
-                        ? "z-[96]"
-                        : ""
-                    }`}
+                    className="absolute bottom-0 right-0 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-2 border-white bg-red-600 text-white shadow-lg transition hover:bg-red-700"
                   >
                     <FaEdit className="h-4 w-4 " />
                   </button>
@@ -1919,7 +1819,10 @@ export default function MyProfilePage() {
             </div>
 
             <div className="flex flex-col gap-6 lg:col-span-8">
-              <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+              <div
+                data-tour="profile-form-section"
+                className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm"
+              >
                 <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-6 py-4">
                   <FaUser className="h-4 w-4 text-slate-500" />
                   <h5 className="text-[18px] font-semibold text-slate-950">
@@ -2265,104 +2168,6 @@ export default function MyProfilePage() {
           }
         }}
       />
-
-      <FeatureTourCoachmark
-        open={featureTourOpen}
-        title={
-          featureTourStep === "edit"
-            ? "Sekarang profil bisa diedit langsung"
-            : featureTourStep === "photo"
-              ? "Foto profil juga bisa diganti"
-              : "Password juga bisa direset dari sini"
-        }
-        description={
-          featureTourStep === "edit"
-            ? "Klik edit profile untuk mengedit profil anda."
-            : featureTourStep === "photo"
-              ? "Di dalam form edit profile, kamu bisa klik ikon pensil ini untuk memilih foto profil baru."
-              : "Kalau perlu ganti password, cukup buka dialog ini dan update credential langsung dari halaman yang sama."
-        }
-        stepLabel={
-          featureTourStep === "edit"
-            ? "Step 2 of 4"
-            : featureTourStep === "photo"
-              ? "Step 3 of 4"
-              : "Step 4 of 4"
-        }
-        primaryLabel={
-          featureTourStep === "edit"
-            ? "Lihat Foto Profil"
-            : featureTourStep === "photo"
-              ? "Ubah Password"
-              : "Selesai"
-        }
-        showPrevious={featureTourStep !== "edit"}
-        isLastStep={featureTourStep === "password"}
-        position={tourBubblePosition}
-        onNext={handleFeatureTourNext}
-        onPrevious={handleFeatureTourPrevious}
-        onSkip={() => {
-          closeEditImmediately();
-          closeResetImmediately();
-          closeFeatureTour();
-        }}
-      />
-
-      {mounted && featureTourOpen && featureTourStep === "photo" && editOpen
-        ? createPortal(
-            <AnimatePresence>
-              {photoSpotlightRect ? (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.98 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.98 }}
-                  transition={{ duration: 0.18 }}
-                  className="fixed z-[98]"
-                  style={{
-                    top: photoSpotlightRect.top,
-                    left: photoSpotlightRect.left,
-                    width: photoSpotlightRect.width,
-                    height: photoSpotlightRect.height,
-                  }}
-                >
-                  <div className="relative h-full w-full">
-                    <div
-                      className="mx-auto flex h-32 w-32 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-slate-200 text-3xl font-bold text-slate-700 shadow-2xl ring-4 ring-white"
-                      style={{
-                        backgroundColor:
-                          selectedProfilePreview ||
-                          avatarUrl ||
-                          !currentUser?.profile_bg_color
-                            ? undefined
-                            : currentUser.profile_bg_color,
-                      }}
-                    >
-                      {selectedProfilePreview || avatarUrl ? (
-                        <Image
-                          src={selectedProfilePreview || avatarUrl}
-                          alt={profile.fullName}
-                          width={128}
-                          height={128}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        initials
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => profileFileInputRef.current?.click()}
-                      className="absolute bottom-0 right-0 flex h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-red-600 text-white shadow-2xl ring-4 ring-white transition hover:bg-red-700"
-                    >
-                      <FaEdit className="h-4 w-4" />
-                    </button>
-                  </div>
-                </motion.div>
-              ) : null}
-            </AnimatePresence>,
-            document.body,
-          )
-        : null}
     </>
   );
 }

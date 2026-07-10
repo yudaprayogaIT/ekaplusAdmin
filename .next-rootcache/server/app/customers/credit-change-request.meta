@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/customers/layout,_N_T_/customers/credit-change-request/layout,_N_T_/customers/credit-change-request/page,_N_T_/customers/credit-change-request/"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/customers/credit-change-request/__PAGE__",
+    "/customers/credit-change-request",
+    "/customers",
+    "/_index",
+    "/_head"
+  ]
+}

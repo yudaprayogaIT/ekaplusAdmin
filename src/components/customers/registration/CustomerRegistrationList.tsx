@@ -33,6 +33,7 @@ import {
   customerRegistrationApproveTourDummy,
 } from "@/lib/customerRegistrationApproveTour";
 import {
+  createDriverSteps,
   createDriverTour,
   waitForElement,
   waitForElementToDisappear,
@@ -957,7 +958,7 @@ export function CustomerRegistrationList() {
           tourStartedRef.current = false;
           tourDriverRef.current = null;
         },
-        steps: [
+        steps: createDriverSteps([
           {
             element: "[data-tour='customer-register-demo-card']",
             popover: {
@@ -1361,7 +1362,7 @@ export function CustomerRegistrationList() {
               },
             },
           },
-        ],
+        ]),
       });
 
       tourStartedRef.current = true;

@@ -75,10 +75,10 @@ export default function Header({
               <Link
                 href="/help"
                 data-tour="help-center-button"
-                className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium shadow-sm transition-all ${
+                className={`inline-flex shrink-0 items-center gap-2 rounded-xl  px-4 py-3 text-sm font-medium transition-all ${
                   isHelpPage
                     ? "border-red-200 bg-red-50 text-red-700"
-                    : "border-gray-200 bg-white text-gray-600 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                    : "border-gray-200 bg-white text-gray-600 hover:text-red-600"
                 }`}
                 title="Buka halaman bantuan"
               >

@@ -1,7 +1,13 @@
 // src/components/auth/UserMenu.tsx
 "use client";
 
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import Image from "next/image";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
@@ -10,14 +16,28 @@ import LoginForm from "./LoginForm";
 import { useRouter } from "next/navigation";
 import { getFileUrl } from "@/config/api";
 import {
+  FEATURE_TOUR_PENDING_CHANGED_EVENT,
+  clearFeatureTourFollowUpStep,
   clearPendingFeatureTourStep,
+  getFeatureTourFollowUpStep,
   getPendingFeatureTourStep,
   isFeatureTourSeen,
   markFeatureTourSeen,
   profileFeatureTourConfig,
+  setPendingFeatureTourStep,
 } from "@/lib/featureTour";
+import {
+  createDriverSteps,
+  createDriverTour,
+  waitForElement,
+} from "@/lib/driverTour";
+import {
+  createProfileHeaderTourSteps,
+  PROFILE_TOUR_TOTAL_STEPS,
+} from "@/lib/profileFeatureTour";
 import { OPEN_LOGIN_MODAL_EVENT } from "@/lib/loginPrompt";
 import { FaArrowRight, FaKey, FaSignInAlt } from "react-icons/fa";
+import type { Driver } from "driver.js";
 
 export default function UserMenu() {
   const { currentUser, currentRole, permissions, isAuthenticated, isLoading } =
@@ -33,8 +53,14 @@ export default function UserMenu() {
     left: number;
     width: number;
   } | null>(null);
+  const [pendingTourStep, setPendingTourStepState] =
+    useState<ReturnType<typeof getPendingFeatureTourStep>>(null);
   const hideHoverCardTimerRef = useRef<number | null>(null);
-  const isHelpNoticeVisible = showProfileCoachmark || showHelpHoverCard || hoveringHelpCard;
+  const profileTourDriverRef = useRef<Driver | null>(null);
+  const profileTourAdvancingRef = useRef(false);
+  const profileTourSkippingRef = useRef(false);
+  const isHelpNoticeVisible =
+    showProfileCoachmark || showHelpHoverCard || hoveringHelpCard;
 
   const getInitials = (name: string) => {
     return name
@@ -55,6 +81,28 @@ export default function UserMenu() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    const syncPendingTourStep = () => {
+      setPendingTourStepState(
+        getPendingFeatureTourStep(profileFeatureTourConfig),
+      );
+    };
+
+    syncPendingTourStep();
+    window.addEventListener(
+      FEATURE_TOUR_PENDING_CHANGED_EVENT,
+      syncPendingTourStep,
+    );
+    return () => {
+      window.removeEventListener(
+        FEATURE_TOUR_PENDING_CHANGED_EVENT,
+        syncPendingTourStep,
+      );
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
     const handleOpenLoginModal = () => {
       setShowLoginForm(true);
     };
@@ -65,6 +113,23 @@ export default function UserMenu() {
     };
   }, []);
 
+  const handleProfileClick = useCallback(() => {
+    profileTourAdvancingRef.current = pendingTourStep === "profile-menu";
+    profileTourDriverRef.current?.destroy();
+    profileTourDriverRef.current = null;
+    const followUpStep = getFeatureTourFollowUpStep(profileFeatureTourConfig);
+    if (pendingTourStep === "profile-menu" && followUpStep) {
+      setPendingFeatureTourStep(profileFeatureTourConfig, followUpStep);
+    } else {
+      clearPendingFeatureTourStep(profileFeatureTourConfig);
+    }
+    clearFeatureTourFollowUpStep(profileFeatureTourConfig);
+    setShowProfileCoachmark(false);
+    setShowHelpHoverCard(false);
+    setHoveringHelpCard(false);
+    router.push("/profile");
+  }, [pendingTourStep, router]);
+
   useLayoutEffect(() => {
     if (!isHelpNoticeVisible || typeof window === "undefined") {
       setHelpCardRect(null);
@@ -72,10 +137,10 @@ export default function UserMenu() {
     }
 
     const updateHelpCardRect = () => {
-      const helpButton = document.querySelector("[data-tour='help-center-button']");
-      if (!(helpButton instanceof HTMLElement)) return;
+      const anchor = document.querySelector("[data-tour='help-center-button']");
+      if (!(anchor instanceof HTMLElement)) return;
 
-      const rect = helpButton.getBoundingClientRect();
+      const rect = anchor.getBoundingClientRect();
       const cardWidth = Math.min(280, Math.max(window.innerWidth - 32, 240));
       const viewportPadding = 12;
       const horizontalGap = 14;
@@ -105,7 +170,7 @@ export default function UserMenu() {
       isLoading ||
       typeof window === "undefined" ||
       isFeatureTourSeen(profileFeatureTourConfig) ||
-      getPendingFeatureTourStep(profileFeatureTourConfig) !== "menu"
+      pendingTourStep !== "menu"
     ) {
       return;
     }
@@ -117,12 +182,104 @@ export default function UserMenu() {
     return () => {
       window.clearTimeout(timer);
     };
-  }, [isAuthenticated, isLoading]);
+  }, [isAuthenticated, isLoading, pendingTourStep]);
+
+  useEffect(() => {
+    if (
+      !isAuthenticated ||
+      isLoading ||
+      typeof window === "undefined" ||
+      pendingTourStep !== "profile-menu"
+    ) {
+      profileTourAdvancingRef.current = false;
+      profileTourSkippingRef.current = false;
+      profileTourDriverRef.current?.destroy();
+      profileTourDriverRef.current = null;
+      return;
+    }
+
+    let cancelled = false;
+
+    const startProfileTour = async () => {
+      const openProfileFromTour = () => {
+        profileTourAdvancingRef.current = pendingTourStep === "profile-menu";
+        profileTourDriverRef.current?.destroy();
+        profileTourDriverRef.current = null;
+        const followUpStep = getFeatureTourFollowUpStep(profileFeatureTourConfig);
+        if (pendingTourStep === "profile-menu" && followUpStep) {
+          setPendingFeatureTourStep(profileFeatureTourConfig, followUpStep);
+        } else {
+          clearPendingFeatureTourStep(profileFeatureTourConfig);
+        }
+        clearFeatureTourFollowUpStep(profileFeatureTourConfig);
+        setShowProfileCoachmark(false);
+        setShowHelpHoverCard(false);
+        setHoveringHelpCard(false);
+        router.push("/profile");
+      };
+
+      const skipProfileTourFromHeader = () => {
+        profileTourSkippingRef.current = true;
+        profileTourDriverRef.current?.destroy();
+        profileTourDriverRef.current = null;
+      };
+
+      const target = await waitForElement("[data-tour='profile-menu-button']", {
+        timeout: 4000,
+        interval: 100,
+      });
+
+      if (cancelled || !target) return;
+
+      profileTourDriverRef.current?.destroy();
+      profileTourDriverRef.current = createDriverTour({
+        doneBtnText: "Buka Profile",
+        onDestroyed: () => {
+          profileTourDriverRef.current = null;
+
+          if (profileTourAdvancingRef.current) {
+            profileTourAdvancingRef.current = false;
+            return;
+          }
+
+          if (profileTourSkippingRef.current) {
+            profileTourSkippingRef.current = false;
+          }
+
+          markFeatureTourSeen(profileFeatureTourConfig);
+          clearPendingFeatureTourStep(profileFeatureTourConfig);
+          clearFeatureTourFollowUpStep(profileFeatureTourConfig);
+        },
+        steps: createDriverSteps(
+          createProfileHeaderTourSteps({
+            openProfile: openProfileFromTour,
+            skipTour: skipProfileTourFromHeader,
+          }),
+          {
+            totalSteps: PROFILE_TOUR_TOTAL_STEPS,
+            stepOffset: 0,
+          },
+        ),
+      });
+
+      profileTourDriverRef.current.drive();
+    };
+
+    void startProfileTour();
+
+    return () => {
+      cancelled = true;
+      profileTourDriverRef.current?.destroy();
+      profileTourDriverRef.current = null;
+    };
+  }, [isAuthenticated, isLoading, pendingTourStep, router]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const helpButton = document.querySelector("[data-tour='help-center-button']");
+    const helpButton = document.querySelector(
+      "[data-tour='help-center-button']",
+    );
     if (!(helpButton instanceof HTMLElement)) return;
 
     const clearHideTimer = () => {
@@ -172,6 +329,7 @@ export default function UserMenu() {
   const acknowledgeProfileCoachmark = () => {
     markFeatureTourSeen(profileFeatureTourConfig);
     clearPendingFeatureTourStep(profileFeatureTourConfig);
+    clearFeatureTourFollowUpStep(profileFeatureTourConfig);
     setShowProfileCoachmark(false);
     setShowHelpHoverCard(false);
     setHoveringHelpCard(false);
@@ -180,16 +338,11 @@ export default function UserMenu() {
   const handleHelpClick = () => {
     markFeatureTourSeen(profileFeatureTourConfig);
     clearPendingFeatureTourStep(profileFeatureTourConfig);
+    clearFeatureTourFollowUpStep(profileFeatureTourConfig);
     setShowProfileCoachmark(false);
     setShowHelpHoverCard(false);
     setHoveringHelpCard(false);
     router.push("/help");
-  };
-
-  const handleProfileClick = () => {
-    clearPendingFeatureTourStep(profileFeatureTourConfig);
-    setShowProfileCoachmark(false);
-    router.push("/profile");
   };
 
   if (isLoading) {
@@ -232,6 +385,7 @@ export default function UserMenu() {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={handleProfileClick}
+          data-tour="profile-menu-button"
           className="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm transition-all hover:shadow-md"
         >
           <div
