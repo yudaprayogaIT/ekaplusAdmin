@@ -27,6 +27,8 @@ export default function Header({
   const pathname = usePathname();
   const isHelpPage = pathname === "/help";
   const { isAuthenticated } = useAuth();
+  const showSearch = isAuthenticated;
+  const showHelp = isAuthenticated;
 
   return (
     <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-gray-100">
@@ -57,22 +59,26 @@ export default function Header({
           </motion.button>
 
           {/* Search Bar */}
-          <div className={isAuthenticated ? "hidden md:block" : "hidden"}>
+          <div className={showSearch ? "hidden shrink-0 md:block" : "hidden"}>
             <MenuSearch allMenuItems={allMenuItems} />
           </div>
         </div>
 
         {/* Right side - User Menu */}
-        <div className="flex items-center gap-3">
-          {isAuthenticated ? (
-            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+        <div className="flex items-center justify-end gap-3">
+          {showHelp ? (
+            <motion.div
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="shrink-0"
+            >
               <Link
                 href="/help"
                 data-tour="help-center-button"
-                className={`flex items-center gap-2 rounded-xl  px-4 py-3 text-sm font-medium  transition-all ${
+                className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium shadow-sm transition-all ${
                   isHelpPage
                     ? "border-red-200 bg-red-50 text-red-700"
-                    : "border-gray-200 bg-white text-gray-600  hover:text-red-600"
+                    : "border-gray-200 bg-white text-gray-600 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
                 }`}
                 title="Buka halaman bantuan"
               >

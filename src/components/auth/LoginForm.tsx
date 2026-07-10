@@ -28,25 +28,11 @@ export default function LoginForm({
   onSuccess,
 }: LoginFormProps) {
   const { login } = useAuth();
-  const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const identifierInputRef = useRef<HTMLInputElement | null>(null);
   const passwordInputRef = useRef<HTMLInputElement | null>(null);
-
-  const syncAutofillValues = () => {
-    const nextIdentifier = identifierInputRef.current?.value ?? "";
-    const nextPassword = passwordInputRef.current?.value ?? "";
-
-    if (nextIdentifier !== identifier) {
-      setIdentifier(nextIdentifier);
-    }
-    if (nextPassword !== password) {
-      setPassword(nextPassword);
-    }
-  };
 
   // Lock body scroll when modal open
   useEffect(() => {
@@ -60,32 +46,12 @@ export default function LoginForm({
     return;
   }, [open]);
 
-  useEffect(() => {
-    if (!open || typeof window === "undefined") return;
-
-    syncAutofillValues();
-
-    const timers = [
-      window.setTimeout(syncAutofillValues, 50),
-      window.setTimeout(syncAutofillValues, 200),
-      window.setTimeout(syncAutofillValues, 500),
-    ];
-
-    return () => {
-      timers.forEach((timer) => window.clearTimeout(timer));
-    };
-  }, [open]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    const formData = new FormData(e.currentTarget as HTMLFormElement);
-    const submittedIdentifier = String(formData.get("username") || "").trim();
-    const submittedPassword = String(formData.get("password") || "");
-
-    setIdentifier(submittedIdentifier);
-    setPassword(submittedPassword);
+    const submittedIdentifier = identifierInputRef.current?.value.trim() || "";
+    const submittedPassword = passwordInputRef.current?.value || "";
 
     if (!submittedIdentifier) {
       setError("Username atau nomor telepon harus diisi");
@@ -102,8 +68,8 @@ export default function LoginForm({
 
       if (typeof result === "boolean") {
         if (result) {
-          setIdentifier("");
-          setPassword("");
+          if (identifierInputRef.current) identifierInputRef.current.value = "";
+          if (passwordInputRef.current) passwordInputRef.current.value = "";
           onClose();
           onSuccess?.();
         } else {
@@ -111,8 +77,8 @@ export default function LoginForm({
         }
       } else if (typeof result === "object" && result !== null) {
         if (result.success) {
-          setIdentifier("");
-          setPassword("");
+          if (identifierInputRef.current) identifierInputRef.current.value = "";
+          if (passwordInputRef.current) passwordInputRef.current.value = "";
           onClose();
           onSuccess?.();
         } else {
@@ -129,9 +95,10 @@ export default function LoginForm({
 
   const handleClose = () => {
     if (!loading) {
-      setIdentifier("");
-      setPassword("");
+      if (identifierInputRef.current) identifierInputRef.current.value = "";
+      if (passwordInputRef.current) passwordInputRef.current.value = "";
       setError(null);
+      setShowPassword(false);
       onClose();
     }
   };
@@ -185,7 +152,7 @@ export default function LoginForm({
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <form onSubmit={handleSubmit} autoComplete="on" className="p-6 space-y-5">
             {/* Error Alert */}
             <AnimatePresence>
               {error && (
@@ -230,9 +197,7 @@ export default function LoginForm({
                   name="username"
                   type="text"
                   autoComplete="username"
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  onInput={syncAutofillValues}
+                  defaultValue=""
                   placeholder="Masukkan email, username atau nomor telepon"
                   disabled={loading}
                   autoFocus
@@ -259,9 +224,7 @@ export default function LoginForm({
                   name="password"
                   autoComplete="current-password"
                   type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onInput={syncAutofillValues}
+                  defaultValue=""
                   placeholder="Masukkan password"
                   disabled={loading}
                   className="w-full pl-12 pr-12 py-3 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:ring-2 focus:ring-red-100 outline-none transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"

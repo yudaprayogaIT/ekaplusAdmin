@@ -3,6 +3,9 @@
 
 import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+import { FaLock, FaHome } from "react-icons/fa";
+import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { dispatchOpenLoginModal } from "@/lib/loginPrompt";
 
