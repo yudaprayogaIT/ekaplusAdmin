@@ -141,6 +141,7 @@ interface CreditChangeRequestDetailModalProps {
   onClose: () => void;
   item: CreditChangeRequestListItem | null;
   onActionExecuted?: () => Promise<void> | void;
+  demoMode?: boolean;
 }
 
 function resolveUserName(
@@ -485,6 +486,7 @@ export function CreditChangeRequestDetailModal({
   onClose,
   item,
   onActionExecuted,
+  demoMode = false,
 }: CreditChangeRequestDetailModalProps) {
   const { token, isAuthenticated } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -529,6 +531,44 @@ export function CreditChangeRequestDetailModal({
   const loadDetail = useCallback(async () => {
     if (!isOpen || !item || !token || !isAuthenticated) return;
 
+    if (demoMode) {
+      setLoading(false);
+      setError(null);
+      setDetail({
+        id: item.id,
+        name: item.code,
+        policy_type: item.policyType,
+        policy_id: item.policyId,
+        apply_to_childs: item.applyToChilds ? 1 : 0,
+        current_credit_limit: item.currentCreditLimit,
+        current_payment_term: item.currentPaymentTerm,
+        current_limit_customer_overdue: item.currentLimitCustomerOverdue,
+        requested_credit_limit: item.requestedCreditLimit,
+        requested_payment_term: item.requestedPaymentTerm,
+        requested_limit_customer_overdue: item.requestedLimitCustomerOverdue,
+        identity_attachment: item.identityAttachment,
+        customer_approval_attachment: item.customerApprovalAttachment,
+        reason: item.reason,
+        rejected_note: item.rejectedNote,
+        saga_status: item.sagaStatus,
+        sync_saga_id: item.syncSagaId,
+        sync_last_error: item.syncLastError,
+        sync_last_rollback_error: item.syncLastRollbackError,
+        status: item.status,
+        docstatus: item.docstatus,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+        workflow_state: item.workflowState,
+        "created_by.full_name": item.createdBy,
+        "updated_by.full_name": item.updatedBy,
+      });
+      setActions([
+        { id: 9901, action: "Approve Director", mode: "approve" },
+        { id: 9902, action: "Reject Director", mode: "reject" },
+      ]);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -562,7 +602,7 @@ export function CreditChangeRequestDetailModal({
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, isOpen, item, token]);
+  }, [demoMode, isAuthenticated, isOpen, item, token]);
 
   useEffect(() => {
     void loadDetail();
@@ -643,6 +683,13 @@ export function CreditChangeRequestDetailModal({
     async function loadPolicyName() {
       if (!isOpen || !token) return;
 
+      if (demoMode) {
+        setPolicyName("BC DEMO SEJAHTERA - Surabaya");
+        setPolicyNameLoading(false);
+        setPolicyNameError(null);
+        return;
+      }
+
       setPolicyNameLoading(true);
       setPolicyNameError(null);
 
@@ -677,12 +724,36 @@ export function CreditChangeRequestDetailModal({
     return () => {
       cancelled = true;
     };
-  }, [effectivePolicyId, effectivePolicyType, isOpen, token]);
+  }, [demoMode, effectivePolicyId, effectivePolicyType, isOpen, token]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadAffectedBranches() {
+      if (demoMode) {
+        setAffectedBranches([
+          {
+            id: 88001,
+            name: "BC-DEMO-SBY",
+            _relations: {
+              branch: { city: "Surabaya", id: 77 },
+              gcid: { gc_name: "DEMO SEJAHTERA CUSTOMER", id: 77001 },
+            },
+          },
+          {
+            id: 88002,
+            name: "BC-DEMO-SDA",
+            _relations: {
+              branch: { city: "Sidoarjo", id: 78 },
+              gcid: { gc_name: "DEMO SEJAHTERA CUSTOMER", id: 77001 },
+            },
+          },
+        ]);
+        setAffectedBranchesError(null);
+        setAffectedBranchesLoading(false);
+        return;
+      }
+
       if (!isOpen || !token || !effectivePolicyType || !effectivePolicyId) {
         setAffectedBranches([]);
         setAffectedBranchesError(null);
@@ -758,7 +829,7 @@ export function CreditChangeRequestDetailModal({
     return () => {
       cancelled = true;
     };
-  }, [effectivePolicyId, effectivePolicyType, isOpen, token]);
+  }, [demoMode, effectivePolicyId, effectivePolicyType, isOpen, token]);
 
   const uploadCustomerApprovalAttachment = useCallback(async () => {
     if (!token || !item?.id || !customerApprovalFile) {
@@ -814,7 +885,8 @@ export function CreditChangeRequestDetailModal({
 
       const normalizedLabel = workflowAction.action.toLowerCase();
       const isRejectAction = normalizedLabel.includes("reject");
-      const requiresDirectorAttachment = isInDirector && !isRejectAction;
+      const requiresDirectorAttachment =
+        !demoMode && isInDirector && !isRejectAction;
       const hasAnyCustomerApprovalAttachment =
         hasStoredCustomerApprovalAttachment || Boolean(customerApprovalFile);
 
@@ -835,6 +907,22 @@ export function CreditChangeRequestDetailModal({
       setError(null);
 
       try {
+        if (demoMode) {
+          await new Promise((resolve) => window.setTimeout(resolve, 300));
+          await loadDetail();
+          await onActionExecuted?.();
+          setPendingRejectAction(null);
+          setResultModal({
+            isOpen: true,
+            type: "success",
+            title: "Action Berhasil",
+            message: `${workflowAction.action} berhasil dijalankan`,
+            description:
+              "Mode tour aktif. Action ini hanya simulasi dan tidak mengubah data asli.",
+          });
+          return;
+        }
+
         if (requiresDirectorAttachment && customerApprovalFile) {
           await uploadCustomerApprovalAttachment();
         }
@@ -878,6 +966,7 @@ export function CreditChangeRequestDetailModal({
     },
     [
       customerApprovalFile,
+      demoMode,
       hasStoredCustomerApprovalAttachment,
       isInDirector,
       item,
@@ -915,6 +1004,7 @@ export function CreditChangeRequestDetailModal({
           }
         >
           <motion.div
+            data-tour={demoMode ? "credit-change-detail-modal" : undefined}
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
@@ -956,6 +1046,16 @@ export function CreditChangeRequestDetailModal({
             </div>
 
             <div className="flex-1 overflow-y-auto bg-slate-50 px-6 py-6">
+              {demoMode && (
+                <div
+                  data-tour="credit-change-demo-banner"
+                  className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+                >
+                  Mode tour aktif. Semua data di dialog ini adalah dummy dan
+                  action workflow tidak akan mengubah data asli.
+                </div>
+              )}
+
               {loading && (
                 <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
                   Memuat detail credit change request...
@@ -969,7 +1069,12 @@ export function CreditChangeRequestDetailModal({
               )}
 
               <div className="space-y-6">
-                <section className="rounded-2xl border border-slate-200 bg-white p-5 grid grid-cols-2 gap-6">
+                <section
+                  data-tour={
+                    demoMode ? "credit-change-values-section" : undefined
+                  }
+                  className="rounded-2xl border border-slate-200 bg-white p-5 grid grid-cols-2 gap-6"
+                >
                   <div>
                     <div className="mb-4 flex items-center gap-2">
                       <FaMoneyBillWave className="text-emerald-600" />
@@ -1101,7 +1206,14 @@ export function CreditChangeRequestDetailModal({
                   </div>
                 </section> */}
 
-                <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                <section
+                  data-tour={
+                    demoMode
+                      ? "credit-change-affected-customers-section"
+                      : undefined
+                  }
+                  className="rounded-2xl border border-slate-200 bg-white p-5"
+                >
                   <div className="mb-4 flex items-center gap-2">
                     <FaUser className="text-indigo-600" />
                     <div>
@@ -1161,7 +1273,10 @@ export function CreditChangeRequestDetailModal({
                     ))}
                 </section>
 
-                <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                <section
+                  data-tour={demoMode ? "credit-change-notes-section" : undefined}
+                  className="rounded-2xl border border-slate-200 bg-white p-5"
+                >
                   <div className="mb-4 flex items-center gap-2">
                     <FaStickyNote className="text-amber-500" />
                     <h3 className="text-lg font-bold text-slate-900">Notes</h3>
@@ -1189,7 +1304,14 @@ export function CreditChangeRequestDetailModal({
                 </section>
 
                 <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-                  <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <section
+                    data-tour={
+                      demoMode
+                        ? "credit-change-identity-attachment-section"
+                        : undefined
+                    }
+                    className="rounded-2xl border border-slate-200 bg-white p-5"
+                  >
                     <div className="mb-4 flex items-center gap-2">
                       <FaFileAlt className="text-sky-500" />
                       <h3 className="text-lg font-bold text-slate-900">
@@ -1203,7 +1325,14 @@ export function CreditChangeRequestDetailModal({
                     />
                   </section>
 
-                  <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <section
+                    data-tour={
+                      demoMode
+                        ? "credit-change-customer-approval-section"
+                        : undefined
+                    }
+                    className="rounded-2xl border border-slate-200 bg-white p-5"
+                  >
                     <div className="mb-4 flex items-center gap-2">
                       <FaImage className="text-sky-500" />
                       <h3 className="text-lg font-bold text-slate-900">
@@ -1264,6 +1393,11 @@ export function CreditChangeRequestDetailModal({
                           )}
                           <button
                             type="button"
+                            data-tour={
+                              demoMode
+                                ? "credit-change-wa-preview-button"
+                                : undefined
+                            }
                             onClick={() => {
                               setWaPreviewOpen(true);
                             }}
@@ -1380,7 +1514,12 @@ export function CreditChangeRequestDetailModal({
                 </section>
 
                 {normalizedActions.length > 0 && (
-                  <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <section
+                    data-tour={
+                      demoMode ? "credit-change-actions-section" : undefined
+                    }
+                    className="rounded-2xl border border-slate-200 bg-white p-5"
+                  >
                     <div className="mb-4 flex items-start justify-between gap-4">
                       <div className="flex items-center gap-2">
                         <FaCheckCircle className="text-emerald-600" />
@@ -1401,6 +1540,12 @@ export function CreditChangeRequestDetailModal({
                       actions={normalizedActions}
                       loadingActionId={executingActionId}
                       disabled={loading}
+                      getActionTourAttribute={(workflowAction) =>
+                        demoMode &&
+                        workflowAction.action.toLowerCase().includes("approve")
+                          ? "credit-change-approve-action-button"
+                          : undefined
+                      }
                       onActionClick={(workflowAction) => {
                         void handleActionClick(workflowAction);
                       }}

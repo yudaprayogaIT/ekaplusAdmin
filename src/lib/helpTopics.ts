@@ -8,6 +8,7 @@ import {
   setPendingFeatureTourStep,
   type FeatureTourStep,
 } from "@/lib/featureTour";
+import { setPendingCreditChangeRequestApproveTour } from "@/lib/creditChangeRequestApproveTour";
 import { setPendingCustomerRegistrationApproveTour } from "@/lib/customerRegistrationApproveTour";
 
 export type HelpTopic = {
@@ -15,7 +16,10 @@ export type HelpTopic = {
   title: string;
   description: string;
   route: string;
-  action: "profile-tour" | "customer-registration-approve-tour";
+  action:
+    | "profile-tour"
+    | "customer-registration-approve-tour"
+    | "credit-change-request-approve-tour";
   step?: FeatureTourStep;
 };
 
@@ -46,6 +50,14 @@ export const helpTopics: HelpTopic[] = [
     route: "/customers/registrations",
     action: "customer-registration-approve-tour",
   },
+  {
+    id: "approve-credit-change-request",
+    title: "Approve Credit Change Request",
+    description:
+      "Ikuti simulasi review dan approve pengajuan perubahan credit limit customer menggunakan data contoh.",
+    route: "/customers/credit-change-request",
+    action: "credit-change-request-approve-tour",
+  },
 ];
 
 type HelpRouter = {
@@ -63,6 +75,9 @@ export function launchHelpTopic(router: HelpRouter, topic: HelpTopic) {
 
   if (topic.action === "customer-registration-approve-tour") {
     setPendingCustomerRegistrationApproveTour();
+  }
+  if (topic.action === "credit-change-request-approve-tour") {
+    setPendingCreditChangeRequestApproveTour();
   }
   router.push(topic.route);
 }

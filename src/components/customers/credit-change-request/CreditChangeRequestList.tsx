@@ -12,6 +12,7 @@ import {
   FaCalendarAlt,
   FaEye,
   FaPlus,
+  FaPlayCircle,
   FaSearch,
   FaSortAmountDown,
   FaSortAmountUp,
@@ -31,6 +32,16 @@ import {
 } from "./CreditChangeRequestDetailModal";
 import { CreditChangeRequestFormModal } from "./CreditChangeRequestFormModal";
 import { policyTypeLabel, resolvePolicyDisplayName } from "./utils";
+import {
+  consumePendingCreditChangeRequestApproveTour,
+  creditChangeRequestApproveTourDummy,
+} from "@/lib/creditChangeRequestApproveTour";
+import {
+  createDriverSteps,
+  createDriverTour,
+  waitForElement,
+} from "@/lib/driverTour";
+import type { Driver } from "driver.js";
 
 type SortField = "created_at" | "updated_at" | "status";
 type SortDirection = "asc" | "desc";
@@ -140,8 +151,7 @@ function mapCreditChangeRequestRow(
     currentPaymentTerm: row.current_payment_term ?? null,
     requestedPaymentTerm: row.requested_payment_term ?? null,
     currentLimitCustomerOverdue: row.current_limit_customer_overdue ?? null,
-    requestedLimitCustomerOverdue:
-      row.requested_limit_customer_overdue ?? null,
+    requestedLimitCustomerOverdue: row.requested_limit_customer_overdue ?? null,
     identityAttachment: row.identity_attachment || null,
     customerApprovalAttachment: row.customer_approval_attachment || null,
     reason: row.reason || null,
@@ -181,7 +191,19 @@ export function CreditChangeRequestList() {
   const [policyNameMap, setPolicyNameMap] = useState<Record<string, string>>(
     {},
   );
+  const [approveTourActive, setApproveTourActive] = useState(false);
+  const [tourItem] = useState<CreditChangeRequestListItem>(
+    creditChangeRequestApproveTourDummy,
+  );
+  const tourDriverRef = useRef<Driver | null>(null);
+  const tourStartedRef = useRef(false);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!consumePendingCreditChangeRequestApproveTour()) return;
+    setApproveTourActive(true);
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -193,97 +215,101 @@ export function CreditChangeRequestList() {
     };
   }, [searchQuery]);
 
-  const loadData = useCallback(async (page: number, replace = false) => {
-    if (replace) {
-      setLoading(true);
-      setError(null);
-    } else {
-      setLoadingMore(true);
-    }
-
-    try {
-      if (!token || !isAuthenticated) {
-        setItems([]);
-        setHasMore(false);
-        return;
+  const loadData = useCallback(
+    async (page: number, replace = false) => {
+      if (replace) {
+        setLoading(true);
+        setError(null);
+      } else {
+        setLoadingMore(true);
       }
 
-      if (debouncedSearchQuery) {
-        const rows = await fetchAllQueryRows<CreditChangeRequestApiResponse>({
-          endpoint: API_CONFIG.ENDPOINTS.CREDIT_CHANGE_REQUEST,
-          spec: {
+      try {
+        if (!token || !isAuthenticated) {
+          setItems([]);
+          setHasMore(false);
+          return;
+        }
+
+        if (debouncedSearchQuery) {
+          const rows = await fetchAllQueryRows<CreditChangeRequestApiResponse>({
+            endpoint: API_CONFIG.ENDPOINTS.CREDIT_CHANGE_REQUEST,
+            spec: {
+              fields: ["*", "created_by.full_name", "updated_by.full_name"],
+              order_by:
+                sortField === "status"
+                  ? [["status", sortDirection]]
+                  : [[sortField, sortDirection]],
+            },
+            token,
+            errorMessage: "Failed to fetch credit change request",
+          });
+
+          setItems(rows.map(mapCreditChangeRequestRow));
+          setCurrentPage(1);
+          setHasMore(false);
+          return;
+        }
+
+        const response = await apiFetch(
+          getQueryUrl(API_CONFIG.ENDPOINTS.CREDIT_CHANGE_REQUEST, {
             fields: ["*", "created_by.full_name", "updated_by.full_name"],
+            page,
             order_by:
               sortField === "status"
                 ? [["status", sortDirection]]
                 : [[sortField, sortDirection]],
-          },
+          }),
+          { method: "GET", cache: "no-store" },
           token,
-          errorMessage: "Failed to fetch credit change request",
-        });
-
-        setItems(rows.map(mapCreditChangeRequestRow));
-        setCurrentPage(1);
-        setHasMore(false);
-        return;
-      }
-
-      const response = await apiFetch(
-        getQueryUrl(API_CONFIG.ENDPOINTS.CREDIT_CHANGE_REQUEST, {
-          fields: ["*", "created_by.full_name", "updated_by.full_name"],
-          page,
-          order_by:
-            sortField === "status"
-              ? [["status", sortDirection]]
-              : [[sortField, sortDirection]],
-        }),
-        { method: "GET", cache: "no-store" },
-        token,
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch credit change request (${response.status})`,
         );
-      }
 
-      const json = await response.json();
-      const rows = Array.isArray(json?.data)
-        ? (json.data as CreditChangeRequestApiResponse[])
-        : [];
-      const perPage = Number(json?.meta?.per_page || DEFAULT_PAGE_SIZE);
-      const mapped = rows.map(mapCreditChangeRequestRow);
+        if (!response.ok) {
+          throw new Error(
+            `Failed to fetch credit change request (${response.status})`,
+          );
+        }
 
-      setItems((current) =>
-        replace
-          ? mapped
-          : [
-              ...current,
-              ...mapped.filter(
-                (item) => !current.some((existing) => existing.id === item.id),
-              ),
-            ],
-      );
-      setCurrentPage(page);
-      setHasMore(rows.length >= perPage);
-    } catch (loadError) {
-      if (replace) {
-        setItems([]);
+        const json = await response.json();
+        const rows = Array.isArray(json?.data)
+          ? (json.data as CreditChangeRequestApiResponse[])
+          : [];
+        const perPage = Number(json?.meta?.per_page || DEFAULT_PAGE_SIZE);
+        const mapped = rows.map(mapCreditChangeRequestRow);
+
+        setItems((current) =>
+          replace
+            ? mapped
+            : [
+                ...current,
+                ...mapped.filter(
+                  (item) =>
+                    !current.some((existing) => existing.id === item.id),
+                ),
+              ],
+        );
+        setCurrentPage(page);
+        setHasMore(rows.length >= perPage);
+      } catch (loadError) {
+        if (replace) {
+          setItems([]);
+        }
+        setHasMore(false);
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Gagal memuat credit change request",
+        );
+      } finally {
+        if (replace) {
+          setLoading(false);
+        } else {
+          setLoadingMore(false);
+        }
       }
-      setHasMore(false);
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Gagal memuat credit change request",
-      );
-    } finally {
-      if (replace) {
-        setLoading(false);
-      } else {
-        setLoadingMore(false);
-      }
-    }
-  }, [debouncedSearchQuery, isAuthenticated, sortDirection, sortField, token]);
+    },
+    [debouncedSearchQuery, isAuthenticated, sortDirection, sortField, token],
+  );
 
   useEffect(() => {
     setCurrentPage(1);
@@ -299,9 +325,13 @@ export function CreditChangeRequestList() {
 
   const filteredItems = useMemo(() => {
     const query = debouncedSearchQuery.trim().toLowerCase();
-    if (!query) return items;
+    const liveRows = approveTourActive
+      ? [tourItem, ...items.filter((item) => item.id !== tourItem.id)]
+      : items;
 
-    return items.filter((item) => {
+    if (!query) return liveRows;
+
+    return liveRows.filter((item) => {
       const policyKey = `${item.policyType}:${item.policyId || 0}`;
       const policyName = policyNameMap[policyKey] || "";
 
@@ -313,7 +343,7 @@ export function CreditChangeRequestList() {
         policyName.toLowerCase().includes(query)
       );
     });
-  }, [debouncedSearchQuery, items, policyNameMap]);
+  }, [approveTourActive, debouncedSearchQuery, items, policyNameMap, tourItem]);
 
   useEffect(() => {
     let cancelled = false;
@@ -402,6 +432,159 @@ export function CreditChangeRequestList() {
     { value: "created_at", label: "Tanggal Buat" },
     { value: "status", label: "Status" },
   ];
+
+  const handleStartApproveTour = useCallback(() => {
+    if (approveTourActive) return;
+    setApproveTourActive(true);
+  }, [approveTourActive]);
+
+  useEffect(() => {
+    if (!approveTourActive || tourStartedRef.current) return;
+
+    let cancelled = false;
+
+    const driveTour = async () => {
+      const card = await waitForElement(
+        "[data-tour='credit-change-demo-card']",
+      );
+      if (!card || cancelled) return;
+
+      const goToNextStep = async (selector: string, clickSelector?: string) => {
+        if (clickSelector) {
+          document.querySelector<HTMLElement>(clickSelector)?.click();
+        }
+        const target = await waitForElement(selector, { timeout: 5000 });
+        if (!target || cancelled) return;
+        target.scrollIntoView({ block: "center", behavior: "smooth" });
+        window.setTimeout(() => tourDriverRef.current?.moveNext(), 180);
+      };
+
+      tourDriverRef.current = createDriverTour({
+        onDestroyed: () => {
+          setApproveTourActive(false);
+          setSelectedItem(null);
+          tourStartedRef.current = false;
+          tourDriverRef.current = null;
+        },
+        steps: createDriverSteps([
+          {
+            element: "[data-tour='credit-change-demo-card']",
+            popover: {
+              title: "Data Dummy Credit Change",
+              description:
+                "Panduan ini memakai request contoh agar flow approve bisa dicoba kapan saja.",
+              side: "left",
+              align: "start",
+            },
+          },
+          {
+            element: "[data-tour='credit-change-view-details']",
+            popover: {
+              title: "Buka Detail Request",
+              description:
+                "Klik View Details untuk melihat perubahan limit, alasan, lampiran, dan action workflow.",
+              side: "top",
+              align: "center",
+              onNextClick: () => {
+                setSelectedItem(tourItem);
+                void goToNextStep("[data-tour='credit-change-detail-modal']");
+              },
+            },
+          },
+          {
+            element: "[data-tour='credit-change-demo-banner']",
+            popover: {
+              title: "Mode Demo Aman",
+              description:
+                "Selama tour aktif, action approve dan reject hanya disimulasikan. Tidak ada data asli yang berubah.",
+              side: "bottom",
+              align: "start",
+            },
+          },
+          {
+            element: "[data-tour='credit-change-values-section']",
+            popover: {
+              title: "Bandingkan Current dan Requested",
+              description:
+                "Review nilai credit limit dan payment term saat ini dibandingkan nilai yang diajukan sebelum mengambil keputusan.",
+              side: "left",
+              align: "start",
+            },
+          },
+          {
+            element: "[data-tour='credit-change-affected-customers-section']",
+            popover: {
+              title: "Cek Customer Terdampak",
+              description:
+                "Bagian ini menunjukkan customer cabang dalam cakupan policy, terutama bila request diterapkan ke child customer.",
+              side: "left",
+              align: "start",
+            },
+          },
+          {
+            element: "[data-tour='credit-change-notes-section']",
+            popover: {
+              title: "Baca Alasan Pengajuan",
+              description:
+                "Pastikan reason cukup jelas. Jika ditolak, rejected note nantinya dipakai sebagai catatan tindak lanjut.",
+              side: "left",
+              align: "start",
+            },
+          },
+          {
+            element: "[data-tour='credit-change-customer-approval-section']",
+            popover: {
+              title: "Lampiran Approval Customer",
+              description:
+                "Untuk status In Director, screenshot persetujuan customer wajib tersedia sebelum action approve dilanjutkan.",
+              side: "left",
+              align: "start",
+            },
+          },
+          {
+            element: "[data-tour='credit-change-wa-preview-button']",
+            popover: {
+              title: "Preview Teks WhatsApp",
+              description:
+                "Gunakan preview ini untuk menyiapkan teks konfirmasi ke customer sebelum upload bukti persetujuan.",
+              side: "top",
+              align: "center",
+            },
+          },
+          {
+            element: "[data-tour='credit-change-actions-section']",
+            popover: {
+              title: "Available Actions",
+              description:
+                "Action workflow yang muncul mengikuti status dokumen dan role user saat ini.",
+              side: "left",
+              align: "start",
+            },
+          },
+          {
+            element: "[data-tour='credit-change-approve-action-button']",
+            popover: {
+              title: "Approve Credit Change Request",
+              description:
+                "Klik action approve untuk melanjutkan request ke tahap berikutnya. Di tour ini aksi hanya simulasi.",
+              side: "top",
+              align: "center",
+            },
+          },
+        ]),
+      });
+
+      tourStartedRef.current = true;
+      tourDriverRef.current.drive();
+    };
+
+    void driveTour();
+
+    return () => {
+      cancelled = true;
+      tourDriverRef.current?.destroy();
+    };
+  }, [approveTourActive, tourItem]);
 
   const handleSave = useCallback(
     async (payload: {
@@ -512,11 +695,12 @@ export function CreditChangeRequestList() {
         </div>
         <button
           type="button"
-          onClick={() => setModalOpen(true)}
-          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-200 transition hover:from-emerald-600 hover:to-teal-700"
+          onClick={handleStartApproveTour}
+          disabled={approveTourActive}
+          className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <FaPlus className="h-4 w-4" />
-          Add New Request
+          <FaPlayCircle className="h-4 w-4" />
+          <span>Tour Approve Credit Change</span>
         </button>
       </div>
 
@@ -563,6 +747,7 @@ export function CreditChangeRequestList() {
 
       <div className="mb-6 rounded-xl border border-gray-100 bg-white p-4 shadow-sm md:p-6">
         <div className="flex flex-col gap-4 md:flex-row">
+          <div></div>
           <div className="relative flex-1">
             <FaSearch className="absolute left-4 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
@@ -573,6 +758,7 @@ export function CreditChangeRequestList() {
               className="w-full rounded-xl border border-gray-200 py-3 pl-11 pr-4 text-sm transition-all focus:border-transparent focus:ring-2 focus:ring-emerald-500"
             />
           </div>
+
           <select
             value={sortField}
             onChange={(event) => setSortField(event.target.value as SortField)}
@@ -596,6 +782,14 @@ export function CreditChangeRequestList() {
             ) : (
               <FaSortAmountDown className="h-4 w-4" />
             )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setModalOpen(true)}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-200 transition hover:from-emerald-600 hover:to-teal-700"
+          >
+            <FaPlus className="h-4 w-4" />
+            Add New Request
           </button>
         </div>
       </div>
@@ -628,6 +822,11 @@ export function CreditChangeRequestList() {
                 }}
                 role="button"
                 tabIndex={0}
+                data-tour={
+                  approveTourActive && item.id === tourItem.id
+                    ? "credit-change-demo-card"
+                    : undefined
+                }
                 onClick={() => setSelectedItem(item)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
@@ -761,6 +960,11 @@ export function CreditChangeRequestList() {
 
                         <button
                           type="button"
+                          data-tour={
+                            approveTourActive && item.id === tourItem.id
+                              ? "credit-change-view-details"
+                              : undefined
+                          }
                           onClick={(event) => {
                             event.stopPropagation();
                             setSelectedItem(item);
@@ -795,7 +999,9 @@ export function CreditChangeRequestList() {
               ref={loadMoreRef}
               className="flex h-16 items-center justify-center text-sm text-slate-400"
             >
-              {loadingMore ? "Memuat data berikutnya..." : "Siap memuat data berikutnya..."}
+              {loadingMore
+                ? "Memuat data berikutnya..."
+                : "Siap memuat data berikutnya..."}
             </div>
           ) : null}
         </>
@@ -805,6 +1011,7 @@ export function CreditChangeRequestList() {
         isOpen={selectedItem !== null}
         onClose={() => setSelectedItem(null)}
         item={selectedItem}
+        demoMode={approveTourActive && selectedItem?.id === tourItem.id}
         onActionExecuted={refreshList}
       />
       <CreditChangeRequestFormModal

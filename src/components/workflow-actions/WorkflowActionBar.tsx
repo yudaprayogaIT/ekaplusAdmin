@@ -14,6 +14,7 @@ type Props = {
   loadingActionId?: number | null;
   disabled?: boolean;
   onActionClick: (action: WorkflowActionItem) => void;
+  getActionTourAttribute?: (action: WorkflowActionItem) => string | undefined;
 };
 
 function getActionTone(actionLabel: string) {
@@ -60,6 +61,7 @@ export default function WorkflowActionBar({
   loadingActionId = null,
   disabled = false,
   onActionClick,
+  getActionTourAttribute,
 }: Props) {
   if (actions.length === 0) return null;
 
@@ -107,6 +109,7 @@ export default function WorkflowActionBar({
 
             <button
               type="button"
+              data-tour={getActionTourAttribute?.(workflowAction)}
               onClick={() => onActionClick(workflowAction)}
               disabled={disabled || isLoading}
               className={`inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-70 ${tone.buttonClassName}`}
