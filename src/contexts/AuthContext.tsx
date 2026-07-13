@@ -24,7 +24,6 @@ import {
   extractPermissionRules,
 } from "@/lib/authz";
 import {
-  isFeatureTourSeen,
   profileFeatureTourConfig,
   setPendingFeatureTourStep,
 } from "@/lib/featureTour";
@@ -737,10 +736,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ]);
 
       applyResolvedSession(resolved, authToken);
-      if (
-        typeof window !== "undefined" &&
-        !isFeatureTourSeen(profileFeatureTourConfig)
-      ) {
+      if (typeof window !== "undefined") {
         setPendingFeatureTourStep(profileFeatureTourConfig, "menu");
       }
       return { success: true };

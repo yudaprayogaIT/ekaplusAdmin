@@ -21,7 +21,6 @@ import {
   clearPendingFeatureTourStep,
   getFeatureTourFollowUpStep,
   getPendingFeatureTourStep,
-  isFeatureTourSeen,
   markFeatureTourSeen,
   profileFeatureTourConfig,
   setPendingFeatureTourStep,
@@ -170,7 +169,6 @@ export default function UserMenu() {
       !isAuthenticated ||
       isLoading ||
       typeof window === "undefined" ||
-      isFeatureTourSeen(profileFeatureTourConfig) ||
       pendingTourStep !== "menu"
     ) {
       return;
@@ -206,7 +204,9 @@ export default function UserMenu() {
         profileTourAdvancingRef.current = pendingTourStep === "profile-menu";
         profileTourDriverRef.current?.destroy();
         profileTourDriverRef.current = null;
-        const followUpStep = getFeatureTourFollowUpStep(profileFeatureTourConfig);
+        const followUpStep = getFeatureTourFollowUpStep(
+          profileFeatureTourConfig,
+        );
         if (pendingTourStep === "profile-menu" && followUpStep) {
           setPendingFeatureTourStep(profileFeatureTourConfig, followUpStep);
         } else {
@@ -490,14 +490,13 @@ export default function UserMenu() {
                       Butuh bantuan memakai EKA+ Admin? Klik menu Help untuk
                       panduan interaktif.
                     </p>
-                    <div className="mt-3 flex items-center justify-end">
+                    <div className="mt-3 flex items-center cursor-pointer justify-end">
                       <button
                         type="button"
                         onClick={handleHelpClick}
                         className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 transition hover:text-red-700"
                       >
                         Buka Help
-                        <FaArrowRight className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </div>

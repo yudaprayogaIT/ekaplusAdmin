@@ -107,39 +107,75 @@ export default function AddWorkflowModal({
 
     setSelectedStates(
       workflowData.document_states.map((ds) => ({
+        id: ds.id,
+        workflow_id: ds.workflow_id,
         state_id: ds.state_id,
         state_name: ds.state_name,
         docstatus: ds.docstatus,
         editable: ds.editable,
         color: ds.color,
         icon: ds.icon,
+        created_by: ds.created_by,
+        updated_by: ds.updated_by,
       }))
     );
 
     setTransitions(
       workflowData.transitions.map((t) => ({
         id: t.id,
+        workflow_id: t.workflow_id,
         from_state_id: t.from_state_id,
         to_state_id: t.to_state_id,
         action: t.action,
         mode: t.mode,
         allowed_role_ids: t.allowed_role_ids,
         min_required: t.min_required,
+        condition_js: t.condition_js,
+        before_js: t.before_js,
+        after_js: t.after_js,
+        auto: t.auto,
+        schedule_cron: t.schedule_cron,
+        stop_if_fail: t.stop_if_fail,
+        created_by: t.created_by,
+        updated_by: t.updated_by,
       }))
     );
   };
 
+  const buildDocumentStatePayload = (
+    state: SelectedState,
+    originalState?: WorkflowWithDetails["document_states"][number],
+  ) => {
+    const payload = {
+      ...(originalState || {}),
+      ...state,
+      workflow_id:
+        state.workflow_id ||
+        originalState?.workflow_id ||
+        originalWorkflowData?.workflow.id,
+      ...(actorId > 0
+        ? {
+            created_by:
+              originalState?.created_by && originalState.created_by > 0
+                ? originalState.created_by
+                : state.created_by && state.created_by > 0
+                  ? state.created_by
+                  : actorId,
+            updated_by: actorId,
+          }
+        : {}),
+    };
+
+    if (!originalState) {
+      delete (payload as { id?: number }).id;
+    }
+
+    return payload;
+  };
+
   const buildDocumentStatesPayload = () => {
     if (!isEdit || !originalWorkflowData) {
-      return selectedStates.map((state) => ({
-        ...state,
-        ...(actorId > 0
-          ? {
-              created_by: actorId,
-              updated_by: actorId,
-            }
-          : {}),
-      }));
+      return selectedStates.map((state) => buildDocumentStatePayload(state));
     }
 
     const merged = originalWorkflowData.document_states.map((originalState) => {
@@ -150,19 +186,7 @@ export default function AddWorkflowModal({
       );
 
       return editedState
-        ? {
-            ...originalState,
-            ...editedState,
-            ...(actorId > 0
-              ? {
-                  created_by:
-                    originalState.created_by && originalState.created_by > 0
-                      ? originalState.created_by
-                      : actorId,
-                  updated_by: actorId,
-                }
-              : {}),
-          }
+        ? buildDocumentStatePayload(editedState, originalState)
         : originalState;
     });
 
@@ -175,82 +199,76 @@ export default function AddWorkflowModal({
               originalState.state_name === state.state_name
           )
       )
-      .map((state) => ({
-        ...state,
-        ...(actorId > 0
-          ? {
-              created_by: actorId,
-              updated_by: actorId,
-            }
-          : {}),
-      }));
+      .map((state) => buildDocumentStatePayload(state));
 
     return [...merged, ...appended];
   };
 
+  const buildTransitionPayload = (
+    transition: TransitionInput,
+    originalTransition?: WorkflowWithDetails["transitions"][number],
+  ) => {
+    const payload = {
+      ...(originalTransition || {}),
+      ...transition,
+      workflow_id:
+        transition.workflow_id ||
+        originalTransition?.workflow_id ||
+        originalWorkflowData?.workflow.id,
+      condition_js: transition.condition_js ?? originalTransition?.condition_js ?? "",
+      before_js: transition.before_js ?? originalTransition?.before_js ?? "",
+      after_js: transition.after_js ?? originalTransition?.after_js ?? "",
+      auto: transition.auto ?? originalTransition?.auto ?? false,
+      schedule_cron:
+        transition.schedule_cron ?? originalTransition?.schedule_cron ?? "",
+      stop_if_fail:
+        transition.stop_if_fail ?? originalTransition?.stop_if_fail ?? true,
+      ...(actorId > 0
+        ? {
+            created_by:
+              originalTransition?.created_by && originalTransition.created_by > 0
+                ? originalTransition.created_by
+                : transition.created_by && transition.created_by > 0
+                  ? transition.created_by
+                  : actorId,
+            updated_by: actorId,
+          }
+        : {}),
+    };
+
+    if (!originalTransition) {
+      delete (payload as { id?: number }).id;
+    }
+
+    return payload;
+  };
+
   const buildTransitionsPayload = () => {
     if (!isEdit || !originalWorkflowData) {
-      return transitions.map((transition) => ({
-        ...transition,
-        ...(actorId > 0
-          ? {
-              created_by: actorId,
-              updated_by: actorId,
-            }
-          : {}),
-      }));
+      return transitions.map((transition) => buildTransitionPayload(transition));
     }
 
     const merged = originalWorkflowData.transitions.map((originalTransition) => {
       const editedTransition = transitions.find(
         (transition) =>
-          (transition as { id?: number }).id === originalTransition.id ||
-          (
-            transition.from_state_id === originalTransition.from_state_id &&
-            transition.to_state_id === originalTransition.to_state_id &&
-            transition.action === originalTransition.action
-          )
+          transition.id !== undefined &&
+          transition.id === originalTransition.id
       );
 
       return editedTransition
-        ? {
-            ...originalTransition,
-            ...editedTransition,
-            ...(actorId > 0
-              ? {
-                  created_by:
-                    originalTransition.created_by && originalTransition.created_by > 0
-                      ? originalTransition.created_by
-                      : actorId,
-                  updated_by: actorId,
-                }
-              : {}),
-          }
+        ? buildTransitionPayload(editedTransition, originalTransition)
         : originalTransition;
     });
 
     const appended = transitions
       .filter(
         (transition) =>
+          transition.id === undefined ||
           !originalWorkflowData.transitions.some(
-            (originalTransition) =>
-              (transition as { id?: number }).id === originalTransition.id ||
-              (
-                transition.from_state_id === originalTransition.from_state_id &&
-                transition.to_state_id === originalTransition.to_state_id &&
-                transition.action === originalTransition.action
-              )
+            (originalTransition) => transition.id === originalTransition.id
           )
       )
-      .map((transition) => ({
-        ...transition,
-        ...(actorId > 0
-          ? {
-              created_by: actorId,
-              updated_by: actorId,
-            }
-          : {}),
-      }));
+      .map((transition) => buildTransitionPayload(transition));
 
     return [...merged, ...appended];
   };
@@ -437,7 +455,6 @@ export default function AddWorkflowModal({
           },
           token
         );
-        console.log(payload)
       } else {
         // POST for create
         response = await apiFetch(
@@ -458,6 +475,8 @@ export default function AddWorkflowModal({
         );
       }
 
+      const shouldReloadPage = isEdit && response.status === 200;
+
       // Trigger event for refresh
       window.dispatchEvent(new Event("ekatalog:workflows_update"));
 
@@ -469,6 +488,10 @@ export default function AddWorkflowModal({
       });
       onClose();
       resetForm();
+
+      if (shouldReloadPage) {
+        window.location.reload();
+      }
     } catch (error) {
       alert(
         error instanceof Error

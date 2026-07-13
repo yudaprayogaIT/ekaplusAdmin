@@ -16,12 +16,21 @@ import { Role } from "./WorkflowList";
 
 export type TransitionInput = {
   id?: number;
+  workflow_id?: number;
   from_state_id: number;
   to_state_id: number;
   action: string;
   mode: "single" | "parallel" | "sequence";
   allowed_role_ids: number[];
   min_required: number;
+  condition_js?: string;
+  before_js?: string;
+  after_js?: string;
+  auto?: boolean;
+  schedule_cron?: string;
+  stop_if_fail?: boolean;
+  created_by?: number;
+  updated_by?: number;
 };
 
 type Props = {

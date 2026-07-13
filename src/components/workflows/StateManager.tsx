@@ -20,12 +20,16 @@ export type GlobalState = {
 };
 
 export type SelectedState = {
+  id?: number;
+  workflow_id?: number;
   state_id: number;
   state_name: string;
   docstatus: number;
   editable: boolean;
   color?: string;
   icon?: string;
+  created_by?: number;
+  updated_by?: number;
 };
 
 type Props = {
