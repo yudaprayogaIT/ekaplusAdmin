@@ -36,7 +36,7 @@ import {
 } from "@/lib/profileFeatureTour";
 import { RESET_PASSWORD_TOUR_TOTAL_STEPS } from "@/lib/resetPasswordTour";
 import { OPEN_LOGIN_MODAL_EVENT } from "@/lib/loginPrompt";
-import { FaArrowRight, FaKey, FaSignInAlt } from "react-icons/fa";
+import { FaKey, FaSignInAlt } from "react-icons/fa";
 import type { Driver } from "driver.js";
 
 export default function UserMenu() {
@@ -317,20 +317,30 @@ export default function UserMenu() {
   useEffect(() => {
     if (!showProfileCoachmark || typeof window === "undefined") return;
 
-    const handleKeyDown = () => {
-      markFeatureTourSeen(profileFeatureTourConfig);
+    const dismissHelpNotice = () => {
       clearPendingFeatureTourStep(profileFeatureTourConfig);
+      clearFeatureTourFollowUpStep(profileFeatureTourConfig);
       setShowProfileCoachmark(false);
+      setShowHelpHoverCard(false);
+      setHoveringHelpCard(false);
+    };
+
+    const autoHideTimer = window.setTimeout(() => {
+      dismissHelpNotice();
+    }, 5000);
+
+    const handleKeyDown = () => {
+      dismissHelpNotice();
     };
 
     window.addEventListener("keydown", handleKeyDown, true);
     return () => {
+      window.clearTimeout(autoHideTimer);
       window.removeEventListener("keydown", handleKeyDown, true);
     };
   }, [showProfileCoachmark]);
 
   const acknowledgeProfileCoachmark = () => {
-    markFeatureTourSeen(profileFeatureTourConfig);
     clearPendingFeatureTourStep(profileFeatureTourConfig);
     clearFeatureTourFollowUpStep(profileFeatureTourConfig);
     setShowProfileCoachmark(false);
@@ -339,7 +349,6 @@ export default function UserMenu() {
   };
 
   const handleHelpClick = () => {
-    markFeatureTourSeen(profileFeatureTourConfig);
     clearPendingFeatureTourStep(profileFeatureTourConfig);
     clearFeatureTourFollowUpStep(profileFeatureTourConfig);
     setShowProfileCoachmark(false);

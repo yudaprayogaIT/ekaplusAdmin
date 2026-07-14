@@ -146,6 +146,13 @@ export default function AddWorkflowModal({
     state: SelectedState,
     originalState?: WorkflowWithDetails["document_states"][number],
   ) => {
+    const payloadActorId =
+      actorId ||
+      originalWorkflowData?.workflow.updated_by ||
+      originalWorkflowData?.workflow.created_by ||
+      workflow?.workflow.updated_by ||
+      workflow?.workflow.created_by ||
+      0;
     const payload = {
       ...(originalState || {}),
       ...state,
@@ -153,15 +160,15 @@ export default function AddWorkflowModal({
         state.workflow_id ||
         originalState?.workflow_id ||
         originalWorkflowData?.workflow.id,
-      ...(actorId > 0
+      ...(payloadActorId > 0
         ? {
             created_by:
               originalState?.created_by && originalState.created_by > 0
                 ? originalState.created_by
                 : state.created_by && state.created_by > 0
                   ? state.created_by
-                  : actorId,
-            updated_by: actorId,
+                  : payloadActorId,
+            updated_by: payloadActorId,
           }
         : {}),
     };
@@ -178,36 +185,29 @@ export default function AddWorkflowModal({
       return selectedStates.map((state) => buildDocumentStatePayload(state));
     }
 
-    const merged = originalWorkflowData.document_states.map((originalState) => {
-      const editedState = selectedStates.find(
-        (state) =>
-          state.state_id === originalState.state_id ||
-          state.state_name === originalState.state_name
+    return selectedStates.map((state) => {
+      const originalState = originalWorkflowData.document_states.find(
+        (item) =>
+          (state.id !== undefined && item.id === state.id) ||
+          item.state_id === state.state_id ||
+          item.state_name === state.state_name
       );
 
-      return editedState
-        ? buildDocumentStatePayload(editedState, originalState)
-        : originalState;
+      return buildDocumentStatePayload(state, originalState);
     });
-
-    const appended = selectedStates
-      .filter(
-        (state) =>
-          !originalWorkflowData.document_states.some(
-            (originalState) =>
-              originalState.state_id === state.state_id ||
-              originalState.state_name === state.state_name
-          )
-      )
-      .map((state) => buildDocumentStatePayload(state));
-
-    return [...merged, ...appended];
   };
 
   const buildTransitionPayload = (
     transition: TransitionInput,
     originalTransition?: WorkflowWithDetails["transitions"][number],
   ) => {
+    const payloadActorId =
+      actorId ||
+      originalWorkflowData?.workflow.updated_by ||
+      originalWorkflowData?.workflow.created_by ||
+      workflow?.workflow.updated_by ||
+      workflow?.workflow.created_by ||
+      0;
     const payload = {
       ...(originalTransition || {}),
       ...transition,
@@ -223,15 +223,15 @@ export default function AddWorkflowModal({
         transition.schedule_cron ?? originalTransition?.schedule_cron ?? "",
       stop_if_fail:
         transition.stop_if_fail ?? originalTransition?.stop_if_fail ?? true,
-      ...(actorId > 0
+      ...(payloadActorId > 0
         ? {
             created_by:
               originalTransition?.created_by && originalTransition.created_by > 0
                 ? originalTransition.created_by
                 : transition.created_by && transition.created_by > 0
                   ? transition.created_by
-                  : actorId,
-            updated_by: actorId,
+                  : payloadActorId,
+            updated_by: payloadActorId,
           }
         : {}),
     };
@@ -243,34 +243,47 @@ export default function AddWorkflowModal({
     return payload;
   };
 
+  const getTransitionsForSelectedStates = () => {
+    const selectedStateIds = new Set(
+      selectedStates.map((state) => state.state_id),
+    );
+
+    return transitions.filter(
+      (transition) =>
+        selectedStateIds.has(transition.from_state_id) &&
+        selectedStateIds.has(transition.to_state_id),
+    );
+  };
+
   const buildTransitionsPayload = () => {
+    const currentTransitions = getTransitionsForSelectedStates();
+
     if (!isEdit || !originalWorkflowData) {
-      return transitions.map((transition) => buildTransitionPayload(transition));
+      return currentTransitions.map((transition) => buildTransitionPayload(transition));
     }
 
-    const merged = originalWorkflowData.transitions.map((originalTransition) => {
-      const editedTransition = transitions.find(
-        (transition) =>
+    return currentTransitions.map((transition) => {
+      const originalTransition = originalWorkflowData.transitions.find(
+        (state) =>
           transition.id !== undefined &&
-          transition.id === originalTransition.id
+          transition.id === state.id
       );
 
-      return editedTransition
-        ? buildTransitionPayload(editedTransition, originalTransition)
-        : originalTransition;
+      return buildTransitionPayload(transition, originalTransition);
     });
+  };
 
-    const appended = transitions
-      .filter(
+  const handleSelectedStatesChange = (nextStates: SelectedState[]) => {
+    const nextStateIds = new Set(nextStates.map((state) => state.state_id));
+
+    setSelectedStates(nextStates);
+    setTransitions((currentTransitions) =>
+      currentTransitions.filter(
         (transition) =>
-          transition.id === undefined ||
-          !originalWorkflowData.transitions.some(
-            (originalTransition) => transition.id === originalTransition.id
-          )
-      )
-      .map((transition) => buildTransitionPayload(transition));
-
-    return [...merged, ...appended];
+          nextStateIds.has(transition.from_state_id) &&
+          nextStateIds.has(transition.to_state_id),
+      ),
+    );
   };
 
   // Reset form
@@ -763,7 +776,7 @@ export default function AddWorkflowModal({
                   <StateManager
                     globalStates={globalStates}
                     selectedStates={selectedStates}
-                    onChange={setSelectedStates}
+                    onChange={handleSelectedStatesChange}
                     onAddState={() => setStateModalOpen(true)}
                   />
 
