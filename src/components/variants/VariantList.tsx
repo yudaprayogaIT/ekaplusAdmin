@@ -28,7 +28,6 @@ import {
   AnimatePresence,
 } from "framer-motion";
 import {
-  fetchVariants,
   deleteVariant,
 } from "@/services/variantService";
 import {
@@ -49,7 +48,6 @@ import FilterBuilder from "@/components/filters/FilterBuilder";
 import { useFilters } from "@/hooks/useFilters";
 import { VARIANT_FILTER_FIELDS } from "@/config/filterFields";
 import { FilterTriple } from "@/types/filter";
-import { groupItemsByPattern } from "@/utils/itemGrouping";
 import {
   buildSearchParams,
   parseSearchParams,
@@ -62,6 +60,64 @@ type ItemVariant = {
   created_at?: string;
   updated_at?: string;
 };
+
+type VariantApiRow = {
+  id: number;
+  item:
+    | number
+    | {
+        id?: number | string;
+        item_code?: string;
+        item_name?: string;
+        uom?: string;
+        image?: string;
+        item_desc?: string;
+        item_category?: string;
+        item_group?: string;
+        disabled?: number;
+      };
+  parent_id: number;
+  idx: number;
+  created_at?: string;
+  updated_at?: string;
+};
+
+function toNumber(value: number | string | null | undefined): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function mapVariantItem(rawItem: VariantApiRow["item"]): Item {
+  if (typeof rawItem === "object" && rawItem !== null) {
+    const itemId = toNumber(rawItem.id) || 0;
+    return {
+      id: itemId,
+      code: rawItem.item_code || `ITEM-${itemId}`,
+      name: rawItem.item_name || `Item ${itemId}`,
+      color: "",
+      type: "",
+      uom: rawItem.uom || "",
+      image: getFileUrl(rawItem.image),
+      description: rawItem.item_desc,
+      category: rawItem.item_category,
+      group: rawItem.item_group,
+      disabled: rawItem.disabled,
+    };
+  }
+
+  return {
+    id: rawItem,
+    code: `ITEM-${rawItem}`,
+    name: `Item ${rawItem}`,
+    color: "",
+    type: "",
+    uom: "",
+  };
+}
 
 type SortField =
   | "name"
@@ -82,7 +138,6 @@ export default function VariantList() {
 
   const [variants, setVariants] = useState<ItemVariant[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [items, setItems] = useState<Item[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [staticDataLoaded, setStaticDataLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -118,6 +173,8 @@ export default function VariantList() {
   });
 
   // Sync state to URL whenever filter, sort, page, or search changes
+  const currentQueryString = searchParams.toString();
+
   useEffect(() => {
     const params = buildSearchParams({
       filters,
@@ -127,9 +184,22 @@ export default function VariantList() {
       searchQuery,
     });
 
-    const newUrl = params.toString() ? `?${params.toString()}` : "";
+    const nextQueryString = params.toString();
+    if (nextQueryString === currentQueryString) {
+      return;
+    }
+
+    const newUrl = nextQueryString ? `?${nextQueryString}` : "";
     router.replace(newUrl, { scroll: false });
-  }, [filters, sortField, sortDirection, currentPage, searchQuery, router]);
+  }, [
+    filters,
+    sortField,
+    sortDirection,
+    currentPage,
+    searchQuery,
+    currentQueryString,
+    router,
+  ]);
 
   // Handle filter apply
   function handleApplyFilters(newFilters: FilterTriple[]) {
@@ -167,7 +237,18 @@ export default function VariantList() {
         limit: number;
         page: number;
       } = {
-        fields: ["*"],
+        fields: [
+          "*",
+          "item.id",
+          "item.item_code",
+          "item.item_name",
+          "item.uom",
+          "item.image",
+          "item.item_desc",
+          "item.item_category",
+          "item.item_group",
+          "item.disabled",
+        ],
         limit: 20,
         page: page,
       };
@@ -220,52 +301,23 @@ export default function VariantList() {
           totalItems = 0;
         }
 
-        variantsData = json.data.map(
-          (v: {
-            id: number;
-            item: number;
-            parent_id: number;
-            idx: number;
-            created_at?: string;
-            updated_at?: string;
-          }) => {
-            const item = items.find((i) => i.id === v.item);
-            if (!item) {
-              return {
-                id: v.id,
-                item: {
-                  id: v.item,
-                  code: `ITEM-${v.item}`,
-                  name: `Item ${v.item} (Not Found)`,
-                  color: "",
-                  type: "",
-                  uom: "",
-                },
-                productid: v.parent_id,
-                displayOrder: v.idx,
-                created_at: v.created_at,
-                updated_at: v.updated_at,
-              };
-            }
-
-            return {
-              id: v.id,
-              item: item,
-              productid: v.parent_id,
-              displayOrder: v.idx,
-              created_at: v.created_at,
-              updated_at: v.updated_at,
-            };
-          }
-        );
+        variantsData = json.data.map((v: VariantApiRow) => ({
+          id: v.id,
+          item: mapVariantItem(v.item),
+          productid: v.parent_id,
+          displayOrder: v.idx,
+          created_at: v.created_at,
+          updated_at: v.updated_at,
+        }));
       }
 
       return { variantsData, totalItems, totalPages };
     },
-    [token, items]
+    [token]
   );
 
-  // Load static data (categories, products, items) once on mount
+  // Load static category and product data once on mount. Variant item details
+  // are fetched through nested item fields in the variant query.
   useEffect(() => {
     if (!token) return;
 
@@ -349,73 +401,12 @@ export default function VariantList() {
           setProducts(productsData);
         }
 
-        // Load items (including disabled) so mapped variants still resolve correctly
-        const itemRows = await fetchAllQueryRows<{
-          id: number;
-          item_code: string;
-          item_name: string;
-          item_color?: string;
-          ekatalog_type?: string;
-          uom: string;
-          image?: string;
-          item_desc?: string;
-          item_category?: string;
-          item_group?: string;
-          disabled?: number;
-        }>({
-          endpoint: API_CONFIG.ENDPOINTS.ITEM,
-          spec: { fields: ["*"] },
-          token,
-          requestInit: { headers },
-        });
-        if (itemRows.length > 0) {
-          const itemsData = itemRows.map(
-            (i: {
-              id: number;
-              item_code: string;
-              item_name: string;
-              item_color?: string;
-              ekatalog_type?: string;
-              uom: string;
-              image?: string;
-              item_desc?: string;
-              item_category?: string;
-              item_group?: string;
-              disabled?: number;
-            }) => ({
-              id: i.id,
-              code: i.item_code,
-              name: i.item_name,
-              color: i.item_color || "",
-              type: i.ekatalog_type || "",
-              uom: i.uom,
-              image: getFileUrl(i.image),
-              description: i.item_desc,
-              category: i.item_category,
-              group: i.item_group,
-              disabled: i.disabled,
-            })
-          );
-          setItems(itemsData);
-        }
-
         setStaticDataLoaded(true);
       } catch (error) {
       }
     }
 
     loadStatic();
-
-    // Reload items when they're updated
-    const handleItemsUpdate = () => {
-      loadStatic();
-    };
-
-    window.addEventListener("ekatalog:items_update", handleItemsUpdate);
-    return () => {
-      window.removeEventListener("ekatalog:items_update", handleItemsUpdate);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   // Reset to first page when sort changes (but not on initial mount)
@@ -423,7 +414,6 @@ export default function VariantList() {
     if (staticDataLoaded && !isInitialMount.current) {
       setCurrentPage(1);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [staticDataLoaded, sortField, sortDirection]);
 
   // Load variants with filters and pagination (only after static data is loaded)
@@ -492,12 +482,14 @@ export default function VariantList() {
     };
   }, [staticDataLoaded, token, filters, sortField, sortDirection, currentPage, loadVariants]);
 
-  // Helper to refresh variants from API
   async function refreshVariants() {
     if (!token) return;
     try {
-      const variantsData = await fetchVariants(token, items);
+      const { variantsData, totalItems, totalPages } =
+        await loadVariants(filters, sortField, sortDirection, currentPage);
       setVariants(variantsData);
+      setTotalItems(totalItems);
+      setTotalPages(totalPages);
       window.dispatchEvent(new Event("ekatalog:variants_update"));
     } catch (err) {
     }
@@ -553,8 +545,6 @@ export default function VariantList() {
 
   // Group by product
   const groupedByProduct = useMemo(() => {
-    const startTime = performance.now();
-
     // Optimize: Group variants by productid first
     const variantsByProduct = new Map<number, ItemVariant[]>();
     filteredVariants.forEach((variant) => {
@@ -572,9 +562,13 @@ export default function VariantList() {
       }))
       .filter((group) => group.items.length > 0);
 
-    const endTime = performance.now();
     return result;
   }, [products, filteredVariants]);
+
+  const uniqueItemCount = useMemo(
+    () => new Set(variants.map((variant) => variant.item.id)).size,
+    [variants],
+  );
 
   if (loading) {
     return (
@@ -634,7 +628,7 @@ export default function VariantList() {
         <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-5 border-2 border-purple-200">
           <div className="text-sm text-purple-700 font-medium mb-1">Items</div>
           <div className="text-3xl font-bold text-purple-900">
-            {items.length}
+            {uniqueItemCount}
           </div>
         </div>
         <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-5 border-2 border-orange-200">

@@ -71,8 +71,6 @@ interface ItemApiResponse {
   item_desc?: string;
   item_category: string;
   item_group: string;
-  ekatalog_type: string;
-  item_color: string;
   image?: string;
   disabled: number;
   created_by: string;
@@ -95,6 +93,28 @@ interface ProductApiResponse {
   owner?: number | string | { id: number; full_name: string };
 }
 
+function mapItemRows(rows: ItemApiResponse[]): Item[] {
+  return rows
+    .map((item: ItemApiResponse): Item | null => {
+      const id = toNumber(item.id);
+      if (id === null) return null;
+      return {
+        id,
+        code: item.item_code,
+        name: item.item_name,
+        uom: item.uom || "",
+        description: item.item_desc || "",
+        category: item.item_category,
+        group: item.item_group,
+        type: "",
+        color: "",
+        image: getFileUrl(item.image),
+        disabled: item.disabled,
+      };
+    })
+    .filter((item): item is Item => item !== null);
+}
+
 export default function ProductList() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -106,6 +126,8 @@ export default function ProductList() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [availableItems, setAvailableItems] = useState<Item[]>([]);
+  const [itemsLoaded, setItemsLoaded] = useState(false);
+  const [itemsLoading, setItemsLoading] = useState(false);
   const [staticDataLoaded, setStaticDataLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ code?: number; message: string } | null>(
@@ -406,7 +428,35 @@ export default function ProductList() {
     initialFilters: urlState.filters,
   });
 
+  const loadAvailableItems = useCallback(
+    async (force = false) => {
+      if (!token || itemsLoading || (itemsLoaded && !force)) return;
+
+      setItemsLoading(true);
+      try {
+        const headers = getAuthHeaders(token);
+        const itemRows = await fetchAllQueryRows<ItemApiResponse>({
+          endpoint: API_CONFIG.ENDPOINTS.ITEM,
+          spec: { fields: ["*"] },
+          token,
+          requestInit: { headers },
+        });
+
+        setAvailableItems(mapItemRows(itemRows));
+        setItemsLoaded(true);
+      } catch {
+        // Keep the modal usable with the variants already attached to products.
+        setItemsLoaded(false);
+      } finally {
+        setItemsLoading(false);
+      }
+    },
+    [itemsLoaded, itemsLoading, token],
+  );
+
   // Sync state to URL whenever filter, sort, page, or search changes
+  const currentQueryString = searchParams.toString();
+
   useEffect(() => {
     const params = buildSearchParams({
       filters,
@@ -417,7 +467,12 @@ export default function ProductList() {
       showHotDealsOnly,
     });
 
-    const newUrl = params.toString() ? `?${params.toString()}` : "";
+    const nextQueryString = params.toString();
+    if (nextQueryString === currentQueryString) {
+      return;
+    }
+
+    const newUrl = nextQueryString ? `?${nextQueryString}` : "";
     router.replace(newUrl, { scroll: false });
   }, [
     filters,
@@ -426,6 +481,7 @@ export default function ProductList() {
     currentPage,
     searchQuery,
     showHotDealsOnly,
+    currentQueryString,
     router,
   ]);
 
@@ -473,7 +529,8 @@ export default function ProductList() {
     loadDataWithFilters(newFilters, 1);
   }
 
-  // Load static data (categories and items) once on mount
+  // Load static category data once on mount. Items are loaded lazily when
+  // the add/edit modal needs the selector data.
   useEffect(() => {
     if (!token) return;
 
@@ -504,51 +561,25 @@ export default function ProductList() {
         setCategories(categoriesData);
       }
 
-      // Load items (including disabled) so mapped variants can still be resolved
-      const itemRows = await fetchAllQueryRows<ItemApiResponse>({
-        endpoint: API_CONFIG.ENDPOINTS.ITEM,
-        spec: { fields: ["*"] },
-        token,
-        requestInit: { headers },
-      });
-      if (itemRows.length > 0) {
-        const itemsData: Array<Item | null> = itemRows.map((item: ItemApiResponse) => {
-            const id = toNumber(item.id);
-            if (id === null) return null;
-            return {
-              id,
-              code: item.item_code,
-              name: item.item_name,
-              uom: item.uom || "",
-              description: item.item_desc || "",
-              category: item.item_category,
-              group: item.item_group,
-              type: item.ekatalog_type,
-              color: item.item_color,
-              image: getFileUrl(item.image),
-              disabled: item.disabled,
-            };
-          });
-        setAvailableItems(itemsData.filter((item): item is Item => item !== null));
-      }
-
-      // Mark static data as loaded
       setStaticDataLoaded(true);
     }
 
     loadStatic();
 
-    // Reload items when they're updated
+  }, [token]);
+
+  useEffect(() => {
     const handleItemsUpdate = () => {
-      loadStatic();
+      if (itemsLoaded) {
+        void loadAvailableItems(true);
+      }
     };
 
     window.addEventListener("ekatalog:items_update", handleItemsUpdate);
     return () => {
       window.removeEventListener("ekatalog:items_update", handleItemsUpdate);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [itemsLoaded, loadAvailableItems]);
 
   // Initial load with filters from URL/localStorage (only after static data is loaded)
   useEffect(() => {
@@ -651,6 +682,7 @@ export default function ProductList() {
   function handleAdd() {
     setModalInitial(null);
     setModalOpen(true);
+    void loadAvailableItems();
   }
 
   // Convert Product (with ItemVariant[]) to ProductFormData (with Item[])
@@ -668,6 +700,7 @@ export default function ProductList() {
   function handleEdit(p: Product) {
     setModalInitial(convertToModalFormat(p));
     setModalOpen(true);
+    void loadAvailableItems();
   }
 
   function openDetail(p: Product) {
@@ -1010,6 +1043,7 @@ export default function ProductList() {
         initial={modalInitial}
         categories={categories}
         availableItems={selectableItems}
+        itemsLoading={itemsLoading}
       />
 
       <ProductDetailModal

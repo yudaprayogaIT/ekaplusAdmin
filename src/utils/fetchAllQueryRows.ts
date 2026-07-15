@@ -9,7 +9,19 @@ type QuerySpec = {
   filters?: unknown[];
   order_by?: [string, string][];
   search?: string;
+  limit?: number;
+  page?: number;
 };
+
+function getPageSignature(rows: unknown[]): string {
+  return rows
+    .map((row) => {
+      if (!row || typeof row !== "object") return JSON.stringify(row);
+      const candidate = row as Record<string, unknown>;
+      return String(candidate.id ?? candidate.ID ?? candidate.name ?? JSON.stringify(candidate));
+    })
+    .join("|");
+}
 
 export async function fetchAllQueryRows<T>({
   endpoint,
@@ -26,11 +38,14 @@ export async function fetchAllQueryRows<T>({
 }): Promise<T[]> {
   const rows: T[] = [];
   let page = 1;
+  let previousPageSignature = "";
+  const requestedLimit = Number(spec.limit || DEFAULT_PAGE_SIZE);
 
   while (true) {
     const response = await apiFetch(
       getQueryUrl(endpoint, {
         ...spec,
+        limit: requestedLimit,
         page,
       }),
       {
@@ -47,13 +62,27 @@ export async function fetchAllQueryRows<T>({
 
     const json = await response.json();
     const pageRows = Array.isArray(json?.data) ? (json.data as T[]) : [];
+    const pageSignature = getPageSignature(pageRows);
+
+    if (page > 1 && pageRows.length > 0 && pageSignature === previousPageSignature) {
+      break;
+    }
+
     rows.push(...pageRows);
 
-    const perPage = Number(json?.meta?.per_page || DEFAULT_PAGE_SIZE);
+    const total = Number(
+      json?.meta?.total || json?.total || json?.count || json?.total_count || 0,
+    );
+    const perPage = Number(json?.meta?.per_page || json?.per_page || requestedLimit);
+    if (total > 0 && rows.length >= total) {
+      break;
+    }
+
     if (pageRows.length < perPage || pageRows.length === 0) {
       break;
     }
 
+    previousPageSignature = pageSignature;
     page += 1;
   }
 

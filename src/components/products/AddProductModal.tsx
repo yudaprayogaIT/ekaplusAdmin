@@ -37,6 +37,7 @@ interface AddProductModalProps {
   initial?: ProductFormData | null;
   categories: Category[];
   availableItems: Item[];
+  itemsLoading?: boolean;
 }
 
 function isItemVariant(value: unknown): value is ItemVariant {
@@ -371,6 +372,7 @@ export default function AddProductModal({
   initial,
   categories,
   availableItems,
+  itemsLoading = false,
 }: AddProductModalProps) {
   const { token } = useAuth();
   const [name, setName] = useState("");
@@ -715,15 +717,22 @@ export default function AddProductModal({
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => setItemSelectorOpen(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors"
+                    disabled={itemsLoading}
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <FaPlus className="w-3.5 h-3.5" />
-                    Pilih Item
+                    {itemsLoading ? "Memuat item..." : "Pilih Item"}
                   </motion.button>
                 </div>
 
+                {itemsLoading && (
+                  <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg text-sm text-purple-700">
+                    Mengambil daftar item untuk varian produk...
+                  </div>
+                )}
+
                 {/* Smart Suggestions */}
-                {name.trim() && (
+                {name.trim() && !itemsLoading && (
                   <VariantSuggestions
                     productName={name}
                     items={availableItems}
