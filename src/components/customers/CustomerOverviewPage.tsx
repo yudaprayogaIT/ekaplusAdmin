@@ -197,12 +197,6 @@ function extractLinkId(value: unknown): number | undefined {
   return undefined;
 }
 
-function isBranchCustomerSearchQuery(query: string): boolean {
-  const normalized = query.trim();
-  if (!normalized) return false;
-  return /\d/.test(normalized);
-}
-
 function getStatus(value: unknown): CustomerStatus {
   const normalized = String(value || "")
     .trim()
@@ -420,14 +414,10 @@ export default function CustomerOverviewPage() {
           const trimmedSearch = debouncedSearch.trim();
           const baseBcSpec = {
             page,
-            ...(trimmedSearch && isBranchCustomerSearchQuery(trimmedSearch)
-              ? { search: trimmedSearch }
-              : {}),
             order_by: [[orderByField, sortDirection]],
           };
 
-          let bcFilters: unknown[] | undefined;
-          if (trimmedSearch && !isBranchCustomerSearchQuery(trimmedSearch)) {
+          const findMatchingGcIds = async (): Promise<number[]> => {
             const gcSearchRes = await apiFetch(
               getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, {
                 fields: ["id"],
@@ -450,70 +440,84 @@ export default function CustomerOverviewPage() {
               ? gcSearchJson.data
               : [];
 
-            const matchingGcIds = gcSearchRows
+            return gcSearchRows
               .map((row) => toNumber(row.id))
               .filter((id): id is number => typeof id === "number");
+          };
 
-            if (matchingGcIds.length === 0) {
-              setTabData((current) => ({
-                ...current,
-                bc: {
-                  cards: [],
-                  currentPage: 1,
-                  hasMore: false,
-                },
-              }));
-              setTabStats((current) => ({
-                ...current,
-                bc: 0,
-              }));
-              setError(null);
-              return;
-            }
-
-            bcFilters = [["gcid", "in", matchingGcIds]];
+          let bcFilters: unknown[] | undefined;
+          const searchesBcid = Boolean(trimmedSearch);
+          if (trimmedSearch) {
+            // The generic search for branch_customer does not consistently
+            // include its ID field (`name`). Always check that field directly;
+            // BCID prefixes and formats vary between branches.
+            bcFilters = [["name", "like", `%${trimmedSearch.toUpperCase()}%`]];
           }
 
-          let bcRes = await apiFetch(
-            getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, {
-              fields: ["id", "name", "branch", "gcid", "status", "updated_at"],
-              ...baseBcSpec,
-              ...(bcFilters ? { filters: bcFilters } : {}),
-            }),
-            { method: "GET", cache: "no-store" },
-            token,
-          );
-
-          if (!bcRes.ok && bcRes.status >= 500) {
-            bcRes = await apiFetch(
+          const fetchBcPage = async (filters?: unknown[]) => {
+            let response = await apiFetch(
               getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, {
                 fields: [
                   "id",
                   "name",
                   "branch",
                   "gcid",
-                  "disabled",
+                  "status",
                   "updated_at",
                 ],
                 ...baseBcSpec,
-                ...(bcFilters ? { filters: bcFilters } : {}),
+                ...(filters ? { filters } : {}),
               }),
               { method: "GET", cache: "no-store" },
               token,
             );
+
+            if (!response.ok && response.status >= 500) {
+              response = await apiFetch(
+                getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, {
+                  fields: [
+                    "id",
+                    "name",
+                    "branch",
+                    "gcid",
+                    "disabled",
+                    "updated_at",
+                  ],
+                  ...baseBcSpec,
+                  ...(filters ? { filters } : {}),
+                }),
+                { method: "GET", cache: "no-store" },
+                token,
+              );
+            }
+
+            if (!response.ok) {
+              throw new Error(`Failed to fetch BC (${response.status})`);
+            }
+
+            const json = await response.json();
+            const rows: BranchCustomerApiResponse[] = Array.isArray(json?.data)
+              ? json.data
+              : [];
+            return {
+              rows,
+              meta: (json?.meta || null) as QueryMeta | null,
+            };
+          };
+
+          let bcResult = await fetchBcPage(bcFilters);
+
+          // If it is not a BCID match, retain the existing customer-name
+          // search behavior through the related group customer.
+          if (searchesBcid && bcResult.rows.length === 0) {
+            const matchingGcIds = await findMatchingGcIds();
+            if (matchingGcIds.length > 0) {
+              bcResult = await fetchBcPage([["gcid", "in", matchingGcIds]]);
+            }
           }
 
-          if (!bcRes.ok) {
-            throw new Error(`Failed to fetch BC (${bcRes.status})`);
-          }
-
-          const bcJson = await bcRes.json();
-          const bcRows: BranchCustomerApiResponse[] = Array.isArray(
-            bcJson?.data,
-          )
-            ? bcJson.data
-            : [];
-          const meta = (bcJson?.meta || null) as QueryMeta | null;
+          const bcRows = bcResult.rows;
+          const meta = bcResult.meta;
 
           const branchIds = Array.from(
             new Set(

@@ -99,12 +99,6 @@ function toNumber(value: unknown): number | undefined {
   return undefined;
 }
 
-function isBranchCustomerCodeSearch(query: string): boolean {
-  const normalized = query.trim().toUpperCase();
-  if (!normalized || normalized.includes(" ")) return false;
-  return /^[A-Z]{2,}\d{2,}$/.test(normalized);
-}
-
 export default function BCList() {
   const { token, isAuthenticated } = useAuth();
 
@@ -138,7 +132,6 @@ export default function BCList() {
             : sortField;
 
       const trimmedSearchQuery = searchQuery.trim();
-      const isBcidSearch = isBranchCustomerCodeSearch(trimmedSearchQuery);
       const bcSpec: {
         fields: string[];
         order_by: [string, string][];
@@ -150,38 +143,47 @@ export default function BCList() {
       };
 
       if (trimmedSearchQuery) {
-        if (isBcidSearch) {
-          bcSpec.search = trimmedSearchQuery;
-        } else {
-          const gcSearchRows = await fetchAllQueryRows<GroupCustomerLookupRow>({
-            endpoint: API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
-            spec: {
-              fields: ["id", "name", "gc_name", "gpid"],
-              search: trimmedSearchQuery,
-            },
-            token,
-            errorMessage: "Failed to fetch group customer",
-          });
-
-          const matchingGcIds = gcSearchRows
-            .map((row) => toNumber(row.id))
-            .filter((id): id is number => typeof id === "number");
-
-          if (matchingGcIds.length === 0) {
-            setBcs([]);
-            return;
-          }
-
-          bcSpec.filters = [["gcid", "in", matchingGcIds]];
-        }
+        // BCID is stored in `name`; do not assume any branch-specific prefix.
+        bcSpec.filters = [
+          ["name", "like", `%${trimmedSearchQuery.toUpperCase()}%`],
+        ];
       }
 
-      const bcRows = await fetchAllQueryRows<BranchCustomerApiResponse>({
+      let bcRows = await fetchAllQueryRows<BranchCustomerApiResponse>({
         endpoint: API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2,
         spec: bcSpec,
         token,
         errorMessage: "Failed to fetch branch customer",
       });
+
+      // Preserve searching by customer name when the query is not a BCID.
+      if (trimmedSearchQuery && bcRows.length === 0) {
+        const gcSearchRows = await fetchAllQueryRows<GroupCustomerLookupRow>({
+          endpoint: API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
+          spec: {
+            fields: ["id", "name", "gc_name", "gpid"],
+            search: trimmedSearchQuery,
+          },
+          token,
+          errorMessage: "Failed to fetch group customer",
+        });
+
+        const matchingGcIds = gcSearchRows
+          .map((row) => toNumber(row.id))
+          .filter((id): id is number => typeof id === "number");
+
+        if (matchingGcIds.length > 0) {
+          bcRows = await fetchAllQueryRows<BranchCustomerApiResponse>({
+            endpoint: API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2,
+            spec: {
+              ...bcSpec,
+              filters: [["gcid", "in", matchingGcIds]],
+            },
+            token,
+            errorMessage: "Failed to fetch branch customer",
+          });
+        }
+      }
 
       const gcIds = Array.from(
         new Set(
