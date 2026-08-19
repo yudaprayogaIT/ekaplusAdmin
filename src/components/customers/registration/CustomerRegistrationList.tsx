@@ -294,7 +294,7 @@ export function CustomerRegistrationList() {
   const loadMoreRef = React.useRef<HTMLDivElement | null>(null);
 
   // Sort state
-  const [sortField, setSortField] = useState<SortField>("created_at");
+  const [sortField, setSortField] = useState<SortField>("updated_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
 
@@ -923,9 +923,12 @@ export function CustomerRegistrationList() {
             "[data-tour='approve-registration-gp-change-button']",
           )
           ?.click();
-        await waitForElement("[data-tour='approve-registration-gp-search-input']", {
-          timeout: 5000,
-        });
+        await waitForElement(
+          "[data-tour='approve-registration-gp-search-input']",
+          {
+            timeout: 5000,
+          },
+        );
         setInputValue(
           "[data-tour='approve-registration-gp-search-input']",
           "DEMO SEJAHTERA ABADI GROUP",

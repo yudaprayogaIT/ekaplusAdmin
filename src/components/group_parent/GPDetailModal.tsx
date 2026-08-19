@@ -8,7 +8,6 @@ import {
   FaClock,
   FaEdit,
   FaSave,
-  FaStore,
   FaTimes,
   FaUsers,
 } from "react-icons/fa";
@@ -189,6 +188,11 @@ export function GPDetailModal({
   const [loadingChildren, setLoadingChildren] = useState(false);
   const [childGCs, setChildGCs] = useState<GroupCustomer[]>([]);
   const [childBCs, setChildBCs] = useState<BranchCustomer[]>([]);
+  const [expandedGcId, setExpandedGcId] = useState<number | null>(null);
+  const [selectedHierarchyNode, setSelectedHierarchyNode] = useState<{
+    type: "gc" | "bc";
+    id: number;
+  } | null>(null);
   const [hierarchyGp, setHierarchyGp] = useState<PolicyHierarchyGpRow | null>(
     null,
   );
@@ -237,6 +241,11 @@ export function GPDetailModal({
     if (isOpen && gp) {
       setActiveTab("hierarchy");
       setIsEditMode(false);
+      setExpandedGcId(null);
+      setSelectedHierarchyNode(null);
+      setChildGCs([]);
+      setChildBCs([]);
+      setLinkedNB(null);
       syncEditState(gp);
     }
   }, [gp, isOpen, syncEditState]);
@@ -661,6 +670,53 @@ export function GPDetailModal({
     [],
   );
 
+  const gpHierarchyTree = useMemo(() => {
+    const gcIds = new Set(childGCs.map((gc) => Number(gc.id)));
+    const bcsByGcId = new Map<number, BranchCustomer[]>();
+    const orphanBcs: BranchCustomer[] = [];
+    childBCs.forEach((bc) => {
+      const gcId = Number(bc.gc_id || 0);
+      if (!gcId || !gcIds.has(gcId)) {
+        orphanBcs.push(bc);
+        return;
+      }
+      const rows = bcsByGcId.get(gcId) || [];
+      rows.push(bc);
+      bcsByGcId.set(gcId, rows);
+    });
+    return {
+      gcs: childGCs.map((gc) => ({
+        gc,
+        bcs: bcsByGcId.get(Number(gc.id)) || [],
+      })),
+      orphanBcs,
+    };
+  }, [childBCs, childGCs]);
+
+  const selectedHierarchyDetail = useMemo(() => {
+    if (!selectedHierarchyNode) return null;
+    for (const node of gpHierarchyTree.gcs) {
+      if (
+        selectedHierarchyNode.type === "gc" &&
+        Number(node.gc.id) === selectedHierarchyNode.id
+      ) {
+        return { type: "gc" as const, gc: node.gc, bcs: node.bcs };
+      }
+      const bc = node.bcs.find(
+        (row) => Number(row.id) === selectedHierarchyNode.id,
+      );
+      if (selectedHierarchyNode.type === "bc" && bc) {
+        return { type: "bc" as const, gc: node.gc, bc };
+      }
+    }
+    const orphanBc = gpHierarchyTree.orphanBcs.find(
+      (row) => Number(row.id) === selectedHierarchyNode.id,
+    );
+    return selectedHierarchyNode.type === "bc" && orphanBc
+      ? { type: "bc" as const, bc: orphanBc }
+      : null;
+  }, [gpHierarchyTree, selectedHierarchyNode]);
+
   if (!gp) return null;
 
   return (
@@ -676,48 +732,33 @@ export function GPDetailModal({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="flex h-[94vh] w-full max-w-[96vw] 2xl:max-w-[1320px] flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl md:max-w-[92vw] md:rounded-3xl"
+            className="flex max-h-[94vh] w-full max-w-[96vw] 2xl:max-w-[1320px] flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl md:max-w-[92vw] md:rounded-3xl"
           >
-            <div className="border-b border-purple-200 bg-gradient-to-r from-purple-600 via-purple-500 to-fuchsia-500 px-4 py-4 md:px-6 md:py-5">
+            <header className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 md:px-6">
               <div className="flex items-start justify-between gap-4">
-                <div className="flex min-w-0 items-center gap-3 md:gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-white shadow-lg shadow-purple-900/20 backdrop-blur-sm md:h-14 md:w-14">
-                    <FaBuilding className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <h2 className="mb-1 text-xl font-bold text-white md:mb-2 md:text-2xl">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-3">
+                    <FaBuilding className="text-xl text-violet-600" />
+                    <h2 className="text-lg font-bold text-slate-900 md:text-xl">
                       Group Parent Details
                     </h2>
-                    <p className="text-sm text-purple-100">
-                      GPID: {gp.code || `GP${gp.id}`}
-                    </p>
                   </div>
+                  <p className="pl-8 text-xs font-semibold text-slate-500">GPID: {gp.code || `GP${gp.id}`}</p>
                 </div>
-
-                {/* <div className="flex items-center gap-2">
-                  {!isEditMode && (
-                    <button
-                      onClick={handleEditClick}
-                      className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-purple-700 transition-all hover:bg-purple-50"
-                    >
-                      <FaEdit className="h-3.5 w-3.5" />
-                      Edit Details
-                    </button>
-                  )}
-                  <button
-                    onClick={onClose}
-                    className="rounded-xl p-2 text-white transition-colors hover:bg-white/20"
-                  >
-                    <HiXMark className="h-6 w-6" />
-                  </button>
-                </div> */}
+                <button onClick={onClose} className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"><HiXMark className="h-5 w-5" /></button>
               </div>
-            </div>
+            </header>
 
-            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 p-4 md:p-5 xl:p-6">
-              <div className="grid min-h-0 gap-5 lg:grid-cols-[210px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)]">
-                <aside>
-                  <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:block lg:space-y-3 lg:overflow-visible lg:pb-0">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4 md:p-5">
+              <div className="grid min-h-0 gap-4 xl:grid-cols-[220px_minmax(0,1fr)]">
+                <aside className="xl:sticky xl:top-6 xl:self-start">
+                  <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+                    <div className="hidden border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(124,58,237,0.16),_transparent_55%),linear-gradient(135deg,#f5f3ff,#ffffff_55%,#f8fafc)] px-4 py-3 xl:block">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-violet-700">Panel Detail</p>
+                      <h3 className="mt-1 text-base font-bold text-slate-900">Navigasi Data</h3>
+                      <p className="mt-0.5 text-xs text-slate-500">Pilih kategori informasi group parent.</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 p-2 xl:grid-cols-1 xl:p-3">
                     {detailTabs.map((tab) => {
                       const active = activeTab === tab.key;
                       return (
@@ -725,7 +766,7 @@ export function GPDetailModal({
                           key={tab.key}
                           type="button"
                           onClick={() => setActiveTab(tab.key)}
-                          className={`min-w-[190px] shrink-0 rounded-2xl border px-4 py-3 text-left transition-all lg:w-full ${
+                          className={`w-full min-w-0 rounded-2xl border px-3 py-2.5 text-left transition-all ${
                             active
                               ? "border-purple-500 bg-gradient-to-r from-purple-600 to-fuchsia-500 text-white shadow-lg shadow-purple-200/70"
                               : "border-slate-200 bg-white text-slate-700 hover:border-purple-200 hover:bg-purple-50/70"
@@ -757,11 +798,12 @@ export function GPDetailModal({
                         </button>
                       );
                     })}
+                    </div>
                   </div>
                 </aside>
 
                 <div className="min-h-0 space-y-5">
-                  <section className="rounded-3xl border border-white bg-white p-6 shadow-sm">
+                  <section className={`${activeTab === "hierarchy" ? "hidden" : ""} rounded-3xl border border-white bg-white p-6 shadow-sm`}>
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-purple-500">
@@ -1134,143 +1176,326 @@ export function GPDetailModal({
                   )} */}
 
                   {activeTab === "hierarchy" && (
-                    <div className="grid min-h-0 gap-4 xl:grid-cols-3">
-                      <section className="flex min-h-0 flex-col rounded-3xl border border-indigo-100 bg-white p-4 shadow-sm xl:p-5">
-                        <div className="mb-4 flex items-center gap-3">
-                          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-500 text-white">
-                            <FaBuilding className="h-5 w-5" />
+                    <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-4 xl:px-5">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500 text-white">
+                            <FaUsers className="h-4 w-4" />
                           </div>
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-indigo-500">
-                              National Brand
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
+                              Struktur Customer
                             </p>
-                            <p className="text-sm text-slate-500">
-                              {linkedNB ? "Relasi induk" : "Belum terhubung"}
+                            <p className="truncate text-sm text-slate-500">
+                              {loadingChildren
+                                ? "Loading..."
+                                : `${childGCs.length} GC • ${childBCs.length} BC`}
                             </p>
                           </div>
                         </div>
-
-                        {linkedNB ? (
-                          <button
-                            type="button"
-                            onClick={() => void handleViewLinkedNb()}
-                            className="flex w-full items-center justify-between rounded-2xl border border-indigo-100 bg-indigo-50/80 px-4 py-4 text-left text-sm text-slate-800 transition-all hover:border-indigo-300 hover:bg-indigo-100/80"
-                          >
-                            <div>
-                              <p className="line-clamp-2 text-[13px] font-semibold leading-5 text-slate-900">
+                        <div className="flex min-w-0 items-center gap-2 text-xs text-slate-500">
+                          {linkedNB ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => void handleViewLinkedNb()}
+                                className="max-w-40 truncate font-semibold text-indigo-600 hover:underline"
+                              >
                                 {linkedNB.name}
-                              </p>
-                              <p className="mt-2 text-xs text-indigo-700">
-                                Limit: {formatCurrency(linkedNB.credit_limit)}
-                              </p>
-                              <p className="mt-1 text-xs text-indigo-700">
-                                Payment Term:{" "}
-                                {formatDays(linkedNB.payment_term)}
-                              </p>
-                            </div>
-                            <FaChevronRight className="ml-3 h-4 w-4 shrink-0 text-indigo-500" />
-                          </button>
-                        ) : (
-                          <p className="text-sm italic text-slate-500">
-                            Group Parent ini tidak terhubung ke National Brand.
-                          </p>
-                        )}
-                      </section>
-
-                      <section className="flex min-h-0 flex-col rounded-3xl border border-blue-100 bg-white p-4 shadow-sm xl:p-5">
-                        <div className="mb-4 flex items-center gap-3">
-                          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500 text-white">
-                            <FaUsers className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-500">
-                              Group Customer
-                            </p>
-                            <p className="text-sm text-slate-500">
-                              {loadingChildren
-                                ? "Loading..."
-                                : `${childGCs.length} data terdaftar`}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="max-h-[58vh] space-y-2.5 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                          {childGCs.length > 0 ? (
-                            childGCs.map((item) => (
-                              <button
-                                key={item.id}
-                                onClick={() => onViewGC?.(item)}
-                                className="flex w-full items-center justify-between rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-left text-sm text-slate-800 transition-all hover:border-blue-300 hover:bg-blue-100/80"
-                              >
-                                <div>
-                                  <p className="line-clamp-2 text-[13px] font-semibold leading-5 text-slate-900">
-                                    {item.name}
-                                  </p>
-                                  <p className="mt-2 text-xs text-blue-700">
-                                    GCID: {item.code || `GC${item.id}`}
-                                  </p>
-                                </div>
-                                <FaChevronRight className="ml-3 h-4 w-4 shrink-0 text-blue-500" />
                               </button>
-                            ))
-                          ) : (
-                            <p className="text-sm italic text-slate-500">
-                              Belum ada GC terdaftar.
-                            </p>
-                          )}
+                              <span>/</span>
+                            </>
+                          ) : null}
+                          <span className="max-w-48 truncate font-semibold text-violet-600">
+                            {gp.name}
+                          </span>
                         </div>
-                      </section>
+                      </div>
 
-                      <section className="flex min-h-0 flex-col rounded-3xl border border-orange-100 bg-white p-4 shadow-sm xl:p-5">
-                        <div className="mb-4 flex items-center gap-3">
-                          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-500 text-white">
-                            <FaStore className="h-5 w-5" />
+                      <div className="grid min-h-[400px] lg:grid-cols-[minmax(0,3fr)_minmax(300px,2fr)] xl:min-h-[440px]">
+                        <div className="border-b border-slate-200 lg:border-b-0 lg:border-r">
+                          <div className="border-b border-slate-100 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                            Group Customer & Branch
                           </div>
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-500">
-                              Branch Customer
-                            </p>
-                            <p className="text-sm text-slate-500">
-                              {loadingChildren
-                                ? "Loading..."
-                                : `${childBCs.length} data terdaftar`}
-                            </p>
+                          <div className="max-h-[55vh] overflow-y-auto py-1">
+                            {gpHierarchyTree.gcs.length > 0 ? (
+                              gpHierarchyTree.gcs.map(({ gc, bcs }) => {
+                                const gcId = Number(gc.id);
+                                const expanded = expandedGcId === gcId;
+                                const selected =
+                                  selectedHierarchyNode?.type === "gc" &&
+                                  selectedHierarchyNode.id === gcId;
+                                const panelId = `gp-explorer-gc-${gcId}`;
+                                return (
+                                  <div
+                                    key={gcId}
+                                    className="border-b border-slate-100 last:border-b-0"
+                                  >
+                                    <div
+                                      className={`flex min-h-[54px] items-stretch border-l-2 ${selected ? "border-blue-500 bg-blue-50/50" : "border-transparent hover:bg-slate-50"}`}
+                                    >
+                                      <button
+                                        type="button"
+                                        aria-expanded={expanded}
+                                        aria-controls={panelId}
+                                        onClick={() =>
+                                          setExpandedGcId((current) =>
+                                            current === gcId ? null : gcId,
+                                          )
+                                        }
+                                        className="flex w-10 shrink-0 items-center justify-center text-blue-500"
+                                        aria-label={`${expanded ? "Tutup" : "Buka"} ${gc.name}`}
+                                      >
+                                        <FaChevronRight
+                                          className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-90" : ""}`}
+                                        />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        aria-expanded={expanded}
+                                        aria-controls={panelId}
+                                        onClick={() => {
+                                          setSelectedHierarchyNode({
+                                            type: "gc",
+                                            id: gcId,
+                                          });
+                                          setExpandedGcId((current) =>
+                                            current === gcId ? null : gcId,
+                                          );
+                                        }}
+                                        className="min-w-0 flex-1 py-2 pr-3 text-left"
+                                      >
+                                        <p className="truncate text-[13px] font-semibold text-slate-900">
+                                          {gc.name}
+                                        </p>
+                                        <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                                          <span className="font-semibold text-blue-600">
+                                            {gc.code || `GC${gc.id}`}
+                                          </span>{" "}
+                                          • {bcs.length} BC
+                                        </p>
+                                      </button>
+                                    </div>
+                                    {expanded ? (
+                                      <div
+                                        id={panelId}
+                                        className="ml-5 border-l border-blue-200 py-0.5"
+                                      >
+                                        {bcs.length > 0 ? (
+                                          bcs.map((item) => {
+                                            const bcId = Number(item.id);
+                                            const bcSelected =
+                                              selectedHierarchyNode?.type ===
+                                                "bc" &&
+                                              selectedHierarchyNode.id === bcId;
+                                            return (
+                                              <button
+                                                type="button"
+                                                key={bcId}
+                                                onClick={() => {
+                                                  setSelectedHierarchyNode({
+                                                    type: "bc",
+                                                    id: bcId,
+                                                  });
+                                                }}
+                                                className={`flex min-h-11 w-full items-center border-l-2 py-1.5 pl-4 pr-3 text-left ${bcSelected ? "border-orange-500 bg-orange-50/60" : "border-transparent hover:bg-slate-50"}`}
+                                              >
+                                                <span className="mr-2 text-xs text-orange-400">
+                                                  └─
+                                                </span>
+                                                <span className="min-w-0">
+                                                  <span className="block truncate text-xs font-medium text-slate-800">
+                                                    {gc.name} -{" "}
+                                                    {item.branch_city ||
+                                                      item.branch_name ||
+                                                      "-"}
+                                                  </span>
+                                                  <span className="block truncate text-[11px] font-bold text-orange-600">
+                                                    {item.code ||
+                                                      `BC${item.id}`}
+                                                  </span>
+                                                </span>
+                                              </button>
+                                            );
+                                          })
+                                        ) : (
+                                          <p className="px-4 py-2 text-xs italic text-slate-400">
+                                            Belum ada BC.
+                                          </p>
+                                        )}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })
+                            ) : (
+                              <p className="px-4 py-10 text-center text-sm italic text-slate-500">
+                                Belum ada GC terdaftar.
+                              </p>
+                            )}
+
+                            {gpHierarchyTree.orphanBcs.length > 0 ? (
+                              <div className="border-t border-amber-200 bg-amber-50/40 px-4 py-2">
+                                <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                                  Relasi belum lengkap
+                                </p>
+                                {gpHierarchyTree.orphanBcs.map((item) => (
+                                  <button
+                                    type="button"
+                                    key={item.id}
+                                    onClick={() => {
+                                      setSelectedHierarchyNode({
+                                        type: "bc",
+                                        id: Number(item.id),
+                                      });
+                                    }}
+                                    className="block w-full border-l-2 border-orange-400 px-3 py-2 text-left hover:bg-white/70"
+                                  >
+                                    <span className="block truncate text-xs font-semibold text-slate-800">
+                                      {item.name}
+                                    </span>
+                                    <span className="text-[10px] text-amber-700">
+                                      Parent GC tidak ditemukan
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
 
-                        <div className="max-h-[58vh] space-y-2.5 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                          {childBCs.length > 0 ? (
-                            childBCs.map((item) => (
-                              <button
-                                key={item.id}
-                                onClick={() => onViewBC?.(item)}
-                                className="flex w-full items-center justify-between rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3 text-left text-sm text-slate-800 transition-all hover:border-orange-300 hover:bg-orange-100/80"
-                              >
-                                <div>
-                                  <p className="line-clamp-2 text-[13px] font-semibold leading-5 text-slate-900">
-                                    {`${item.gc_name || item.gc_code || "GC"} - ${
-                                      item.branch_city ||
-                                      item.branch_name ||
-                                      item.name ||
-                                      "-"
-                                    }`}
-                                  </p>
-                                  <p className="mt-2 text-xs text-orange-700">
-                                    BCID: {item.code || `BC${item.id}`} •{" "}
-                                    {item.branch_city || "-"}
-                                  </p>
+                        <aside className="bg-slate-50/50">
+                          <div className="border-b border-slate-100 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                            Detail Customer
+                          </div>
+                          <div className="max-h-[55vh] overflow-y-auto p-4 xl:p-5">
+                            {selectedHierarchyDetail ? (
+                              <div>
+                                <nav
+                                  className="mb-5 flex flex-wrap items-center gap-1 text-[11px] text-slate-500"
+                                  aria-label="Breadcrumb hierarchy"
+                                >
+                                  {linkedNB ? (
+                                    <>
+                                      <span>{linkedNB.name}</span>
+                                      <span>/</span>
+                                    </>
+                                  ) : null}
+                                  <span>{gp.name}</span>
+                                  <span>/</span>
+                                  <span className="font-semibold text-slate-800">
+                                    {selectedHierarchyDetail.type === "gc"
+                                      ? selectedHierarchyDetail.gc.name
+                                      : selectedHierarchyDetail.bc
+                                          .branch_city ||
+                                        selectedHierarchyDetail.bc.name}
+                                  </span>
+                                </nav>
+                                <p
+                                  className={`text-[10px] font-bold uppercase tracking-[0.2em] ${selectedHierarchyDetail.type === "gc" ? "text-blue-600" : "text-orange-600"}`}
+                                >
+                                  {selectedHierarchyDetail.type === "gc"
+                                    ? "Group Customer"
+                                    : "Branch Customer"}
+                                </p>
+                                <h4 className="mt-2 text-xl font-bold text-slate-900">
+                                  {selectedHierarchyDetail.type === "gc"
+                                    ? selectedHierarchyDetail.gc.name
+                                    : `${selectedHierarchyDetail.gc?.name || "Branch Customer"} - ${selectedHierarchyDetail.bc.branch_city || "-"}`}
+                                </h4>
+                                <p className="mt-1 text-sm font-semibold text-slate-500">
+                                  {selectedHierarchyDetail.type === "gc"
+                                    ? `GCID: ${selectedHierarchyDetail.gc.code || `GC${selectedHierarchyDetail.gc.id}`}`
+                                    : `BCID: ${selectedHierarchyDetail.bc.code || `BC${selectedHierarchyDetail.bc.id}`}`}
+                                </p>
+                                <div className="mt-5 space-y-4 border-t border-slate-200 pt-4 text-sm">
+                                  <div>
+                                    <p className="text-xs text-slate-500">
+                                      Parent
+                                    </p>
+                                    <p className="mt-1 font-semibold text-slate-800">
+                                      GP: {gp.name}
+                                    </p>
+                                    {selectedHierarchyDetail.type === "bc" ? (
+                                      <p className="mt-1 font-semibold text-slate-800">
+                                        GC:{" "}
+                                        {selectedHierarchyDetail.gc?.name ||
+                                          "Relasi belum lengkap"}
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                  {selectedHierarchyDetail.type === "gc" ? (
+                                    <div>
+                                      <p className="text-xs text-slate-500">
+                                        Branch Customer
+                                      </p>
+                                      <div className="mt-2 space-y-1.5">
+                                        {selectedHierarchyDetail.bcs.length >
+                                        0 ? (
+                                          selectedHierarchyDetail.bcs.map(
+                                            (item) => (
+                                              <div
+                                                key={item.id}
+                                                className="flex items-center justify-between gap-3 border-b border-slate-100 py-1.5"
+                                              >
+                                                <span className="truncate text-slate-700">
+                                                  {item.branch_city || "-"}
+                                                </span>
+                                                <span className="shrink-0 text-xs font-semibold text-orange-600">
+                                                  {item.code || `BC${item.id}`}
+                                                </span>
+                                              </div>
+                                            ),
+                                          )
+                                        ) : (
+                                          <p className="italic text-slate-400">
+                                            Belum ada BC.
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <p className="text-xs text-slate-500">
+                                        Kota Branch
+                                      </p>
+                                      <p className="mt-1 font-semibold text-slate-800">
+                                        {selectedHierarchyDetail.bc
+                                          .branch_city || "-"}
+                                      </p>
+                                    </div>
+                                  )}
                                 </div>
-                                <FaChevronRight className="ml-3 h-4 w-4 shrink-0 text-orange-500" />
-                              </button>
-                            ))
-                          ) : (
-                            <p className="text-sm italic text-slate-500">
-                              Belum ada BC terdaftar.
-                            </p>
-                          )}
-                        </div>
-                      </section>
-                    </div>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    selectedHierarchyDetail.type === "gc"
+                                      ? onViewGC?.(selectedHierarchyDetail.gc)
+                                      : onViewBC?.(selectedHierarchyDetail.bc)
+                                  }
+                                  className="mt-6 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
+                                >
+                                  {selectedHierarchyDetail.type === "gc"
+                                    ? "Lihat Detail GC"
+                                    : "Lihat Detail BC"}
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex min-h-[280px] flex-col items-center justify-center text-center">
+                                <FaUsers className="h-8 w-8 text-slate-300" />
+                                <p className="mt-3 font-semibold text-slate-700">
+                                  Pilih customer pada struktur
+                                </p>
+                                <p className="mt-1 max-w-xs text-sm text-slate-500">
+                                  Klik nama GC atau BC untuk menampilkan
+                                  detailnya di sini.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </aside>
+                      </div>
+                    </section>
                   )}
 
                   {activeTab === "activity" && (
