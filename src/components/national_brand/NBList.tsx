@@ -99,8 +99,8 @@ interface CustomerRegisterOwnerRow {
 
 interface NationalBrandItem {
   id: number;
-  code: string;
   name: string;
+  nb_name: string;
   disabled: number;
   created_at: string;
   updated_at: string;
@@ -115,7 +115,7 @@ interface NationalBrandItem {
   active_bc_names: string[];
 }
 
-type SortField = "name" | "code" | "created_at" | "updated_at";
+type SortField = "nb_name" | "name" | "created_at" | "updated_at";
 type SortDirection = "asc" | "desc";
 
 function toNumber(value: unknown): number | undefined {
@@ -147,7 +147,7 @@ export default function NBList() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [sortField, setSortField] = useState<SortField>("name");
+  const [sortField, setSortField] = useState<SortField>("nb_name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
   const [selectedItem, setSelectedItem] =
@@ -292,8 +292,8 @@ export default function NBList() {
 
         return {
           id: row.id,
-          code: row.name,
-          name: row.nb_name || row.name || "-",
+          name: row.name,
+          nb_name: row.nb_name || "-",
           disabled: Number(row.disabled || 0),
           created_at: row.created_at || new Date(0).toISOString(),
           updated_at:
@@ -340,8 +340,8 @@ export default function NBList() {
       const q = searchQuery.trim().toLowerCase();
       result = result.filter(
         (item) =>
-          item.code.toLowerCase().includes(q) ||
           item.name.toLowerCase().includes(q) ||
+          item.nb_name.toLowerCase().includes(q) ||
           item.owners.some((owner) => owner.toLowerCase().includes(q)) ||
           item.sample_gp_names.some((gp) => gp.toLowerCase().includes(q)) ||
           item.sample_gc_names.some((gc) => gc.toLowerCase().includes(q)),
@@ -352,7 +352,7 @@ export default function NBList() {
       let aValue: string | number;
       let bValue: string | number;
 
-      if (sortField === "name" || sortField === "code") {
+      if (sortField === "name" || sortField === "nb_name") {
         aValue = a[sortField].toLowerCase();
         bValue = b[sortField].toLowerCase();
       } else {
@@ -485,8 +485,8 @@ export default function NBList() {
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
             >
               <span>
-                {sortField === "name" && "Name"}
-                {sortField === "code" && "Code"}
+                {sortField === "nb_name" && "Name"}
+                {sortField === "name" && "Code"}
                 {sortField === "created_at" && "Created Date"}
                 {sortField === "updated_at" && "Updated Date"}
               </span>
@@ -509,8 +509,8 @@ export default function NBList() {
                     className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 py-2 min-w-[200px] z-20"
                   >
                     {[
-                      { value: "name" as SortField, label: "Name" },
-                      { value: "code" as SortField, label: "Code" },
+                      { value: "nb_name" as SortField, label: "Name" },
+                      { value: "name" as SortField, label: "Code" },
                       {
                         value: "created_at" as SortField,
                         label: "Created Date",
@@ -574,9 +574,9 @@ export default function NBList() {
                 <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 px-5 py-4 flex items-start justify-between gap-3">
                   <div>
                     <h3 className="text-lg font-bold text-white line-clamp-1">
-                      {item.name}
+                      {item.nb_name}
                     </h3>
-                    <p className="text-sm text-indigo-100">NBID: {item.code}</p>
+                    <p className="text-sm text-indigo-100">NBID: {item.name}</p>
                   </div>
                   <span
                     className={`px-3 py-1 text-xs font-semibold rounded-full ${

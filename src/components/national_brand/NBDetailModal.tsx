@@ -23,8 +23,8 @@ import { useAuth } from "@/contexts/AuthContext";
 
 export interface NationalBrandDetailData {
   id: number;
-  code: string;
   name: string;
+  nb_name: string;
   disabled: number;
   created_at: string;
   updated_at: string;
@@ -68,7 +68,7 @@ interface PolicyHierarchyGcRow {
         id?: number | string | null;
         name?: string | null;
         gp_name?: string | null;
-    }
+      }
     | null;
   _relations?: {
     gpid?: {
@@ -197,7 +197,6 @@ interface GroupCustomerDetailRow {
 interface BranchCustomerDetailRow {
   id: number;
   name?: string | null;
-  bcid_name?: string | null;
   gcid?:
     | number
     | { id?: number | string; name?: string; gc_name?: string }
@@ -271,8 +270,8 @@ function resolveUserName(
 function mapGpRow(row: GroupParentDetailRow): GroupParent {
   return {
     id: Number(row.id),
-    code: row.name || undefined,
-    name: row.gp_name || row.name || "-",
+    name: row.name || `GP${row.id}`,
+    gp_name: row.gp_name || "-",
     description: row.description || undefined,
     credit_limit_active: Number(row.credit_limit_active || 0),
     credit_limit: row.credit_limit ?? null,
@@ -311,8 +310,8 @@ function mapGcRow(row: GroupCustomerDetailRow): GroupCustomer {
 
   return {
     id: Number(row.id),
-    code: row.name || undefined,
-    name: row.gc_name || row.name || "-",
+    name: row.name || `GC${row.id}`,
+    gc_name: row.gc_name || "-",
     description: row.description || undefined,
     gp_id: gpId,
     gp_name: gpName,
@@ -375,8 +374,7 @@ function mapBcRow(row: BranchCustomerDetailRow): BranchCustomer {
 
   return {
     id: Number(row.id),
-    code: row.name || undefined,
-    name: row.bcid_name || row.name || "-",
+    name: row.name || `BC${row.id}`,
     gc_id: gcId,
     gc_name: gcName,
     gc_code: gcCode,
@@ -777,11 +775,7 @@ export function NBDetailModal({
     return {
       gps: hierarchyTree.gps
         .map((node) => {
-          const gpMatches = matches(
-            node.gp.id,
-            node.gp.name,
-            node.gp.gp_name,
-          );
+          const gpMatches = matches(node.gp.id, node.gp.name, node.gp.gp_name);
           const gcs = node.gcs.filter(
             ({ gc, bcs }) =>
               gpMatches ||
@@ -875,11 +869,13 @@ export function NBDetailModal({
                 <div className="space-y-1">
                   <div className="flex items-center gap-3">
                     <FaTags className="text-xl text-indigo-600" />
-                    <h2 className="text-lg font-bold text-slate-900 md:text-xl">
+                    <h2 className="text-lg font-bold text-slate-900 md:text-lg">
                       National Brand Details
                     </h2>
                   </div>
-                  <p className="pl-8 text-xs font-semibold text-slate-500">NBID: {item.code}</p>
+                  <p className="pl-8 text-sm font-semibold text-slate-500">
+                    {item.nb_name} - {item.name}
+                  </p>
                 </div>
 
                 <button
@@ -896,61 +892,73 @@ export function NBDetailModal({
                 <aside className="xl:sticky xl:top-6 xl:self-start">
                   <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
                     <div className="hidden border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(79,70,229,0.16),_transparent_55%),linear-gradient(135deg,#eef2ff,#ffffff_55%,#f8fafc)] px-4 py-3 xl:block">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-indigo-700">Panel Detail</p>
-                      <h3 className="mt-1 text-base font-bold text-slate-900">Navigasi Data</h3>
-                      <p className="mt-0.5 text-xs text-slate-500">Pilih kategori informasi national brand.</p>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-indigo-700">
+                        Panel Detail
+                      </p>
+                      <h3 className="mt-1 text-base font-bold text-slate-900">
+                        Navigasi Data
+                      </h3>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        Pilih kategori informasi national brand.
+                      </p>
                     </div>
                     <div className="grid grid-cols-2 gap-2 p-2 xl:grid-cols-1 xl:p-3">
-                    {detailTabs.map((tab) => {
-                      const active = activeTab === tab.key;
-                      return (
-                        <button
-                          key={tab.key}
-                          type="button"
-                          onClick={() => setActiveTab(tab.key)}
-                          className={`w-full min-w-0 rounded-2xl border px-3 py-2.5 text-left transition-all ${
-                            active
-                              ? "border-indigo-500 bg-gradient-to-r from-indigo-600 to-cyan-500 text-white shadow-lg shadow-indigo-200/70"
-                              : "border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:bg-indigo-50/70"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-                                active
-                                  ? "bg-white/20 text-white"
-                                  : "bg-slate-100 text-indigo-600"
-                              }`}
-                            >
-                              {tab.icon}
-                            </div>
-                            <div>
-                              <p className="text-sm font-semibold">{tab.label}</p>
-                              <p
-                                className={`text-xs ${
-                                  active ? "text-indigo-100" : "text-slate-500"
+                      {detailTabs.map((tab) => {
+                        const active = activeTab === tab.key;
+                        return (
+                          <button
+                            key={tab.key}
+                            type="button"
+                            onClick={() => setActiveTab(tab.key)}
+                            className={`w-full min-w-0 rounded-2xl border px-3 py-2.5 text-left transition-all ${
+                              active
+                                ? "border-indigo-500 bg-gradient-to-r from-indigo-600 to-cyan-500 text-white shadow-lg shadow-indigo-200/70"
+                                : "border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:bg-indigo-50/70"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                                  active
+                                    ? "bg-white/20 text-white"
+                                    : "bg-slate-100 text-indigo-600"
                                 }`}
                               >
-                                {tab.caption}
-                              </p>
+                                {tab.icon}
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold">
+                                  {tab.label}
+                                </p>
+                                <p
+                                  className={`text-xs ${
+                                    active
+                                      ? "text-indigo-100"
+                                      : "text-slate-500"
+                                  }`}
+                                >
+                                  {tab.caption}
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                        </button>
-                      );
-                    })}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </aside>
 
                 <div className="min-h-0 space-y-5">
-                  <section className={`${activeTab === "hierarchy" ? "hidden" : ""} rounded-3xl border border-white bg-white p-6 shadow-sm`}>
+                  <section
+                    className={`${activeTab === "hierarchy" ? "hidden" : ""} rounded-3xl border border-white bg-white p-6 shadow-sm`}
+                  >
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-indigo-500">
                           National Brand
                         </p>
                         <h3 className="mt-2 text-3xl font-bold text-slate-900">
-                          {item.name}
+                          {item.nb_name}
                         </h3>
                         <p className="mt-2 text-sm text-slate-500">
                           Pusat identitas brand dan relasi customer aktif.
@@ -1023,7 +1031,7 @@ export function NBDetailModal({
                           Kode Brand
                         </p>
                         <p className="mt-4 text-lg font-semibold text-slate-900">
-                          {item.code}
+                          {item.name}
                         </p>
                       </div>
                     </section>
@@ -1082,11 +1090,15 @@ export function NBDetailModal({
                           </div>
                         </div>
                         <label className="relative block w-full px-4 pb-4 sm:max-w-sm sm:py-4 sm:pr-4 xl:py-5 xl:pr-5">
-                          <span className="sr-only">Cari hierarchy customer</span>
+                          <span className="sr-only">
+                            Cari hierarchy customer
+                          </span>
                           <input
                             type="search"
                             value={hierarchySearch}
-                            onChange={(event) => setHierarchySearch(event.target.value)}
+                            onChange={(event) =>
+                              setHierarchySearch(event.target.value)
+                            }
                             placeholder="Cari nama atau kode GP, GC, BC..."
                             className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-800 outline-none transition focus:border-violet-400 focus:bg-white focus:ring-2 focus:ring-violet-100"
                           />
@@ -1107,195 +1119,527 @@ export function NBDetailModal({
                           <div className="max-h-[55vh] overflow-y-auto py-1">
                             {filteredHierarchyTree.gps.map(({ gp, gcs }) => {
                               const gpId = Number(gp.id);
-                              const searching = hierarchySearch.trim().length > 0;
-                              const expanded = searching || expandedGpId === gpId;
-                              const selected = selectedHierarchyNode?.type === "gp" && selectedHierarchyNode.id === gpId;
-                              const bcCount = gcs.reduce((total, node) => total + node.bcs.length, 0);
+                              const searching =
+                                hierarchySearch.trim().length > 0;
+                              const expanded =
+                                searching || expandedGpId === gpId;
+                              const selected =
+                                selectedHierarchyNode?.type === "gp" &&
+                                selectedHierarchyNode.id === gpId;
+                              const bcCount = gcs.reduce(
+                                (total, node) => total + node.bcs.length,
+                                0,
+                              );
                               const panelId = `nb-explorer-gp-${gpId}`;
                               return (
-                                <div key={gpId} className="border-b border-slate-100 last:border-b-0">
-                                  <div className={`flex min-h-16 items-stretch border-l-2 ${selected ? "border-violet-500 bg-violet-50/50" : "border-transparent hover:bg-slate-50"}`}>
+                                <div
+                                  key={gpId}
+                                  className="border-b border-slate-100 last:border-b-0"
+                                >
+                                  <div
+                                    className={`flex min-h-16 items-stretch border-l-2 ${selected ? "border-violet-500 bg-violet-50/50" : "border-transparent hover:bg-slate-50"}`}
+                                  >
                                     <button
                                       type="button"
                                       aria-expanded={expanded}
                                       aria-controls={panelId}
                                       onClick={() => {
-                                        setExpandedGpId((current) => current === gpId ? null : gpId);
+                                        setExpandedGpId((current) =>
+                                          current === gpId ? null : gpId,
+                                        );
                                         setExpandedGcId(null);
                                       }}
                                       className="flex w-10 shrink-0 items-center justify-center text-violet-500"
                                       aria-label={`${expanded ? "Tutup" : "Buka"} ${gp.gp_name || gp.name || "Group Parent"}`}
                                     >
-                                      <FaChevronRight className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-90" : ""}`} />
+                                      <FaChevronRight
+                                        className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-90" : ""}`}
+                                      />
                                     </button>
                                     <button
                                       type="button"
                                       aria-expanded={expanded}
                                       aria-controls={panelId}
                                       onClick={() => {
-                                        setSelectedHierarchyNode({ type: "gp", id: gpId });
-                                        setExpandedGpId((current) => current === gpId ? null : gpId);
+                                        setSelectedHierarchyNode({
+                                          type: "gp",
+                                          id: gpId,
+                                        });
+                                        setExpandedGpId((current) =>
+                                          current === gpId ? null : gpId,
+                                        );
                                         setExpandedGcId(null);
                                       }}
                                       className="min-w-0 flex-1 py-2 pr-3 text-left"
                                     >
-                                      <p className="truncate text-[13px] font-semibold text-slate-900">{gp.gp_name || gp.name || "-"}</p>
-                                      <p className="mt-0.5 truncate text-[11px] text-slate-500">
-                                        <span className="font-semibold text-violet-600">GP</span> • {gcs.length} GC • {bcCount} BC
+                                      <p className="truncate text-[13px] font-semibold text-slate-900">
+                                        {gp.gp_name || gp.name || "-"}
                                       </p>
-                                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{formatCurrency(gp.credit_limit)} • {formatDays(gp.payment_term)}</p>
+                                      <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                                        <span className="font-semibold text-violet-600">
+                                          {gp.name} :
+                                        </span>{" "}
+                                        {gcs.length} GC • {bcCount} BC
+                                      </p>
+                                      <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                                        {formatCurrency(gp.credit_limit)} •{" "}
+                                        {formatDays(gp.payment_term)}
+                                      </p>
                                     </button>
                                   </div>
                                   {expanded ? (
-                                    <div id={panelId} className="ml-5 border-l border-violet-200">
-                                      {gcs.length > 0 ? gcs.map(({ gc, bcs }) => {
-                                        const gcId = Number(gc.id);
-                                        const normalizedSearch = hierarchySearch.trim().toLocaleLowerCase("id-ID");
-                                        const gcMatchesSearch = searching && [
-                                          gc.id,
-                                          gc.name,
-                                          gc.gc_name,
-                                          ...bcs.flatMap((bc) => [bc.id, bc.name, bc._relations?.branch?.city]),
-                                        ].some((value) => String(value ?? "").toLocaleLowerCase("id-ID").includes(normalizedSearch));
-                                        const gcExpanded = gcMatchesSearch || expandedGcId === gcId;
-                                        const gcSelected = selectedHierarchyNode?.type === "gc" && selectedHierarchyNode.id === gcId;
-                                        const gcPanelId = `nb-explorer-gc-${gcId}`;
-                                        return (
-                                          <div key={gcId}>
-                                            <div className={`flex min-h-[50px] items-stretch border-l-2 ${gcSelected ? "border-blue-500 bg-blue-50/50" : "border-transparent hover:bg-slate-50"}`}>
-                                              <button
-                                                type="button"
-                                                aria-expanded={gcExpanded}
-                                                aria-controls={gcPanelId}
-                                                onClick={() => setExpandedGcId((current) => current === gcId ? null : gcId)}
-                                                className="flex w-9 shrink-0 items-center justify-center text-blue-500"
-                                                aria-label={`${gcExpanded ? "Tutup" : "Buka"} ${gc.gc_name || gc.name || "Group Customer"}`}
+                                    <div
+                                      id={panelId}
+                                      className="ml-5 border-l border-violet-200"
+                                    >
+                                      {gcs.length > 0 ? (
+                                        gcs.map(({ gc, bcs }) => {
+                                          const gcId = Number(gc.id);
+                                          const normalizedSearch =
+                                            hierarchySearch
+                                              .trim()
+                                              .toLocaleLowerCase("id-ID");
+                                          const gcMatchesSearch =
+                                            searching &&
+                                            [
+                                              gc.id,
+                                              gc.name,
+                                              gc.gc_name,
+                                              ...bcs.flatMap((bc) => [
+                                                bc.id,
+                                                bc.name,
+                                                bc._relations?.branch?.city,
+                                              ]),
+                                            ].some((value) =>
+                                              String(value ?? "")
+                                                .toLocaleLowerCase("id-ID")
+                                                .includes(normalizedSearch),
+                                            );
+                                          const gcExpanded =
+                                            gcMatchesSearch ||
+                                            expandedGcId === gcId;
+                                          const gcSelected =
+                                            selectedHierarchyNode?.type ===
+                                              "gc" &&
+                                            selectedHierarchyNode.id === gcId;
+                                          const gcPanelId = `nb-explorer-gc-${gcId}`;
+                                          return (
+                                            <div key={gcId}>
+                                              <div
+                                                className={`flex min-h-[50px] items-stretch border-l-2 ${gcSelected ? "border-blue-500 bg-blue-50/50" : "border-transparent hover:bg-slate-50"}`}
                                               >
-                                                <FaChevronRight className={`h-3 w-3 transition-transform ${gcExpanded ? "rotate-90" : ""}`} />
-                                              </button>
-                                              <button type="button" aria-expanded={gcExpanded} aria-controls={gcPanelId} onClick={() => {
-                                                setSelectedHierarchyNode({ type: "gc", id: gcId });
-                                                setExpandedGcId((current) => current === gcId ? null : gcId);
-                                              }} className="min-w-0 flex-1 py-2 pr-3 text-left">
-                                                <p className="truncate text-xs font-semibold text-slate-800">{gc.gc_name || gc.name || "-"}</p>
-                                                <p className="mt-0.5 truncate text-[11px] text-slate-500"><span className="font-semibold text-blue-600">{gc.name || `GC${gc.id}`}</span> • {bcs.length} BC</p>
-                                              </button>
-                                            </div>
-                                            {gcExpanded ? (
-                                              <div id={gcPanelId} className="ml-5 border-l border-blue-200 py-0.5">
-                                                {bcs.length > 0 ? bcs.map((bc) => {
-                                                  const bcId = Number(bc.id);
-                                                  const bcSelected = selectedHierarchyNode?.type === "bc" && selectedHierarchyNode.id === bcId;
-                                                  const city = bc._relations?.branch?.city || "-";
-                                                  return (
-                                                    <button
-                                                      type="button"
-                                                      key={bcId}
-                                                      onClick={() => {
-                                                        setSelectedHierarchyNode({ type: "bc", id: bcId });
-                                                      }}
-                                                      className={`flex min-h-11 w-full items-center border-l-2 py-1.5 pl-4 pr-3 text-left ${bcSelected ? "border-orange-500 bg-orange-50/60" : "border-transparent hover:bg-slate-50"}`}
-                                                    >
-                                                      <span className="mr-2 text-xs text-orange-400">└─</span>
-                                                      <span className="min-w-0">
-                                                        <span className="block truncate text-xs font-medium text-slate-800">{gc.gc_name || gc.name || "Group Customer"} - {city}</span>
-                                                        <span className="block truncate text-[11px] font-bold text-orange-600">{bc.name || `BC${bc.id}`}</span>
-                                                      </span>
-                                                    </button>
-                                                  );
-                                                }) : <p className="px-4 py-2 text-xs italic text-slate-400">Belum ada BC.</p>}
+                                                <button
+                                                  type="button"
+                                                  aria-expanded={gcExpanded}
+                                                  aria-controls={gcPanelId}
+                                                  onClick={() =>
+                                                    setExpandedGcId(
+                                                      (current) =>
+                                                        current === gcId
+                                                          ? null
+                                                          : gcId,
+                                                    )
+                                                  }
+                                                  className="flex w-9 shrink-0 items-center justify-center text-blue-500"
+                                                  aria-label={`${gcExpanded ? "Tutup" : "Buka"} ${gc.gc_name || gc.name || "Group Customer"}`}
+                                                >
+                                                  <FaChevronRight
+                                                    className={`h-3 w-3 transition-transform ${gcExpanded ? "rotate-90" : ""}`}
+                                                  />
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  aria-expanded={gcExpanded}
+                                                  aria-controls={gcPanelId}
+                                                  onClick={() => {
+                                                    setSelectedHierarchyNode({
+                                                      type: "gc",
+                                                      id: gcId,
+                                                    });
+                                                    setExpandedGcId(
+                                                      (current) =>
+                                                        current === gcId
+                                                          ? null
+                                                          : gcId,
+                                                    );
+                                                  }}
+                                                  className="min-w-0 flex-1 py-2 pr-3 text-left"
+                                                >
+                                                  <p className="truncate text-xs font-semibold text-slate-800">
+                                                    {gc.gc_name ||
+                                                      gc.name ||
+                                                      "-"}
+                                                  </p>
+                                                  <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                                                    <span className="font-semibold text-blue-600">
+                                                      {gc.name} :
+                                                    </span>{" "}
+                                                    {bcs.length} BC
+                                                  </p>
+                                                </button>
                                               </div>
-                                            ) : null}
-                                          </div>
-                                        );
-                                      }) : <p className="px-4 py-2 text-xs italic text-slate-400">Belum ada GC.</p>}
+                                              {gcExpanded ? (
+                                                <div
+                                                  id={gcPanelId}
+                                                  className="ml-5 border-l border-blue-200 py-0.5"
+                                                >
+                                                  {bcs.length > 0 ? (
+                                                    bcs.map((bc) => {
+                                                      const bcId = Number(
+                                                        bc.id,
+                                                      );
+                                                      const bcSelected =
+                                                        selectedHierarchyNode?.type ===
+                                                          "bc" &&
+                                                        selectedHierarchyNode.id ===
+                                                          bcId;
+                                                      const city =
+                                                        bc._relations?.branch
+                                                          ?.city || "-";
+                                                      return (
+                                                        <button
+                                                          type="button"
+                                                          key={bcId}
+                                                          onClick={() => {
+                                                            setSelectedHierarchyNode(
+                                                              {
+                                                                type: "bc",
+                                                                id: bcId,
+                                                              },
+                                                            );
+                                                          }}
+                                                          className={`flex min-h-11 w-full items-center border-l-2 py-1.5 pl-4 pr-3 text-left ${bcSelected ? "border-orange-500 bg-orange-50/60" : "border-transparent hover:bg-slate-50"}`}
+                                                        >
+                                                          <span className="mr-2 text-xs text-orange-400">
+                                                            └─
+                                                          </span>
+                                                          <span className="min-w-0">
+                                                            <span className="block truncate text-xs font-medium text-slate-800">
+                                                              {gc.gc_name ||
+                                                                gc.name ||
+                                                                "Group Customer"}{" "}
+                                                              - {city}
+                                                            </span>
+                                                            <span className="block truncate text-[11px] font-bold text-orange-600">
+                                                              {bc.name ||
+                                                                `BC${bc.id}`}
+                                                            </span>
+                                                          </span>
+                                                        </button>
+                                                      );
+                                                    })
+                                                  ) : (
+                                                    <p className="px-4 py-2 text-xs italic text-slate-400">
+                                                      Belum ada BC.
+                                                    </p>
+                                                  )}
+                                                </div>
+                                              ) : null}
+                                            </div>
+                                          );
+                                        })
+                                      ) : (
+                                        <p className="px-4 py-2 text-xs italic text-slate-400">
+                                          Belum ada GC.
+                                        </p>
+                                      )}
                                     </div>
                                   ) : null}
                                 </div>
                               );
                             })}
 
-                            {filteredHierarchyTree.orphanGcs.length > 0 || filteredHierarchyTree.orphanBcs.length > 0 ? (
+                            {filteredHierarchyTree.orphanGcs.length > 0 ||
+                            filteredHierarchyTree.orphanBcs.length > 0 ? (
                               <div className="border-t border-amber-200 bg-amber-50/40 px-4 py-2">
-                                <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">Relasi belum lengkap</p>
-                                {filteredHierarchyTree.orphanGcs.map(({ gc, bcs }) => (
-                                  <button key={gc.id} type="button" onClick={() => setSelectedHierarchyNode({ type: "gc", id: Number(gc.id) })} className="block w-full border-l-2 border-blue-400 px-3 py-2 text-left hover:bg-white/70">
-                                    <span className="block truncate text-xs font-semibold text-slate-800">{gc.gc_name || gc.name || "-"}</span>
-                                    <span className="text-[10px] text-amber-700">Parent GP tidak ditemukan • {bcs.length} BC</span>
-                                  </button>
-                                ))}
+                                <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                                  Relasi belum lengkap
+                                </p>
+                                {filteredHierarchyTree.orphanGcs.map(
+                                  ({ gc, bcs }) => (
+                                    <button
+                                      key={gc.id}
+                                      type="button"
+                                      onClick={() =>
+                                        setSelectedHierarchyNode({
+                                          type: "gc",
+                                          id: Number(gc.id),
+                                        })
+                                      }
+                                      className="block w-full border-l-2 border-blue-400 px-3 py-2 text-left hover:bg-white/70"
+                                    >
+                                      <span className="block truncate text-xs font-semibold text-slate-800">
+                                        {gc.gc_name || gc.name || "-"}
+                                      </span>
+                                      <span className="text-[10px] text-amber-700">
+                                        Parent GP tidak ditemukan • {bcs.length}{" "}
+                                        BC
+                                      </span>
+                                    </button>
+                                  ),
+                                )}
                                 {filteredHierarchyTree.orphanBcs.map((bc) => (
-                                  <button key={bc.id} type="button" onClick={() => setSelectedHierarchyNode({ type: "bc", id: Number(bc.id) })} className="block w-full border-l-2 border-orange-400 px-3 py-2 text-left hover:bg-white/70">
-                                    <span className="block truncate text-xs font-semibold text-slate-800">{bc._relations?.branch?.city || bc.name || "-"}</span>
-                                    <span className="text-[10px] text-amber-700">Parent GC tidak ditemukan</span>
+                                  <button
+                                    key={bc.id}
+                                    type="button"
+                                    onClick={() =>
+                                      setSelectedHierarchyNode({
+                                        type: "bc",
+                                        id: Number(bc.id),
+                                      })
+                                    }
+                                    className="block w-full border-l-2 border-orange-400 px-3 py-2 text-left hover:bg-white/70"
+                                  >
+                                    <span className="block truncate text-xs font-semibold text-slate-800">
+                                      {bc._relations?.branch?.city ||
+                                        bc.name ||
+                                        "-"}
+                                    </span>
+                                    <span className="text-[10px] text-amber-700">
+                                      Parent GC tidak ditemukan
+                                    </span>
                                   </button>
                                 ))}
                               </div>
                             ) : null}
 
-                            {!hierarchyLoading && filteredHierarchyTree.gps.length === 0 && filteredHierarchyTree.orphanGcs.length === 0 && filteredHierarchyTree.orphanBcs.length === 0 ? (
-                              <p className="px-4 py-10 text-center text-sm italic text-slate-500">{hierarchySearch.trim() ? "Customer tidak ditemukan." : "Belum ada hierarchy customer aktif."}</p>
+                            {!hierarchyLoading &&
+                            filteredHierarchyTree.gps.length === 0 &&
+                            filteredHierarchyTree.orphanGcs.length === 0 &&
+                            filteredHierarchyTree.orphanBcs.length === 0 ? (
+                              <p className="px-4 py-10 text-center text-sm italic text-slate-500">
+                                {hierarchySearch.trim()
+                                  ? "Customer tidak ditemukan."
+                                  : "Belum ada hierarchy customer aktif."}
+                              </p>
                             ) : null}
                           </div>
                         </div>
 
                         <aside className="min-h-0 bg-slate-50/50">
-                          <div className="border-b border-slate-100 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Detail Customer</div>
+                          <div className="border-b border-slate-100 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                            Detail Customer
+                          </div>
                           <div className="max-h-[55vh] overflow-y-auto p-4 xl:p-5">
                             {selectedHierarchyDetail ? (
                               <div>
-                                <nav className="mb-5 flex flex-wrap items-center gap-1 text-[11px] text-slate-500" aria-label="Breadcrumb hierarchy">
-                                  <span>{item.name}</span>
-                                  {selectedHierarchyDetail.type !== "gp" && selectedHierarchyDetail.gp ? <><span>/</span><span>{selectedHierarchyDetail.gp.gp_name || selectedHierarchyDetail.gp.name}</span></> : null}
-                                  {selectedHierarchyDetail.type === "bc" && selectedHierarchyDetail.gc ? <><span>/</span><span>{selectedHierarchyDetail.gc.gc_name || selectedHierarchyDetail.gc.name}</span></> : null}
+                                <nav
+                                  className="mb-5 flex flex-wrap items-center gap-1 text-[11px] text-slate-500"
+                                  aria-label="Breadcrumb hierarchy"
+                                >
+                                  <span>{item.nb_name}</span>
+                                  {selectedHierarchyDetail.type !== "gp" &&
+                                  selectedHierarchyDetail.gp ? (
+                                    <>
+                                      <span>/</span>
+                                      <span>
+                                        {selectedHierarchyDetail.gp.gp_name ||
+                                          selectedHierarchyDetail.gp.name}
+                                      </span>
+                                    </>
+                                  ) : null}
+                                  {selectedHierarchyDetail.type === "bc" &&
+                                  selectedHierarchyDetail.gc ? (
+                                    <>
+                                      <span>/</span>
+                                      <span>
+                                        {selectedHierarchyDetail.gc.gc_name ||
+                                          selectedHierarchyDetail.gc.name}
+                                      </span>
+                                    </>
+                                  ) : null}
                                   <span>/</span>
                                   <span className="font-semibold text-slate-800">
-                                    {selectedHierarchyDetail.type === "gp" ? selectedHierarchyDetail.gp.gp_name || selectedHierarchyDetail.gp.name : selectedHierarchyDetail.type === "gc" ? selectedHierarchyDetail.gc.gc_name || selectedHierarchyDetail.gc.name : selectedHierarchyDetail.bc._relations?.branch?.city || selectedHierarchyDetail.bc.name}
+                                    {selectedHierarchyDetail.type === "gp"
+                                      ? selectedHierarchyDetail.gp.gp_name ||
+                                        selectedHierarchyDetail.gp.name
+                                      : selectedHierarchyDetail.type === "gc"
+                                        ? selectedHierarchyDetail.gc.gc_name ||
+                                          selectedHierarchyDetail.gc.name
+                                        : selectedHierarchyDetail.bc._relations
+                                            ?.branch?.city ||
+                                          selectedHierarchyDetail.bc.name}
                                   </span>
                                 </nav>
 
-                                <p className={`text-[10px] font-bold uppercase tracking-[0.2em] ${selectedHierarchyDetail.type === "gp" ? "text-violet-600" : selectedHierarchyDetail.type === "gc" ? "text-blue-600" : "text-orange-600"}`}>
-                                  {selectedHierarchyDetail.type === "gp" ? "Group Parent" : selectedHierarchyDetail.type === "gc" ? "Group Customer" : "Branch Customer"}
+                                <p
+                                  className={`text-[10px] font-bold uppercase tracking-[0.2em] ${selectedHierarchyDetail.type === "gp" ? "text-violet-600" : selectedHierarchyDetail.type === "gc" ? "text-blue-600" : "text-orange-600"}`}
+                                >
+                                  {selectedHierarchyDetail.type === "gp"
+                                    ? "Group Parent"
+                                    : selectedHierarchyDetail.type === "gc"
+                                      ? "Group Customer"
+                                      : "Branch Customer"}
                                 </p>
                                 <h4 className="mt-2 text-xl font-bold text-slate-900">
-                                  {selectedHierarchyDetail.type === "gp" ? selectedHierarchyDetail.gp.gp_name || selectedHierarchyDetail.gp.name : selectedHierarchyDetail.type === "gc" ? selectedHierarchyDetail.gc.gc_name || selectedHierarchyDetail.gc.name : `${selectedHierarchyDetail.gc?.gc_name || selectedHierarchyDetail.gc?.name || "Branch Customer"} - ${selectedHierarchyDetail.bc._relations?.branch?.city || "-"}`}
+                                  {selectedHierarchyDetail.type === "gp"
+                                    ? selectedHierarchyDetail.gp.gp_name ||
+                                      selectedHierarchyDetail.gp.name
+                                    : selectedHierarchyDetail.type === "gc"
+                                      ? selectedHierarchyDetail.gc.gc_name ||
+                                        selectedHierarchyDetail.gc.name
+                                      : `${selectedHierarchyDetail.gc?.gc_name || selectedHierarchyDetail.gc?.name || "Branch Customer"} - ${selectedHierarchyDetail.bc._relations?.branch?.city || "-"}`}
                                 </h4>
                                 <p className="mt-1 text-sm font-semibold text-slate-500">
-                                  {selectedHierarchyDetail.type === "gp" ? `GPID: ${selectedHierarchyDetail.gp.name || `GP${selectedHierarchyDetail.gp.id}`}` : selectedHierarchyDetail.type === "gc" ? `GCID: ${selectedHierarchyDetail.gc.name || `GC${selectedHierarchyDetail.gc.id}`}` : `BCID: ${selectedHierarchyDetail.bc.name || `BC${selectedHierarchyDetail.bc.id}`}`}
+                                  {selectedHierarchyDetail.type === "gp"
+                                    ? `GPID: ${selectedHierarchyDetail.gp.name || `GP${selectedHierarchyDetail.gp.id}`}`
+                                    : selectedHierarchyDetail.type === "gc"
+                                      ? `GCID: ${selectedHierarchyDetail.gc.name || `GC${selectedHierarchyDetail.gc.id}`}`
+                                      : `BCID: ${selectedHierarchyDetail.bc.name || `BC${selectedHierarchyDetail.bc.id}`}`}
                                 </p>
 
                                 <div className="mt-5 space-y-4 border-t border-slate-200 pt-4 text-sm">
                                   {selectedHierarchyDetail.type === "gp" ? (
                                     <>
-                                      <div><p className="text-xs text-slate-500">Turunan</p><p className="mt-1 font-semibold text-slate-800">{selectedHierarchyDetail.gcs.length} GC • {selectedHierarchyDetail.gcs.reduce((total, node) => total + node.bcs.length, 0)} BC</p></div>
-                                      <div><p className="text-xs text-slate-500">Policy</p><p className="mt-1 font-semibold text-slate-800">{formatCurrency(selectedHierarchyDetail.gp.credit_limit)} • {formatDays(selectedHierarchyDetail.gp.payment_term)}</p></div>
+                                      <div>
+                                        <p className="text-xs text-slate-500">
+                                          Turunan
+                                        </p>
+                                        <p className="mt-1 font-semibold text-slate-800">
+                                          {selectedHierarchyDetail.gcs.length}{" "}
+                                          GC •{" "}
+                                          {selectedHierarchyDetail.gcs.reduce(
+                                            (total, node) =>
+                                              total + node.bcs.length,
+                                            0,
+                                          )}{" "}
+                                          BC
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="text-xs text-slate-500">
+                                          Credit Limit dan TOP
+                                        </p>
+                                        <p className="mt-1 font-semibold text-slate-800">
+                                          {formatCurrency(
+                                            selectedHierarchyDetail.gp
+                                              .credit_limit,
+                                          )}{" "}
+                                          •{" "}
+                                          {formatDays(
+                                            selectedHierarchyDetail.gp
+                                              .payment_term,
+                                          )}
+                                        </p>
+                                      </div>
                                     </>
                                   ) : selectedHierarchyDetail.type === "gc" ? (
                                     <>
-                                      <div><p className="text-xs text-slate-500">Parent</p><p className="mt-1 font-semibold text-slate-800">GP: {selectedHierarchyDetail.gp?.gp_name || selectedHierarchyDetail.gp?.name || "Relasi belum lengkap"}</p></div>
-                                      <div><p className="text-xs text-slate-500">Branch Customer</p><div className="mt-2 space-y-1.5">{selectedHierarchyDetail.bcs.length > 0 ? selectedHierarchyDetail.bcs.map((bc) => <div key={bc.id} className="flex items-center justify-between gap-3 border-b border-slate-100 py-1.5"><span className="truncate text-slate-700">{bc._relations?.branch?.city || "-"}</span><span className="shrink-0 text-xs font-semibold text-orange-600">{bc.name || `BC${bc.id}`}</span></div>) : <p className="italic text-slate-400">Belum ada BC.</p>}</div></div>
+                                      <div>
+                                        <p className="text-xs text-slate-500">
+                                          Parent
+                                        </p>
+                                        <p className="mt-1 font-semibold text-slate-800">
+                                          GP:{" "}
+                                          {selectedHierarchyDetail.gp
+                                            ?.gp_name ||
+                                            selectedHierarchyDetail.gp?.name ||
+                                            "Relasi belum lengkap"}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="text-xs text-slate-500">
+                                          Branch Customer
+                                        </p>
+                                        <div className="mt-2 space-y-1.5">
+                                          {selectedHierarchyDetail.bcs.length >
+                                          0 ? (
+                                            selectedHierarchyDetail.bcs.map(
+                                              (bc) => (
+                                                <div
+                                                  key={bc.id}
+                                                  className="flex items-center justify-between gap-3 border-b border-slate-100 py-1.5"
+                                                >
+                                                  <span className="truncate text-slate-700">
+                                                    {bc._relations?.branch
+                                                      ?.city || "-"}
+                                                  </span>
+                                                  <span className="shrink-0 text-xs font-semibold text-orange-600">
+                                                    {bc.name || `BC${bc.id}`}
+                                                  </span>
+                                                </div>
+                                              ),
+                                            )
+                                          ) : (
+                                            <p className="italic text-slate-400">
+                                              Belum ada BC.
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
                                     </>
                                   ) : (
                                     <>
-                                      <div><p className="text-xs text-slate-500">Parent</p><p className="mt-1 font-semibold text-slate-800">GP: {selectedHierarchyDetail.gp?.gp_name || selectedHierarchyDetail.gp?.name || "-"}</p><p className="mt-1 font-semibold text-slate-800">GC: {selectedHierarchyDetail.gc?.gc_name || selectedHierarchyDetail.gc?.name || "Relasi belum lengkap"}</p></div>
-                                      <div><p className="text-xs text-slate-500">Kota Branch</p><p className="mt-1 font-semibold text-slate-800">{selectedHierarchyDetail.bc._relations?.branch?.city || "-"}</p></div>
+                                      <div>
+                                        <p className="text-xs text-slate-500">
+                                          Parent
+                                        </p>
+                                        <p className="mt-1 font-semibold text-slate-800">
+                                          GP:{" "}
+                                          {selectedHierarchyDetail.gp
+                                            ?.gp_name ||
+                                            selectedHierarchyDetail.gp?.name ||
+                                            "-"}
+                                        </p>
+                                        <p className="mt-1 font-semibold text-slate-800">
+                                          GC:{" "}
+                                          {selectedHierarchyDetail.gc
+                                            ?.gc_name ||
+                                            selectedHierarchyDetail.gc?.name ||
+                                            "Relasi belum lengkap"}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="text-xs text-slate-500">
+                                          Kota Branch
+                                        </p>
+                                        <p className="mt-1 font-semibold text-slate-800">
+                                          {selectedHierarchyDetail.bc._relations
+                                            ?.branch?.city || "-"}
+                                        </p>
+                                      </div>
                                     </>
                                   )}
                                 </div>
 
                                 <button
                                   type="button"
-                                  onClick={() => selectedHierarchyDetail.type === "gp" ? void handleViewGp(Number(selectedHierarchyDetail.gp.id)) : selectedHierarchyDetail.type === "gc" ? void handleViewGc(Number(selectedHierarchyDetail.gc.id)) : void handleViewBc(Number(selectedHierarchyDetail.bc.id))}
+                                  onClick={() =>
+                                    selectedHierarchyDetail.type === "gp"
+                                      ? void handleViewGp(
+                                          Number(selectedHierarchyDetail.gp.id),
+                                        )
+                                      : selectedHierarchyDetail.type === "gc"
+                                        ? void handleViewGc(
+                                            Number(
+                                              selectedHierarchyDetail.gc.id,
+                                            ),
+                                          )
+                                        : void handleViewBc(
+                                            Number(
+                                              selectedHierarchyDetail.bc.id,
+                                            ),
+                                          )
+                                  }
                                   className="mt-6 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
                                 >
-                                  {selectedHierarchyDetail.type === "gp" ? "Lihat Detail GP" : selectedHierarchyDetail.type === "gc" ? "Lihat Detail GC" : "Lihat Detail BC"}
+                                  {selectedHierarchyDetail.type === "gp"
+                                    ? "Lihat Detail GP"
+                                    : selectedHierarchyDetail.type === "gc"
+                                      ? "Lihat Detail GC"
+                                      : "Lihat Detail BC"}
                                 </button>
                               </div>
                             ) : (
                               <div className="flex min-h-[300px] flex-col items-center justify-center text-center">
                                 <FaUsers className="h-8 w-8 text-slate-300" />
-                                <p className="mt-3 font-semibold text-slate-700">Pilih customer pada struktur</p>
-                                <p className="mt-1 max-w-xs text-sm text-slate-500">Klik nama GP, GC, atau BC untuk melihat konteks dan detailnya di sini.</p>
+                                <p className="mt-3 font-semibold text-slate-700">
+                                  Pilih customer pada struktur
+                                </p>
+                                <p className="mt-1 max-w-xs text-sm text-slate-500">
+                                  Klik nama GP, GC, atau BC untuk melihat
+                                  konteks dan detailnya di sini.
+                                </p>
                               </div>
                             )}
                           </div>
@@ -1349,14 +1693,14 @@ export function NBDetailModal({
               </div>
             </div>
 
-            <div className="flex border-t border-slate-200 bg-white px-4 py-4 md:justify-end md:px-6">
+            {/* <div className="flex border-t border-slate-200 bg-white px-4 py-4 md:justify-end md:px-6">
               <button
                 onClick={onClose}
                 className="w-full rounded-2xl bg-slate-200 px-5 py-2.5 font-medium text-slate-700 transition-all hover:bg-slate-300 md:w-auto"
               >
                 Close
               </button>
-            </div>
+            </div> */}
           </motion.div>
         </div>
       )}

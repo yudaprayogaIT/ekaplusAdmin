@@ -42,10 +42,10 @@ export function GPCard({ gp, onViewDetails }: GPCardProps) {
             </div>
             <div className="flex-1">
               <h3 className="text-lg font-bold text-white line-clamp-1">
-                {gp.name}
+                {gp.gp_name}
               </h3>
               <p className="text-sm text-purple-100">
-                GPID: {gp.code || `GP${gp.id}`}
+                GPID: {gp.name}
               </p>
             </div>
           </div>

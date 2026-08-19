@@ -43,10 +43,10 @@ export function GCCard({ gc, onViewDetails }: GCCardProps) {
             </div>
             <div className="flex-1">
               <h3 className="text-lg font-bold text-white line-clamp-1">
-                {gc.name}
+                {gc.gc_name}
               </h3>
               <p className="text-sm text-blue-100">
-                GCID: {gc.code || `GC${gc.id}`}
+                GCID: {gc.name}
               </p>
             </div>
           </div>

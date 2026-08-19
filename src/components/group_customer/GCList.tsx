@@ -29,7 +29,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
 
-type SortField = "name" | "gp_name" | "created_at" | "updated_at";
+type SortField = "gc_name" | "gp_name" | "created_at" | "updated_at";
 type SortDirection = "asc" | "desc";
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -96,7 +96,7 @@ export default function GCList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
 
-  const [sortField, setSortField] = useState<SortField>("name");
+  const [sortField, setSortField] = useState<SortField>("gc_name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -131,8 +131,8 @@ export default function GCList() {
       const orderByField =
         sortField === "gp_name"
           ? "gpid.gp_name"
-          : sortField === "name"
-            ? "name"
+          : sortField === "gc_name"
+            ? "gc_name"
             : sortField;
 
       const gcSpec = {
@@ -209,8 +209,8 @@ export default function GCList() {
 
         return {
           id: Number(row.id),
-          code: row.name || undefined,
-          name: row.gc_name || row.name || "-",
+          name: row.name || `GC${row.id}`,
+          gc_name: row.gc_name || "-",
           description: row.description || undefined,
           gp_id: gpId,
           gp_name: directGpName || gpMap.get(gpId)?.name,
@@ -412,7 +412,7 @@ export default function GCList() {
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
             >
               <span>
-                {sortField === "name" && "Name"}
+                {sortField === "gc_name" && "Name"}
                 {sortField === "gp_name" && "GP Name"}
                 {sortField === "created_at" && "Created Date"}
                 {sortField === "updated_at" && "Updated Date"}
@@ -438,7 +438,7 @@ export default function GCList() {
                     className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 py-2 min-w-[200px] z-20"
                   >
                     {[
-                      { value: "name" as SortField, label: "Name" },
+                      { value: "gc_name" as SortField, label: "Name" },
                       { value: "gp_name" as SortField, label: "GP Name" },
                       {
                         value: "created_at" as SortField,

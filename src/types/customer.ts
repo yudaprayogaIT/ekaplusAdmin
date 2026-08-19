@@ -3,8 +3,8 @@
 // GP (Group Parent) - Represents a unique business entity
 export interface GroupParent {
   id: number; // GPID (auto-increment)
-  code?: string; // document name/code (e.g. GP00002)
-  name: string; // GPName (unique)
+  name: string; // document code from DB (e.g. GP00002)
+  gp_name: string; // business/display name
   description?: string;
   credit_limit_active?: number;
   credit_limit?: number | null;
@@ -25,8 +25,8 @@ export interface GroupParent {
 // GC (Group Customer) - Company-level customer
 export interface GroupCustomer {
   id: number; // GCID (auto-increment)
-  code?: string; // document name/code (e.g. GC00002)
-  name: string; // GCName (from company name)
+  name: string; // document code from DB (e.g. GC00002)
+  gc_name: string; // business/display name
   description?: string;
   gp_id: number; // Foreign key to GP
   gp_name?: string; // GP name (for display)
@@ -58,8 +58,7 @@ export interface GroupCustomer {
 // BC (Branch Customer) - Branch-level customer
 export interface BranchCustomer {
   id: number; // BCID (auto-increment)
-  code?: string; // document name/code (e.g. BC00002)
-  name: string; // BCName (GCName + Branch.city)
+  name: string; // document code from DB (e.g. BC00002)
   description?: string;
   gc_id: number; // Foreign key to GC
   gc_name?: string; // GC name (for display)
@@ -101,6 +100,7 @@ export interface BranchCustomer {
 export interface GroupParentApiResponse {
   id: number;
   name: string;
+  gp_name: string;
   credit_limit_active?: number | null;
   credit_limit?: number | null;
   payment_term_active?: number | null;
@@ -120,6 +120,7 @@ export interface GroupParentApiResponse {
 export interface GroupCustomerApiResponse {
   id: number;
   name: string;
+  gc_name: string;
   gp_id: number;
   gp?: GroupParentApiResponse;
   credit_limit_active?: number | null;

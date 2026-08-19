@@ -123,7 +123,6 @@ interface GroupCustomerApiResponse {
 interface BranchCustomerApiResponse {
   id: number;
   name?: string | null;
-  bcid_name?: string | null;
   gcid?:
     | number
     | { id?: number; name?: string; gc_name?: string; gpid?: number }
@@ -644,8 +643,7 @@ export default function CustomerOverviewPage() {
 
             const bc: BranchCustomer = {
               id: Number(row.id),
-              code: row.name || undefined,
-              name: computedName,
+              name: row.name || `BC${row.id}`,
               gc_id: gcId,
               gc_name: gcName || undefined,
               branch_id: branchId,
@@ -658,8 +656,8 @@ export default function CustomerOverviewPage() {
 
             return {
               id: bc.id,
-              code: bc.code || `BC-${bc.id}`,
-              name: bc.name,
+              code: bc.name,
+              name: computedName,
               contact: "-",
               branchLocation: bc.branch_city || bc.branch_name || "-",
               monthlyVolume: "-",
@@ -717,8 +715,8 @@ export default function CustomerOverviewPage() {
           const nextCards = gpRows.map((row) => {
             const gp: GroupParent = {
               id: Number(row.id),
-              code: row.name || undefined,
-              name: row.gp_name || row.name || "-",
+              name: row.name || `GP${row.id}`,
+              gp_name: row.gp_name || "-",
               description: row.description || undefined,
               credit_limit_active: Number(row.credit_limit_active || 0),
               credit_limit: row.credit_limit ?? null,
@@ -744,8 +742,8 @@ export default function CustomerOverviewPage() {
 
             return {
               id: gp.id,
-              code: gp.code || `GP-${gp.id}`,
-              name: gp.name,
+              code: gp.name,
+              name: gp.gp_name,
               contact: "-",
               branchLocation: "Group Parent",
               monthlyVolume: "-",
@@ -843,8 +841,8 @@ export default function CustomerOverviewPage() {
             const gpId = extractLinkId(row.gpid) || 0;
             const gc: GroupCustomer = {
               id: Number(row.id),
-              code: row.name || undefined,
-              name: row.gc_name || row.name || "-",
+              name: row.name || `GC${row.id}`,
+              gc_name: row.gc_name || "-",
               gp_id: gpId,
               gp_name:
                 row.gpid && typeof row.gpid === "object"
@@ -865,8 +863,8 @@ export default function CustomerOverviewPage() {
 
             return {
               id: gc.id,
-              code: gc.code || `GC-${gc.id}`,
-              name: gc.name,
+              code: gc.name,
+              name: gc.gc_name,
               contact: gc.owner_name || "-",
               branchLocation: "Group Customer",
               monthlyVolume: "-",
@@ -945,8 +943,8 @@ export default function CustomerOverviewPage() {
                 kind: "nb" as const,
                 item: {
                   id,
-                  code,
-                  name,
+                  name: code,
+                  nb_name: name,
                   disabled,
                   created_at: row.created_at || new Date(0).toISOString(),
                   updated_at:

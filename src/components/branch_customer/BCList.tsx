@@ -29,13 +29,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
 import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 
-type SortField = "name" | "branch_city" | "created_at" | "updated_at";
+type SortField = "gc_name" | "branch_city" | "created_at" | "updated_at";
 type SortDirection = "asc" | "desc";
 
 interface BranchCustomerApiResponse {
   id: number;
   name?: string | null;
-  bcid_name?: string | null;
   gcid?:
     | number
     | { id?: number; name?: string; gc_name?: string; gpid?: number }
@@ -111,7 +110,7 @@ export default function BCList() {
   const [selectedBC, setSelectedBC] = useState<BranchCustomer | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [sortField, setSortField] = useState<SortField>("name");
+  const [sortField, setSortField] = useState<SortField>("gc_name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
   const loadData = useCallback(async () => {
@@ -127,8 +126,8 @@ export default function BCList() {
       const orderByField =
         sortField === "branch_city"
           ? "branch.city"
-          : sortField === "name"
-            ? "name"
+          : sortField === "gc_name"
+            ? "gcid.gc_name"
             : sortField;
 
       const trimmedSearchQuery = searchQuery.trim();
@@ -332,18 +331,10 @@ export default function BCList() {
 
         const gcName = directGcName || gcRef?.name;
         const branchCity = directBranchCity || branchRef?.city;
-        const normalizedGcName = (gcName || "").trim();
-        const normalizedBranchCity = (branchCity || "").trim();
-        const computedDisplayName =
-          normalizedGcName && normalizedBranchCity
-            ? `${normalizedGcName} - ${normalizedBranchCity}`
-            : undefined;
 
         return {
           id: Number(row.id),
-          code: row.name || undefined,
-          name:
-            computedDisplayName || row.bcid_name || row.name || `BC ${row.id}`,
+          name: row.name || `BC${row.id}`,
           gc_id: gcId,
           gc_name: gcName,
           gc_code:
@@ -508,7 +499,7 @@ export default function BCList() {
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
             >
               <span>
-                {sortField === "name" && "Name"}
+                {sortField === "gc_name" && "Name"}
                 {sortField === "branch_city" && "Branch City"}
                 {sortField === "created_at" && "Created Date"}
                 {sortField === "updated_at" && "Updated Date"}
@@ -534,7 +525,7 @@ export default function BCList() {
                     className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 py-2 min-w-[200px] z-20"
                   >
                     {[
-                      { value: "name" as SortField, label: "Name" },
+                      { value: "gc_name" as SortField, label: "Name" },
                       {
                         value: "branch_city" as SortField,
                         label: "Branch City",

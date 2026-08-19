@@ -44,9 +44,9 @@ export function BCCard({ bc, onViewDetails }: BCCardProps) {
             </div>
             <div className="flex-1">
               <h3 className="text-lg font-bold text-white line-clamp-1">
-                {bc.name}
+                {bc.gc_name || "-"}
               </h3>
-              <p className="text-sm text-orange-100">BCID: {bc.code || `BC${bc.id}`}</p>
+              <p className="text-sm text-orange-100">BCID: {bc.name}</p>
             </div>
           </div>
 

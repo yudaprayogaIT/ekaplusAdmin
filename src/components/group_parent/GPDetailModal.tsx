@@ -190,7 +190,7 @@ export function GPDetailModal({
   const [childBCs, setChildBCs] = useState<BranchCustomer[]>([]);
   const [expandedGcId, setExpandedGcId] = useState<number | null>(null);
   const [selectedHierarchyNode, setSelectedHierarchyNode] = useState<{
-    type: "gc" | "bc";
+    type: "nb" | "gp" | "gc" | "bc";
     id: number;
   } | null>(null);
   const [hierarchyGp, setHierarchyGp] = useState<PolicyHierarchyGpRow | null>(
@@ -270,6 +270,8 @@ export function GPDetailModal({
           fields: [
             "id",
             "nbid",
+            "name",
+            "gp_name",
             "description",
             "created_by.full_name",
             "updated_by.full_name",
@@ -393,11 +395,11 @@ export function GPDetailModal({
 
       const mappedGCs: GroupCustomer[] = hierarchyGcRows.map((row) => ({
         id: Number(row.id),
-        code: row.name || undefined,
-        name: row.gc_name || row.name || "-",
+        name: row.name || `GC${row.id}`,
+        gc_name: row.gc_name || "-",
         gp_id: gp.id,
-        gp_name: gp.name,
-        gp_code: gp.code,
+        gp_name: gp.gp_name,
+        // gp_code: gp.code,
         created_at: new Date(0).toISOString(),
         updated_at: new Date(0).toISOString(),
         disabled: 0,
@@ -415,13 +417,11 @@ export function GPDetailModal({
 
         return {
           id: Number(row.id),
-          code: row.name || undefined,
-          name: `${gcName || "GC"} - ${branchCity || "-"}`,
+          name: row.name || `BC${row.id}`,
           gc_id: gcId,
           gc_name: gcName,
           gc_code: gcCode,
-          gp_name: gp.name,
-          gp_code: gp.code,
+          gp_name: gp.gp_name,
           branch_id: 0,
           branch_city: branchCity,
           created_at: new Date(0).toISOString(),
@@ -549,8 +549,8 @@ export function GPDetailModal({
 
       onViewNB({
         id: linkedNB.id,
-        code: (nbRow?.name || linkedNB.code || `NB${linkedNB.id}`) as string,
-        name: (nbRow?.nb_name || nbRow?.name || linkedNB.name || "-") as string,
+        name: (nbRow?.name || linkedNB.code || `NB${linkedNB.id}`) as string,
+        nb_name: (nbRow?.nb_name || linkedNB.name || "-") as string,
         disabled: Number(nbRow?.disabled || linkedNB.disabled || 0),
         created_at:
           nbRow?.created_at || linkedNB.created_at || new Date(0).toISOString(),
@@ -739,13 +739,20 @@ export function GPDetailModal({
                 <div className="space-y-1">
                   <div className="flex items-center gap-3">
                     <FaBuilding className="text-xl text-violet-600" />
-                    <h2 className="text-lg font-bold text-slate-900 md:text-xl">
+                    <h2 className="text-lg font-bold text-slate-900 md:text-lg">
                       Group Parent Details
                     </h2>
                   </div>
-                  <p className="pl-8 text-xs font-semibold text-slate-500">GPID: {gp.code || `GP${gp.id}`}</p>
+                  <p className="pl-8 text-sm font-semibold text-slate-500">
+                    {gp.gp_name} - {gp.name}
+                  </p>
                 </div>
-                <button onClick={onClose} className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"><HiXMark className="h-5 w-5" /></button>
+                <button
+                  onClick={onClose}
+                  className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                >
+                  <HiXMark className="h-5 w-5" />
+                </button>
               </div>
             </header>
 
@@ -754,56 +761,66 @@ export function GPDetailModal({
                 <aside className="xl:sticky xl:top-6 xl:self-start">
                   <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
                     <div className="hidden border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(124,58,237,0.16),_transparent_55%),linear-gradient(135deg,#f5f3ff,#ffffff_55%,#f8fafc)] px-4 py-3 xl:block">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-violet-700">Panel Detail</p>
-                      <h3 className="mt-1 text-base font-bold text-slate-900">Navigasi Data</h3>
-                      <p className="mt-0.5 text-xs text-slate-500">Pilih kategori informasi group parent.</p>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-violet-700">
+                        Panel Detail
+                      </p>
+                      <h3 className="mt-1 text-base font-bold text-slate-900">
+                        Navigasi Data
+                      </h3>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        Pilih kategori informasi group parent.
+                      </p>
                     </div>
                     <div className="grid grid-cols-2 gap-2 p-2 xl:grid-cols-1 xl:p-3">
-                    {detailTabs.map((tab) => {
-                      const active = activeTab === tab.key;
-                      return (
-                        <button
-                          key={tab.key}
-                          type="button"
-                          onClick={() => setActiveTab(tab.key)}
-                          className={`w-full min-w-0 rounded-2xl border px-3 py-2.5 text-left transition-all ${
-                            active
-                              ? "border-purple-500 bg-gradient-to-r from-purple-600 to-fuchsia-500 text-white shadow-lg shadow-purple-200/70"
-                              : "border-slate-200 bg-white text-slate-700 hover:border-purple-200 hover:bg-purple-50/70"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-                                active
-                                  ? "bg-white/20 text-white"
-                                  : "bg-slate-100 text-purple-600"
-                              }`}
-                            >
-                              {tab.icon}
-                            </div>
-                            <div>
-                              <p className="text-sm font-semibold">
-                                {tab.label}
-                              </p>
-                              <p
-                                className={`text-xs ${
-                                  active ? "text-purple-100" : "text-slate-500"
+                      {detailTabs.map((tab) => {
+                        const active = activeTab === tab.key;
+                        return (
+                          <button
+                            key={tab.key}
+                            type="button"
+                            onClick={() => setActiveTab(tab.key)}
+                            className={`w-full min-w-0 rounded-2xl border px-3 py-2.5 text-left transition-all ${
+                              active
+                                ? "border-purple-500 bg-gradient-to-r from-purple-600 to-fuchsia-500 text-white shadow-lg shadow-purple-200/70"
+                                : "border-slate-200 bg-white text-slate-700 hover:border-purple-200 hover:bg-purple-50/70"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                                  active
+                                    ? "bg-white/20 text-white"
+                                    : "bg-slate-100 text-purple-600"
                                 }`}
                               >
-                                {tab.caption}
-                              </p>
+                                {tab.icon}
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold">
+                                  {tab.label}
+                                </p>
+                                <p
+                                  className={`text-xs ${
+                                    active
+                                      ? "text-purple-100"
+                                      : "text-slate-500"
+                                  }`}
+                                >
+                                  {tab.caption}
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                        </button>
-                      );
-                    })}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </aside>
 
                 <div className="min-h-0 space-y-5">
-                  <section className={`${activeTab === "hierarchy" ? "hidden" : ""} rounded-3xl border border-white bg-white p-6 shadow-sm`}>
+                  <section
+                    className={`${activeTab === "hierarchy" ? "hidden" : ""} rounded-3xl border border-white bg-white p-6 shadow-sm`}
+                  >
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-purple-500">
@@ -820,7 +837,7 @@ export function GPDetailModal({
                           />
                         ) : (
                           <h3 className="mt-2 text-3xl font-bold text-slate-900">
-                            {gp.name}
+                            {gp.gp_name}
                           </h3>
                         )}
                         <p className="mt-2 text-sm text-slate-500">
@@ -1189,7 +1206,7 @@ export function GPDetailModal({
                             <p className="truncate text-sm text-slate-500">
                               {loadingChildren
                                 ? "Loading..."
-                                : `${childGCs.length} GC • ${childBCs.length} BC`}
+                                : `${linkedNB ? "1 NB • " : ""}1 GP • ${childGCs.length} GC • ${childBCs.length} BC`}
                             </p>
                           </div>
                         </div>
@@ -1198,7 +1215,12 @@ export function GPDetailModal({
                             <>
                               <button
                                 type="button"
-                                onClick={() => void handleViewLinkedNb()}
+                                onClick={() =>
+                                  setSelectedHierarchyNode({
+                                    type: "nb",
+                                    id: linkedNB.id,
+                                  })
+                                }
                                 className="max-w-40 truncate font-semibold text-indigo-600 hover:underline"
                               >
                                 {linkedNB.name}
@@ -1206,18 +1228,76 @@ export function GPDetailModal({
                               <span>/</span>
                             </>
                           ) : null}
-                          <span className="max-w-48 truncate font-semibold text-violet-600">
-                            {gp.name}
-                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedHierarchyNode({
+                                type: "gp",
+                                id: gp.id,
+                              })
+                            }
+                            className="max-w-48 truncate font-semibold text-violet-600 hover:underline"
+                          >
+                            {gp.gp_name}
+                          </button>
                         </div>
                       </div>
 
                       <div className="grid min-h-[400px] lg:grid-cols-[minmax(0,3fr)_minmax(300px,2fr)] xl:min-h-[440px]">
                         <div className="border-b border-slate-200 lg:border-b-0 lg:border-r">
                           <div className="border-b border-slate-100 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                            Group Customer & Branch
+                            National Brand, Group Parent, Customer & Branch
                           </div>
                           <div className="max-h-[55vh] overflow-y-auto py-1">
+                            {linkedNB ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setSelectedHierarchyNode({
+                                    type: "nb",
+                                    id: linkedNB.id,
+                                  })
+                                }
+                                className={`flex min-h-12 w-full items-center border-l-2 px-4 py-2 text-left ${selectedHierarchyNode?.type === "nb" ? "border-indigo-500 bg-indigo-50/50" : "border-transparent hover:bg-indigo-50/50"}`}
+                              >
+                                <span className="mr-3 rounded-md bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-600">
+                                  {linkedNB.code}
+                                </span>
+                                <span className="min-w-0">
+                                  <span className="block truncate text-xs font-semibold text-slate-900">
+                                    {linkedNB.name}
+                                  </span>
+                                  <span className="block truncate text-[10px] text-slate-500">
+                                    1 Group Parent
+                                  </span>
+                                </span>
+                              </button>
+                            ) : null}
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedHierarchyNode({
+                                  type: "gp",
+                                  id: gp.id,
+                                })
+                              }
+                              className={`${linkedNB ? "ml-5 w-[calc(100%_-_1.25rem)]" : "w-full"} flex min-h-12 items-center border-l-2 border-violet-500 px-3 py-2 text-left ${selectedHierarchyNode?.type === "gp" ? "bg-violet-50/50" : "hover:bg-violet-50/50"}`}
+                            >
+                              {linkedNB ? (
+                                <span className="mr-2 text-xs text-violet-400">└─</span>
+                              ) : null}
+                              <span className="min-w-0">
+                                <span className="block truncate text-xs font-semibold text-slate-900">
+                                  {gp.gp_name}
+                                </span>
+                                <span className="block truncate text-[10px] font-semibold text-violet-600">
+                                  {gp.name} • {childGCs.length} GC • {childBCs.length} BC
+                                </span>
+                              </span>
+                            </button>
+
+                            <div className={`${linkedNB ? "ml-10" : "ml-5"} border-l border-blue-200`}>
                             {gpHierarchyTree.gcs.length > 0 ? (
                               gpHierarchyTree.gcs.map(({ gc, bcs }) => {
                                 const gcId = Number(gc.id);
@@ -1244,7 +1324,7 @@ export function GPDetailModal({
                                           )
                                         }
                                         className="flex w-10 shrink-0 items-center justify-center text-blue-500"
-                                        aria-label={`${expanded ? "Tutup" : "Buka"} ${gc.name}`}
+                                        aria-label={`${expanded ? "Tutup" : "Buka"} ${gc.gc_name}`}
                                       >
                                         <FaChevronRight
                                           className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-90" : ""}`}
@@ -1266,11 +1346,11 @@ export function GPDetailModal({
                                         className="min-w-0 flex-1 py-2 pr-3 text-left"
                                       >
                                         <p className="truncate text-[13px] font-semibold text-slate-900">
-                                          {gc.name}
+                                          {gc.gc_name}
                                         </p>
                                         <p className="mt-0.5 truncate text-[11px] text-slate-500">
                                           <span className="font-semibold text-blue-600">
-                                            {gc.code || `GC${gc.id}`}
+                                            {gc.name}
                                           </span>{" "}
                                           • {bcs.length} BC
                                         </p>
@@ -1305,14 +1385,13 @@ export function GPDetailModal({
                                                 </span>
                                                 <span className="min-w-0">
                                                   <span className="block truncate text-xs font-medium text-slate-800">
-                                                    {gc.name} -{" "}
+                                                    {gc.gc_name} -{" "}
                                                     {item.branch_city ||
                                                       item.branch_name ||
                                                       "-"}
                                                   </span>
                                                   <span className="block truncate text-[11px] font-bold text-orange-600">
-                                                    {item.code ||
-                                                      `BC${item.id}`}
+                                                    {item.name}
                                                   </span>
                                                 </span>
                                               </button>
@@ -1361,6 +1440,7 @@ export function GPDetailModal({
                                 ))}
                               </div>
                             ) : null}
+                            </div>
                           </div>
                         </div>
 
@@ -1369,7 +1449,57 @@ export function GPDetailModal({
                             Detail Customer
                           </div>
                           <div className="max-h-[55vh] overflow-y-auto p-4 xl:p-5">
-                            {selectedHierarchyDetail ? (
+                            {selectedHierarchyNode?.type === "nb" && linkedNB ? (
+                              <div>
+                                <nav className="mb-5 text-[11px] text-slate-500" aria-label="Breadcrumb hierarchy">
+                                  <span className="font-semibold text-slate-800">{linkedNB.name}</span>
+                                </nav>
+                                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-600">National Brand</p>
+                                <h4 className="mt-2 text-xl font-bold text-slate-900">{linkedNB.name}</h4>
+                                <p className="mt-1 text-sm font-semibold text-slate-500">NBID: {linkedNB.code}</p>
+                                <div className="mt-5 space-y-4 border-t border-slate-200 pt-4 text-sm">
+                                  <div>
+                                    <p className="text-xs text-slate-500">Group Parent</p>
+                                    <p className="mt-1 font-semibold text-slate-800">{gp.gp_name}</p>
+                                    <p className="mt-1 text-xs font-semibold text-violet-600">{gp.name}</p>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleViewLinkedNb()}
+                                  className="mt-6 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
+                                >
+                                  Lihat Detail NB
+                                </button>
+                              </div>
+                            ) : selectedHierarchyNode?.type === "gp" ? (
+                              <div>
+                                <nav className="mb-5 flex flex-wrap items-center gap-1 text-[11px] text-slate-500" aria-label="Breadcrumb hierarchy">
+                                  {linkedNB ? <><span>{linkedNB.name}</span><span>/</span></> : null}
+                                  <span className="font-semibold text-slate-800">{gp.gp_name}</span>
+                                </nav>
+                                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-violet-600">Group Parent</p>
+                                <h4 className="mt-2 text-xl font-bold text-slate-900">{gp.gp_name}</h4>
+                                <p className="mt-1 text-sm font-semibold text-slate-500">GPID: {gp.name}</p>
+                                <div className="mt-5 space-y-4 border-t border-slate-200 pt-4 text-sm">
+                                  {linkedNB ? <div><p className="text-xs text-slate-500">Parent</p><p className="mt-1 font-semibold text-slate-800">NB: {linkedNB.name}</p></div> : null}
+                                  <div><p className="text-xs text-slate-500">Turunan</p><p className="mt-1 font-semibold text-slate-800">{childGCs.length} GC • {childBCs.length} BC</p></div>
+                                  <div className="grid gap-3 border-t border-slate-200 pt-4 sm:grid-cols-2">
+                                    <div className="rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3">
+                                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-violet-600">Credit Limit</p>
+                                      <p className="mt-2 text-base font-bold text-slate-900">{formatCurrency(hierarchyGp?.credit_limit ?? gp.credit_limit)}</p>
+                                      <p className="mt-1 text-xs font-semibold text-violet-600">Level: GP</p>
+                                    </div>
+                                    <div className="rounded-2xl border border-cyan-100 bg-cyan-50 px-4 py-3">
+                                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-700">Payment Term</p>
+                                      <p className="mt-2 text-base font-bold text-slate-900">{formatDays(hierarchyGp?.payment_term ?? gp.payment_term)}</p>
+                                      <p className="mt-1 text-xs font-semibold text-cyan-700">Level: GP</p>
+                                    </div>
+                                  </div>
+                                </div>
+                                <button type="button" disabled className="mt-6 w-full cursor-default rounded-xl bg-slate-300 px-4 py-2.5 text-sm font-semibold text-white">Group Parent Aktif</button>
+                              </div>
+                            ) : selectedHierarchyDetail ? (
                               <div>
                                 <nav
                                   className="mb-5 flex flex-wrap items-center gap-1 text-[11px] text-slate-500"
@@ -1381,7 +1511,7 @@ export function GPDetailModal({
                                       <span>/</span>
                                     </>
                                   ) : null}
-                                  <span>{gp.name}</span>
+                                  <span>{gp.gp_name}</span>
                                   <span>/</span>
                                   <span className="font-semibold text-slate-800">
                                     {selectedHierarchyDetail.type === "gc"
@@ -1405,16 +1535,21 @@ export function GPDetailModal({
                                 </h4>
                                 <p className="mt-1 text-sm font-semibold text-slate-500">
                                   {selectedHierarchyDetail.type === "gc"
-                                    ? `GCID: ${selectedHierarchyDetail.gc.code || `GC${selectedHierarchyDetail.gc.id}`}`
-                                    : `BCID: ${selectedHierarchyDetail.bc.code || `BC${selectedHierarchyDetail.bc.id}`}`}
+                                    ? `GCID: ${selectedHierarchyDetail.gc.name}`
+                                    : `BCID: ${selectedHierarchyDetail.bc.name}`}
                                 </p>
                                 <div className="mt-5 space-y-4 border-t border-slate-200 pt-4 text-sm">
                                   <div>
                                     <p className="text-xs text-slate-500">
                                       Parent
                                     </p>
+                                    {linkedNB ? (
+                                      <p className="mt-1 font-semibold text-slate-800">
+                                        NB: {linkedNB.name}
+                                      </p>
+                                    ) : null}
                                     <p className="mt-1 font-semibold text-slate-800">
-                                      GP: {gp.name}
+                                      GP: {gp.gp_name}
                                     </p>
                                     {selectedHierarchyDetail.type === "bc" ? (
                                       <p className="mt-1 font-semibold text-slate-800">
@@ -1442,7 +1577,7 @@ export function GPDetailModal({
                                                   {item.branch_city || "-"}
                                                 </span>
                                                 <span className="shrink-0 text-xs font-semibold text-orange-600">
-                                                  {item.code || `BC${item.id}`}
+                                                  {item.name}
                                                 </span>
                                               </div>
                                             ),
@@ -1547,8 +1682,8 @@ export function GPDetailModal({
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-slate-200 bg-white px-4 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end md:px-6">
-              {isEditMode && (
+            {isEditMode && (
+              <div className="flex flex-col gap-3 border-t border-slate-200 bg-white px-4 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end md:px-6">
                 <>
                   <button
                     onClick={handleCancelEdit}
@@ -1567,16 +1702,8 @@ export function GPDetailModal({
                     {isSaving ? "Menyimpan..." : "Apply Changes"}
                   </button>
                 </>
-              )}
-              {!isEditMode && (
-                <button
-                  onClick={onClose}
-                  className="w-full rounded-2xl bg-slate-200 px-5 py-2.5 font-medium text-slate-700 transition-all hover:bg-slate-300 sm:w-auto"
-                >
-                  Close
-                </button>
-              )}
-            </div>
+              </div>
+            )}
           </motion.div>
         </div>
       )}
