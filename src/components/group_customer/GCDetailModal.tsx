@@ -141,6 +141,8 @@ interface GroupCustomerDetailRow {
   owner_email?: string | null;
   owner_place_of_birth?: string | null;
   owner_date_of_birth?: string | null;
+  tax_status?: number | string | null;
+  npwp?: string | null;
 }
 
 type DetailTab = "company" | "finance" | "hierarchy" | "activity";
@@ -436,6 +438,8 @@ export function GCDetailModal({
   const [editedOwnerEmail, setEditedOwnerEmail] = useState("");
   const [editedOwnerPlaceOfBirth, setEditedOwnerPlaceOfBirth] = useState("");
   const [editedOwnerDateOfBirth, setEditedOwnerDateOfBirth] = useState("");
+  const [detailTaxStatus, setDetailTaxStatus] = useState<number | undefined>();
+  const [detailNpwp, setDetailNpwp] = useState("");
   const [creditPolicyFields, setCreditPolicyFields] = useState({
     credit_limit_active: 0,
     credit_limit: null as number | null,
@@ -499,6 +503,8 @@ export function GCDetailModal({
           "owner_email",
           "owner_place_of_birth",
           "owner_date_of_birth",
+          "tax_status",
+          "npwp",
         ],
         filters: [["id", "=", gc.id]],
         limit: 1,
@@ -533,6 +539,10 @@ export function GCDetailModal({
     setEditedOwnerDateOfBirth(
       gcDetailRow?.owner_date_of_birth?.split("T")[0] || "",
     );
+    setDetailTaxStatus(
+      toNumber(gcDetailRow?.tax_status) ?? toNumber(gc.tax_status),
+    );
+    setDetailNpwp((gcDetailRow?.npwp ?? gc.npwp ?? "").trim());
     setCreditPolicyFields({
       credit_limit_active: Number(gcDetailRow?.credit_limit_active || 0),
       credit_limit: gcDetailRow?.credit_limit ?? null,
@@ -773,6 +783,8 @@ export function GCDetailModal({
       setEditedOwnerEmail(gc.owner_email || "");
       setEditedOwnerPlaceOfBirth("");
       setEditedOwnerDateOfBirth("");
+      setDetailTaxStatus(toNumber(gc.tax_status));
+      setDetailNpwp((gc.npwp || "").trim());
     }
   }, [gc, isOpen]);
 
@@ -1317,9 +1329,9 @@ export function GCDetailModal({
                               )}
                               {renderReadOnlyField(
                                 "Tax Status",
-                                gc.tax_status === 1 ? "PKP" : "Non PKP",
+                                detailTaxStatus === 1 ? "PKP" : "Non PKP",
                               )}
-                              {renderReadOnlyField("NPWP", gc.npwp || "-")}
+                              {renderReadOnlyField("NPWP", detailNpwp || "-")}
                               {renderReadOnlyField(
                                 "Description",
                                 editedDescription || gc.description || "-",

@@ -64,7 +64,7 @@ interface BCDetailApi {
     | number
     | { id?: number | null; branch_name?: string | null; city?: string | null }
     | null;
-  customer_register?: number | null;
+  customer_register?: number | { name?: string | null } | null;
   product_need?: string | null;
   branch_owner?: string | null;
   branch_owner_phone?: string | null;
@@ -591,7 +591,12 @@ export function BCDetailModal({
     try {
       const dRes = await apiFetch(
         getQueryUrl(`${API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2}/${bc.id}`, {
-          fields: ["*", "created_by.full_name", "updated_by.full_name"],
+          fields: [
+            "*",
+            "customer_register.name",
+            "created_by.full_name",
+            "updated_by.full_name",
+          ],
         }),
         { method: "GET", cache: "no-store" },
         token,
@@ -772,9 +777,7 @@ export function BCDetailModal({
         });
 
         setRelatedBCs(
-          mappedBCs.sort((a, b) =>
-            a.name.localeCompare(b.name, "id-ID"),
-          ),
+          mappedBCs.sort((a, b) => a.name.localeCompare(b.name, "id-ID")),
         );
       } catch (error) {
         setRelatedBCs([]);
@@ -1717,10 +1720,9 @@ export function BCDetailModal({
   const taxStatusLabel = getTaxStatusLabel(detail?.tax_status);
   const npwpValue = detail?.npwp || "-";
   const customerRegister =
-    detail?.customer_register === null ||
-    detail?.customer_register === undefined
-      ? "-"
-      : String(detail.customer_register);
+    detail?.customer_register && typeof detail.customer_register === "object"
+      ? detail.customer_register.name || "-"
+      : "-";
   const isCashLabel = Number(detail?.is_cash || 0) === 1 ? "Cash" : "Non Cash";
   const branchLocation =
     [bc.branch_name, bc.branch_city].filter(Boolean).join(", ") || "-";
@@ -2449,15 +2451,15 @@ export function BCDetailModal({
                                     Primary Contact
                                   </p>
                                   <h5 className="mt-1 text-xl font-bold text-slate-900">
-                                    Identitas Pemilik
+                                    Identitas PIC Branch
                                   </h5>
                                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                                     {renderReadOnlyField(
-                                      "Nama Owner",
+                                      "Nama PIC Branch",
                                       branchOwner,
                                     )}
                                     {renderReadOnlyField(
-                                      "Telepon",
+                                      "Telepon PIC Branch",
                                       branchOwnerPhone,
                                     )}
                                     {renderReadOnlyField(
@@ -2700,38 +2702,198 @@ export function BCDetailModal({
                     {activeTab === "hierarchy" && (
                       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
                         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-4 xl:px-5">
-                          <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500 text-white"><FaArrowDown className="h-4 w-4" /></div><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-600">Struktur Customer</p><p className="text-sm text-slate-500">{relatedBCsLoading ? "Memuat data..." : `${nb ? "1 NB • " : ""}${gp ? "1 GP • " : ""}1 GC • ${relatedBCs.length || 1} BC`}</p></div></div>
-                          <div className="flex min-w-0 items-center gap-2 text-xs text-slate-500">{nb ? <><span className="max-w-32 truncate text-indigo-600">{nb.name}</span><span>/</span></> : null}{gp ? <><button type="button" onClick={() => { setSelectedHierarchyParent("gp"); setSelectedHierarchyBcId(null); }} className="max-w-36 truncate font-semibold text-violet-600 hover:underline">{gp.gp_name}</button><span>/</span></> : null}{gc ? <button type="button" onClick={() => { setSelectedHierarchyParent(null); setSelectedHierarchyBcId(null); }} className="max-w-40 truncate font-semibold text-blue-600 hover:underline">{gc.gc_name}</button> : null}</div>
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500 text-white">
+                              <FaArrowDown className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-600">
+                                Struktur Customer
+                              </p>
+                              <p className="text-sm text-slate-500">
+                                {relatedBCsLoading
+                                  ? "Memuat data..."
+                                  : `${nb ? "1 NB • " : ""}${gp ? "1 GP • " : ""}1 GC • ${relatedBCs.length || 1} BC`}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex min-w-0 items-center gap-2 text-xs text-slate-500">
+                            {nb ? (
+                              <>
+                                <span className="max-w-32 truncate text-indigo-600">
+                                  {nb.name}
+                                </span>
+                                <span>/</span>
+                              </>
+                            ) : null}
+                            {gp ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedHierarchyParent("gp");
+                                    setSelectedHierarchyBcId(null);
+                                  }}
+                                  className="max-w-36 truncate font-semibold text-violet-600 hover:underline"
+                                >
+                                  {gp.gp_name}
+                                </button>
+                                <span>/</span>
+                              </>
+                            ) : null}
+                            {gc ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedHierarchyParent(null);
+                                  setSelectedHierarchyBcId(null);
+                                }}
+                                className="max-w-40 truncate font-semibold text-blue-600 hover:underline"
+                              >
+                                {gc.gc_name}
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
-                        {relatedBCsError ? <div className="mx-4 mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{relatedBCsError}</div> : null}
+                        {relatedBCsError ? (
+                          <div className="mx-4 mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                            {relatedBCsError}
+                          </div>
+                        ) : null}
 
                         <div className="grid min-h-[400px] lg:grid-cols-[minmax(0,3fr)_minmax(300px,2fr)] xl:min-h-[440px]">
                           <div className="border-b border-slate-200 lg:border-b-0 lg:border-r">
-                            <div className="border-b border-slate-100 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Group Customer & Branch</div>
+                            <div className="border-b border-slate-100 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                              Group Customer & Branch
+                            </div>
                             <div className="max-h-[55vh] overflow-y-auto py-1">
                               {nb ? (
                                 <div className="flex min-h-12 items-center border-l-2 border-indigo-500 px-4 py-2">
-                                  <span className="mr-3 rounded-md bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-600">{nb.code}</span>
-                                  <span className="min-w-0"><span className="block truncate text-xs font-semibold text-slate-900">{nb.name}</span><span className="block truncate text-[10px] font-semibold text-indigo-600">{nb.code}</span></span>
+                                  <span className="mr-3 rounded-md bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-600">
+                                    {nb.code}
+                                  </span>
+                                  <span className="min-w-0">
+                                    <span className="block truncate text-xs font-semibold text-slate-900">
+                                      {nb.name}
+                                    </span>
+                                    <span className="block truncate text-[10px] font-semibold text-indigo-600">
+                                      {nb.code}
+                                    </span>
+                                  </span>
                                 </div>
                               ) : null}
                               {gp ? (
-                                <button type="button" onClick={() => { setSelectedHierarchyParent("gp"); setSelectedHierarchyBcId(null); }} className={`ml-5 flex min-h-[50px] w-[calc(100%_-_1.25rem)] items-center border-l-2 px-3 py-2 text-left ${selectedHierarchyParent === "gp" ? "border-violet-500 bg-violet-50/50" : "border-transparent hover:bg-violet-50/50"}`}>
-                                  <span className="mr-2 text-xs text-violet-400">└─</span>
-                                  <span className="mr-3 rounded-md bg-violet-50 px-2 py-1 text-[10px] font-bold text-violet-600">{gp.name}</span>
-                                  <span className="min-w-0"><span className="block truncate text-xs font-semibold text-slate-900">{gp.gp_name}</span><span className="block truncate text-[10px] font-semibold text-violet-600">{gp.name}</span></span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedHierarchyParent("gp");
+                                    setSelectedHierarchyBcId(null);
+                                  }}
+                                  className={`ml-5 flex min-h-[50px] w-[calc(100%_-_1.25rem)] items-center border-l-2 px-3 py-2 text-left ${selectedHierarchyParent === "gp" ? "border-violet-500 bg-violet-50/50" : "border-transparent hover:bg-violet-50/50"}`}
+                                >
+                                  <span className="mr-2 text-xs text-violet-400">
+                                    └─
+                                  </span>
+                                  <span className="mr-3 rounded-md bg-violet-50 px-2 py-1 text-[10px] font-bold text-violet-600">
+                                    {gp.name}
+                                  </span>
+                                  <span className="min-w-0">
+                                    <span className="block truncate text-xs font-semibold text-slate-900">
+                                      {gp.gp_name}
+                                    </span>
+                                    <span className="block truncate text-[10px] font-semibold text-violet-600">
+                                      {gp.name}
+                                    </span>
+                                  </span>
                                 </button>
                               ) : null}
-                              <div className={`flex min-h-[54px] items-stretch border-l-2 ${nb || gp ? "ml-10" : ""} ${selectedHierarchyParent === null && selectedHierarchyBcId === null ? "border-blue-500 bg-blue-50/50" : "border-transparent hover:bg-slate-50"}`}>
-                                <button type="button" aria-expanded={hierarchyExpanded} aria-controls={`bc-explorer-${gc?.id || bc.gc_id}`} onClick={() => setHierarchyExpanded((value) => !value)} className="flex w-10 items-center justify-center text-blue-500" aria-label={`${hierarchyExpanded ? "Tutup" : "Buka"} ${gcName}`}><FaChevronRight className={`h-3.5 w-3.5 transition-transform ${hierarchyExpanded ? "rotate-90" : ""}`} /></button>
-                                <button type="button" aria-expanded={hierarchyExpanded} aria-controls={`bc-explorer-${gc?.id || bc.gc_id}`} onClick={() => { setSelectedHierarchyParent(null); setSelectedHierarchyBcId(null); setHierarchyExpanded((value) => !value); }} className="min-w-0 flex-1 py-2 pr-3 text-left"><p className="truncate text-[13px] font-semibold text-slate-900">{gcName}</p><p className="mt-0.5 truncate text-[11px] text-slate-500"><span className="font-semibold text-blue-600">{gc?.name || bc.gc_code || `GC${bc.gc_id}`}</span> • {relatedBCs.length || 1} BC</p></button>
+                              <div
+                                className={`flex min-h-[54px] items-stretch border-l-2 ${nb || gp ? "ml-10" : ""} ${selectedHierarchyParent === null && selectedHierarchyBcId === null ? "border-blue-500 bg-blue-50/50" : "border-transparent hover:bg-slate-50"}`}
+                              >
+                                <button
+                                  type="button"
+                                  aria-expanded={hierarchyExpanded}
+                                  aria-controls={`bc-explorer-${gc?.id || bc.gc_id}`}
+                                  onClick={() =>
+                                    setHierarchyExpanded((value) => !value)
+                                  }
+                                  className="flex w-10 items-center justify-center text-blue-500"
+                                  aria-label={`${hierarchyExpanded ? "Tutup" : "Buka"} ${gcName}`}
+                                >
+                                  <FaChevronRight
+                                    className={`h-3.5 w-3.5 transition-transform ${hierarchyExpanded ? "rotate-90" : ""}`}
+                                  />
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-expanded={hierarchyExpanded}
+                                  aria-controls={`bc-explorer-${gc?.id || bc.gc_id}`}
+                                  onClick={() => {
+                                    setSelectedHierarchyParent(null);
+                                    setSelectedHierarchyBcId(null);
+                                    setHierarchyExpanded((value) => !value);
+                                  }}
+                                  className="min-w-0 flex-1 py-2 pr-3 text-left"
+                                >
+                                  <p className="truncate text-[13px] font-semibold text-slate-900">
+                                    {gcName}
+                                  </p>
+                                  <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                                    <span className="font-semibold text-blue-600">
+                                      {gc?.name ||
+                                        bc.gc_code ||
+                                        `GC${bc.gc_id}`}
+                                    </span>{" "}
+                                    • {relatedBCs.length || 1} BC
+                                  </p>
+                                </button>
                               </div>
                               {hierarchyExpanded ? (
-                                <div id={`bc-explorer-${gc?.id || bc.gc_id}`} className={`${nb || gp ? "ml-16" : "ml-5"} border-l border-blue-200 py-0.5`}>
-                                  {(relatedBCs.length > 0 ? relatedBCs : [bc]).map((item) => {
-                                    const selected = selectedHierarchyBcId === Number(item.id);
-                                    const isCurrent = Number(item.id) === Number(bc.id);
-                                    return <button type="button" key={item.id} onClick={() => { setSelectedHierarchyParent(null); setSelectedHierarchyBcId(Number(item.id)); }} className={`flex min-h-12 w-full items-center border-l-2 py-1.5 pl-4 pr-3 text-left ${selected && selectedHierarchyParent === null ? "border-orange-500 bg-orange-50/60" : "border-transparent hover:bg-slate-50"}`}><span className="mr-2 text-xs text-orange-400">└─</span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-medium text-slate-800">{gcName} - {item.branch_city || item.branch_name || "-"}</span><span className="block truncate text-[11px] font-bold text-orange-600">{item.name}</span></span>{isCurrent ? <span className="ml-2 rounded-full bg-orange-100 px-2 py-0.5 text-[9px] font-bold text-orange-700">Aktif</span> : null}</button>;
+                                <div
+                                  id={`bc-explorer-${gc?.id || bc.gc_id}`}
+                                  className={`${nb || gp ? "ml-16" : "ml-5"} border-l border-blue-200 py-0.5`}
+                                >
+                                  {(relatedBCs.length > 0
+                                    ? relatedBCs
+                                    : [bc]
+                                  ).map((item) => {
+                                    const selected =
+                                      selectedHierarchyBcId === Number(item.id);
+                                    const isCurrent =
+                                      Number(item.id) === Number(bc.id);
+                                    return (
+                                      <button
+                                        type="button"
+                                        key={item.id}
+                                        onClick={() => {
+                                          setSelectedHierarchyParent(null);
+                                          setSelectedHierarchyBcId(
+                                            Number(item.id),
+                                          );
+                                        }}
+                                        className={`flex min-h-12 w-full items-center border-l-2 py-1.5 pl-4 pr-3 text-left ${selected && selectedHierarchyParent === null ? "border-orange-500 bg-orange-50/60" : "border-transparent hover:bg-slate-50"}`}
+                                      >
+                                        <span className="mr-2 text-xs text-orange-400">
+                                          └─
+                                        </span>
+                                        <span className="min-w-0 flex-1">
+                                          <span className="block truncate text-xs font-medium text-slate-800">
+                                            {gcName} -{" "}
+                                            {item.branch_city ||
+                                              item.branch_name ||
+                                              "-"}
+                                          </span>
+                                          <span className="block truncate text-[11px] font-bold text-orange-600">
+                                            {item.name}
+                                          </span>
+                                        </span>
+                                        {isCurrent ? (
+                                          <span className="ml-2 rounded-full bg-orange-100 px-2 py-0.5 text-[9px] font-bold text-orange-700">
+                                            Aktif
+                                          </span>
+                                        ) : null}
+                                      </button>
+                                    );
                                   })}
                                 </div>
                               ) : null}
@@ -2739,25 +2901,184 @@ export function BCDetailModal({
                           </div>
 
                           <aside className="bg-slate-50/50">
-                            <div className="border-b border-slate-100 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Detail Customer</div>
+                            <div className="border-b border-slate-100 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                              Detail Customer
+                            </div>
                             <div className="max-h-[55vh] overflow-y-auto p-4 xl:p-5">
                               {selectedHierarchyParent === "gp" && gp ? (
                                 <div>
-                                  <nav className="mb-5 flex flex-wrap items-center gap-1 text-[11px] text-slate-500" aria-label="Breadcrumb hierarchy">{nb ? <><span>{nb.name}</span><span>/</span></> : null}<span className="font-semibold text-slate-800">{gp.gp_name}</span></nav>
-                                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-violet-600">Group Parent</p>
-                                  <h4 className="mt-2 text-xl font-bold text-slate-900">{gp.gp_name}</h4>
-                                  <p className="mt-1 text-sm font-semibold text-slate-500">GPID: {gp.name}</p>
-                                  <div className="mt-5 space-y-4 border-t border-slate-200 pt-4 text-sm">{nb ? <div><p className="text-xs text-slate-500">Parent</p><p className="mt-1 font-semibold text-slate-800">NB: {nb.name}</p></div> : null}{gc ? <div><p className="text-xs text-slate-500">Group Customer</p><p className="mt-1 font-semibold text-slate-800">{gc.gc_name}</p><p className="mt-1 text-xs font-semibold text-blue-600">{gc.name}</p></div> : null}</div>
-                                  <button type="button" onClick={() => onViewGP?.(gp)} disabled={!onViewGP} className="mt-6 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:bg-slate-300">Lihat Detail GP</button>
+                                  <nav
+                                    className="mb-5 flex flex-wrap items-center gap-1 text-[11px] text-slate-500"
+                                    aria-label="Breadcrumb hierarchy"
+                                  >
+                                    {nb ? (
+                                      <>
+                                        <span>{nb.name}</span>
+                                        <span>/</span>
+                                      </>
+                                    ) : null}
+                                    <span className="font-semibold text-slate-800">
+                                      {gp.gp_name}
+                                    </span>
+                                  </nav>
+                                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-violet-600">
+                                    Group Parent
+                                  </p>
+                                  <h4 className="mt-2 text-xl font-bold text-slate-900">
+                                    {gp.gp_name}
+                                  </h4>
+                                  <p className="mt-1 text-sm font-semibold text-slate-500">
+                                    GPID: {gp.name}
+                                  </p>
+                                  <div className="mt-5 space-y-4 border-t border-slate-200 pt-4 text-sm">
+                                    {nb ? (
+                                      <div>
+                                        <p className="text-xs text-slate-500">
+                                          Parent
+                                        </p>
+                                        <p className="mt-1 font-semibold text-slate-800">
+                                          NB: {nb.name}
+                                        </p>
+                                      </div>
+                                    ) : null}
+                                    {gc ? (
+                                      <div>
+                                        <p className="text-xs text-slate-500">
+                                          Group Customer
+                                        </p>
+                                        <p className="mt-1 font-semibold text-slate-800">
+                                          {gc.gc_name}
+                                        </p>
+                                        <p className="mt-1 text-xs font-semibold text-blue-600">
+                                          {gc.name}
+                                        </p>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => onViewGP?.(gp)}
+                                    disabled={!onViewGP}
+                                    className="mt-6 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:bg-slate-300"
+                                  >
+                                    Lihat Detail GP
+                                  </button>
                                 </div>
                               ) : (
                                 <>
-                              <nav className="mb-5 flex flex-wrap items-center gap-1 text-[11px] text-slate-500" aria-label="Breadcrumb hierarchy">{nb ? <><span>{nb.name}</span><span>/</span></> : null}{gp ? <><span>{gp.gp_name}</span><span>/</span></> : null}<span>{gcName}</span>{selectedHierarchyBc ? <><span>/</span><span className="font-semibold text-slate-800">{selectedHierarchyBc.branch_city || selectedHierarchyBc.name}</span></> : null}</nav>
-                              <p className={`text-[10px] font-bold uppercase tracking-[0.2em] ${selectedHierarchyBc ? "text-orange-600" : "text-blue-600"}`}>{selectedHierarchyBc ? "Branch Customer" : "Group Customer"}</p>
-                              <h4 className="mt-2 text-xl font-bold text-slate-900">{selectedHierarchyBc ? `${gcName} - ${selectedHierarchyBc.branch_city || selectedHierarchyBc.branch_name || "-"}` : gcName}</h4>
-                              <p className="mt-1 text-sm font-semibold text-slate-500">{selectedHierarchyBc ? `BCID: ${selectedHierarchyBc.name}` : `GCID: ${gc?.name || bc.gc_code || `GC${bc.gc_id}`}`}</p>
-                              <div className="mt-4 space-y-3 border-t border-slate-200 pt-3 text-sm"><div><p className="text-xs text-slate-500">Parent</p>{nb ? <p className="mt-1 font-semibold text-slate-800">NB: {nb.name}</p> : null}{gp ? <p className="mt-1 font-semibold text-slate-800">GP: {gp.gp_name}</p> : null}{selectedHierarchyBc && gc ? <p className="mt-1 font-semibold text-slate-800">GC: {gcName}</p> : null}</div>{selectedHierarchyBc ? <div><p className="text-xs text-slate-500">Kota Branch</p><p className="mt-1 font-semibold text-slate-800">{selectedHierarchyBc.branch_city || "-"}</p></div> : <div><p className="text-xs text-slate-500">Branch Customer</p><p className="mt-1 font-semibold text-slate-800">{relatedBCs.length || 1} data terdaftar</p></div>}</div>
-                              <button type="button" onClick={() => selectedHierarchyBc && Number(selectedHierarchyBc.id) !== Number(bc.id) ? onViewBC?.(selectedHierarchyBc) : selectedHierarchyBcId === null && gc ? onViewGC?.(gc) : undefined} disabled={selectedHierarchyBc ? Number(selectedHierarchyBc.id) === Number(bc.id) : !gc} className="mt-6 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-default disabled:bg-slate-300">{selectedHierarchyBc ? Number(selectedHierarchyBc.id) === Number(bc.id) ? "Branch Customer Aktif" : "Lihat Detail BC" : "Lihat Detail GC"}</button>
+                                  <nav
+                                    className="mb-5 flex flex-wrap items-center gap-1 text-[11px] text-slate-500"
+                                    aria-label="Breadcrumb hierarchy"
+                                  >
+                                    {nb ? (
+                                      <>
+                                        <span>{nb.name}</span>
+                                        <span>/</span>
+                                      </>
+                                    ) : null}
+                                    {gp ? (
+                                      <>
+                                        <span>{gp.gp_name}</span>
+                                        <span>/</span>
+                                      </>
+                                    ) : null}
+                                    <span>{gcName}</span>
+                                    {selectedHierarchyBc ? (
+                                      <>
+                                        <span>/</span>
+                                        <span className="font-semibold text-slate-800">
+                                          {selectedHierarchyBc.branch_city ||
+                                            selectedHierarchyBc.name}
+                                        </span>
+                                      </>
+                                    ) : null}
+                                  </nav>
+                                  <p
+                                    className={`text-[10px] font-bold uppercase tracking-[0.2em] ${selectedHierarchyBc ? "text-orange-600" : "text-blue-600"}`}
+                                  >
+                                    {selectedHierarchyBc
+                                      ? "Branch Customer"
+                                      : "Group Customer"}
+                                  </p>
+                                  <h4 className="mt-2 text-xl font-bold text-slate-900">
+                                    {selectedHierarchyBc
+                                      ? `${gcName} - ${selectedHierarchyBc.branch_city || selectedHierarchyBc.branch_name || "-"}`
+                                      : gcName}
+                                  </h4>
+                                  <p className="mt-1 text-sm font-semibold text-slate-500">
+                                    {selectedHierarchyBc
+                                      ? `BCID: ${selectedHierarchyBc.name}`
+                                      : `GCID: ${gc?.name || bc.gc_code || `GC${bc.gc_id}`}`}
+                                  </p>
+                                  <div className="mt-4 space-y-3 border-t border-slate-200 pt-3 text-sm">
+                                    <div>
+                                      <p className="text-xs text-slate-500">
+                                        Parent
+                                      </p>
+                                      {nb ? (
+                                        <p className="mt-1 font-semibold text-slate-800">
+                                          NB: {nb.name}
+                                        </p>
+                                      ) : null}
+                                      {gp ? (
+                                        <p className="mt-1 font-semibold text-slate-800">
+                                          GP: {gp.gp_name}
+                                        </p>
+                                      ) : null}
+                                      {selectedHierarchyBc && gc ? (
+                                        <p className="mt-1 font-semibold text-slate-800">
+                                          GC: {gcName}
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                    {selectedHierarchyBc ? (
+                                      <div>
+                                        <p className="text-xs text-slate-500">
+                                          Kota Branch
+                                        </p>
+                                        <p className="mt-1 font-semibold text-slate-800">
+                                          {selectedHierarchyBc.branch_city ||
+                                            "-"}
+                                        </p>
+                                      </div>
+                                    ) : (
+                                      <div>
+                                        <p className="text-xs text-slate-500">
+                                          Branch Customer
+                                        </p>
+                                        <p className="mt-1 font-semibold text-slate-800">
+                                          {relatedBCs.length || 1} data
+                                          terdaftar
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      selectedHierarchyBc &&
+                                      Number(selectedHierarchyBc.id) !==
+                                        Number(bc.id)
+                                        ? onViewBC?.(selectedHierarchyBc)
+                                        : selectedHierarchyBcId === null && gc
+                                          ? onViewGC?.(gc)
+                                          : undefined
+                                    }
+                                    disabled={
+                                      selectedHierarchyBc
+                                        ? Number(selectedHierarchyBc.id) ===
+                                          Number(bc.id)
+                                        : !gc
+                                    }
+                                    className="mt-6 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-default disabled:bg-slate-300"
+                                  >
+                                    {selectedHierarchyBc
+                                      ? Number(selectedHierarchyBc.id) ===
+                                        Number(bc.id)
+                                        ? "Branch Customer Aktif"
+                                        : "Lihat Detail BC"
+                                      : "Lihat Detail GC"}
+                                  </button>
                                 </>
                               )}
                             </div>
