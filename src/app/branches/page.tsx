@@ -1,4 +1,5 @@
 // src/app/branches/page.tsx
+import { Suspense } from "react";
 import RequireAuth from "@/components/auth/RequireAuth";
 import BranchList from "@/components/branches/BranchList";
 
@@ -10,7 +11,9 @@ export const metadata = {
 export default function BranchesPage() {
   return (
     <RequireAuth>
-      <BranchList />
+      <Suspense fallback={null}>
+        <BranchList />
+      </Suspense>
     </RequireAuth>
   );
 }

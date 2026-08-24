@@ -7,6 +7,7 @@ import React, {
   useCallback,
   useRef,
 } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { RegistrationCard } from "./RegistrationCard";
 import { RegistrationDetailModal } from "./RegistrationDetailModal";
 import { ApproveRegistrationModal } from "./ApproveRegistrationModal";
@@ -276,6 +277,13 @@ async function enrichMasterLinkNames(
 
 export function CustomerRegistrationList() {
   const { token, isAuthenticated } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const searchDetailId = searchParams.get("id");
+  const [routeDetailId, setRouteDetailId] = useState<string | null>(
+    searchDetailId,
+  );
   const [registrations, setRegistrations] = useState<CustomerRegistration[]>(
     [],
   );
@@ -324,6 +332,18 @@ export function CustomerRegistrationList() {
   const tourRegistrationRef = useRef<CustomerRegistration>(
     customerRegistrationApproveTourDummy,
   );
+
+  useEffect(() => {
+    setRouteDetailId(searchDetailId);
+  }, [searchDetailId]);
+
+  useEffect(() => {
+    const syncRouteFromBrowser = () => {
+      setRouteDetailId(new URLSearchParams(window.location.search).get("id"));
+    };
+    window.addEventListener("popstate", syncRouteFromBrowser);
+    return () => window.removeEventListener("popstate", syncRouteFromBrowser);
+  }, []);
 
   // Use filter system
   const { filters, setFilters } = useFilters({
@@ -819,7 +839,91 @@ export function CustomerRegistrationList() {
   const handleViewDetails = (registration: CustomerRegistration) => {
     setSelectedRegistration(registration);
     setIsDetailModalOpen(true);
+    setRouteDetailId(String(registration.id));
+    window.history.pushState(
+      { ...window.history.state, ekaModalBase: "/customers/registrations" },
+      "",
+      `${pathname}?id=${encodeURIComponent(registration.id)}`,
+    );
   };
+
+  const closeDetailRoute = useCallback(() => {
+    setIsDetailModalOpen(false);
+    setSelectedRegistration(null);
+    setRouteDetailId(null);
+    if (window.history.state?.ekaModalBase === "/customers/registrations") {
+      window.history.back();
+      return;
+    }
+    router.replace("/customers/registrations");
+  }, [router]);
+
+  const replaceDetailRouteWithList = useCallback(() => {
+    setRouteDetailId(null);
+    window.history.replaceState(
+      { ...window.history.state, ekaModalBase: undefined },
+      "",
+      "/customers/registrations",
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!routeDetailId) {
+      setIsDetailModalOpen(false);
+      setSelectedRegistration(null);
+      return;
+    }
+
+    const loaded = registrations.find(
+      (registration) => String(registration.id) === routeDetailId,
+    );
+    if (loaded) {
+      setSelectedRegistration(loaded);
+      setIsDetailModalOpen(true);
+      return;
+    }
+
+    if (!isAuthenticated || !token) return;
+    const authToken = token;
+    let cancelled = false;
+
+    async function loadDirectRegistration() {
+      const response = await apiFetch(
+        getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER, {
+          fields: [
+            "*",
+            "branch_id.branch_name",
+            "branch_id.city",
+            "created_by.full_name",
+            "updated_by.full_name",
+          ],
+          filters: [["id", "=", routeDetailId]],
+          limit: 1,
+        }),
+        { method: "GET", cache: "no-store" },
+        authToken,
+      );
+      if (!response.ok || cancelled) return;
+      const json = await response.json();
+      const row = Array.isArray(json?.data)
+        ? (json.data[0] as CustomerRegistrationApiResponse | undefined)
+        : undefined;
+      if (!row || cancelled) return;
+      const [registration] = await enrichMasterLinkNames(
+        [mapToFrontendType(row)],
+        authToken,
+      );
+      if (!cancelled && registration) {
+        setSelectedRegistration(registration);
+        setIsDetailModalOpen(true);
+      }
+    }
+
+    void loadDirectRegistration();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, registrations, routeDetailId, token]);
 
   const handleSearchChange = (query: string) => {
     setSearchQuery(query);
@@ -829,12 +933,14 @@ export function CustomerRegistrationList() {
   const handleApprove = (registration: CustomerRegistration) => {
     setSelectedForAction(registration);
     setIsDetailModalOpen(false); // Close detail modal
+    replaceDetailRouteWithList();
     setIsApproveModalOpen(true);
   };
 
   const handleReject = (registration: CustomerRegistration) => {
     setSelectedForAction(registration);
     setIsDetailModalOpen(false); // Close detail modal
+    replaceDetailRouteWithList();
     setIsRejectModalOpen(true);
   };
 
@@ -1867,7 +1973,7 @@ export function CustomerRegistrationList() {
       {/* Detail Modal */}
       <RegistrationDetailModal
         isOpen={isDetailModalOpen}
-        onClose={() => setIsDetailModalOpen(false)}
+        onClose={closeDetailRoute}
         registration={selectedRegistration}
         demoMode={
           approveTourActive && selectedRegistration?.id === tourRegistration.id

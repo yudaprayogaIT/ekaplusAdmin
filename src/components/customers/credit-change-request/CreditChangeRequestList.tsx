@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   FaCalendarAlt,
@@ -174,6 +175,15 @@ function mapCreditChangeRequestRow(
 
 export function CreditChangeRequestList() {
   const { token, isAuthenticated } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const detailIdParam = searchParams.get("id");
+  const searchRouteDetailId =
+    detailIdParam && /^\d+$/.test(detailIdParam) ? Number(detailIdParam) : null;
+  const [routeDetailId, setRouteDetailId] = useState<number | null>(
+    searchRouteDetailId,
+  );
   const [items, setItems] = useState<CreditChangeRequestListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -198,6 +208,20 @@ export function CreditChangeRequestList() {
   const tourDriverRef = useRef<Driver | null>(null);
   const tourStartedRef = useRef(false);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const routedDetailRequestRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setRouteDetailId(searchRouteDetailId);
+  }, [searchRouteDetailId]);
+
+  useEffect(() => {
+    const syncRouteFromBrowser = () => {
+      const id = new URLSearchParams(window.location.search).get("id");
+      setRouteDetailId(id && /^\d+$/.test(id) ? Number(id) : null);
+    };
+    window.addEventListener("popstate", syncRouteFromBrowser);
+    return () => window.removeEventListener("popstate", syncRouteFromBrowser);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -316,6 +340,79 @@ export function CreditChangeRequestList() {
     setHasMore(true);
     void loadData(1, true);
   }, [loadData]);
+
+  useEffect(() => {
+    if (routeDetailId === null) {
+      routedDetailRequestRef.current = null;
+      if (!approveTourActive) setSelectedItem(null);
+      return;
+    }
+
+    const loaded = items.find((item) => item.id === routeDetailId);
+    if (loaded) {
+      setSelectedItem(loaded);
+      return;
+    }
+    if (!token || !isAuthenticated) return;
+    if (routedDetailRequestRef.current === routeDetailId) return;
+    routedDetailRequestRef.current = routeDetailId;
+    const authToken = token;
+    let cancelled = false;
+
+    async function loadRoutedDetail() {
+      const response = await apiFetch(
+        getQueryUrl(API_CONFIG.ENDPOINTS.CREDIT_CHANGE_REQUEST, {
+          fields: ["*", "created_by.full_name", "updated_by.full_name"],
+          filters: [["id", "=", routeDetailId]],
+          limit: 1,
+        }),
+        { method: "GET", cache: "no-store" },
+        authToken,
+      );
+      if (!response.ok || cancelled) return;
+      const json = await response.json();
+      const row = Array.isArray(json?.data)
+        ? (json.data[0] as CreditChangeRequestApiResponse | undefined)
+        : undefined;
+      if (!row || cancelled) return;
+      setSelectedItem(mapCreditChangeRequestRow(row));
+    }
+
+    void loadRoutedDetail();
+    return () => {
+      cancelled = true;
+    };
+  }, [approveTourActive, isAuthenticated, items, routeDetailId, token]);
+
+  const openDetail = useCallback(
+    (item: CreditChangeRequestListItem) => {
+      setSelectedItem(item);
+      if (approveTourActive && item.id === tourItem.id) return;
+      setRouteDetailId(item.id);
+      window.history.pushState(
+        {
+          ...window.history.state,
+          ekaModalBase: "/customers/credit-change-request",
+        },
+        "",
+        `${pathname}?id=${item.id}`,
+      );
+    },
+    [approveTourActive, pathname, tourItem.id],
+  );
+
+  const closeDetail = useCallback(() => {
+    setSelectedItem(null);
+    setRouteDetailId(null);
+    if (
+      window.history.state?.ekaModalBase ===
+      "/customers/credit-change-request"
+    ) {
+      window.history.back();
+      return;
+    }
+    router.replace("/customers/credit-change-request");
+  }, [router]);
 
   const refreshList = useCallback(async () => {
     setCurrentPage(1);
@@ -827,11 +924,11 @@ export function CreditChangeRequestList() {
                     ? "credit-change-demo-card"
                     : undefined
                 }
-                onClick={() => setSelectedItem(item)}
+                onClick={() => openDetail(item)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    setSelectedItem(item);
+                    openDetail(item);
                   }
                 }}
                 className="cursor-pointer overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm outline-none transition focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2"
@@ -967,7 +1064,7 @@ export function CreditChangeRequestList() {
                           }
                           onClick={(event) => {
                             event.stopPropagation();
-                            setSelectedItem(item);
+                            openDetail(item);
                           }}
                           className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:shadow-lg"
                         >
@@ -1009,7 +1106,7 @@ export function CreditChangeRequestList() {
 
       <CreditChangeRequestDetailModal
         isOpen={selectedItem !== null}
-        onClose={() => setSelectedItem(null)}
+        onClose={closeDetail}
         item={selectedItem}
         demoMode={approveTourActive && selectedItem?.id === tourItem.id}
         onActionExecuted={refreshList}

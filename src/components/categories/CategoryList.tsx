@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import CategoryCard from "./CategoryCard";
 import AddCategoryModal from "./AddCategoryModal";
 import CategoryDetailModal from "./CategoryDetailModal";
@@ -245,6 +246,15 @@ async function fetchAllCategories(
 
 export default function CategoryList() {
   const { token, isAuthenticated } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const detailIdParam = searchParams.get("id");
+  const searchRouteDetailId =
+    detailIdParam && /^\d+$/.test(detailIdParam) ? Number(detailIdParam) : null;
+  const [routeDetailId, setRouteDetailId] = useState<number | null>(
+    searchRouteDetailId,
+  );
   const [categories, setCategories] = useState<Category[]>([]);
   const [types, setTypes] = useState<CategoryType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -264,6 +274,19 @@ export default function CategoryList() {
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
+
+  useEffect(() => {
+    setRouteDetailId(searchRouteDetailId);
+  }, [searchRouteDetailId]);
+
+  useEffect(() => {
+    const syncRouteFromBrowser = () => {
+      const id = new URLSearchParams(window.location.search).get("id");
+      setRouteDetailId(id && /^\d+$/.test(id) ? Number(id) : null);
+    };
+    window.addEventListener("popstate", syncRouteFromBrowser);
+    return () => window.removeEventListener("popstate", syncRouteFromBrowser);
+  }, []);
 
   // Load categories and types from API
   useEffect(() => {
@@ -344,6 +367,18 @@ export default function CategoryList() {
     };
   }, [isAuthenticated, token]);
 
+  useEffect(() => {
+    if (routeDetailId === null) {
+      setDetailOpen(false);
+      setDetailItem(null);
+      return;
+    }
+    const loaded = categories.find((item) => item.id === routeDetailId);
+    if (!loaded) return;
+    setDetailItem(loaded);
+    setDetailOpen(true);
+  }, [categories, routeDetailId]);
+
   // Listen for updates - reload from API when triggered
   useEffect(() => {
     async function handler() {
@@ -353,9 +388,7 @@ export default function CategoryList() {
         const mappedCategories = await fetchAllCategories(token, types);
         setCategories(mappedCategories);
         localStorage.setItem(SNAP_KEY, JSON.stringify(mappedCategories));
-      } catch (error) {
-        // console.error("Failed to reload categories:", error);
-      }
+      } catch {}
     }
 
     window.addEventListener("ekatalog:categories_update", handler);
@@ -423,11 +456,23 @@ export default function CategoryList() {
   function openDetail(c: Category) {
     setDetailItem(c);
     setDetailOpen(true);
+    setRouteDetailId(c.id);
+    window.history.pushState(
+      { ...window.history.state, ekaModalBase: "/categories" },
+      "",
+      `${pathname}?id=${c.id}`,
+    );
   }
 
   function closeDetail() {
     setDetailOpen(false);
     setDetailItem(null);
+    setRouteDetailId(null);
+    if (window.history.state?.ekaModalBase === "/categories") {
+      window.history.back();
+      return;
+    }
+    router.replace("/categories");
   }
 
   function onDetailEdit(c: Category) {

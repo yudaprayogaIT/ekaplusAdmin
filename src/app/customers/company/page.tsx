@@ -1,5 +1,4 @@
-import RequireAuth from "@/components/auth/RequireAuth";
-import CustomerOverviewPage from "@/components/customers/CustomerOverviewPage";
+import { redirect } from "next/navigation";
 
 export const metadata = {
   title: "Customers - EKA+ Web Admin",
@@ -7,9 +6,5 @@ export const metadata = {
 };
 
 export default function CustomersPage() {
-  return (
-    <RequireAuth>
-      <CustomerOverviewPage />
-    </RequireAuth>
-  );
+  redirect("/customers/company/bc");
 }

@@ -1,4 +1,5 @@
 // src/app/categories/page.tsx
+import { Suspense } from "react";
 import RequireAuth from "@/components/auth/RequireAuth";
 import CategoryList from "@/components/categories/CategoryList";
 
@@ -10,7 +11,9 @@ export default function Page() {
   return (
     <div className="space-y-6">
       <RequireAuth>
-        <CategoryList />
+        <Suspense fallback={null}>
+          <CategoryList />
+        </Suspense>
       </RequireAuth>
     </div>
   );

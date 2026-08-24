@@ -1,5 +1,6 @@
 // src/app/types/page.tsx
 
+import { Suspense } from "react";
 import RequireAuth from "@/components/auth/RequireAuth";
 import TypeList from "@/components/types/Typelist";
 
@@ -11,7 +12,9 @@ export const metadata = {
 export default function TypesPage() {
   return (
     <RequireAuth>
-      <TypeList />
+      <Suspense fallback={null}>
+        <TypeList />
+      </Suspense>
     </RequireAuth>
   );
 }

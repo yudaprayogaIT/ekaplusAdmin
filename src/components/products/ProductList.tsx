@@ -8,7 +8,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import ProductCard from "./ProductCard";
 import AddProductModal from "./AddProductModal";
 import ProductDetailModal from "./ProductDetailModal";
@@ -116,12 +116,19 @@ function mapItemRows(rows: ItemApiResponse[]): Item[] {
 }
 
 export default function ProductList() {
+  const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { token } = useAuth();
 
   // Parse initial state from URL
   const urlState = parseSearchParams(searchParams);
+  const detailIdParam = searchParams.get("id");
+  const searchRouteDetailId =
+    detailIdParam && /^\d+$/.test(detailIdParam) ? Number(detailIdParam) : null;
+  const [routeDetailId, setRouteDetailId] = useState<number | null>(
+    searchRouteDetailId,
+  );
 
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -164,9 +171,23 @@ export default function ProductList() {
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
+  const routedDetailRequestRef = useRef<number | null>(null);
 
   // Track if this is initial mount to prevent resetting page on first load
   const isInitialMount = useRef(true);
+
+  useEffect(() => {
+    setRouteDetailId(searchRouteDetailId);
+  }, [searchRouteDetailId]);
+
+  useEffect(() => {
+    const syncRouteFromBrowser = () => {
+      const id = new URLSearchParams(window.location.search).get("id");
+      setRouteDetailId(id && /^\d+$/.test(id) ? Number(id) : null);
+    };
+    window.addEventListener("popstate", syncRouteFromBrowser);
+    return () => window.removeEventListener("popstate", syncRouteFromBrowser);
+  }, []);
 
   // Helper function to load products only (for pagination/sorting)
   async function loadProducts(
@@ -397,26 +418,6 @@ export default function ProductList() {
         .filter(
           (product: Product | null): product is Product => product !== null,
         );
-    } else {
-      // Log error details for debugging
-      let errorDetail = `HTTP ${productsRes.status}`;
-      try {
-        const errorBody = await productsRes.json();
-        errorDetail = errorBody.message || errorBody.error || errorDetail;
-      } catch {
-        // console.error(
-        //   "[ProductList] API Error (no JSON body):",
-        //   productsRes.status,
-        //   productsRes.statusText,
-        // );
-      }
-
-      // if (productsRes.status === 400 || productsRes.status === 500) {
-      //   console.warn(
-      //     "[ProductList] Filter query failed, returning empty results:",
-      //     errorDetail,
-      //   );
-      // }
     }
 
     return { productsWithVariants, totalItems, totalPages };
@@ -466,6 +467,9 @@ export default function ProductList() {
       searchQuery,
       showHotDealsOnly,
     });
+    if (routeDetailId !== null) {
+      params.set("id", String(routeDetailId));
+    }
 
     const nextQueryString = params.toString();
     if (nextQueryString === currentQueryString) {
@@ -481,6 +485,7 @@ export default function ProductList() {
     currentPage,
     searchQuery,
     showHotDealsOnly,
+    routeDetailId,
     currentQueryString,
     router,
   ]);
@@ -603,6 +608,41 @@ export default function ProductList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [staticDataLoaded, token, filters, currentPage]);
 
+  useEffect(() => {
+    if (routeDetailId === null) {
+      routedDetailRequestRef.current = null;
+      setDetailOpen(false);
+      setDetailItem(null);
+      return;
+    }
+    const loaded = products.find((item) => item.id === routeDetailId);
+    if (loaded) {
+      setDetailItem(loaded);
+      setDetailOpen(true);
+      return;
+    }
+    if (!staticDataLoaded || !token) return;
+    if (routedDetailRequestRef.current === routeDetailId) return;
+    routedDetailRequestRef.current = routeDetailId;
+    let cancelled = false;
+
+    async function loadRoutedProduct() {
+      const result = await loadProducts([["id", "=", routeDetailId]], undefined, undefined, 1);
+      const product = result.productsWithVariants[0];
+      if (!cancelled && product) {
+        setDetailItem(product);
+        setDetailOpen(true);
+      }
+    }
+    void loadRoutedProduct();
+    return () => {
+      cancelled = true;
+    };
+    // loadProducts maps against the latest category/item state and is
+    // intentionally invoked only once per routed ID.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, routeDetailId, staticDataLoaded, token]);
+
   // Reload data when sort changes (only after static data is loaded, but not on initial mount)
   useEffect(() => {
     if (staticDataLoaded && token && !isInitialMount.current) {
@@ -630,9 +670,7 @@ export default function ProductList() {
         setTotalItems(totalItems);
         setTotalPages(totalPages);
         localStorage.setItem(SNAP_KEY, JSON.stringify(productsWithVariants));
-      } catch (error) {
-        // console.error("[ProductList] ❌ Reload failed:", error);
-      }
+      } catch {}
     }
 
     window.addEventListener("ekatalog:products_update", handler);
@@ -672,7 +710,7 @@ export default function ProductList() {
             `Gagal menghapus produk: ${errorData.message || "Unknown error"}`,
           );
         }
-      } catch (error) {
+      } catch {
         alert("Gagal menghapus produk. Silakan coba lagi.");
       }
     };
@@ -706,11 +744,30 @@ export default function ProductList() {
   function openDetail(p: Product) {
     setDetailItem(p);
     setDetailOpen(true);
+    setRouteDetailId(p.id);
+    const params = new URLSearchParams(window.location.search);
+    params.set("id", String(p.id));
+    window.history.pushState(
+      { ...window.history.state, ekaModalBase: "/products" },
+      "",
+      `${pathname}?${params.toString()}`,
+    );
   }
 
   function closeDetail() {
     setDetailOpen(false);
     setDetailItem(null);
+    setRouteDetailId(null);
+    if (window.history.state?.ekaModalBase === "/products") {
+      window.history.back();
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    params.delete("id");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, {
+      scroll: false,
+    });
   }
 
   function onDetailEdit(p: Product) {

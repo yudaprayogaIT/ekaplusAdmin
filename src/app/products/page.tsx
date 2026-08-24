@@ -1,4 +1,5 @@
 // src/app/products/page.tsx
+import { Suspense } from "react";
 import RequireAuth from "@/components/auth/RequireAuth";
 import ProductList from "@/components/products/ProductList";
 
@@ -10,7 +11,9 @@ export const metadata = {
 export default function ProductsPage() {
   return (
     <RequireAuth>
-      <ProductList />
+      <Suspense fallback={null}>
+        <ProductList />
+      </Suspense>
     </RequireAuth>
   );
 }

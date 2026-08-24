@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import RequireAuth from '@/components/auth/RequireAuth';
 import { CustomerRegistrationList } from '@/components/customers/registration/CustomerRegistrationList';
 
@@ -9,7 +10,9 @@ export const metadata = {
 export default function CustomerRegistrationsPage() {
   return (
     <RequireAuth>
-      <CustomerRegistrationList />
+      <Suspense fallback={null}>
+        <CustomerRegistrationList />
+      </Suspense>
     </RequireAuth>
   );
 }

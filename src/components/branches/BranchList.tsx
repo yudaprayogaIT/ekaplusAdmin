@@ -1,7 +1,8 @@
 // src/components/branches/BranchList.tsx
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import BranchCard from "./BranchCard";
 import AddBranchModal from "./AddBranchModal";
 import BranchDetailModal from "./BranchDetailModal";
@@ -76,6 +77,39 @@ type BranchAPIResponse = {
   meta: Record<string, unknown>;
 };
 
+type BranchAPIRow = BranchAPIResponse["data"][number];
+
+function mapBranchRow(item: BranchAPIRow): Branch {
+  return {
+    id: item.id,
+    name: item.name || "",
+    branch_name: item.branch_name,
+    city: item.city,
+    address: item.address,
+    lat: parseFloat(item.lat) || 0,
+    lng: parseFloat(item.lng) || 0,
+    island: item.island,
+    area: item.area,
+    url: item.url,
+    token: item.token,
+    disabled: item.disabled,
+    created_at: item.created_at,
+    updated_at: item.updated_at,
+    created_by:
+      typeof item.created_by === "object"
+        ? item.created_by.full_name || "Unknown"
+        : item.created_by,
+    updated_by:
+      typeof item.updated_by === "object"
+        ? item.updated_by.full_name || "Unknown"
+        : item.updated_by,
+    owner:
+      typeof item.owner === "object"
+        ? item.owner.full_name || "Unknown"
+        : item.owner,
+  };
+}
+
 type SortOption =
   | "name-asc"
   | "name-desc"
@@ -93,6 +127,15 @@ export default function BranchList() {
     isLoading: authLoading,
     token,
   } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const detailIdParam = searchParams.get("id");
+  const searchRouteDetailId =
+    detailIdParam && /^\d+$/.test(detailIdParam) ? Number(detailIdParam) : null;
+  const [routeDetailId, setRouteDetailId] = useState<number | null>(
+    searchRouteDetailId,
+  );
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ code?: number; message: string } | null>(
@@ -114,6 +157,20 @@ export default function BranchList() {
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
+  const routedDetailRequestRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setRouteDetailId(searchRouteDetailId);
+  }, [searchRouteDetailId]);
+
+  useEffect(() => {
+    const syncRouteFromBrowser = () => {
+      const id = new URLSearchParams(window.location.search).get("id");
+      setRouteDetailId(id && /^\d+$/.test(id) ? Number(id) : null);
+    };
+    window.addEventListener("popstate", syncRouteFromBrowser);
+    return () => window.removeEventListener("popstate", syncRouteFromBrowser);
+  }, []);
 
   // Permission checks
   const canManageBranches = hasAnyPermission([
@@ -123,7 +180,7 @@ export default function BranchList() {
   ]);
 
   // Extract data loading logic into reusable function
-  const loadBranches = async () => {
+  const loadBranches = useCallback(async () => {
     if (!isAuthenticated || !token) {
       setLoading(false);
       return;
@@ -153,34 +210,7 @@ export default function BranchList() {
         const response = (await res.json()) as BranchAPIResponse;
 
         // Map API response to Branch type
-        const mappedBranches: Branch[] = response.data.map((item) => ({
-          id: item.id,
-          name: item.name || "",
-          branch_name: item.branch_name,
-          city: item.city,
-          address: item.address,
-          lat: parseFloat(item.lat) || 0, // Convert string to number
-          lng: parseFloat(item.lng) || 0, // Convert string to number
-          island: item.island,
-          area: item.area,
-          url: item.url,
-          token: item.token,
-          disabled: item.disabled,
-          created_at: item.created_at,
-          updated_at: item.updated_at,
-          created_by:
-            typeof item.created_by === "object"
-              ? item.created_by.full_name || "Unknown"
-              : item.created_by,
-          updated_by:
-            typeof item.updated_by === "object"
-              ? item.updated_by.full_name || "Unknown"
-              : item.updated_by,
-          owner:
-            typeof item.owner === "object"
-              ? item.owner.full_name || "Unknown"
-              : item.owner,
-        }));
+        const mappedBranches = response.data.map(mapBranchRow);
 
         setBranches(mappedBranches);
         try {
@@ -215,12 +245,64 @@ export default function BranchList() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAuthenticated, token]);
 
   // Load branches on mount - only if authenticated and has token
   useEffect(() => {
-    loadBranches();
-  }, [isAuthenticated, token]);
+    void loadBranches();
+  }, [loadBranches]);
+
+  useEffect(() => {
+    if (routeDetailId === null) {
+      routedDetailRequestRef.current = null;
+      setDetailOpen(false);
+      setDetailItem(null);
+      return;
+    }
+
+    const loaded = branches.find((branch) => branch.id === routeDetailId);
+    if (loaded) {
+      setDetailItem(loaded);
+      setDetailOpen(true);
+      return;
+    }
+    if (!isAuthenticated || !token) return;
+    if (routedDetailRequestRef.current === routeDetailId) return;
+    routedDetailRequestRef.current = routeDetailId;
+    const authToken = token;
+    let cancelled = false;
+
+    async function loadRoutedBranch() {
+      const response = await apiFetch(
+        getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH, {
+          fields: [
+            "*",
+            "created_by.full_name",
+            "updated_by.full_name",
+            "owner.full_name",
+          ],
+          filters: [["id", "=", routeDetailId]],
+          limit: 1,
+        }),
+        {
+          method: "GET",
+          cache: "no-store",
+          headers: getAuthHeaders(authToken),
+        },
+      );
+      if (!response.ok || cancelled) return;
+      const json = (await response.json()) as BranchAPIResponse;
+      const row = json.data?.[0];
+      if (!row || cancelled) return;
+      setDetailItem(mapBranchRow(row));
+      setDetailOpen(true);
+    }
+
+    void loadRoutedBranch();
+    return () => {
+      cancelled = true;
+    };
+  }, [branches, isAuthenticated, routeDetailId, token]);
 
   // Listen for updates - reload from API when triggered
   useEffect(() => {
@@ -248,34 +330,7 @@ export default function BranchList() {
         if (res.ok) {
           const response = (await res.json()) as BranchAPIResponse;
 
-          const mappedBranches: Branch[] = response.data.map((item) => ({
-            id: item.id,
-            name: item.name || "",
-            branch_name: item.branch_name,
-            city: item.city,
-            address: item.address,
-            lat: parseFloat(item.lat) || 0,
-            lng: parseFloat(item.lng) || 0,
-            island: item.island,
-            area: item.area,
-            url: item.url,
-            token: item.token,
-            disabled: item.disabled,
-            created_at: item.created_at,
-            updated_at: item.updated_at,
-            created_by:
-              typeof item.created_by === "object"
-                ? item.created_by.full_name || "Unknown"
-                : item.created_by,
-            updated_by:
-              typeof item.updated_by === "object"
-                ? item.updated_by.full_name || "Unknown"
-                : item.updated_by,
-            owner:
-              typeof item.owner === "object"
-                ? item.owner.full_name || "Unknown"
-                : item.owner,
-          }));
+          const mappedBranches = response.data.map(mapBranchRow);
 
           setBranches(mappedBranches);
           localStorage.setItem(SNAP_KEY, JSON.stringify(mappedBranches));
@@ -349,11 +404,23 @@ export default function BranchList() {
   function openDetail(branch: Branch) {
     setDetailItem(branch);
     setDetailOpen(true);
+    setRouteDetailId(branch.id);
+    window.history.pushState(
+      { ...window.history.state, ekaModalBase: "/branches" },
+      "",
+      `${pathname}?id=${branch.id}`,
+    );
   }
 
   function closeDetail() {
     setDetailOpen(false);
     setDetailItem(null);
+    setRouteDetailId(null);
+    if (window.history.state?.ekaModalBase === "/branches") {
+      window.history.back();
+      return;
+    }
+    router.replace("/branches");
   }
 
   function onDetailEdit(branch: Branch) {

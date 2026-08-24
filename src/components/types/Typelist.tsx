@@ -6,6 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import TypeCard from "./TypeCard";
 import AddTypeModal from "./AddTypeModal";
 import TypeDetailModal from "./TypeDetailModal";
@@ -69,12 +70,50 @@ type TypeAPIResponse = {
   meta: Record<string, unknown>;
 };
 
+type TypeAPIRow = TypeAPIResponse["data"][number];
+
+function mapTypeRow(item: TypeAPIRow): ItemType {
+  const mapUser = (
+    value: number | { id?: number; full_name?: string },
+  ): { id: number; name: string } | undefined =>
+    typeof value === "object"
+      ? { id: value.id || 0, name: value.full_name || "Unknown" }
+      : value
+        ? { id: value, name: `User #${value}` }
+        : undefined;
+
+  return {
+    id: item.id,
+    name: item.name,
+    type_name: item.type_name,
+    image: getFileUrl(item.image),
+    description: item.description || undefined,
+    docstatus: item.docstatus,
+    status: item.status,
+    disabled: item.disabled,
+    created_at: item.created_at,
+    updated_at: item.updated_at,
+    created_by: mapUser(item.created_by),
+    updated_by: mapUser(item.updated_by),
+    owner: mapUser(item.owner),
+  };
+}
+
 type SortOption = "name-asc" | "name-desc" | "id-asc" | "id-desc";
 
 const SNAP_KEY = "ekatalog_types_snapshot";
 
 export default function TypeList() {
   const { token, isAuthenticated } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const detailIdParam = searchParams.get("id");
+  const searchRouteDetailId =
+    detailIdParam && /^\d+$/.test(detailIdParam) ? Number(detailIdParam) : null;
+  const [routeDetailId, setRouteDetailId] = useState<number | null>(
+    searchRouteDetailId,
+  );
   const [types, setTypes] = useState<ItemType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +131,20 @@ export default function TypeList() {
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
+  const routedDetailRequestRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setRouteDetailId(searchRouteDetailId);
+  }, [searchRouteDetailId]);
+
+  useEffect(() => {
+    const syncRouteFromBrowser = () => {
+      const id = new URLSearchParams(window.location.search).get("id");
+      setRouteDetailId(id && /^\d+$/.test(id) ? Number(id) : null);
+    };
+    window.addEventListener("popstate", syncRouteFromBrowser);
+    return () => window.removeEventListener("popstate", syncRouteFromBrowser);
+  }, []);
 
   // Load types from SQL API
   useEffect(() => {
@@ -127,42 +180,12 @@ export default function TypeList() {
 
           if (!cancelled) {
             // Map API response to ItemType
-            const mappedTypes: ItemType[] = response.data.map((item) => ({
-              id: item.id,
-              name: item.name,
-              type_name: item.type_name,
-              image: getFileUrl(item.image),
-              description: item.description || undefined,
-              docstatus: item.docstatus,
-              status: item.status,
-              disabled: item.disabled,
-              created_at: item.created_at,
-              updated_at: item.updated_at,
-              created_by:
-                typeof item.created_by === "object"
-                  ? { id: item.created_by.id || 0, name: item.created_by.full_name || "Unknown" }
-                  : item.created_by
-                    ? { id: item.created_by, name: `User #${item.created_by}` }
-                    : undefined,
-              updated_by:
-                typeof item.updated_by === "object"
-                  ? { id: item.updated_by.id || 0, name: item.updated_by.full_name || "Unknown" }
-                  : item.updated_by
-                    ? { id: item.updated_by, name: `User #${item.updated_by}` }
-                    : undefined,
-              owner:
-                typeof item.owner === "object"
-                  ? { id: item.owner.id || 0, name: item.owner.full_name || "Unknown" }
-                  : item.owner
-                    ? { id: item.owner, name: `User #${item.owner}` }
-                    : undefined,
-            }));
+            const mappedTypes = response.data.map(mapTypeRow);
 
             setTypes(mappedTypes);
             try {
               localStorage.setItem(SNAP_KEY, JSON.stringify(mappedTypes));
-            } catch (e) {
-            }
+            } catch {}
           }
         } else {
           if (!cancelled) {
@@ -185,6 +208,56 @@ export default function TypeList() {
       cancelled = true;
     };
   }, [isAuthenticated, token]);
+
+  useEffect(() => {
+    if (routeDetailId === null) {
+      routedDetailRequestRef.current = null;
+      setDetailOpen(false);
+      setDetailItem(null);
+      return;
+    }
+    const loaded = types.find((item) => item.id === routeDetailId);
+    if (loaded) {
+      setDetailItem(loaded);
+      setDetailOpen(true);
+      return;
+    }
+    if (!isAuthenticated || !token) return;
+    if (routedDetailRequestRef.current === routeDetailId) return;
+    routedDetailRequestRef.current = routeDetailId;
+    const authToken = token;
+    let cancelled = false;
+
+    async function loadRoutedType() {
+      const response = await apiFetch(
+        getQueryUrl(API_CONFIG.ENDPOINTS.TYPE, {
+          fields: [
+            "*",
+            "created_by.full_name",
+            "updated_by.full_name",
+            "owner.full_name",
+          ],
+          filters: [["id", "=", routeDetailId]],
+          limit: 1,
+        }),
+        {
+          method: "GET",
+          cache: "no-store",
+          headers: getAuthHeaders(authToken),
+        },
+      );
+      if (!response.ok || cancelled) return;
+      const json = (await response.json()) as TypeAPIResponse;
+      const row = json.data?.[0];
+      if (!row || cancelled) return;
+      setDetailItem(mapTypeRow(row));
+      setDetailOpen(true);
+    }
+    void loadRoutedType();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, routeDetailId, token, types]);
 
   // Listen for updates - reload from API when triggered
   useEffect(() => {
@@ -212,42 +285,12 @@ export default function TypeList() {
         if (res.ok) {
           const response = (await res.json()) as TypeAPIResponse;
 
-          const mappedTypes: ItemType[] = response.data.map((item) => ({
-            id: item.id,
-            name: item.name,
-            type_name: item.type_name,
-            image: getFileUrl(item.image),
-            description: item.description,
-            docstatus: item.docstatus,
-            status: item.status,
-            disabled: item.disabled,
-            created_at: item.created_at,
-            updated_at: item.updated_at,
-            created_by:
-              typeof item.created_by === "object"
-                ? { id: item.created_by.id || 0, name: item.created_by.full_name || "Unknown" }
-                : item.created_by
-                  ? { id: item.created_by, name: `User #${item.created_by}` }
-                  : undefined,
-            updated_by:
-              typeof item.updated_by === "object"
-                ? { id: item.updated_by.id || 0, name: item.updated_by.full_name || "Unknown" }
-                : item.updated_by
-                  ? { id: item.updated_by, name: `User #${item.updated_by}` }
-                  : undefined,
-            owner:
-              typeof item.owner === "object"
-                ? { id: item.owner.id || 0, name: item.owner.full_name || "Unknown" }
-                : item.owner
-                  ? { id: item.owner, name: `User #${item.owner}` }
-                  : undefined,
-          }));
+          const mappedTypes = response.data.map(mapTypeRow);
 
           setTypes(mappedTypes);
           localStorage.setItem(SNAP_KEY, JSON.stringify(mappedTypes));
         }
-      } catch (error) {
-      }
+      } catch {}
     }
 
     window.addEventListener("ekatalog:types_update", handler);
@@ -313,11 +356,23 @@ export default function TypeList() {
   function openDetail(t: ItemType) {
     setDetailItem(t);
     setDetailOpen(true);
+    setRouteDetailId(t.id);
+    window.history.pushState(
+      { ...window.history.state, ekaModalBase: "/types" },
+      "",
+      `${pathname}?id=${t.id}`,
+    );
   }
 
   function closeDetail() {
     setDetailOpen(false);
     setDetailItem(null);
+    setRouteDetailId(null);
+    if (window.history.state?.ekaModalBase === "/types") {
+      window.history.back();
+      return;
+    }
+    router.replace("/types");
   }
 
   function onDetailEdit(t: ItemType) {

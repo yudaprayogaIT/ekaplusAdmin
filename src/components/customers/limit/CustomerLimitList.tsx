@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   FaCalendarAlt,
   FaCheckCircle,
@@ -113,6 +114,15 @@ function getStatusTone(status: string) {
 
 export function CustomerLimitList() {
   const { token, isAuthenticated } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const detailIdParam = searchParams.get("id");
+  const searchRouteDetailId =
+    detailIdParam && /^\d+$/.test(detailIdParam) ? Number(detailIdParam) : null;
+  const [routeDetailId, setRouteDetailId] = useState<number | null>(
+    searchRouteDetailId,
+  );
   const [items, setItems] = useState<CustomerLimitListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -124,6 +134,19 @@ export function CustomerLimitList() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [visibleCount, setVisibleCount] = useState(ITEMS_PER_BATCH);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setRouteDetailId(searchRouteDetailId);
+  }, [searchRouteDetailId]);
+
+  useEffect(() => {
+    const syncRouteFromBrowser = () => {
+      const id = new URLSearchParams(window.location.search).get("id");
+      setRouteDetailId(id && /^\d+$/.test(id) ? Number(id) : null);
+    };
+    window.addEventListener("popstate", syncRouteFromBrowser);
+    return () => window.removeEventListener("popstate", syncRouteFromBrowser);
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -214,6 +237,38 @@ export function CustomerLimitList() {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (routeDetailId === null) {
+      setSelectedItem(null);
+      return;
+    }
+    const routedItem = items.find((item) => item.id === routeDetailId) || null;
+    setSelectedItem(routedItem);
+  }, [items, routeDetailId]);
+
+  const openDetail = useCallback(
+    (item: CustomerLimitListItem) => {
+      setSelectedItem(item);
+      setRouteDetailId(item.id);
+      window.history.pushState(
+        { ...window.history.state, ekaModalBase: "/customers/limit" },
+        "",
+        `${pathname}?id=${item.id}`,
+      );
+    },
+    [pathname],
+  );
+
+  const closeDetail = useCallback(() => {
+    setSelectedItem(null);
+    setRouteDetailId(null);
+    if (window.history.state?.ekaModalBase === "/customers/limit") {
+      window.history.back();
+      return;
+    }
+    router.replace("/customers/limit");
+  }, [router]);
 
   const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -492,7 +547,7 @@ export function CustomerLimitList() {
 
                   <button
                     type="button"
-                    onClick={() => setSelectedItem(item)}
+                    onClick={() => openDetail(item)}
                     className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:shadow-lg"
                   >
                     <FaEye className="h-4 w-4" />
@@ -526,7 +581,7 @@ export function CustomerLimitList() {
 
       <CustomerLimitDetailModal
         isOpen={selectedItem !== null}
-        onClose={() => setSelectedItem(null)}
+        onClose={closeDetail}
         item={selectedItem}
       />
     </div>

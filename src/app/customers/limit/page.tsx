@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import RequireAuth from "@/components/auth/RequireAuth";
 import { CustomerLimitList } from "@/components/customers/limit/CustomerLimitList";
 
@@ -9,7 +10,9 @@ export const metadata = {
 export default function CustomerLimitPage() {
   return (
     <RequireAuth>
-      <CustomerLimitList />
+      <Suspense fallback={null}>
+        <CustomerLimitList />
+      </Suspense>
     </RequireAuth>
   );
 }

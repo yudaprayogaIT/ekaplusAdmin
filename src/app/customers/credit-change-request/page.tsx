@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import RequireAuth from "@/components/auth/RequireAuth";
 import { CreditChangeRequestList } from "@/components/customers/credit-change-request/CreditChangeRequestList";
 
@@ -9,7 +10,9 @@ export const metadata = {
 export default function CreditChangeRequestPage() {
   return (
     <RequireAuth>
-      <CreditChangeRequestList />
+      <Suspense fallback={null}>
+        <CreditChangeRequestList />
+      </Suspense>
     </RequireAuth>
   );
 }

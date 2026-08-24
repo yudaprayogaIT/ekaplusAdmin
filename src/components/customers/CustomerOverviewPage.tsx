@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getApiUrl, getQueryUrl } from "@/config/api";
@@ -348,7 +349,19 @@ function renderCardIcon(type: CustomerType) {
 
 export default function CustomerOverviewPage() {
   const { token, isAuthenticated } = useAuth();
-  const [activeTab, setActiveTab] = useState<CustomerType>("bc");
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const parsedRouteState = useMemo(() => {
+    const match = pathname.match(/^\/customers\/company\/(nb|gp|gc|bc)\/?$/);
+    const idParam = searchParams.get("id");
+    return {
+      type: (match?.[1] || "bc") as CustomerType,
+      detailId: idParam && /^\d+$/.test(idParam) ? Number(idParam) : null,
+    };
+  }, [pathname, searchParams]);
+  const [routeState, setRouteState] = useState(parsedRouteState);
+  const [activeTab, setActiveTab] = useState<CustomerType>(routeState.type);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sortField, setSortField] = useState<CustomerSortField>("updated_at");
@@ -378,6 +391,31 @@ export default function CustomerOverviewPage() {
   const [selectedGC, setSelectedGC] = useState<GroupCustomer | null>(null);
   const [selectedBC, setSelectedBC] = useState<BranchCustomer | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const routedDetailRequestRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setRouteState(parsedRouteState);
+  }, [parsedRouteState]);
+
+  useEffect(() => {
+    const syncRouteFromBrowser = () => {
+      const match = window.location.pathname.match(
+        /^\/customers\/company\/(nb|gp|gc|bc)\/?$/,
+      );
+      const idParam = new URLSearchParams(window.location.search).get("id");
+      setRouteState({
+        type: (match?.[1] || "bc") as CustomerType,
+        detailId:
+          idParam && /^\d+$/.test(idParam) ? Number(idParam) : null,
+      });
+    };
+    window.addEventListener("popstate", syncRouteFromBrowser);
+    return () => window.removeEventListener("popstate", syncRouteFromBrowser);
+  }, []);
+
+  useEffect(() => {
+    setActiveTab(routeState.type);
+  }, [routeState.type]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1155,21 +1193,193 @@ export default function CustomerOverviewPage() {
     loadingMore,
   ]);
 
+  const selectDetail = useCallback(
+    (
+      type: CustomerType,
+      item:
+        | NationalBrandDetailData
+        | GroupParent
+        | GroupCustomer
+        | BranchCustomer
+        | null,
+    ) => {
+      setSelectedNB(type === "nb" ? (item as NationalBrandDetailData) : null);
+      setSelectedGP(type === "gp" ? (item as GroupParent) : null);
+      setSelectedGC(type === "gc" ? (item as GroupCustomer) : null);
+      setSelectedBC(type === "bc" ? (item as BranchCustomer) : null);
+    },
+    [],
+  );
+
   const openDetail = (card: UnifiedCard) => {
     if (card.detail.kind === "nb") {
-      setSelectedNB(card.detail.item);
-      return;
+      selectDetail("nb", card.detail.item);
+    } else if (card.detail.kind === "gp") {
+      selectDetail("gp", card.detail.item);
+    } else if (card.detail.kind === "gc") {
+      selectDetail("gc", card.detail.item);
+    } else {
+      selectDetail("bc", card.detail.item);
     }
-    if (card.detail.kind === "gp") {
-      setSelectedGP(card.detail.item);
-      return;
-    }
-    if (card.detail.kind === "gc") {
-      setSelectedGC(card.detail.item);
-      return;
-    }
-    setSelectedBC(card.detail.item);
+    setRouteState({ type: card.type, detailId: card.id });
+    const base = `/customers/company/${card.type}`;
+    window.history.pushState(
+      { ...window.history.state, ekaModalBase: base },
+      "",
+      `${base}?id=${card.id}`,
+    );
   };
+
+  const navigateToRelatedDetail = useCallback(
+    (
+      type: CustomerType,
+      item:
+        | NationalBrandDetailData
+        | GroupParent
+        | GroupCustomer
+        | BranchCustomer,
+    ) => {
+      selectDetail(type, item);
+      setActiveTab(type);
+      setRouteState({ type, detailId: item.id });
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `/customers/company/${type}?id=${item.id}`,
+      );
+    },
+    [selectDetail],
+  );
+
+  const closeDetail = useCallback(() => {
+    selectDetail(routeState.type, null);
+    setRouteState((current) => ({ ...current, detailId: null }));
+    const modalBase = window.history.state?.ekaModalBase;
+    if (
+      typeof modalBase === "string" &&
+      modalBase.startsWith("/customers/company/")
+    ) {
+      window.history.back();
+      return;
+    }
+    router.replace(`/customers/company/${routeState.type}`);
+  }, [routeState.type, router, selectDetail]);
+
+  useEffect(() => {
+    const { type, detailId } = routeState;
+    if (detailId === null) {
+      routedDetailRequestRef.current = null;
+      selectDetail(type, null);
+      return;
+    }
+
+    const loadedCard = tabData[type].cards.find(
+      (card) => card.id === detailId,
+    );
+    if (loadedCard) {
+      selectDetail(type, loadedCard.detail.item);
+      return;
+    }
+    if (!isAuthenticated || !token) return;
+
+    const requestKey = `${type}:${detailId}`;
+    if (routedDetailRequestRef.current === requestKey) return;
+    routedDetailRequestRef.current = requestKey;
+    let cancelled = false;
+
+    async function loadRoutedDetail() {
+      const endpoint =
+        type === "nb"
+          ? API_CONFIG.ENDPOINTS.NATIONAL_BRAND
+          : type === "gp"
+            ? API_CONFIG.ENDPOINTS.GROUP_PARENT
+            : type === "gc"
+              ? API_CONFIG.ENDPOINTS.GROUP_CUSTOMER
+              : API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2;
+      const response = await apiFetch(
+        getQueryUrl(endpoint, {
+          fields: ["*", "created_by.full_name", "updated_by.full_name"],
+          filters: [["id", "=", detailId]],
+          limit: 1,
+        }),
+        { method: "GET", cache: "no-store" },
+        token,
+      );
+      if (!response.ok || cancelled) return;
+      const json = await response.json();
+      const row = Array.isArray(json?.data) ? json.data[0] : undefined;
+      if (!row || cancelled) return;
+      const fallbackDate = new Date(0).toISOString();
+
+      if (type === "nb") {
+        selectDetail("nb", {
+          id: Number(row.id),
+          name: row.name || `NB-${row.id}`,
+          nb_name: row.nb_name || row.name || `NB ${row.id}`,
+          disabled: Number(row.disabled || 0),
+          created_at: row.created_at || fallbackDate,
+          updated_at: row.updated_at || row.created_at || fallbackDate,
+          owners: [],
+          active_gp_count: 0,
+          active_gc_count: 0,
+          active_bc_count: 0,
+          active_gp_names: [],
+          active_gc_names: [],
+          active_bc_names: [],
+        });
+      } else if (type === "gp") {
+        selectDetail("gp", {
+          id: Number(row.id),
+          name: row.name || `GP${row.id}`,
+          gp_name: row.gp_name || "-",
+          description: row.description || undefined,
+          credit_limit_active: Number(row.credit_limit_active || 0),
+          credit_limit: row.credit_limit ?? null,
+          payment_term_active: Number(row.payment_term_active || 0),
+          payment_term: row.payment_term ?? null,
+          limit_customer_overdue_active: Number(
+            row.limit_customer_overdue_active || 0,
+          ),
+          limit_customer_overdue: row.limit_customer_overdue ?? null,
+          created_at: row.created_at || fallbackDate,
+          updated_at: row.updated_at || row.created_at || fallbackDate,
+          disabled: Number(row.disabled || 0),
+        });
+      } else if (type === "gc") {
+        selectDetail("gc", {
+          id: Number(row.id),
+          name: row.name || `GC${row.id}`,
+          gc_name: row.gc_name || "-",
+          gp_id: extractLinkId(row.gpid) || 0,
+          description: row.description || undefined,
+          owner_name: row.owner_full_name || undefined,
+          owner_phone: row.owner_phone || undefined,
+          owner_email: row.owner_email || undefined,
+          created_at: row.created_at || fallbackDate,
+          updated_at: row.updated_at || row.created_at || fallbackDate,
+          disabled: Number(row.disabled || 0),
+        });
+      } else {
+        selectDetail("bc", {
+          id: Number(row.id),
+          name: row.name || `BC${row.id}`,
+          gc_id: extractLinkId(row.gcid) || 0,
+          branch_id: extractLinkId(row.branch) || 0,
+          created_at: row.created_at || row.updated_at || fallbackDate,
+          updated_at: row.updated_at || row.created_at || fallbackDate,
+          disabled:
+            typeof row.status === "string"
+              ? getDisabledFromStatus(row.status)
+              : Number(row.disabled || 0),
+        });
+      }
+    }
+
+    void loadRoutedDetail();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, routeState, selectDetail, tabData, token]);
 
   const handleGCUpdate = (updatedGC: GroupCustomer) => {
     setSelectedGC(updatedGC);
@@ -1288,7 +1498,16 @@ export default function CustomerOverviewPage() {
           {tabOptions.map((tab) => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => {
+                selectDetail(tab.key, null);
+                setActiveTab(tab.key);
+                setRouteState({ type: tab.key, detailId: null });
+                window.history.pushState(
+                  { ...window.history.state, ekaModalBase: undefined },
+                  "",
+                  `/customers/company/${tab.key}`,
+                );
+              }}
               className={`border-b-[3px] pb-2 text-sm font-bold transition-colors ${
                 activeTab === tab.key
                   ? "border-orange-500 text-orange-500"
@@ -1535,71 +1754,39 @@ export default function CustomerOverviewPage() {
 
       <NBDetailModal
         isOpen={selectedNB !== null}
-        onClose={() => setSelectedNB(null)}
+        onClose={closeDetail}
         item={selectedNB}
-        onViewGP={(gp) => {
-          setSelectedNB(null);
-          setSelectedGP(gp);
-        }}
-        onViewGC={(gc) => {
-          setSelectedNB(null);
-          setSelectedGC(gc);
-        }}
-        onViewBC={(bc) => {
-          setSelectedNB(null);
-          setSelectedBC(bc);
-        }}
+        onViewGP={(gp) => navigateToRelatedDetail("gp", gp)}
+        onViewGC={(gc) => navigateToRelatedDetail("gc", gc)}
+        onViewBC={(bc) => navigateToRelatedDetail("bc", bc)}
       />
 
       <GPDetailModal
         isOpen={selectedGP !== null}
-        onClose={() => setSelectedGP(null)}
+        onClose={closeDetail}
         gp={selectedGP}
-        onViewNB={(nb) => {
-          setSelectedGP(null);
-          setSelectedNB(nb);
-        }}
-        onViewGC={(gc) => {
-          setSelectedGP(null);
-          setSelectedGC(gc);
-        }}
-        onViewBC={(bc) => {
-          setSelectedGP(null);
-          setSelectedBC(bc);
-        }}
+        onViewNB={(nb) => navigateToRelatedDetail("nb", nb)}
+        onViewGC={(gc) => navigateToRelatedDetail("gc", gc)}
+        onViewBC={(bc) => navigateToRelatedDetail("bc", bc)}
       />
 
       <GCDetailModal
         isOpen={selectedGC !== null}
-        onClose={() => setSelectedGC(null)}
+        onClose={closeDetail}
         gc={selectedGC}
         onGCUpdate={handleGCUpdate}
-        onViewGP={(gp) => {
-          setSelectedGC(null);
-          setSelectedGP(gp);
-        }}
-        onViewBC={(bc) => {
-          setSelectedGC(null);
-          setSelectedBC(bc);
-        }}
+        onViewGP={(gp) => navigateToRelatedDetail("gp", gp)}
+        onViewBC={(bc) => navigateToRelatedDetail("bc", bc)}
       />
 
       <BCDetailModal
         isOpen={selectedBC !== null}
-        onClose={() => setSelectedBC(null)}
+        onClose={closeDetail}
         bc={selectedBC}
         onBCUpdate={handleBCUpdate}
-        onViewBC={(bc) => {
-          setSelectedBC(bc);
-        }}
-        onViewGP={(gp) => {
-          setSelectedBC(null);
-          setSelectedGP(gp);
-        }}
-        onViewGC={(gc) => {
-          setSelectedBC(null);
-          setSelectedGC(gc);
-        }}
+        onViewBC={(bc) => navigateToRelatedDetail("bc", bc)}
+        onViewGP={(gp) => navigateToRelatedDetail("gp", gp)}
+        onViewGC={(gc) => navigateToRelatedDetail("gc", gc)}
       />
     </div>
   );
