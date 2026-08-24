@@ -1121,7 +1121,7 @@ export default function UserList() {
       }
 
       const requestUrl = modalInitial
-        ? `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.USERS}/${modalInitial.id}`
+        ? `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.USER_UPDATE}/${modalInitial.id}`
         : `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.USER_CREATE}`;
       const res = await apiFetch(
         requestUrl,

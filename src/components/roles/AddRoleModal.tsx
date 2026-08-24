@@ -69,7 +69,9 @@ export default function AddRoleModal({
         Name: name.trim(),
         Slug: slug.trim(),
         Description: description.trim(),
-        IsSystem: currentIsSystem,
+        ...(isEditMode
+          ? { IsSystem: currentIsSystem }
+          : { is_system: 1 }),
       };
 
       let response;
