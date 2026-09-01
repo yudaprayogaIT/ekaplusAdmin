@@ -3,7 +3,14 @@
 import React from "react";
 import { motion } from "framer-motion";
 import type { CustomerRegistration } from "@/types/customerRegistration";
-import { FaBuilding, FaUser, FaMapMarkerAlt, FaEye, FaSyncAlt } from "react-icons/fa";
+import {
+  FaBuilding,
+  FaUser,
+  FaUsers,
+  FaMapMarkerAlt,
+  FaEye,
+  FaSyncAlt,
+} from "react-icons/fa";
 
 interface RegistrationCardProps {
   registration: CustomerRegistration;
@@ -129,6 +136,17 @@ export function RegistrationCard({
           </span>
         </div>
 
+        {/* Sales Team */}
+        <div className="flex items-center gap-2">
+          <FaUsers className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          <span className="text-sm text-gray-500 flex-shrink-0">
+            Sales Team:
+          </span>
+          <span className="text-sm text-gray-700 font-medium truncate">
+            {registration.support_data.sales_team || "-"}
+          </span>
+        </div>
+
         {/* Branch */}
         <div className="flex items-center gap-2">
           <FaMapMarkerAlt className="w-4 h-4 text-gray-400 flex-shrink-0" />
@@ -172,5 +190,4 @@ export function RegistrationCard({
     </motion.div>
   );
 }
-
 

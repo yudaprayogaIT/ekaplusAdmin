@@ -100,6 +100,7 @@ interface CustomerRegistrationApiResponse {
   npwp?: string | null;
   erp_customer_group?: string | null;
   same_as_company_address?: number | boolean | null;
+  identity_attachment?: string | null;
   nbid?: number | { id?: number; name?: string; nb_name?: string } | null;
   nbid_id?: number | null;
   nbid_name?: string | null;
@@ -532,6 +533,7 @@ export function CustomerRegistrationList() {
       },
       same_as_company_address: Boolean(apiData.same_as_company_address),
       shipping_addresses: [],
+      identity_attachment: apiData.identity_attachment || undefined,
 
       // Documents
       documents: {

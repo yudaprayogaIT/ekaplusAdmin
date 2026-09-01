@@ -37,6 +37,7 @@ interface ShippingApiRow {
   parent_id?: number;
   label?: string | null;
   type?: string | null;
+  email?: string | null;
   address?: string | null;
   city?: string | null;
   province?: string | null;
@@ -141,6 +142,7 @@ function payloadShipping(addr: CustomerRegistrationShippingAddress) {
   return {
     label: cleanInputValue(addr.label).trim(),
     type: cleanInputValue(addr.type) || "Shipping",
+    email: toNullableText(addr.email),
     pic_name: toNullableText(addr.pic_name),
     pic_phone: toNullableText(addr.pic_phone),
     address: cleanInputValue(addr.address).trim(),
@@ -395,6 +397,7 @@ export function EditRegistrationModal({
             parent_id: x.parent_id,
             label: cleanInputValue(x.label),
             type: cleanInputValue(x.type) || "Shipping",
+            email: cleanInputValue(x.email),
             address: cleanInputValue(x.address),
             city: cleanInputValue(x.city),
             province: cleanInputValue(x.province),
@@ -530,6 +533,7 @@ export function EditRegistrationModal({
             parent_id: x.parent_id,
             label: cleanInputValue(x.label),
             type: cleanInputValue(x.type) || "Shipping",
+            email: cleanInputValue(x.email),
             address: cleanInputValue(x.address),
             city: cleanInputValue(x.city),
             province: cleanInputValue(x.province),

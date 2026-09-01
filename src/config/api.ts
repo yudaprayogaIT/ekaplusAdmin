@@ -47,6 +47,7 @@ export const API_CONFIG = {
 
     CUSTOMER_REGISTER: "/api/resource/customer_register",
     CUSTOMER_REGISTER_ADDRESS: "/api/resource/customer_register_address",
+    CUSTOMER_REGISTER_CONTACT: "/api/resource/customer_register_contact",
     CUSTOMER_LIMIT: "/api/resource/customer_limit",
     CREDIT_CHANGE_REQUEST: "/api/resource/credit_change_request",
     CREDIT_POLICY: "/api/resource/credit_policy",
@@ -136,13 +137,27 @@ export function getAuthHeadersFormData(token: string): HeadersInit {
 export function getFileUrl(filename?: string | null): string | undefined {
   if (!filename) return undefined;
 
+  const normalizedFilename = filename.trim();
+  if (!normalizedFilename) return undefined;
+
   // Jika sudah berupa URL lengkap, return as is
-  if (filename.startsWith("http://") || filename.startsWith("https://")) {
-    return filename;
+  if (
+    normalizedFilename.startsWith("http://") ||
+    normalizedFilename.startsWith("https://")
+  ) {
+    return normalizedFilename;
+  }
+
+  if (normalizedFilename.startsWith("/files/")) {
+    return `${API_CONFIG.FILE_BASE_URL}${normalizedFilename}`;
+  }
+
+  if (normalizedFilename.startsWith("files/")) {
+    return `${API_CONFIG.FILE_BASE_URL}/${normalizedFilename}`;
   }
 
   // Jika hanya filename, buat full URL
-  return `${API_CONFIG.FILE_BASE_URL}/files/${filename}`;
+  return `${API_CONFIG.FILE_BASE_URL}/files/${normalizedFilename}`;
 }
 
 /**

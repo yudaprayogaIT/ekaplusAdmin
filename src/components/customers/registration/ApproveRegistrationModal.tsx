@@ -295,16 +295,18 @@ export function ApproveRegistrationModal({
   const existingGcid = registration?.gc_id;
   const existingBcid = registration?.bc_id;
   const existingNbid = registration?.master_links?.nb_id;
-  const effectiveNbid = existingNbid || selectedNbid || undefined;
-  const effectiveGpid = existingGpid || selectedGpid || undefined;
-  const effectiveGcid = existingGcid || selectedGcid || undefined;
+  // Existing values become the initial selection, but the approver's latest
+  // selection remains authoritative during final validation.
+  const effectiveNbid = selectedNbid || undefined;
+  const effectiveGpid = selectedGpid || undefined;
+  const effectiveGcid = selectedGcid || undefined;
   const effectiveBcid = existingBcid || selectedBcid || undefined;
   const isCreatingNewGpFlow = Boolean(
     gpCreatedViaCreateFlow ||
-    (!existingGpid && !selectedGpid && gpMode === "create"),
+    (!selectedGpid && gpMode === "create"),
   );
   const canSearchExistingGc = Boolean(
-    !isCreatingNewGpFlow && (existingGpid || selectedGpid),
+    !isCreatingNewGpFlow && selectedGpid,
   );
   const canSearchExistingBc = Boolean(false);
 
@@ -700,10 +702,10 @@ export function ApproveRegistrationModal({
       // Reset all modes & searches
       setGpMode(shouldCreateGroupParent ? "create" : "search");
       setGpSearch("");
-      setSelectedGpid(null);
+      setSelectedGpid(existingGpid || null);
       setGcMode("idle");
       setGcSearch("");
-      setSelectedGcid(null);
+      setSelectedGcid(existingGcid || null);
       setBcMode("idle");
       setBcSearch("");
       setSelectedBcid(null);
@@ -812,6 +814,8 @@ export function ApproveRegistrationModal({
     demoMode,
     demoNationalBrands,
     ensureNationalBrands,
+    existingGcid,
+    existingGpid,
     existingNbid,
     isOpen,
     registration,
@@ -871,7 +875,7 @@ export function ApproveRegistrationModal({
 
   useEffect(() => {
     if (!selectedBcid) return;
-    const effectiveGcid = selectedGcid || existingGcid;
+    const effectiveGcid = selectedGcid;
     const selectedBc = branchCustomers.find(
       (row) => Number(row.id) === Number(selectedBcid),
     );
@@ -882,10 +886,10 @@ export function ApproveRegistrationModal({
     ) {
       setSelectedBcid(null);
     }
-  }, [selectedBcid, selectedGcid, existingGcid, branchCustomers]);
+  }, [selectedBcid, selectedGcid, branchCustomers]);
 
   useEffect(() => {
-    if (step !== 3 || existingGcid) return;
+    if (step !== 3 || selectedGcid) return;
     if (!selectedGcid && canSearchExistingGc) {
       setGcMode("search");
       return;
@@ -894,7 +898,7 @@ export function ApproveRegistrationModal({
       setGcMode("create");
       setSelectedGcid(null);
     }
-  }, [step, existingGcid, canSearchExistingGc, selectedGcid]);
+  }, [step, canSearchExistingGc, selectedGcid]);
 
   useEffect(() => {
     if (step !== 4 || existingBcid) return;
@@ -907,7 +911,7 @@ export function ApproveRegistrationModal({
 
   useEffect(() => {
     if (!isCreatingNewGpFlow) return;
-    if (step >= 3 && !existingGcid && !selectedGcid) {
+    if (step >= 3 && !selectedGcid) {
       setGcMode("create");
     }
     if (step >= 4 && !existingBcid && !selectedBcid) {
@@ -916,7 +920,6 @@ export function ApproveRegistrationModal({
   }, [
     isCreatingNewGpFlow,
     step,
-    existingGcid,
     selectedGcid,
     existingBcid,
     selectedBcid,
@@ -1028,7 +1031,7 @@ export function ApproveRegistrationModal({
     }
 
     // Step 2: Group Parent
-    if (step === 2 && !existingGpid) {
+    if (step === 2) {
       if (selectedGpid) return null;
       if (gpMode === "create") {
         if (!normalizeEntityName(gpName))
@@ -1039,7 +1042,7 @@ export function ApproveRegistrationModal({
     }
 
     // Step 3: Group Customer
-    if (step === 3 && !existingGcid) {
+    if (step === 3) {
       if (canSearchExistingGc && selectedGcid) return null;
       if (gcMode === "create" || !canSearchExistingGc) {
         if (!normalizeEntityName(gcName)) return "GC Name wajib diisi";
@@ -1483,9 +1486,12 @@ export function ApproveRegistrationModal({
         className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 text-sm"
       >
         <span className="text-blue-800 font-medium">
-          {selectedGpRow?.gp_name || "-"}{" "}
+          {selectedGpRow?.gp_name ||
+            gpDisplay?.gp_name ||
+            registration.gp_name ||
+            "-"}{" "}
           <span className="text-blue-500">
-            ({selectedGpRow?.name || `GP${selectedGpid}`})
+            ({selectedGpRow?.name || gpDisplay?.name || `GP${selectedGpid}`})
           </span>
         </span>
         <button
@@ -1517,7 +1523,7 @@ export function ApproveRegistrationModal({
     return (
       <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 text-sm">
         <span className="text-blue-800 font-medium">
-          {selectedGcRow?.gc_name || "-"}{" "}
+          {selectedGcRow?.gc_name || registration.gc_name || "-"}{" "}
           <span className="text-blue-500">
             ({selectedGcRow?.name || `GC${selectedGcid}`})
           </span>
@@ -1733,15 +1739,7 @@ export function ApproveRegistrationModal({
                       Step ini opsional. Anda bisa lanjut tanpa membuat National
                       Brand.
                     </p>
-                    {existingNbid ? (
-                      <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 text-sm text-green-900">
-                        <p className="font-semibold">
-                          National Brand sudah terpasang di registrasi.
-                        </p>
-                        <p className="mt-1">NB ID: {existingNbid}</p>
-                      </div>
-                    ) : (
-                      <>
+                    <>
                         <div className="space-y-3">
                           <div className="relative">
                             <FaSearch className="absolute left-3 top-3.5 text-gray-400 text-sm" />
@@ -1868,8 +1866,7 @@ export function ApproveRegistrationModal({
                             lanjut tanpa NB.
                           </div>
                         )}
-                      </>
-                    )}
+                    </>
                   </div>
                 </section>
               )}
@@ -1932,21 +1929,7 @@ export function ApproveRegistrationModal({
                       Select Group Parent
                     </h3>
 
-                    {existingGpid ? (
-                      <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 text-sm text-green-900">
-                        <p className="font-semibold">
-                          Group Parent sudah ada, tidak bisa membuat baru.
-                        </p>
-                        <p className="mt-1">
-                          {gpDisplay?.gp_name || registration.gp_name || "-"}{" "}
-                          (GPID:{" "}
-                          {gpDisplay?.name ||
-                            registration.gp_name ||
-                            `GP${existingGpid}`}
-                          )
-                        </p>
-                      </div>
-                    ) : selectedGpid ? (
+                    {selectedGpid ? (
                       // GP already selected — show badge only
                       renderSelectedGpBadge()
                     ) : (
@@ -2134,14 +2117,7 @@ export function ApproveRegistrationModal({
                       Select Group Customer
                     </h3>
 
-                    {existingGcid ? (
-                      <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 text-sm text-green-900">
-                        <p className="font-semibold">
-                          Group Customer sudah ada.
-                        </p>
-                        <p className="mt-1">GC ID: {existingGcid}</p>
-                      </div>
-                    ) : selectedGcid ? (
+                    {selectedGcid ? (
                       <>
                         {renderSelectedGcBadge()}
                         <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 text-sm space-y-1">

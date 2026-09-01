@@ -100,6 +100,7 @@ export interface CustomerRegistration {
 
   same_as_company_address?: boolean;
   shipping_addresses?: CustomerRegistrationShippingAddress[];
+  identity_attachment?: string;
 
   // 5. Dokumen
   documents: {
@@ -147,6 +148,7 @@ export interface CustomerRegistrationShippingAddress {
   id?: number;
   label: string;
   type?: string;
+  email?: string;
   address: string;
   city: string;
   province: string;
