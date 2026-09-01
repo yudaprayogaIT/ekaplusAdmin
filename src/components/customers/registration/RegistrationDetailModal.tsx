@@ -138,9 +138,8 @@ async function detectAttachmentMediaType(blob: Blob): Promise<string> {
 
 function blobToDataUrl(blob: Blob, mediaType: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const typedBlob = blob.type === mediaType
-      ? blob
-      : new Blob([blob], { type: mediaType });
+    const typedBlob =
+      blob.type === mediaType ? blob : new Blob([blob], { type: mediaType });
     const reader = new FileReader();
     reader.onload = () =>
       typeof reader.result === "string"
@@ -996,164 +995,6 @@ export function RegistrationDetailModal({
 
               <section className="mb-6">
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <FaUser className="w-4 h-4 text-blue-600" />
-                  </div>
-                  <h3 className="text-lg font-bold text-gray-900">
-                    Identitas
-                  </h3>
-                </div>
-                <div className="bg-white rounded-xl border border-gray-200 p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 bg-blue-50 rounded-lg flex items-center justify-center">
-                        <FaUser className="w-3.5 h-3.5 text-blue-600" />
-                      </div>
-                      <h4 className="text-sm font-bold text-gray-900">
-                        Pemilik
-                      </h4>
-                    </div>
-                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                    <div className="grid grid-cols-1 gap-4">
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Nama Lengkap
-                        </label>
-                        <p className="text-sm text-gray-900 font-medium">
-                          {registration.user.full_name}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          No. Handphone
-                        </label>
-                        <div className="flex items-center gap-2">
-                          <FaPhone className="w-3 h-3 text-gray-400" />
-                          <p className="text-sm text-gray-900 font-medium">
-                            {formatPhoneNumber(registration.user.phone)}
-                          </p>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Email
-                        </label>
-                        <div className="flex items-center gap-2">
-                          <FaEnvelope className="w-3 h-3 text-gray-400" />
-                          <p className="text-sm text-gray-900 font-medium">
-                            {registration.user.email}
-                          </p>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Tempat Lahir
-                        </label>
-                        <p className="text-sm text-gray-900 font-medium">
-                          {registration.user.place_of_birth}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Tanggal Lahir
-                        </label>
-                        <p className="text-sm text-gray-900 font-medium">
-                          {formatDate(registration.user.date_of_birth)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  </div>
-
-                  <div className="space-y-4 border-t border-gray-200 pt-6 md:border-t-0 md:border-l md:pt-0 md:pl-6">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 bg-cyan-50 rounded-lg flex items-center justify-center">
-                      <FaUser className="w-3.5 h-3.5 text-cyan-600" />
-                    </div>
-                    <h4 className="text-sm font-bold text-gray-900">
-                      PIC Branch
-                    </h4>
-                  </div>
-                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                    <div className="grid grid-cols-1 gap-4">
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Nama Lengkap
-                        </label>
-                        <p className="text-sm text-gray-900 font-medium">
-                          {displayValue(registration.branch_owner?.full_name)}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          No. Handphone
-                        </label>
-                        <div className="flex items-center gap-2">
-                          <FaPhone className="w-3 h-3 text-gray-400" />
-                          <p className="text-sm text-gray-900 font-medium">
-                            {formatPhoneNumber(
-                              registration.branch_owner?.phone || "-",
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Email
-                        </label>
-                        <div className="flex items-center gap-2">
-                          <FaEnvelope className="w-3 h-3 text-gray-400" />
-                          <p className="text-sm text-gray-900 font-medium">
-                            {displayValue(registration.branch_owner?.email)}
-                          </p>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Tempat Lahir
-                        </label>
-                        <p className="text-sm text-gray-900 font-medium">
-                          {displayValue(
-                            registration.branch_owner?.place_of_birth,
-                          )}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Tanggal Lahir
-                        </label>
-                        <p className="text-sm text-gray-900 font-medium">
-                          {formatDate(
-                            registration.branch_owner?.date_of_birth || "-",
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  </div>
-
-                </div>
-              </section>
-
-              <section className="mb-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
-                    <IoDocumentTextOutline className="w-4 h-4 text-amber-600" />
-                  </div>
-                  <h3 className="text-lg font-bold text-gray-900">
-                    Attachment
-                  </h3>
-                </div>
-                <div className="rounded-xl border border-gray-200 bg-white p-5">
-                  <ContactIdentityAttachment
-                    attachment={registration.identity_attachment}
-                    token={token}
-                  />
-                </div>
-              </section>
-
-              <section className="mb-6">
-                <div className="flex items-center gap-2 mb-4">
                   <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
                     <FaBuilding className="w-4 h-4 text-purple-600" />
                   </div>
@@ -1223,7 +1064,7 @@ export function RegistrationDetailModal({
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                        Customer Group
+                        Sales Team
                       </label>
                       <p className="text-sm text-gray-900 font-medium">
                         {displayValue(registration.support_data.sales_team)}
@@ -1280,6 +1121,161 @@ export function RegistrationDetailModal({
                       </p>
                     </div>
                   </div>
+                </div>
+              </section>
+
+              <section className="mb-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <FaUser className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">Identitas</h3>
+                </div>
+                <div className="bg-white rounded-xl border border-gray-200 p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 bg-blue-50 rounded-lg flex items-center justify-center">
+                        <FaUser className="w-3.5 h-3.5 text-blue-600" />
+                      </div>
+                      <h4 className="text-sm font-bold text-gray-900">
+                        Pemilik
+                      </h4>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                      <div className="grid grid-cols-1 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                            Nama Lengkap
+                          </label>
+                          <p className="text-sm text-gray-900 font-medium">
+                            {registration.user.full_name}
+                          </p>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                            No. Handphone
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <FaPhone className="w-3 h-3 text-gray-400" />
+                            <p className="text-sm text-gray-900 font-medium">
+                              {formatPhoneNumber(registration.user.phone)}
+                            </p>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                            Email
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <FaEnvelope className="w-3 h-3 text-gray-400" />
+                            <p className="text-sm text-gray-900 font-medium">
+                              {registration.user.email}
+                            </p>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                            Tempat Lahir
+                          </label>
+                          <p className="text-sm text-gray-900 font-medium">
+                            {registration.user.place_of_birth}
+                          </p>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                            Tanggal Lahir
+                          </label>
+                          <p className="text-sm text-gray-900 font-medium">
+                            {formatDate(registration.user.date_of_birth)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 border-t border-gray-200 pt-6 md:border-t-0 md:border-l md:pt-0 md:pl-6">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 bg-cyan-50 rounded-lg flex items-center justify-center">
+                        <FaUser className="w-3.5 h-3.5 text-cyan-600" />
+                      </div>
+                      <h4 className="text-sm font-bold text-gray-900">
+                        PIC Branch
+                      </h4>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                      <div className="grid grid-cols-1 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                            Nama Lengkap
+                          </label>
+                          <p className="text-sm text-gray-900 font-medium">
+                            {displayValue(registration.branch_owner?.full_name)}
+                          </p>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                            No. Handphone
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <FaPhone className="w-3 h-3 text-gray-400" />
+                            <p className="text-sm text-gray-900 font-medium">
+                              {formatPhoneNumber(
+                                registration.branch_owner?.phone || "-",
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                            Email
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <FaEnvelope className="w-3 h-3 text-gray-400" />
+                            <p className="text-sm text-gray-900 font-medium">
+                              {displayValue(registration.branch_owner?.email)}
+                            </p>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                            Tempat Lahir
+                          </label>
+                          <p className="text-sm text-gray-900 font-medium">
+                            {displayValue(
+                              registration.branch_owner?.place_of_birth,
+                            )}
+                          </p>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                            Tanggal Lahir
+                          </label>
+                          <p className="text-sm text-gray-900 font-medium">
+                            {formatDate(
+                              registration.branch_owner?.date_of_birth || "-",
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="mb-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
+                    <IoDocumentTextOutline className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Attachment
+                  </h3>
+                </div>
+                <div className="rounded-xl border border-gray-200 bg-white p-5">
+                  <ContactIdentityAttachment
+                    attachment={registration.identity_attachment}
+                    token={token}
+                  />
                 </div>
               </section>
 

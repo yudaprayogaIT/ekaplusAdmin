@@ -41,6 +41,14 @@ import {
   resolvePolicyDisplayName,
 } from "./utils";
 
+// Tambahkan status baru di sini jika attachment approval customer diwajibkan
+// sebelum action workflow (selain Reject) dapat dilanjutkan.
+const CUSTOMER_APPROVAL_ATTACHMENT_REQUIRED_STATUSES = [
+  "In Director",
+  "In Accounting Sidoarjo",
+  "In Head of Adinistrations",
+];
+
 export interface ICreditChangeRequestRow {
   id: number;
   code: string;
@@ -639,7 +647,8 @@ export function CreditChangeRequestDetailModal({
     [activeDetail],
   );
   const currentStatus = activeDetail?.status || item?.status || "";
-  const isInDirector = currentStatus === "In Director";
+  const isCustomerApprovalAttachmentRequired =
+    CUSTOMER_APPROVAL_ATTACHMENT_REQUIRED_STATUSES.includes(currentStatus);
   const effectivePolicyType = activeDetail?.policy_type ?? item?.policyType;
   const effectivePolicyId = activeDetail?.policy_id ?? item?.policyId;
   const effectiveRequestedCreditLimit =
@@ -885,14 +894,17 @@ export function CreditChangeRequestDetailModal({
 
       const normalizedLabel = workflowAction.action.toLowerCase();
       const isRejectAction = normalizedLabel.includes("reject");
-      const requiresDirectorAttachment =
-        !demoMode && isInDirector && !isRejectAction;
+      const requiresCustomerApprovalAttachment =
+        !demoMode && isCustomerApprovalAttachmentRequired && !isRejectAction;
       const hasAnyCustomerApprovalAttachment =
         hasStoredCustomerApprovalAttachment || Boolean(customerApprovalFile);
 
-      if (requiresDirectorAttachment && !hasAnyCustomerApprovalAttachment) {
+      if (
+        requiresCustomerApprovalAttachment &&
+        !hasAnyCustomerApprovalAttachment
+      ) {
         const message =
-          "Screenshot persetujuan customer wajib diunggah dulu sebelum melanjutkan action dari In Director.";
+          `Screenshot persetujuan customer wajib diunggah dulu sebelum melanjutkan action dari status ${currentStatus}.`;
         setError(message);
         setResultModal({
           isOpen: true,
@@ -923,7 +935,7 @@ export function CreditChangeRequestDetailModal({
           return;
         }
 
-        if (requiresDirectorAttachment && customerApprovalFile) {
+        if (requiresCustomerApprovalAttachment && customerApprovalFile) {
           await uploadCustomerApprovalAttachment();
         }
 
@@ -966,9 +978,10 @@ export function CreditChangeRequestDetailModal({
     },
     [
       customerApprovalFile,
+      currentStatus,
       demoMode,
       hasStoredCustomerApprovalAttachment,
-      isInDirector,
+      isCustomerApprovalAttachmentRequired,
       item,
       loadDetail,
       onActionExecuted,
@@ -1339,7 +1352,7 @@ export function CreditChangeRequestDetailModal({
                         Customer Approval Attachment
                       </h3>
                     </div>
-                    {isInDirector && (
+                    {isCustomerApprovalAttachmentRequired && (
                       <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
                         <div>
                           <label className="mb-1 block text-sm font-semibold text-slate-700">
@@ -1371,8 +1384,8 @@ export function CreditChangeRequestDetailModal({
                             />
                           </label>
                           <p className="mt-1 text-xs text-slate-500">
-                            Saat workflow berada di `In Director`, lampiran ini
-                            wajib ada sebelum action lanjut.
+                            Pada status ini, lampiran wajib ada sebelum action
+                            selain Reject dilanjutkan.
                           </p>
                         </div>
                         <div className="flex flex-wrap gap-3">
