@@ -158,8 +158,9 @@ export default function WorkflowList() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalInitial, setModalInitial] =
-    useState<WorkflowWithDetails | null>(null);
+  const [modalInitial, setModalInitial] = useState<WorkflowWithDetails | null>(
+    null,
+  );
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailWorkflow, setDetailWorkflow] =
     useState<WorkflowWithDetails | null>(null);
@@ -192,7 +193,7 @@ export default function WorkflowList() {
         method: "GET",
         cache: "no-store",
         headers,
-      }
+      },
     );
 
     if (!response.ok) {
@@ -257,7 +258,8 @@ export default function WorkflowList() {
           const workflowsData = await workflowsRes.json();
           const rolesData = (await rolesRes.json()) as RoleAPIResponse;
           const statesData = await statesRes.json();
-          const resourcesData = (await resourcesRes.json()) as ResourceAPIResponse;
+          const resourcesData =
+            (await resourcesRes.json()) as ResourceAPIResponse;
 
           if (!cancelled) {
             setWorkflows(normalizeWorkflowResponse(workflowsData));
@@ -300,8 +302,7 @@ export default function WorkflowList() {
       try {
         const nextStates = await fetchGlobalStates(token);
         setGlobalStates(nextStates);
-      } catch {
-      }
+      } catch {}
     }
 
     window.addEventListener("ekaplus:workflow_states_update", handler);
@@ -329,12 +330,12 @@ export default function WorkflowList() {
           const response = await res.json();
           setWorkflows(normalizeWorkflowResponse(response));
         }
-      } catch {
-      }
+      } catch {}
     }
 
     window.addEventListener("ekatalog:workflows_update", handler);
-    return () => window.removeEventListener("ekatalog:workflows_update", handler);
+    return () =>
+      window.removeEventListener("ekatalog:workflows_update", handler);
   }, [isAuthenticated, token]);
 
   // Filter workflows based on search
@@ -343,9 +344,13 @@ export default function WorkflowList() {
     displayedWorkflows = displayedWorkflows.filter(
       (wf) =>
         wf.workflow.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        wf.workflow.resource.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        wf.workflow.resource
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase()) ||
         (wf.workflow.description &&
-          wf.workflow.description.toLowerCase().includes(searchQuery.toLowerCase()))
+          wf.workflow.description
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase())),
     );
   }
 
@@ -360,10 +365,10 @@ export default function WorkflowList() {
   }
 
   function handleWorkflowSaved(payload: {
-      mode: "create" | "update";
-      name: string;
-      resource: string;
-    }) {
+    mode: "create" | "update";
+    name: string;
+    resource: string;
+  }) {
     setResultModal({
       isOpen: true,
       type: "success",
@@ -386,7 +391,9 @@ export default function WorkflowList() {
 
   function promptDeleteWorkflow(workflow: WorkflowWithDetails) {
     setConfirmTitle("Hapus Workflow");
-    setConfirmDesc(`Yakin ingin menghapus workflow "${workflow.workflow.name}"?`);
+    setConfirmDesc(
+      `Yakin ingin menghapus workflow "${workflow.workflow.name}"?`,
+    );
     setConfirmAction(() => async () => {
       await deleteWorkflow(workflow);
     });
@@ -515,20 +522,20 @@ export default function WorkflowList() {
         </div>
       ),
     },
-    {
-      key: "resource",
-      header: "Resource",
-      render: (item) => (
-        <div className="space-y-1">
-          <code className="inline-flex rounded bg-gray-100 px-2 py-1 text-[11px] text-gray-600">
-            {item.workflow.resource}
-          </code>
-          <p className="text-xs text-gray-500">
-            {resourceNameBySlug.get(item.workflow.resource) || "-"}
-          </p>
-        </div>
-      ),
-    },
+    // {
+    //   key: "resource",
+    //   header: "Resource",
+    //   render: (item) => (
+    //     <div className="space-y-1">
+    //       <code className="inline-flex rounded bg-gray-100 px-2 py-1 text-[11px] text-gray-600">
+    //         {item.workflow.resource}
+    //       </code>
+    //       <p className="text-xs text-gray-500">
+    //         {resourceNameBySlug.get(item.workflow.resource) || "-"}
+    //       </p>
+    //     </div>
+    //   ),
+    // },
     {
       key: "status",
       header: "Status",
@@ -579,7 +586,8 @@ export default function WorkflowList() {
                 Total {workflows.length} workflow
               </span>
               <span className="text-gray-500">
-                {activeWorkflows.length} aktif, {inactiveWorkflows.length} nonaktif
+                {activeWorkflows.length} aktif, {inactiveWorkflows.length}{" "}
+                nonaktif
               </span>
             </>
           }

@@ -9,7 +9,12 @@ import EntityTable, {
   EntityTableColumn,
 } from "@/components/entity-management/EntityTable";
 import { useAuth } from "@/contexts/AuthContext";
-import { FaCircle, FaLock, FaPalette } from "react-icons/fa";
+import {
+  FaCircle,
+  FaLock,
+  FaPalette,
+  FaSortAmountDown,
+} from "react-icons/fa";
 import {
   getQueryUrl,
   getResourceUrl,
@@ -26,11 +31,40 @@ export type WorkflowState = {
   docstatus: number;
   created_by: number;
   updated_by: number;
+  updated_by_name?: string;
 };
 
-type WorkflowStateAPIResponse = WorkflowState[];
+type WorkflowStateAPIRow = Omit<WorkflowState, "updated_by"> & {
+  updated_by: number | { id?: number; full_name?: string };
+  "updated_by.full_name"?: string;
+};
+
+type WorkflowStateAPIResponse = WorkflowStateAPIRow[];
+type SortOption =
+  | "name-asc"
+  | "name-desc"
+  | "id-asc"
+  | "id-desc"
+  | "active-first"
+  | "draft-first";
 
 const SNAP_KEY = "ekaplus_workflow_states_snapshot";
+
+function mapWorkflowState(row: WorkflowStateAPIRow): WorkflowState {
+  const updatedByObject =
+    typeof row.updated_by === "object" && row.updated_by
+      ? row.updated_by
+      : null;
+
+  return {
+    ...row,
+    updated_by:
+      updatedByObject?.id ??
+      (typeof row.updated_by === "number" ? row.updated_by : 0),
+    updated_by_name:
+      updatedByObject?.full_name || row["updated_by.full_name"] || undefined,
+  };
+}
 
 export default function WorkflowStateList() {
   const { token, isAuthenticated } = useAuth();
@@ -38,6 +72,7 @@ export default function WorkflowStateList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<SortOption>("name-asc");
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<WorkflowState | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -61,7 +96,7 @@ export default function WorkflowStateList() {
         }
 
         const dataUrl = getQueryUrl(API_CONFIG.ENDPOINTS.WORKFLOW_STATE, {
-          fields: ["*"],
+          fields: ["*", "updated_by.full_name"],
         });
         const headers = getAuthHeaders(token);
 
@@ -74,9 +109,10 @@ export default function WorkflowStateList() {
         if (res.ok) {
           const response = (await res.json()) as WorkflowStateAPIResponse;
           if (!cancelled) {
-            setStates(response);
+            const mappedStates = response.map(mapWorkflowState);
+            setStates(mappedStates);
             try {
-              localStorage.setItem(SNAP_KEY, JSON.stringify(response));
+              localStorage.setItem(SNAP_KEY, JSON.stringify(mappedStates));
             } catch {}
           }
         } else if (!cancelled) {
@@ -116,7 +152,7 @@ export default function WorkflowStateList() {
 
       try {
         const dataUrl = getQueryUrl(API_CONFIG.ENDPOINTS.WORKFLOW_STATE, {
-          fields: ["*"],
+          fields: ["*", "updated_by.full_name"],
         });
         const headers = getAuthHeaders(token);
 
@@ -128,8 +164,9 @@ export default function WorkflowStateList() {
 
         if (res.ok) {
           const response = (await res.json()) as WorkflowStateAPIResponse;
-          setStates(response);
-          localStorage.setItem(SNAP_KEY, JSON.stringify(response));
+          const mappedStates = response.map(mapWorkflowState);
+          setStates(mappedStates);
+          localStorage.setItem(SNAP_KEY, JSON.stringify(mappedStates));
         }
       } catch {}
     }
@@ -230,6 +267,34 @@ export default function WorkflowStateList() {
     );
   }
 
+  filteredStates = [...filteredStates].sort((left, right) => {
+    switch (sortBy) {
+      case "name-desc":
+        return right.name.localeCompare(left.name, "id", {
+          sensitivity: "base",
+        });
+      case "id-asc":
+        return left.id - right.id;
+      case "id-desc":
+        return right.id - left.id;
+      case "active-first":
+        return (
+          right.docstatus - left.docstatus ||
+          left.name.localeCompare(right.name, "id", { sensitivity: "base" })
+        );
+      case "draft-first":
+        return (
+          left.docstatus - right.docstatus ||
+          left.name.localeCompare(right.name, "id", { sensitivity: "base" })
+        );
+      case "name-asc":
+      default:
+        return left.name.localeCompare(right.name, "id", {
+          sensitivity: "base",
+        });
+    }
+  });
+
   const uniqueColors = Array.from(
     new Set(states.map((s) => s.color).filter(Boolean)),
   );
@@ -307,7 +372,8 @@ export default function WorkflowStateList() {
       header: "Updated By",
       className: "whitespace-nowrap",
       cellClassName: "text-sm text-gray-500 whitespace-nowrap",
-      render: (state) => `User #${state.updated_by}`,
+      render: (state) =>
+        state.updated_by_name || (state.updated_by ? "Unknown User" : "System"),
     },
   ];
 
@@ -385,6 +451,26 @@ export default function WorkflowStateList() {
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           searchPlaceholder="Cari workflow state..."
+          rightInfo={
+            <div className="relative">
+              <FaSortAmountDown className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+              <select
+                value={sortBy}
+                onChange={(event) =>
+                  setSortBy(event.target.value as SortOption)
+                }
+                aria-label="Urutkan workflow state"
+                className="min-w-[190px] appearance-none rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-8 text-sm text-gray-700 focus:border-transparent focus:ring-2 focus:ring-red-500"
+              >
+                <option value="name-asc">Nama: A-Z</option>
+                <option value="name-desc">Nama: Z-A</option>
+                <option value="id-asc">ID: Lama-Terbaru</option>
+                <option value="id-desc">ID: Terbaru-Lama</option>
+                <option value="active-first">Status: Active</option>
+                <option value="draft-first">Status: Draft</option>
+              </select>
+            </div>
+          }
           summary={
             <>
               <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 font-medium text-gray-700">

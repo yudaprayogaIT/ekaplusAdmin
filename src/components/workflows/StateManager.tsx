@@ -45,6 +45,12 @@ export default function StateManager({
   onChange,
   onAddState,
 }: Props) {
+  const availableStates = globalStates
+    .filter((state) => state.docstatus === 1)
+    .sort((left, right) =>
+      left.name.localeCompare(right.name, "id", { sensitivity: "base" }),
+    );
+
   const getDocstatusLabel = (docstatus: number) => {
     switch (docstatus) {
       case 0:
@@ -122,7 +128,7 @@ export default function StateManager({
               Tambah State
             </button>
           )}
-          {globalStates.length === 0 && (
+          {availableStates.length === 0 && (
             <Link
               href="/workflow-states"
               className="px-4 py-2 bg-blue-100 text-blue-700 rounded-xl font-bold hover:bg-blue-200 transition-all flex items-center gap-2"
@@ -156,14 +162,18 @@ export default function StateManager({
       </div>
 
       {/* No states available */}
-      {globalStates.length === 0 && (
+      {availableStates.length === 0 && (
         <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-6 text-center">
           <FaCircle className="w-12 h-12 text-blue-400 mx-auto mb-3" />
           <h4 className="text-lg font-bold text-blue-900 mb-2">
-            Belum Ada Global States
+            {globalStates.length === 0
+              ? "Belum Ada Global States"
+              : "Belum Ada Workflow State Aktif"}
           </h4>
           <p className="text-sm text-blue-700 mb-4">
-            Anda perlu membuat global states terlebih dahulu sebelum membuat workflow
+            {globalStates.length === 0
+              ? "Anda perlu membuat global states terlebih dahulu sebelum membuat workflow"
+              : "Aktifkan workflow state dengan Doc Status 1 agar dapat dipilih pada workflow"}
           </p>
           <Link
             href="/workflow-states"
@@ -186,7 +196,7 @@ export default function StateManager({
       )}
 
       {/* States list */}
-      {globalStates.length > 0 && (
+      {availableStates.length > 0 && (
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
           <div className="grid grid-cols-[56px_72px_minmax(0,1fr)_280px] border-b border-gray-200 bg-gray-50/80 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
             <div className="px-4 py-3 text-center">Pick</div>
@@ -195,7 +205,7 @@ export default function StateManager({
             <div className="px-4 py-3">Doc Status</div>
           </div>
 
-          {globalStates.map((globalState, index) => {
+          {availableStates.map((globalState, index) => {
             const selected = isSelected(globalState.id);
             const selectedState = getSelectedState(globalState.id);
             const currentDocstatus =
@@ -206,8 +216,15 @@ export default function StateManager({
             return (
               <div
                 key={globalState.id}
-                className={`grid grid-cols-[56px_72px_minmax(0,1fr)_280px] items-center border-b border-gray-100 last:border-b-0 ${
-                  selected ? "bg-purple-50/40" : "bg-white"
+                onClick={(event) => {
+                  const target = event.target as HTMLElement;
+                  if (target.closest("button, select, input, a")) return;
+                  toggleState(globalState);
+                }}
+                className={`grid cursor-pointer grid-cols-[56px_72px_minmax(0,1fr)_280px] items-center border-b border-gray-100 transition-colors last:border-b-0 ${
+                  selected
+                    ? "bg-purple-50/60 hover:bg-purple-50"
+                    : "bg-white hover:bg-gray-50"
                 }`}
               >
                 <div className="flex justify-center px-4 py-3">

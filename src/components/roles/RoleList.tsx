@@ -8,7 +8,7 @@ import EntityPageHeader from "@/components/entity-management/EntityPageHeader";
 import EntityTable, {
   EntityTableColumn,
 } from "@/components/entity-management/EntityTable";
-import { FaUserShield } from "react-icons/fa";
+import { FaSortAmountDown, FaUserShield } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAuthHeaders, API_CONFIG, apiFetch } from "@/config/api";
 
@@ -36,6 +36,14 @@ type RoleAPIResponse = {
   };
 };
 
+type SortOption =
+  | "name-asc"
+  | "name-desc"
+  | "updated-desc"
+  | "updated-asc"
+  | "system-first"
+  | "non-system-first";
+
 function normalizeBoolean(value: unknown): boolean {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value === 1;
@@ -58,6 +66,7 @@ export default function RoleList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<SortOption>("name-asc");
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<Role | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -176,6 +185,34 @@ export default function RoleList() {
           role.Description.toLowerCase().includes(searchQuery.toLowerCase())),
     );
   }
+
+  displayedRoles = [...displayedRoles].sort((left, right) => {
+    switch (sortBy) {
+      case "name-desc":
+        return right.Name.localeCompare(left.Name, "id", {
+          sensitivity: "base",
+        });
+      case "updated-desc":
+        return (
+          new Date(right.UpdatedAt).getTime() -
+          new Date(left.UpdatedAt).getTime()
+        );
+      case "updated-asc":
+        return (
+          new Date(left.UpdatedAt).getTime() -
+          new Date(right.UpdatedAt).getTime()
+        );
+      case "system-first":
+        return Number(right.IsSystem) - Number(left.IsSystem);
+      case "non-system-first":
+        return Number(left.IsSystem) - Number(right.IsSystem);
+      case "name-asc":
+      default:
+        return left.Name.localeCompare(right.Name, "id", {
+          sensitivity: "base",
+        });
+    }
+  });
 
   const totalRoles = roles.length;
   const shownRoles = displayedRoles.length;
@@ -366,6 +403,25 @@ export default function RoleList() {
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           searchPlaceholder="Cari role berdasarkan nama, slug, atau deskripsi..."
+          rightInfo={
+            <div className="relative">
+              <FaSortAmountDown className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+              <select
+                value={sortBy}
+                onChange={(event) =>
+                  setSortBy(event.target.value as SortOption)
+                }
+                className="min-w-[190px] appearance-none rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-8 text-sm text-gray-700 focus:border-transparent focus:ring-2 focus:ring-red-500"
+              >
+                <option value="name-asc">Nama: A-Z</option>
+                <option value="name-desc">Nama: Z-A</option>
+                <option value="updated-desc">Terbaru Diupdate</option>
+                <option value="updated-asc">Terlama Diupdate</option>
+                <option value="system-first">Is System: True</option>
+                <option value="non-system-first">Is System: False</option>
+              </select>
+            </div>
+          }
           accentClasses={{
             iconBg: "bg-red-50",
             iconText: "text-red-600",

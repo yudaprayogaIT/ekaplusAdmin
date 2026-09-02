@@ -45,8 +45,13 @@ import {
 // sebelum action workflow (selain Reject) dapat dilanjutkan.
 const CUSTOMER_APPROVAL_ATTACHMENT_REQUIRED_STATUSES = [
   "In Director",
-  "In Accounting Sidoarjo",
-  "In Head of Adinistrations",
+  "Waiting Accounting Bogor",
+  "Waiting Admin RH 1",
+  "Waiting Admin RH 2",
+  "Waiting Admin RH 3",
+  "Waiting Admin RH 4",
+  "Waiting Admin RH 5",
+  "Waiting Accounting Sidoarjo",
 ];
 
 export interface ICreditChangeRequestRow {
@@ -903,8 +908,7 @@ export function CreditChangeRequestDetailModal({
         requiresCustomerApprovalAttachment &&
         !hasAnyCustomerApprovalAttachment
       ) {
-        const message =
-          `Screenshot persetujuan customer wajib diunggah dulu sebelum melanjutkan action dari status ${currentStatus}.`;
+        const message = `Screenshot persetujuan customer wajib diunggah dulu sebelum melanjutkan action dari status ${currentStatus}.`;
         setError(message);
         setResultModal({
           isOpen: true,
@@ -1287,7 +1291,9 @@ export function CreditChangeRequestDetailModal({
                 </section>
 
                 <section
-                  data-tour={demoMode ? "credit-change-notes-section" : undefined}
+                  data-tour={
+                    demoMode ? "credit-change-notes-section" : undefined
+                  }
                   className="rounded-2xl border border-slate-200 bg-white p-5"
                 >
                   <div className="mb-4 flex items-center gap-2">
