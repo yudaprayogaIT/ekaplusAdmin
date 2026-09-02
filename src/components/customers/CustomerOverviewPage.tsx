@@ -24,6 +24,10 @@ import { GPDetailModal } from "@/components/group_parent/GPDetailModal";
 import { GCDetailModal } from "@/components/group_customer/GCDetailModal";
 import { BCDetailModal } from "@/components/branch_customer/BCDetailModal";
 import {
+  exportCustomerWorkbook,
+  type CustomerExportProgress,
+} from "@/utils/exportCustomerWorkbook";
+import {
   FaBuilding,
   FaEye,
   FaRegBuilding,
@@ -33,6 +37,7 @@ import {
   FaStore,
   FaTruck,
   FaChevronDown,
+  FaFileExcel,
 } from "react-icons/fa";
 
 type CustomerType = "nb" | "gp" | "gc" | "bc";
@@ -348,7 +353,7 @@ function renderCardIcon(type: CustomerType) {
 }
 
 export default function CustomerOverviewPage() {
-  const { token, isAuthenticated } = useAuth();
+  const { token, isAuthenticated, currentRole } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -383,6 +388,11 @@ export default function CustomerOverviewPage() {
     gc: 0,
     bc: 0,
   });
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] =
+    useState<CustomerExportProgress | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const canExportCustomer = currentRole?.name === "administrator";
 
   const [selectedNB, setSelectedNB] = useState<NationalBrandDetailData | null>(
     null,
@@ -1423,6 +1433,26 @@ export default function CustomerOverviewPage() {
     }));
   };
 
+  const handleExportCustomer = async () => {
+    if (!token || !canExportCustomer || isExporting) return;
+    setIsExporting(true);
+    setExportError(null);
+    setExportProgress({ completed: 0, total: 8, label: "Menyiapkan export" });
+
+    try {
+      await exportCustomerWorkbook({ token, onProgress: setExportProgress });
+    } catch (exportFailure) {
+      setExportError(
+        exportFailure instanceof Error
+          ? exportFailure.message
+          : "Gagal membuat export customer",
+      );
+    } finally {
+      setIsExporting(false);
+      setExportProgress(null);
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -1532,6 +1562,21 @@ export default function CustomerOverviewPage() {
           </label>
 
           <div className="flex items-center gap-3 self-start lg:self-auto">
+            {canExportCustomer ? (
+              <button
+                type="button"
+                onClick={handleExportCustomer}
+                disabled={isExporting || !token}
+                className="flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white transition-all hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
+                title="Export seluruh data customer ke satu file Excel"
+              >
+                <FaFileExcel className="h-4 w-4" />
+                {isExporting && exportProgress
+                  ? `${exportProgress.completed}/${exportProgress.total}`
+                  : "Export Customer"}
+              </button>
+            ) : null}
+
             <button
               type="button"
               onClick={() =>
@@ -1611,6 +1656,18 @@ export default function CustomerOverviewPage() {
             </div>
           </div>
         </div>
+
+        {isExporting && exportProgress ? (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+            {exportProgress.label} ({exportProgress.completed}/
+            {exportProgress.total})
+          </div>
+        ) : null}
+        {exportError ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {exportError}
+          </div>
+        ) : null}
 
         {loading && (
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
