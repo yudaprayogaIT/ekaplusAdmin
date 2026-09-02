@@ -18,6 +18,7 @@ export type Role = {
   Slug: string;
   Description: string;
   IsSystem: boolean;
+  is_system?: boolean | number | string;
   CreatedAt: string;
   UpdatedAt: string;
 };
@@ -34,6 +35,22 @@ type RoleAPIResponse = {
     processing_time_ms: number;
   };
 };
+
+function normalizeBoolean(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    return ["1", "true", "yes"].includes(value.trim().toLowerCase());
+  }
+  return false;
+}
+
+function normalizeRole(role: Role): Role {
+  return {
+    ...role,
+    IsSystem: normalizeBoolean(role.IsSystem ?? role.is_system),
+  };
+}
 
 export default function RoleList() {
   const { token, isAuthenticated } = useAuth();
@@ -96,7 +113,7 @@ export default function RoleList() {
 
         const response = (await res.json()) as RoleAPIResponse;
         if (!cancelled) {
-          setRoles(response.data);
+          setRoles(response.data.map(normalizeRole));
         }
       } catch (err: unknown) {
         if (!cancelled) {
@@ -140,7 +157,7 @@ export default function RoleList() {
 
         if (res.ok) {
           const response = (await res.json()) as RoleAPIResponse;
-          setRoles(response.data);
+          setRoles(response.data.map(normalizeRole));
         }
       } catch {}
     }
@@ -273,6 +290,22 @@ export default function RoleList() {
         <p className="line-clamp-1">
           {role.Description || "Belum ada deskripsi role."}
         </p>
+      ),
+    },
+    {
+      key: "is-system",
+      header: "Is System",
+      className: "whitespace-nowrap",
+      render: (role) => (
+        <span
+          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+            role.IsSystem
+              ? "bg-green-100 text-green-700"
+              : "bg-gray-100 text-gray-600"
+          }`}
+        >
+          {role.IsSystem ? "True" : "False"}
+        </span>
       ),
     },
     {

@@ -87,6 +87,21 @@ export default function RoleDetailModal({
         )}
       </div>
 
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-2">
+          Is System
+        </label>
+        <span
+          className={`inline-flex rounded-full px-3 py-1.5 text-sm font-semibold ${
+            role.IsSystem
+              ? "bg-green-100 text-green-700"
+              : "bg-gray-100 text-gray-600"
+          }`}
+        >
+          {role.IsSystem ? "True" : "False"}
+        </span>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="rounded-2xl border border-gray-200 bg-white p-4">
           <div className="flex items-center gap-3 mb-3">

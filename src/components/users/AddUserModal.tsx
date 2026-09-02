@@ -194,8 +194,9 @@ export default function AddUserModal({
 
   const filteredRoles = useMemo(() => {
     const query = roleQuery.trim().toLowerCase();
-    if (!query) return roles;
-    return roles.filter((role) =>
+    const systemRoles = roles.filter((role) => role.is_system);
+    if (!query) return systemRoles;
+    return systemRoles.filter((role) =>
       [role.display_name, role.name].some((value) =>
         value.toLowerCase().includes(query),
       ),

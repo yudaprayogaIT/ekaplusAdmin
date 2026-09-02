@@ -158,10 +158,6 @@ type SortOption =
 
 type UsersApiRow = Record<string, unknown>;
 
-type RolesApiResponse = {
-  data?: Array<Record<string, unknown>>;
-};
-
 type UsersApiResponse = {
   data?: UsersApiRow[] | UsersApiRow | null;
   message?: string;
@@ -188,6 +184,7 @@ type UserRoleApiRow = Record<string, unknown>;
 
 const USER_EVENT = "ekaplus:users_update";
 const USER_ENDPOINT = API_CONFIG.ENDPOINTS.USERS;
+const USER_ROLE_OPTIONS_ENDPOINT = "/api/resource/roles";
 const DEFAULT_USER_PAGE_SIZE = 20;
 const USER_ROLE_ENDPOINTS = [
   "/api/resource/user_roles",
@@ -444,22 +441,25 @@ export default function UserList() {
 
   const loadRoles = useCallback(async () => {
     if (!token) return [];
-    const res = await apiFetch(
-      `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTHZ_ROLE}`,
-      {
-        method: "GET",
-        cache: "no-store",
-        headers: getAuthHeaders(token),
-      },
-      token,
-    );
 
-    if (!res.ok) return [];
+    try {
+      const rows = await fetchAllQueryRows<Record<string, unknown>>({
+        endpoint: USER_ROLE_OPTIONS_ENDPOINT,
+        spec: {
+          fields: ["id", "name", "is_system"],
+          order_by: [["name", "ASC"]],
+        },
+        token,
+        requestInit: {
+          headers: getAuthHeaders(token),
+        },
+        errorMessage: "Gagal memuat role user",
+      });
 
-    const json = (await res
-      .json()
-      .catch(() => null)) as RolesApiResponse | null;
-    return Array.isArray(json?.data) ? json.data.map(mapRole) : [];
+      return rows.map(mapRole);
+    } catch {
+      return [];
+    }
   }, [token]);
 
   const loadUsersPage = useCallback(

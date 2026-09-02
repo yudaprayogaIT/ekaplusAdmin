@@ -20,10 +20,10 @@ export default function AddRoleModal({
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
+  const [isSystem, setIsSystem] = useState(true);
   const [loading, setLoading] = useState(false);
 
   const isEditMode = !!initialData;
-  const currentIsSystem = isEditMode ? Boolean(initialData?.IsSystem) : true;
 
   useEffect(() => {
     if (!open) return;
@@ -32,12 +32,14 @@ export default function AddRoleModal({
       setName(initialData.Name || "");
       setSlug(initialData.Slug || "");
       setDescription(initialData.Description || "");
+      setIsSystem(Boolean(initialData.IsSystem));
       return;
     }
 
     setName("");
     setSlug("");
     setDescription("");
+    setIsSystem(true);
   }, [open, initialData]);
 
   const handleNameChange = (value: string) => {
@@ -69,9 +71,7 @@ export default function AddRoleModal({
         Name: name.trim(),
         Slug: slug.trim(),
         Description: description.trim(),
-        ...(isEditMode
-          ? { IsSystem: currentIsSystem }
-          : { is_system: 1 }),
+        ...(isEditMode ? { IsSystem: isSystem } : { is_system: isSystem }),
       };
 
       let response;
@@ -179,6 +179,40 @@ export default function AddRoleModal({
           rows={4}
           className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all resize-none"
         />
+      </div>
+
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-2">
+          Is System <span className="text-red-500">*</span>
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { value: true, label: "True" },
+            { value: false, label: "False" },
+          ].map((option) => (
+            <label
+              key={String(option.value)}
+              className={`flex cursor-pointer items-center justify-center rounded-xl border-2 px-4 py-3 text-sm font-semibold transition-all ${
+                isSystem === option.value
+                  ? "border-red-500 bg-red-50 text-red-700"
+                  : "border-gray-200 text-gray-600 hover:border-gray-300"
+              }`}
+            >
+              <input
+                type="radio"
+                name="role_is_system"
+                checked={isSystem === option.value}
+                onChange={() => setIsSystem(option.value)}
+                className="sr-only"
+                disabled={loading}
+              />
+              {option.label}
+            </label>
+          ))}
+        </div>
+        <p className="mt-1 text-xs text-gray-500">
+          Hanya role dengan nilai True yang tersedia saat memilih role user.
+        </p>
       </div>
     </EntityFormModal>
   );
