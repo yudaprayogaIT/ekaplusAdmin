@@ -3243,21 +3243,156 @@ export function BCDetailModal({
                                     <div className="flex items-center justify-between">
                                       <span>Kabupaten/Kota</span>
                                       {isEditMode ? (
+                                        provinces.length > 0 ? (
+                                          <select
+                                            value={
+                                              shippingAreaStates[idx]
+                                                ?.regencyCode || ""
+                                            }
+                                            onChange={(e) =>
+                                              void onShippingRegencyChange(
+                                                idx,
+                                                e.target.value,
+                                              )
+                                            }
+                                            className="w-36 rounded border border-blue-300 px-1 py-0.5 text-xs"
+                                            disabled={
+                                              isSaving ||
+                                              !shippingAreaStates[idx]
+                                                ?.provinceCode
+                                            }
+                                          >
+                                            <option value="">
+                                              {shippingAreaStates[idx]
+                                                ?.provinceCode
+                                                ? "Pilih Kota/Kabupaten"
+                                                : "Pilih provinsi dulu"}
+                                            </option>
+
+                                            {(
+                                              shippingAreaStates[idx]
+                                                ?.regencies || []
+                                            ).map((regency) => (
+                                              <option
+                                                key={regency.code}
+                                                value={regency.code}
+                                              >
+                                                {regency.name}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        ) : (
+                                          <input
+                                            value={r.city || ""}
+                                            onChange={(e) =>
+                                              updateEditedRow(
+                                                r.id,
+                                                "city",
+                                                e.target.value,
+                                              )
+                                            }
+                                            className="w-28 rounded border border-blue-300 px-1 py-0.5 text-xs"
+                                            disabled={isSaving}
+                                          />
+                                        )
+                                      ) : (
+                                        <span className="font-semibold text-slate-900">
+                                          {r.city || "-"}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* KECAMATAN */}
+                                    <div className="flex items-center justify-between">
+                                      <span>Kecamatan</span>
+
+                                      {isEditMode ? (
+                                        provinces.length > 0 ? (
+                                          <select
+                                            value={
+                                              (
+                                                shippingAreaStates[idx]
+                                                  ?.districts || []
+                                              ).find(
+                                                (x) =>
+                                                  normalizeName(x.name) ===
+                                                  normalizeName(r.district),
+                                              )?.code || ""
+                                            }
+                                            onChange={(e) =>
+                                              onShippingDistrictChange(
+                                                idx,
+                                                e.target.value,
+                                              )
+                                            }
+                                            className="w-36 rounded border border-blue-300 px-1 py-0.5 text-xs"
+                                            disabled={
+                                              isSaving ||
+                                              !shippingAreaStates[idx]
+                                                ?.regencyCode
+                                            }
+                                          >
+                                            <option value="">
+                                              {shippingAreaStates[idx]
+                                                ?.regencyCode
+                                                ? "Pilih Kecamatan"
+                                                : "Pilih kota dulu"}
+                                            </option>
+
+                                            {(
+                                              shippingAreaStates[idx]
+                                                ?.districts || []
+                                            ).map((district) => (
+                                              <option
+                                                key={district.code}
+                                                value={district.code}
+                                              >
+                                                {district.name}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        ) : (
+                                          <input
+                                            value={r.district || ""}
+                                            onChange={(e) =>
+                                              updateEditedRow(
+                                                r.id,
+                                                "district",
+                                                e.target.value,
+                                              )
+                                            }
+                                            className="w-28 rounded border border-blue-300 px-1 py-0.5 text-xs"
+                                            disabled={isSaving}
+                                          />
+                                        )
+                                      ) : (
+                                        <span className="font-semibold text-slate-900">
+                                          {r.district || "-"}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* KELURAHAN / DESA */}
+                                    <div className="flex items-center justify-between">
+                                      <span>Kelurahan/Desa</span>
+
+                                      {isEditMode ? (
                                         <input
-                                          value={r.city || ""}
+                                          value={r.village || ""}
                                           onChange={(e) =>
                                             updateEditedRow(
                                               r.id,
-                                              "city",
+                                              "village",
                                               e.target.value,
                                             )
                                           }
-                                          className="w-28 rounded border border-blue-300 px-1 py-0.5 text-xs"
+                                          className="w-36 rounded border border-blue-300 px-1 py-0.5 text-xs"
+                                          placeholder="Kelurahan / Desa"
                                           disabled={isSaving}
                                         />
                                       ) : (
                                         <span className="font-semibold text-slate-900">
-                                          {r.city || "-"}
+                                          {r.village || "-"}
                                         </span>
                                       )}
                                     </div>
