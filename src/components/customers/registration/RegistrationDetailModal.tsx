@@ -26,6 +26,7 @@ import {
   fetchPaymentAccountInfo,
   type PaymentAccountInfo,
 } from "@/utils/paymentAccount";
+import { ResourceHistory } from "@/components/customers/ResourceHistory";
 
 interface RegistrationDetailModalProps {
   isOpen: boolean;
@@ -1660,6 +1661,15 @@ export function RegistrationDetailModal({
                   </div>
                 </section>
               )}
+              <div className="mb-6">
+                <ResourceHistory
+                  key={`customer-register-history-${registration.id}`}
+                  endpoint={API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER}
+                  resourceId={registration.id}
+                  token={token}
+                  demoMode={demoMode}
+                />
+              </div>
             </div>
 
             <div className="bg-white px-6 py-4 border-t border-gray-200 flex justify-between items-center gap-3">

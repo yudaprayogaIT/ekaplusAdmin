@@ -411,6 +411,7 @@ export default function UserList() {
     IntegrationTokenInfo[]
   >([]);
   const [loading, setLoading] = useState(true);
+  const [hasLoadedUsers, setHasLoadedUsers] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -434,6 +435,7 @@ export default function UserList() {
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const usersRequestGenerationRef = useRef(0);
   const canViewUsers = hasPermission("user.read");
   const canCreateUsers = hasPermission("user.create");
   const canEditUsers = hasPermission("user.update");
@@ -464,8 +466,13 @@ export default function UserList() {
 
   const loadUsersPage = useCallback(
     async (page: number, replace: boolean) => {
+      const requestGeneration = replace
+        ? ++usersRequestGenerationRef.current
+        : usersRequestGenerationRef.current;
+
       if (replace) {
         setLoading(true);
+        setLoadingMore(false);
         setError(null);
       } else {
         setLoadingMore(true);
@@ -519,6 +526,10 @@ export default function UserList() {
           toNumberValue(meta && "count" in meta ? meta.count : null);
         const mapped = rows.map(mapUser);
 
+        // Ignore a response from an older search/sort request. Without this,
+        // a slower request can overwrite the latest search results.
+        if (requestGeneration !== usersRequestGenerationRef.current) return;
+
         let appendedCount = 0;
         setUsers((current) => {
           if (replace) {
@@ -540,6 +551,7 @@ export default function UserList() {
           return (current ?? 0) + appendedCount;
         });
       } catch (err) {
+        if (requestGeneration !== usersRequestGenerationRef.current) return;
         setError(err instanceof Error ? err.message : "Gagal memuat users");
         if (replace) {
           setUsers([]);
@@ -548,7 +560,10 @@ export default function UserList() {
         setHasMore(false);
       } finally {
         if (replace) {
-          setLoading(false);
+          if (requestGeneration === usersRequestGenerationRef.current) {
+            setLoading(false);
+            setHasLoadedUsers(true);
+          }
         } else {
           setLoadingMore(false);
         }
@@ -717,7 +732,6 @@ export default function UserList() {
   }, [refreshSupportingData]);
 
   useEffect(() => {
-    setUsers([]);
     setCurrentPage(1);
     setHasMore(true);
     setTotalUsers(null);
@@ -1299,7 +1313,7 @@ export default function UserList() {
     );
   }
 
-  if (loading) {
+  if (loading && !hasLoadedUsers) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 p-4 md:p-4">
         <div className="mx-auto">
@@ -1388,7 +1402,16 @@ export default function UserList() {
           //   </>
           // }
           rightInfo={
-            <div className="flex flex-col items-start gap-2 md:items-end">
+            <div className="flex flex-wrap items-center gap-3">
+              {loading ? (
+                <span
+                  className="inline-flex items-center gap-2 text-xs font-medium text-gray-500"
+                  role="status"
+                >
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-200 border-t-red-500" />
+                  Memperbarui hasil...
+                </span>
+              ) : null}
               <div className="relative">
                 <FaSortAmountDown className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
                 <select

@@ -40,6 +40,7 @@ import {
   formatRequestDate,
   resolvePolicyDisplayName,
 } from "./utils";
+import { ResourceHistory } from "@/components/customers/ResourceHistory";
 
 // Tambahkan status baru di sini jika attachment approval customer diwajibkan
 // sebelum action workflow (selain Reject) dapat dilanjutkan.
@@ -1531,6 +1532,14 @@ export function CreditChangeRequestDetailModal({
                     </div>
                   </div>
                 </section>
+
+                <ResourceHistory
+                  key={`credit-change-history-${item.id}`}
+                  endpoint={API_CONFIG.ENDPOINTS.CREDIT_CHANGE_REQUEST}
+                  resourceId={item.id}
+                  token={token}
+                  demoMode={demoMode}
+                />
 
                 {normalizedActions.length > 0 && (
                   <section
