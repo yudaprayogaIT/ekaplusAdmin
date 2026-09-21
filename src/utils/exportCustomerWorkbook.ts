@@ -48,7 +48,11 @@ function worksheetToRows(worksheet: Worksheet): DataRow[] {
   });
 
   const rows: DataRow[] = [];
-  for (let rowNumber = 2; rowNumber <= worksheet.actualRowCount; rowNumber += 1) {
+  for (
+    let rowNumber = 2;
+    rowNumber <= worksheet.actualRowCount;
+    rowNumber += 1
+  ) {
     const worksheetRow = worksheet.getRow(rowNumber);
     const row: DataRow = {};
     let hasValue = false;
@@ -106,6 +110,45 @@ function firstValue(...values: unknown[]): unknown {
   );
 }
 
+function isActiveFlag(value: unknown): boolean {
+  if (value === true || value === 1) return true;
+  if (typeof value !== "string") return false;
+  return ["1", "true", "yes", "active", "aktif"].includes(
+    value.trim().toLowerCase(),
+  );
+}
+
+function hasValue(value: unknown): boolean {
+  return value !== null && value !== undefined && value !== "";
+}
+
+function resolvePolicyValue(
+  groupParent: DataRow | undefined,
+  nationalBrand: DataRow | undefined,
+  valueField: "credit_limit" | "payment_term",
+): { value: unknown; level: "GP" | "NB" | null } {
+  const activeField = `${valueField}_active`;
+  const gpValue = groupParent?.[valueField];
+  const nbValue = nationalBrand?.[valueField];
+  const hasActiveMetadata =
+    Boolean(groupParent && Object.hasOwn(groupParent, activeField)) ||
+    Boolean(nationalBrand && Object.hasOwn(nationalBrand, activeField));
+
+  if (isActiveFlag(groupParent?.[activeField])) {
+    return { value: gpValue, level: "GP" };
+  }
+  if (isActiveFlag(nationalBrand?.[activeField])) {
+    return { value: nbValue, level: "NB" };
+  }
+
+  if (hasActiveMetadata) return { value: null, level: null };
+
+  // Mendukung export lama yang belum menyertakan penanda *_active.
+  if (hasValue(gpValue)) return { value: gpValue, level: "GP" };
+  if (hasValue(nbValue)) return { value: nbValue, level: "NB" };
+  return { value: null, level: null };
+}
+
 function buildCustomerSummary(sourceRows: Map<string, DataRow[]>): unknown[][] {
   const nationalBrands = createLookup(sourceRows.get("national_brand") || []);
   const groupParents = createLookup(sourceRows.get("group_parent") || []);
@@ -126,10 +169,24 @@ function buildCustomerSummary(sourceRows: Map<string, DataRow[]>): unknown[][] {
     const groupParent = findLinkedRow(groupParents, groupCustomer?.gpid);
     const nationalBrand = findLinkedRow(nationalBrands, groupParent?.nbid);
     const branch = findLinkedRow(branches, branchCustomer.branch);
-    const address = addressesByBc.get(asKey(branchCustomer.id) || "");
+    const address =
+      addressesByBc.get(asKey(branchCustomer.id) || "") ||
+      addressesByBc.get(asKey(branchCustomer.name) || "");
+    const creditLimit = resolvePolicyValue(
+      groupParent,
+      nationalBrand,
+      "credit_limit",
+    );
+    const paymentTerm = resolvePolicyValue(
+      groupParent,
+      nationalBrand,
+      "payment_term",
+    );
 
     return [
-      valueOrNull(firstValue(groupCustomer?.gc_name, branchCustomer.customer_name)),
+      valueOrNull(
+        firstValue(groupCustomer?.gc_name, branchCustomer.customer_name),
+      ),
       valueOrNull(branch?.city),
       valueOrNull(branchCustomer.status),
       valueOrNull(branchCustomer.sales_team),
@@ -140,8 +197,11 @@ function buildCustomerSummary(sourceRows: Map<string, DataRow[]>): unknown[][] {
       valueOrNull(groupParent?.gp_name),
       valueOrNull(nationalBrand?.name),
       valueOrNull(nationalBrand?.nb_name),
-      valueOrNull(firstValue(branchCustomer.limit, branchCustomer.credit_limit)),
-      valueOrNull(firstValue(branchCustomer.top, branchCustomer.payment_term)),
+      valueOrNull(creditLimit.value),
+      valueOrNull(creditLimit.level),
+      valueOrNull(paymentTerm.value),
+      valueOrNull(paymentTerm.level),
+      valueOrNull(firstValue(address?.type, address?.address_type)),
       valueOrNull(address?.address),
       valueOrNull(address?.province),
       valueOrNull(address?.city),
@@ -151,7 +211,10 @@ function buildCustomerSummary(sourceRows: Map<string, DataRow[]>): unknown[][] {
   });
 }
 
-function styleWorksheet(worksheet: Worksheet, preferredWidths?: number[]): void {
+function styleWorksheet(
+  worksheet: Worksheet,
+  preferredWidths?: number[],
+): void {
   const header = worksheet.getRow(1);
   header.height = 24;
   header.eachCell({ includeEmpty: false }, (cell) => {
@@ -275,8 +338,11 @@ export async function exportCustomerWorkbook({
     "gpname",
     "nbid",
     "nbname",
-    "limit",
-    "TOP",
+    "credit limit",
+    "level credit limit",
+    "payment term",
+    "level payment term",
+    "address type",
     "address",
     "province",
     "city",
@@ -286,10 +352,13 @@ export async function exportCustomerWorkbook({
   summary.addRows(buildCustomerSummary(sourceRows));
   styleWorksheet(
     summary,
-    [28, 18, 14, 18, 14, 14, 28, 14, 28, 14, 28, 18, 12, 42, 18, 18, 20, 20],
+    [
+      28, 18, 14, 18, 14, 14, 28, 14, 28, 14, 28, 18, 20, 12, 22, 18, 42, 18,
+      18, 20, 20,
+    ],
   );
   summary.getColumn(12).numFmt = "#,##0";
-  summary.getColumn(13).numFmt = "0";
+  summary.getColumn(14).numFmt = "0";
   summary.getColumn(5).numFmt = "@";
   summary.getColumn(6).numFmt = "@";
   summary.getColumn(8).numFmt = "@";
@@ -309,7 +378,7 @@ export async function exportCustomerWorkbook({
   );
   const link = document.createElement("a");
   link.href = url;
-  link.download = `customer_export_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  link.download = `customer_ekaplus_export_${new Date().toISOString().slice(0, 10)}.xlsx`;
   document.body.appendChild(link);
   link.click();
   link.remove();
