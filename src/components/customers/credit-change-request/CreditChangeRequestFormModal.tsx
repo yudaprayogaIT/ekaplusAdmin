@@ -434,8 +434,6 @@ export function CreditChangeRequestFormModal({
   const [policyDropdownOpen, setPolicyDropdownOpen] = useState(false);
   const [requestedCreditLimit, setRequestedCreditLimit] = useState("");
   const [requestedPaymentTerm, setRequestedPaymentTerm] = useState("");
-  const [requestedLimitCustomerOverdue, setRequestedLimitCustomerOverdue] =
-    useState("");
   const [applyToChilds, setApplyToChilds] = useState(true);
   const [reason, setReason] = useState("");
   const [identityAttachment, setIdentityAttachment] = useState<File | null>(
@@ -474,7 +472,6 @@ export function CreditChangeRequestFormModal({
     setPolicyDropdownOpen(false);
     setRequestedCreditLimit("");
     setRequestedPaymentTerm("");
-    setRequestedLimitCustomerOverdue("");
     setApplyToChilds(true);
     setReason("");
     setIdentityAttachment(null);
@@ -863,9 +860,6 @@ export function CreditChangeRequestFormModal({
     const parsedPolicyId = Number(policyId || 0);
     const parsedCreditLimit = parseCurrencyInput(requestedCreditLimit);
     const parsedPaymentTerm = parseIntegerInput(requestedPaymentTerm);
-    const parsedLimitCustomerOverdue = parseIntegerInput(
-      requestedLimitCustomerOverdue,
-    );
     const trimmedReason = reason.trim();
     const resolvedRequestedCreditLimit =
       parsedCreditLimit !== undefined
@@ -875,10 +869,6 @@ export function CreditChangeRequestFormModal({
       parsedPaymentTerm !== undefined
         ? parsedPaymentTerm
         : (currentProfile?.paymentTerm ?? undefined);
-    const resolvedRequestedLimitCustomerOverdue =
-      parsedLimitCustomerOverdue !== undefined
-        ? parsedLimitCustomerOverdue
-        : (currentProfile?.limitCustomerOverdue ?? undefined);
 
     if (!parsedPolicyId) {
       setError("Policy wajib dipilih.");
@@ -892,8 +882,7 @@ export function CreditChangeRequestFormModal({
 
     if (
       parsedCreditLimit === undefined &&
-      parsedPaymentTerm === undefined &&
-      parsedLimitCustomerOverdue === undefined
+      parsedPaymentTerm === undefined
     ) {
       setError("Minimal isi salah satu nilai perubahan yang diajukan.");
       return;
@@ -917,18 +906,6 @@ export function CreditChangeRequestFormModal({
       }
     }
 
-    if (parsedLimitCustomerOverdue !== undefined) {
-      if (
-        !Number.isInteger(parsedLimitCustomerOverdue) ||
-        parsedLimitCustomerOverdue < 0
-      ) {
-        setError(
-          "Requested limit customer overdue harus berupa angka bulat 0 atau lebih.",
-        );
-        return;
-      }
-    }
-
     try {
       await onSave({
         policyType,
@@ -936,7 +913,7 @@ export function CreditChangeRequestFormModal({
         applyToChilds,
         requestedCreditLimit: resolvedRequestedCreditLimit,
         requestedPaymentTerm: resolvedRequestedPaymentTerm,
-        requestedLimitCustomerOverdue: resolvedRequestedLimitCustomerOverdue,
+        requestedLimitCustomerOverdue: 1,
         reason: trimmedReason,
         identityAttachment,
         customerApprovalAttachment,
@@ -1302,7 +1279,7 @@ export function CreditChangeRequestFormModal({
                           />
                         </div>
 
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
                           <div>
                             <label className="mb-1 block text-sm font-semibold text-gray-700">
                               Requested Payment Term
@@ -1313,23 +1290,6 @@ export function CreditChangeRequestFormModal({
                               value={requestedPaymentTerm}
                               onChange={(e) =>
                                 setRequestedPaymentTerm(e.target.value)
-                              }
-                              disabled={saving}
-                              placeholder="Hari"
-                              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-emerald-300"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="mb-1 block text-sm font-semibold text-gray-700">
-                              Requested Limit Customer Overdue
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={requestedLimitCustomerOverdue}
-                              onChange={(e) =>
-                                setRequestedLimitCustomerOverdue(e.target.value)
                               }
                               disabled={saving}
                               placeholder="Hari"

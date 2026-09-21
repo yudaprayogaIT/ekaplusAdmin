@@ -11,6 +11,7 @@ import EntityTable, {
 import { FaShieldAlt } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAuthHeaders, API_CONFIG, apiFetch } from "@/config/api";
+import { useDetailRoute } from "@/hooks/useDetailRoute";
 
 export type Permission = {
   ID: number;
@@ -35,6 +36,7 @@ type PermissionAPIResponse = {
 
 export default function PermissionList() {
   const { token, isAuthenticated } = useAuth();
+  const { detailRouteId, openDetailRoute, closeDetailRoute } = useDetailRoute();
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +53,21 @@ export default function PermissionList() {
   const [confirmAction, setConfirmAction] = useState<
     (() => Promise<void>) | null
   >(null);
+
+  useEffect(() => {
+    if (!detailRouteId) {
+      setDetailOpen(false);
+      setDetailPermission(null);
+      return;
+    }
+    const routed = permissions.find(
+      (permission) => String(permission.ID) === detailRouteId,
+    );
+    if (routed) {
+      setDetailPermission(routed);
+      setDetailOpen(true);
+    }
+  }, [detailRouteId, permissions]);
 
   const formatUpdatedAt = (dateString: string) => {
     const date = new Date(dateString);
@@ -207,15 +224,22 @@ export default function PermissionList() {
   function openDetail(permission: Permission) {
     setDetailPermission(permission);
     setDetailOpen(true);
+    openDetailRoute(permission.ID);
+  }
+
+  function closeDetail() {
+    setDetailOpen(false);
+    setDetailPermission(null);
+    closeDetailRoute();
   }
 
   function onDetailEdit(permission: Permission) {
-    setDetailOpen(false);
+    closeDetail();
     setTimeout(() => handleEdit(permission), 100);
   }
 
   function onDetailDelete(permission: Permission) {
-    setDetailOpen(false);
+    closeDetail();
     setTimeout(() => promptDeletePermission(permission), 100);
   }
 
@@ -367,7 +391,7 @@ export default function PermissionList() {
 
       <PermissionDetailModal
         open={detailOpen}
-        onClose={() => setDetailOpen(false)}
+        onClose={closeDetail}
         permission={detailPermission}
         onEdit={onDetailEdit}
         onDelete={onDetailDelete}

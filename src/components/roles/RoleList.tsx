@@ -11,6 +11,7 @@ import EntityTable, {
 import { FaSortAmountDown, FaUserShield } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAuthHeaders, API_CONFIG, apiFetch } from "@/config/api";
+import { useDetailRoute } from "@/hooks/useDetailRoute";
 
 export type Role = {
   ID: number;
@@ -62,6 +63,7 @@ function normalizeRole(role: Role): Role {
 
 export default function RoleList() {
   const { token, isAuthenticated } = useAuth();
+  const { detailRouteId, openDetailRoute, closeDetailRoute } = useDetailRoute();
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +79,19 @@ export default function RoleList() {
   const [confirmAction, setConfirmAction] = useState<
     (() => Promise<void>) | null
   >(null);
+
+  useEffect(() => {
+    if (!detailRouteId) {
+      setDetailOpen(false);
+      setDetailRole(null);
+      return;
+    }
+    const routed = roles.find((role) => String(role.ID) === detailRouteId);
+    if (routed) {
+      setDetailRole(routed);
+      setDetailOpen(true);
+    }
+  }, [detailRouteId, roles]);
 
   const formatUpdatedAt = (dateString: string) => {
     const date = new Date(dateString);
@@ -266,15 +281,22 @@ export default function RoleList() {
   function openDetail(role: Role) {
     setDetailRole(role);
     setDetailOpen(true);
+    openDetailRoute(role.ID);
+  }
+
+  function closeDetail() {
+    setDetailOpen(false);
+    setDetailRole(null);
+    closeDetailRoute();
   }
 
   function onDetailEdit(role: Role) {
-    setDetailOpen(false);
+    closeDetail();
     setTimeout(() => handleEdit(role), 100);
   }
 
   function onDetailDelete(role: Role) {
-    setDetailOpen(false);
+    closeDetail();
     setTimeout(() => promptDeleteRole(role), 100);
   }
 
@@ -471,7 +493,7 @@ export default function RoleList() {
 
       <RoleDetailModal
         open={detailOpen}
-        onClose={() => setDetailOpen(false)}
+        onClose={closeDetail}
         role={detailRole}
         onEdit={onDetailEdit}
         onDelete={onDetailDelete}

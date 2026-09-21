@@ -2242,7 +2242,7 @@ export function BCDetailModal({
                                   </p>
                                 </div>
 
-                                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+                                {/* <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
                                   <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700">
                                     Tax Status
                                   </p>
@@ -2292,7 +2292,7 @@ export function BCDetailModal({
                                       </>
                                     </div>
                                   )}
-                                </div>
+                                </div> */}
 
                                 <div className="rounded-2xl border border-indigo-100 bg-white p-4 md:col-span-2 xl:col-span-2">
                                   <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-indigo-700">
@@ -2424,11 +2424,11 @@ export function BCDetailModal({
                                       "Status",
                                       detail?.status || "-",
                                     )}
-                                    {renderReadOnlyField(
+                                    {/* {renderReadOnlyField(
                                       "Tax Status",
                                       taxStatusLabel,
-                                    )}
-                                    {renderReadOnlyField("NPWP", npwpValue)}
+                                    )} */}
+                                    {/* {renderReadOnlyField("NPWP", npwpValue)} */}
                                     {renderReadOnlyField(
                                       "Is Cash",
                                       isCashLabel,

@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   FaCheckCircle,
   FaEnvelope,
@@ -396,6 +397,13 @@ function mapIntegrationToken(
 }
 
 export default function UserList() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const searchRouteDetailId = searchParams.get("id")?.trim() || null;
+  const [routeDetailId, setRouteDetailId] = useState<string | null>(
+    searchRouteDetailId,
+  );
   const {
     hasPermission,
     token,
@@ -436,10 +444,25 @@ export default function UserList() {
   const actionRef = useRef<(() => Promise<void>) | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const usersRequestGenerationRef = useRef(0);
+  const routedDetailRequestRef = useRef<string | null>(null);
   const canViewUsers = hasPermission("user.read");
   const canCreateUsers = hasPermission("user.create");
   const canEditUsers = hasPermission("user.update");
   const canDeleteUsers = hasPermission("user.delete");
+
+  useEffect(() => {
+    setRouteDetailId(searchRouteDetailId);
+  }, [searchRouteDetailId]);
+
+  useEffect(() => {
+    const syncRouteFromBrowser = () => {
+      setRouteDetailId(
+        new URLSearchParams(window.location.search).get("id")?.trim() || null,
+      );
+    };
+    window.addEventListener("popstate", syncRouteFromBrowser);
+    return () => window.removeEventListener("popstate", syncRouteFromBrowser);
+  }, []);
 
   const loadRoles = useCallback(async () => {
     if (!token) return [];
@@ -739,6 +762,59 @@ export default function UserList() {
   }, [loadUsersPage]);
 
   useEffect(() => {
+    if (!routeDetailId) {
+      routedDetailRequestRef.current = null;
+      setDetailOpen(false);
+      setDetailItem(null);
+      return;
+    }
+
+    const loaded = users.find((user) => user.id === routeDetailId);
+    if (loaded) {
+      setDetailItem(loaded);
+      setDetailOpen(true);
+      return;
+    }
+
+    if (!isAuthenticated || !token) return;
+    if (routedDetailRequestRef.current === routeDetailId) return;
+    routedDetailRequestRef.current = routeDetailId;
+    const authToken = token;
+    let cancelled = false;
+
+    async function loadRoutedUser() {
+      try {
+        const response = await apiFetch(
+          getQueryUrl(USER_ENDPOINT, {
+            fields: ["*"],
+            filters: [["id", "=", routeDetailId]],
+            limit: 1,
+          }),
+          {
+            method: "GET",
+            cache: "no-store",
+            headers: getAuthHeaders(authToken),
+          },
+          authToken,
+        );
+        if (!response.ok || cancelled) return;
+        const json = (await response.json()) as UsersApiResponse;
+        const row = Array.isArray(json.data) ? json.data[0] : json.data;
+        if (!row || cancelled) return;
+        setDetailItem(mapUser(row));
+        setDetailOpen(true);
+      } catch {
+        // Keep the list usable when a stale or inaccessible ID is requested.
+      }
+    }
+
+    void loadRoutedUser();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, routeDetailId, token, users]);
+
+  useEffect(() => {
     const handler = () => {
       void refreshSupportingData();
       setUsers([]);
@@ -896,11 +972,30 @@ export default function UserList() {
   const openDetail = (user: User) => {
     setDetailItem(user);
     setDetailOpen(true);
+    setRouteDetailId(user.id);
+    const params = new URLSearchParams(window.location.search);
+    params.set("id", user.id);
+    window.history.pushState(
+      { ...window.history.state, ekaModalBase: "/users" },
+      "",
+      `${pathname}?${params.toString()}`,
+    );
   };
 
   const closeDetail = () => {
     setDetailOpen(false);
     setDetailItem(null);
+    setRouteDetailId(null);
+    if (window.history.state?.ekaModalBase === "/users") {
+      window.history.back();
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    params.delete("id");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, {
+      scroll: false,
+    });
   };
 
   const onDetailEdit = (user: User) => {

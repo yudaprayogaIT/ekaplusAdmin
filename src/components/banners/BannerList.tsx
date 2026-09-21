@@ -26,6 +26,7 @@ import {
   apiFetch,
 } from "@/config/api";
 import type { Banner, BannerAPIResponse, ScheduleStatus } from "@/types/banner";
+import { useDetailRoute } from "@/hooks/useDetailRoute";
 
 type SortOption =
   | "display_order-asc"
@@ -52,6 +53,7 @@ function getScheduleStatus(banner: Banner): ScheduleStatus {
 
 export default function BannerList() {
   const { token, isAuthenticated } = useAuth();
+  const { detailRouteId, openDetailRoute, closeDetailRoute } = useDetailRoute();
   const [banners, setBanners] = useState<Banner[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +74,21 @@ export default function BannerList() {
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
+
+  useEffect(() => {
+    if (!detailRouteId) {
+      setDetailOpen(false);
+      setDetailItem(null);
+      return;
+    }
+    const routed = banners.find(
+      (banner) => String(banner.id) === detailRouteId,
+    );
+    if (routed) {
+      setDetailItem(routed);
+      setDetailOpen(true);
+    }
+  }, [banners, detailRouteId]);
 
   // Load banners from API
   useEffect(() => {
@@ -353,11 +370,13 @@ export default function BannerList() {
   function openDetail(banner: Banner) {
     setDetailItem(banner);
     setDetailOpen(true);
+    openDetailRoute(banner.id);
   }
 
   function closeDetail() {
     setDetailOpen(false);
     setDetailItem(null);
+    closeDetailRoute();
   }
 
   function onDetailEdit(banner: Banner) {

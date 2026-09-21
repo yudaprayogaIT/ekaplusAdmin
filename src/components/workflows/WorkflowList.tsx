@@ -20,6 +20,7 @@ import {
 } from "react-icons/fa";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAuthHeaders, API_CONFIG, apiFetch } from "@/config/api";
+import { useDetailRoute } from "@/hooks/useDetailRoute";
 
 // Types
 export type GlobalState = {
@@ -149,6 +150,7 @@ function normalizeGlobalStateResponse(payload: unknown): GlobalState[] {
 
 export default function WorkflowList() {
   const { token, isAuthenticated } = useAuth();
+  const { detailRouteId, openDetailRoute, closeDetailRoute } = useDetailRoute();
   const [workflows, setWorkflows] = useState<WorkflowWithDetails[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [globalStates, setGlobalStates] = useState<GlobalState[]>([]);
@@ -184,6 +186,21 @@ export default function WorkflowList() {
     title: "",
     message: "",
   });
+
+  useEffect(() => {
+    if (!detailRouteId) {
+      setDetailOpen(false);
+      setDetailWorkflow(null);
+      return;
+    }
+    const routed = workflows.find(
+      (item) => String(item.workflow.id) === detailRouteId,
+    );
+    if (routed) {
+      setDetailWorkflow(routed);
+      setDetailOpen(true);
+    }
+  }, [detailRouteId, workflows]);
 
   async function fetchGlobalStates(tokenValue: string): Promise<GlobalState[]> {
     const headers = getAuthHeaders(tokenValue);
@@ -431,15 +448,24 @@ export default function WorkflowList() {
   function openDetail(workflow: WorkflowWithDetails) {
     setDetailWorkflow(workflow);
     setDetailOpen(true);
+    if (workflow.workflow.id !== undefined) {
+      openDetailRoute(workflow.workflow.id);
+    }
+  }
+
+  function closeDetail() {
+    setDetailOpen(false);
+    setDetailWorkflow(null);
+    closeDetailRoute();
   }
 
   function onDetailEdit(workflow: WorkflowWithDetails) {
-    setDetailOpen(false);
+    closeDetail();
     setTimeout(() => handleEdit(workflow), 100);
   }
 
   function onDetailDelete(workflow: WorkflowWithDetails) {
-    setDetailOpen(false);
+    closeDetail();
     setTimeout(() => promptDeleteWorkflow(workflow), 100);
   }
 
@@ -666,7 +692,7 @@ export default function WorkflowList() {
 
       <WorkflowDetailModal
         open={detailOpen}
-        onClose={() => setDetailOpen(false)}
+        onClose={closeDetail}
         workflow={detailWorkflow}
         roles={roles}
         onEdit={onDetailEdit}

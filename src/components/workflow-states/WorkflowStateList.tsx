@@ -22,6 +22,7 @@ import {
   API_CONFIG,
   apiFetch,
 } from "@/config/api";
+import { useDetailRoute } from "@/hooks/useDetailRoute";
 
 export type WorkflowState = {
   id: number;
@@ -68,6 +69,7 @@ function mapWorkflowState(row: WorkflowStateAPIRow): WorkflowState {
 
 export default function WorkflowStateList() {
   const { token, isAuthenticated } = useAuth();
+  const { detailRouteId, openDetailRoute, closeDetailRoute } = useDetailRoute();
   const [states, setStates] = useState<WorkflowState[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +83,19 @@ export default function WorkflowStateList() {
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
+
+  useEffect(() => {
+    if (!detailRouteId) {
+      setDetailOpen(false);
+      setDetailItem(null);
+      return;
+    }
+    const routed = states.find((state) => String(state.id) === detailRouteId);
+    if (routed) {
+      setDetailItem(routed);
+      setDetailOpen(true);
+    }
+  }, [detailRouteId, states]);
 
   useEffect(() => {
     let cancelled = false;
@@ -230,11 +245,13 @@ export default function WorkflowStateList() {
   function openDetail(state: WorkflowState) {
     setDetailItem(state);
     setDetailOpen(true);
+    openDetailRoute(state.id);
   }
 
   function closeDetail() {
     setDetailOpen(false);
     setDetailItem(null);
+    closeDetailRoute();
   }
 
   function onDetailEdit(state: WorkflowState) {

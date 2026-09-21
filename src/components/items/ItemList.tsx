@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useMemo } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import ItemCard from "./ItemCard";
 import AddItemModal from "./AddItemModal";
 import ItemDetailModal from "./ItemDetailModal";
@@ -138,12 +138,19 @@ type SortDirection = "asc" | "desc";
 const SNAP_KEY = "ekatalog_items_snapshot";
 
 export default function ItemList() {
+  const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { token, isAuthenticated } = useAuth();
 
   // Parse initial state from URL
   const urlState = parseSearchParams(searchParams);
+  const detailIdParam = searchParams.get("id");
+  const searchRouteDetailId =
+    detailIdParam && /^\d+$/.test(detailIdParam) ? Number(detailIdParam) : null;
+  const [routeDetailId, setRouteDetailId] = useState<number | null>(
+    searchRouteDetailId,
+  );
 
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
@@ -184,6 +191,7 @@ export default function ItemList() {
     new Set(),
   );
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const routedDetailRequestRef = useRef<number | null>(null);
 
   // Products and categories for BulkProductCreationModal
   const [products, setProducts] = useState<Product[]>([]);
@@ -194,6 +202,19 @@ export default function ItemList() {
     entity: "item",
     initialFilters: urlState.filters,
   });
+
+  useEffect(() => {
+    setRouteDetailId(searchRouteDetailId);
+  }, [searchRouteDetailId]);
+
+  useEffect(() => {
+    const syncRouteFromBrowser = () => {
+      const id = new URLSearchParams(window.location.search).get("id");
+      setRouteDetailId(id && /^\d+$/.test(id) ? Number(id) : null);
+    };
+    window.addEventListener("popstate", syncRouteFromBrowser);
+    return () => window.removeEventListener("popstate", syncRouteFromBrowser);
+  }, []);
 
   const itemFilterConfig: EntityFilterConfig = useMemo(() => {
     const categoryOptions = Array.from(
@@ -395,6 +416,9 @@ export default function ItemList() {
       searchQuery,
       showOnlyUnmapped,
     });
+    if (routeDetailId !== null) {
+      params.set("id", String(routeDetailId));
+    }
 
     const newUrl = params.toString() ? `?${params.toString()}` : "";
     router.replace(newUrl, { scroll: false });
@@ -405,6 +429,7 @@ export default function ItemList() {
     currentPage,
     searchQuery,
     showOnlyUnmapped,
+    routeDetailId,
     router,
   ]);
 
@@ -619,7 +644,18 @@ export default function ItemList() {
     }
   }
 
-  async function openDetail(item: Item) {
+  async function openDetail(item: Item, updateRoute = true) {
+    if (updateRoute) {
+      setRouteDetailId(item.id);
+      const params = new URLSearchParams(window.location.search);
+      params.set("id", String(item.id));
+      window.history.pushState(
+        { ...window.history.state, ekaModalBase: "/items" },
+        "",
+        `${pathname}?${params.toString()}`,
+      );
+    }
+
     // Fetch detail item dengan branches menggunakan childs
     if (!token) {
       setDetailItem(item);
@@ -694,7 +730,64 @@ export default function ItemList() {
   function closeDetail() {
     setDetailOpen(false);
     setDetailItem(null);
+    setRouteDetailId(null);
+    if (window.history.state?.ekaModalBase === "/items") {
+      window.history.back();
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    params.delete("id");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, {
+      scroll: false,
+    });
   }
+
+  useEffect(() => {
+    if (routeDetailId === null) {
+      routedDetailRequestRef.current = null;
+      setDetailOpen(false);
+      setDetailItem(null);
+      return;
+    }
+
+    const loaded = items.find((item) => item.id === routeDetailId);
+    if (loaded) {
+      if (detailItem?.id !== loaded.id || !detailOpen) {
+        void openDetail(loaded, false);
+      }
+      return;
+    }
+
+    if (!isAuthenticated || !token) return;
+    if (routedDetailRequestRef.current === routeDetailId) return;
+    routedDetailRequestRef.current = routeDetailId;
+    let cancelled = false;
+
+    async function loadRoutedItem() {
+      try {
+        const result = await loadAllData(
+          [["id", "=", routeDetailId]],
+          undefined,
+          undefined,
+          1,
+        );
+        const item = result.items.find((row) => row.id === routeDetailId);
+        if (!cancelled && item) {
+          await openDetail(item, false);
+        }
+      } catch {
+        // The list error state remains responsible for API error feedback.
+      }
+    }
+
+    void loadRoutedItem();
+    return () => {
+      cancelled = true;
+    };
+    // openDetail/loadAllData intentionally use the current auth and route state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailItem?.id, detailOpen, isAuthenticated, items, routeDetailId, token]);
 
   function onDetailEdit(item: Item) {
     closeDetail();

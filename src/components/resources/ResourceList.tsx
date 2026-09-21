@@ -9,6 +9,7 @@ import EntityPageHeader from "@/components/entity-management/EntityPageHeader";
 import EntityTable, {
   EntityTableColumn,
 } from "@/components/entity-management/EntityTable";
+import { useDetailRoute } from "@/hooks/useDetailRoute";
 
 export type AuthzResource = {
   ID: number;
@@ -41,6 +42,7 @@ export function normalizeDescription(value?: string | null) {
 
 export default function ResourceList() {
   const { token, isAuthenticated } = useAuth();
+  const { detailRouteId, openDetailRoute, closeDetailRoute } = useDetailRoute();
   const [resources, setResources] = useState<AuthzResource[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +52,21 @@ export default function ResourceList() {
   const [detailResource, setDetailResource] = useState<AuthzResource | null>(
     null,
   );
+
+  useEffect(() => {
+    if (!detailRouteId) {
+      setDetailOpen(false);
+      setDetailResource(null);
+      return;
+    }
+    const routed = resources.find(
+      (resource) => String(resource.ID) === detailRouteId,
+    );
+    if (routed) {
+      setDetailResource(routed);
+      setDetailOpen(true);
+    }
+  }, [detailRouteId, resources]);
 
   const formatUpdatedAt = (value?: string) => {
     if (!value) return "-";
@@ -164,6 +181,13 @@ export default function ResourceList() {
   function openDetail(resource: AuthzResource) {
     setDetailResource(resource);
     setDetailOpen(true);
+    openDetailRoute(resource.ID);
+  }
+
+  function closeDetail() {
+    setDetailOpen(false);
+    setDetailResource(null);
+    closeDetailRoute();
   }
 
   const columns: EntityTableColumn<AuthzResource>[] = [
@@ -325,7 +349,7 @@ export default function ResourceList() {
 
       <ResourceDetailModal
         open={detailOpen}
-        onClose={() => setDetailOpen(false)}
+        onClose={closeDetail}
         resource={detailResource}
       />
     </div>

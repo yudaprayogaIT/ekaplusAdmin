@@ -197,7 +197,7 @@ export default function FilterBuilder({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
-            className="absolute right-0 mt-2 z-50 w-[min(500px,calc(100vw-2rem))] min-w-[120px] overflow-hidden rounded-xl border-2 border-blue-100 bg-white shadow-2xl md:min-w-[600px] md:max-w-[800px]"
+            className="absolute left-0 z-50 mt-2 flex max-h-[min(75vh,640px)] w-[calc(100vw-2rem)] max-w-[700px] flex-col overflow-hidden rounded-xl border-2 border-blue-100 bg-white shadow-2xl md:w-[min(700px,calc(100vw-22rem))]"
           >
             {/* Header with Gradient */}
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4 border-b border-blue-100">
@@ -219,11 +219,11 @@ export default function FilterBuilder({
               </div>
             </div>
 
-            <div className="p-5">
+            <div className="min-h-0 overflow-y-auto p-4 sm:p-5">
               {/* Filter Rows */}
-              <div className="space-y-3 mb-4 max-h-[400px] overflow-y-auto pr-2">
+              <div className="mb-4 space-y-3">
                 {filters.length === 0 ? (
-                  <div className="text-center py-12 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border-2 border-dashed border-blue-200">
+                  <div className="rounded-xl border-2 border-dashed border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 py-8 text-center sm:py-10">
                     <FaFilter className="mx-auto text-4xl text-blue-300 mb-3" />
                     <p className="text-sm font-medium text-gray-600">
                       No filters yet
@@ -247,7 +247,7 @@ export default function FilterBuilder({
               </div>
 
               {/* Actions */}
-              <div className="flex items-center justify-between gap-3 pt-4 border-t-2 border-gray-100">
+              <div className="flex flex-col gap-3 border-t-2 border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
                 <button
                   onClick={addFilter}
                   className="flex items-center gap-2 px-4 py-2.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-all text-sm font-semibold border-2 border-blue-200 hover:border-blue-300"
@@ -256,7 +256,7 @@ export default function FilterBuilder({
                   <span>Add Filter</span>
                 </button>
 
-                <div className="flex gap-2">
+                <div className="flex justify-end gap-2">
                   <button
                     onClick={clearAllFilters}
                     disabled={filters.length === 0}

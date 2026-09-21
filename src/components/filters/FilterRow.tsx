@@ -36,7 +36,7 @@ export default function FilterRow({
   };
 
   return (
-    <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-md">
+    <div className="flex flex-col gap-2 rounded-lg bg-gray-50 p-3 sm:flex-row sm:items-center">
       {/* Field Dropdown */}
       <select
         value={filter.field}
@@ -49,7 +49,7 @@ export default function FilterRow({
             value: undefined, // Reset value when field changes
           });
         }}
-        className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm min-w-[150px]"
+        className="w-full min-w-0 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 sm:w-[180px]"
       >
         <option value="">Select Field...</option>
         {config.fields.map((field) => (
@@ -78,7 +78,7 @@ export default function FilterRow({
           });
         }}
         disabled={!filter.field}
-        className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm disabled:bg-gray-100 disabled:cursor-not-allowed min-w-[120px]"
+        className="w-full min-w-0 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100 sm:w-[140px]"
       >
         <option value="">Operator...</option>
         {availableOperators.map((op) => (
@@ -107,7 +107,7 @@ export default function FilterRow({
       {/* Remove Button */}
       <button
         onClick={onRemove}
-        className="p-2 text-red-500 hover:bg-red-50 rounded-md transition-colors"
+        className="self-end rounded-md p-2 text-red-500 transition-colors hover:bg-red-50 sm:self-auto"
         title="Remove filter"
       >
         <FaTimes />
