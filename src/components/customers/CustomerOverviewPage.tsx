@@ -23,10 +23,18 @@ import {
 import { GPDetailModal } from "@/components/group_parent/GPDetailModal";
 import { GCDetailModal } from "@/components/group_customer/GCDetailModal";
 import { BCDetailModal } from "@/components/branch_customer/BCDetailModal";
+import { MissingCustomerContactModal } from "@/components/customers/MissingCustomerContactModal";
 import {
   exportCustomerWorkbook,
   type CustomerExportProgress,
 } from "@/utils/exportCustomerWorkbook";
+import {
+  generateMissingCustomerContacts,
+  scanMissingCustomerContacts,
+  type CustomerContactGenerationProgress,
+  type CustomerContactGenerationResult,
+  type CustomerContactScanResult,
+} from "@/utils/generateCustomerContacts";
 import {
   FaBuilding,
   FaEye,
@@ -38,6 +46,7 @@ import {
   FaTruck,
   FaChevronDown,
   FaFileExcel,
+  FaAddressBook,
 } from "react-icons/fa";
 
 type CustomerType = "nb" | "gp" | "gc" | "bc";
@@ -393,6 +402,17 @@ export default function CustomerOverviewPage() {
     useState<CustomerExportProgress | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const canExportCustomer = currentRole?.name === "administrator";
+  const [contactCheckOpen, setContactCheckOpen] = useState(false);
+  const [isScanningContacts, setIsScanningContacts] = useState(false);
+  const [contactScanResult, setContactScanResult] =
+    useState<CustomerContactScanResult | null>(null);
+  const [contactScanError, setContactScanError] = useState<string | null>(null);
+  const [isGeneratingContacts, setIsGeneratingContacts] = useState(false);
+  const [contactGenerationProgress, setContactGenerationProgress] =
+    useState<CustomerContactGenerationProgress | null>(null);
+  const [contactGenerationResult, setContactGenerationResult] =
+    useState<CustomerContactGenerationResult | null>(null);
+  const canGenerateCustomerContact = currentRole?.name === "administrator";
 
   const [selectedNB, setSelectedNB] = useState<NationalBrandDetailData | null>(
     null,
@@ -1453,6 +1473,72 @@ export default function CustomerOverviewPage() {
     }
   };
 
+  const handleCheckMissingCustomerContacts = async () => {
+    if (!token || !canGenerateCustomerContact || isScanningContacts) return;
+    setContactCheckOpen(true);
+    setIsScanningContacts(true);
+    setContactScanError(null);
+    setContactScanResult(null);
+    setContactGenerationResult(null);
+    setContactGenerationProgress(null);
+
+    try {
+      const result = await scanMissingCustomerContacts({
+        token,
+        roleName: currentRole?.name,
+      });
+      setContactScanResult(result);
+    } catch (scanFailure) {
+      setContactScanError(
+        scanFailure instanceof Error
+          ? scanFailure.message
+          : "Gagal mengecek customer contact",
+      );
+    } finally {
+      setIsScanningContacts(false);
+    }
+  };
+
+  const handleGenerateMissingCustomerContacts = async () => {
+    if (
+      !token ||
+      !canGenerateCustomerContact ||
+      !contactScanResult ||
+      isGeneratingContacts
+    ) {
+      return;
+    }
+
+    setIsGeneratingContacts(true);
+    setContactScanError(null);
+    setContactGenerationResult(null);
+    setContactGenerationProgress({
+      completed: 0,
+      total:
+        contactScanResult.groupCustomers.length +
+        contactScanResult.branchCustomers.length,
+      label: "Menyiapkan proses generate",
+    });
+
+    try {
+      const result = await generateMissingCustomerContacts({
+        token,
+        roleName: currentRole?.name,
+        scanResult: contactScanResult,
+        onProgress: setContactGenerationProgress,
+      });
+      setContactGenerationResult(result);
+    } catch (generationFailure) {
+      setContactScanError(
+        generationFailure instanceof Error
+          ? generationFailure.message
+          : "Gagal menjalankan generate customer contact",
+      );
+    } finally {
+      setIsGeneratingContacts(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -1562,6 +1648,19 @@ export default function CustomerOverviewPage() {
           </label>
 
           <div className="flex items-center gap-3 self-start lg:self-auto">
+            {canGenerateCustomerContact ? (
+              <button
+                type="button"
+                onClick={handleCheckMissingCustomerContacts}
+                disabled={isScanningContacts || isGeneratingContacts || !token}
+                className="flex h-11 items-center gap-2 rounded-xl bg-orange-500 px-4 text-sm font-bold text-white transition-all hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300"
+                title="Cek GC dan BC yang belum memiliki customer contact"
+              >
+                <FaAddressBook className="h-4 w-4" />
+                {isScanningContacts ? "Checking..." : "Check Customer Contact"}
+              </button>
+            ) : null}
+
             {canExportCustomer ? (
               <button
                 type="button"
@@ -1808,6 +1907,21 @@ export default function CustomerOverviewPage() {
           </div>
         ) : null}
       </section>
+
+      <MissingCustomerContactModal
+        open={contactCheckOpen}
+        scanning={isScanningContacts}
+        scanResult={contactScanResult}
+        scanError={contactScanError}
+        generating={isGeneratingContacts}
+        progress={contactGenerationProgress}
+        generationResult={contactGenerationResult}
+        onClose={() => {
+          if (!isGeneratingContacts) setContactCheckOpen(false);
+        }}
+        onRescan={handleCheckMissingCustomerContacts}
+        onGenerate={handleGenerateMissingCustomerContacts}
+      />
 
       <NBDetailModal
         isOpen={selectedNB !== null}
