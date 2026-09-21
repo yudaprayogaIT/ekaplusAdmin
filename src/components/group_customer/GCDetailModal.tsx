@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import {
   FaBuilding,
+  FaAddressBook,
   FaChevronRight,
   FaClock,
   FaEdit,
@@ -30,6 +31,7 @@ import {
 } from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
+import { CustomerContactRelationsPanel } from "@/components/branch_customer/BCContactRelationsPanel";
 
 interface GCDetailModalProps {
   isOpen: boolean;
@@ -145,7 +147,7 @@ interface GroupCustomerDetailRow {
   npwp?: string | null;
 }
 
-type DetailTab = "company" | "finance" | "hierarchy" | "activity";
+type DetailTab = "company" | "finance" | "hierarchy" | "contacts" | "activity";
 
 const COMPANY_TYPE_OPTIONS = ["Company", "Individual"];
 const COMPANY_TITLE_OPTIONS_BY_TYPE: Record<string, string[]> = {
@@ -942,6 +944,12 @@ export function GCDetailModal({
         icon: <FaUsers className="h-4 w-4" />,
       },
       {
+        key: "contacts" as const,
+        label: "Contacts",
+        caption: "Relasi contact customer",
+        icon: <FaAddressBook className="h-4 w-4" />,
+      },
+      {
         key: "activity" as const,
         label: "Aktivitas",
         caption: "Riwayat data",
@@ -1098,7 +1106,7 @@ export function GCDetailModal({
                 </aside>
 
                 <div className="min-h-0 space-y-5">
-                  <section className={`${activeTab === "hierarchy" ? "hidden" : ""} rounded-3xl border border-white bg-white p-6 shadow-sm`}>
+                  <section className={`${activeTab === "hierarchy" || activeTab === "contacts" ? "hidden" : ""} rounded-3xl border border-white bg-white p-6 shadow-sm`}>
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-blue-500">
@@ -1552,6 +1560,13 @@ export function GCDetailModal({
                         </aside>
                       </div>
                     </section>
+                  )}
+
+                  {activeTab === "contacts" && (
+                    <CustomerContactRelationsPanel
+                      parentId={gc.id}
+                      parentType="group_customer"
+                    />
                   )}
 
                   {activeTab === "activity" && (

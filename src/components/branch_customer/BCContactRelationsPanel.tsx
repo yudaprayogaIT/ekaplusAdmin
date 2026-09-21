@@ -12,7 +12,12 @@ import {
   FaUserTie,
 } from "react-icons/fa";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import { API_CONFIG, apiFetch, getAuthHeaders, getResourceUrl } from "@/config/api";
+import {
+  API_CONFIG,
+  apiFetch,
+  getAuthHeaders,
+  getResourceUrl,
+} from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import type {
@@ -38,12 +43,29 @@ type PositionApiRow = {
 };
 
 type CustomerContactApiRow = {
-  id: number | string;
+  id?: number | string;
   name?: string | null;
   parent_id?: number | string | null;
   parent_type?: string | null;
-  contact_id?: number | string | { id?: number | string } | null;
-  position_id?: number | string | { id?: number | string } | null;
+  contact_id_id?: number | string | null;
+  contact_id?:
+    | number
+    | string
+    | {
+        id?: number | string;
+        name?: string | null;
+        full_name?: string | null;
+        display_name?: string | null;
+        notes?: string | null;
+        disabled?: number | null;
+        status?: string | null;
+      }
+    | null;
+  position_id?:
+    | number
+    | string
+    | { id?: number | string; position_name?: string | null }
+    | null;
   title?: string | null;
   is_primary?: number | null;
   created_at?: string | null;
@@ -110,7 +132,7 @@ function mapRelation(row: CustomerContactApiRow): CustomerContact {
     name: row.name || undefined,
     parent_id: toNumber(row.parent_id),
     parent_type: row.parent_type || "branch_customer",
-    contact_id: toNumber(row.contact_id),
+    contact_id: toNumber(row.contact_id) || toNumber(row.contact_id_id),
     position_id: toNumber(row.position_id),
     title: row.title || undefined,
     is_primary: Number(row.is_primary || 0),
@@ -139,6 +161,7 @@ function RelationFormModal({
   error,
   contacts,
   positions,
+  contactsLoading,
 }: {
   open: boolean;
   onClose: () => void;
@@ -148,6 +171,7 @@ function RelationFormModal({
   error: string | null;
   contacts: Contact[];
   positions: CustomerPosition[];
+  contactsLoading: boolean;
 }) {
   const [draft, setDraft] = useState<RelationDraft>({
     contact_id: "",
@@ -191,7 +215,7 @@ function RelationFormModal({
           >
             <div className="border-b border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.16),_transparent_55%),linear-gradient(135deg,#eff6ff,#ffffff_55%,#f8fafc)] px-6 py-5">
               <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-blue-700">
-                Branch Contact Relation
+                Customer Contact Relation
               </p>
               <h3 className="mt-2 text-2xl font-bold text-slate-900">
                 {initial ? "Edit Relasi Contact" : "Tambah Relasi Contact"}
@@ -213,10 +237,12 @@ function RelationFormModal({
                     setDraft((prev) => ({ ...prev, contact_id: event.target.value }))
                   }
                   className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500"
-                  disabled={saving}
+                  disabled={saving || contactsLoading}
                   required
                 >
-                  <option value="">Pilih contact</option>
+                  <option value="">
+                    {contactsLoading ? "Memuat contact..." : "Pilih contact"}
+                  </option>
                   {contacts.map((contact) => (
                     <option key={contact.id} value={String(contact.id)}>
                       {contact.full_name}
@@ -276,14 +302,14 @@ function RelationFormModal({
               <button
                 type="button"
                 onClick={onClose}
-                disabled={saving}
+                disabled={saving || contactsLoading}
                 className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-900"
               >
                 Batal
               </button>
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || contactsLoading}
                 className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
               >
                 {saving ? "Menyimpan..." : initial ? "Update Relasi" : "Simpan Relasi"}
@@ -296,10 +322,12 @@ function RelationFormModal({
   );
 }
 
-export function BCContactRelationsPanel({
-  branchCustomerId,
+export function CustomerContactRelationsPanel({
+  parentId,
+  parentType,
 }: {
-  branchCustomerId: number;
+  parentId: number;
+  parentType: "group_customer" | "branch_customer";
 }) {
   const { token, isAuthenticated } = useAuth();
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -312,11 +340,13 @@ export function BCContactRelationsPanel({
   const [modalInitial, setModalInitial] = useState<HydratedRelation | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [contactsLoading, setContactsLoading] = useState(false);
+  const [contactLookupLoaded, setContactLookupLoaded] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const actionRef = useRef<(() => Promise<void>) | null>(null);
 
   const loadData = useCallback(async () => {
-    if (!isAuthenticated || !token || !branchCustomerId) {
+    if (!isAuthenticated || !token || !parentId) {
       setLoading(false);
       return;
     }
@@ -325,29 +355,45 @@ export function BCContactRelationsPanel({
     setError(null);
     try {
       const headers = getAuthHeaders(token);
-      const [relationRows, contactRows, positionRows] = await Promise.all([
-        fetchAllQueryRows<CustomerContactApiRow>({
-          endpoint: API_CONFIG.ENDPOINTS.CUSTOMER_CONTACT,
-          spec: {
-            fields: ["*"],
-            filters: [
-              ["parent_type", "=", "branch_customer"],
-              ["parent_id", "=", branchCustomerId],
-            ],
-          },
-          token,
-          requestInit: { headers },
-          errorMessage: "Gagal memuat relasi contact",
-        }),
-        fetchAllQueryRows<ContactApiRow>({
-          endpoint: API_CONFIG.ENDPOINTS.CONTACT,
-          spec: {
-            fields: ["id", "name", "full_name", "display_name", "disabled"],
-          },
-          token,
-          requestInit: { headers },
-          errorMessage: "Gagal memuat contact lookup",
-        }),
+      const relationRowsPromise = fetchAllQueryRows<CustomerContactApiRow>({
+        endpoint: API_CONFIG.ENDPOINTS.CUSTOMER_CONTACT,
+        spec: {
+          fields: [
+            "id",
+            "name",
+            "parent_id",
+            "parent_type",
+            "contact_id",
+            "contact_id.id",
+            "contact_id.name",
+            "contact_id.display_name",
+            "contact_id.full_name",
+            "contact_id.notes",
+            "contact_id.disabled",
+            "contact_id.status",
+            "position_id",
+            "position_id.position_name",
+            "title",
+            "is_primary",
+            "idx",
+            "created_at",
+            "updated_at",
+          ],
+          filters: [
+            ["parent_id", "=", parentId],
+            ["parent_type", "=", parentType],
+          ],
+          limit: 100,
+        },
+        token,
+        requestInit: { headers },
+        errorMessage: `Gagal memuat relasi contact ${
+          parentType === "group_customer" ? "Group Customer" : "Branch Customer"
+        }`,
+      });
+
+      const [relationRows, positionRows] = await Promise.all([
+        relationRowsPromise,
         fetchAllQueryRows<PositionApiRow>({
           endpoint: API_CONFIG.ENDPOINTS.CUSTOMER_POSITION,
           spec: {
@@ -359,42 +405,124 @@ export function BCContactRelationsPanel({
         }),
       ]);
 
-      const mappedRelations: CustomerContact[] = (
-        Array.isArray(relationRows) ? relationRows : []
-      ).map(mapRelation);
-      const relatedContactIds: number[] = Array.from(
-        new Set(mappedRelations.map((item: CustomerContact) => item.contact_id).filter(Boolean)),
+      const mappedPositions = positionRows.map(mapPosition);
+      // Keep a client-side scope guard as well. This prevents a malformed API
+      // response from leaking a BC relation into a GC with the same numeric ID.
+      const scopedRelationRows = relationRows.filter(
+        (row) =>
+          toNumber(row.parent_id) === parentId &&
+          row.parent_type?.trim().toLowerCase() === parentType,
       );
-
-      let mappedIdentities: ContactIdentity[] = [];
-      if (relatedContactIds.length > 0) {
-        const identityRows = await fetchAllQueryRows<IdentityApiRow>({
-          endpoint: API_CONFIG.ENDPOINTS.CONTACT_IDENTITIES,
-          spec: {
-            fields: ["*"],
-            filters: [["contact_id", "in", relatedContactIds]],
-          },
-          token,
-          requestInit: { headers },
-          errorMessage: "Gagal memuat contact identities",
+      const positionIdByName = new Map(
+        mappedPositions.map((position) => [
+          position.position_name.trim().toLowerCase(),
+          position.id,
+        ]),
+      );
+      const mappedRelations: CustomerContact[] = scopedRelationRows.map((row, index) => {
+        const mapped = mapRelation(row);
+        const embeddedPositionName =
+          row.position_id && typeof row.position_id === "object"
+            ? row.position_id.position_name?.trim().toLowerCase()
+            : undefined;
+        return {
+          ...mapped,
+          // Older API responses may omit the relation ID. A negative local ID
+          // keeps React keys stable; mutation controls stay hidden for the row.
+          id: mapped.id || -(index + 1),
+          parent_id: parentId,
+          parent_type: parentType,
+          position_id:
+            mapped.position_id ||
+            (embeddedPositionName
+              ? positionIdByName.get(embeddedPositionName) || 0
+              : 0),
+        };
+      });
+      const relatedContactIds: number[] = Array.from(
+        new Set(
+          mappedRelations
+            .map((item: CustomerContact) => item.contact_id)
+            .filter(Boolean),
+        ),
+      );
+      const identityRows =
+        relatedContactIds.length > 0
+          ? await fetchAllQueryRows<IdentityApiRow>({
+              endpoint: API_CONFIG.ENDPOINTS.CONTACT_IDENTITIES,
+              spec: {
+                fields: ["*"],
+                filters: [["contact_id", "in", relatedContactIds]],
+                limit: Math.max(relatedContactIds.length, 20),
+              },
+              token,
+              requestInit: { headers },
+              errorMessage: "Gagal memuat contact identities",
+            })
+          : [];
+      const contactMap = new Map<number, Contact>();
+      scopedRelationRows.forEach((row) => {
+        if (!row.contact_id || typeof row.contact_id !== "object") return;
+        const embeddedId =
+          toNumber(row.contact_id.id) || toNumber(row.contact_id_id);
+        if (!embeddedId) return;
+        const existing = contactMap.get(embeddedId);
+        contactMap.set(embeddedId, {
+          ...existing,
+          id: embeddedId,
+          name: row.contact_id.name || existing?.name,
+          full_name:
+            row.contact_id.full_name ||
+            row.contact_id.display_name ||
+            existing?.full_name ||
+            `Contact #${embeddedId}`,
+          display_name:
+            row.contact_id.display_name || existing?.display_name,
+          notes: row.contact_id.notes || existing?.notes,
+          disabled: Number(row.contact_id.disabled ?? existing?.disabled ?? 0),
         });
-        mappedIdentities = identityRows.map(mapIdentity);
-      }
-
+      });
       setRelations(mappedRelations);
-      setContacts(contactRows.map(mapContact));
-      setPositions(positionRows.map(mapPosition));
-      setIdentities(mappedIdentities);
+      setContacts(Array.from(contactMap.values()));
+      setPositions(mappedPositions);
+      setIdentities(identityRows.map(mapIdentity));
+      setContactLookupLoaded(false);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
     } finally {
       setLoading(false);
     }
-  }, [branchCustomerId, isAuthenticated, token]);
+  }, [isAuthenticated, parentId, parentType, token]);
 
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  const loadContactLookup = useCallback(async () => {
+    if (!token || contactLookupLoaded || contactsLoading) return;
+    setContactsLoading(true);
+    setModalError(null);
+    try {
+      const rows = await fetchAllQueryRows<ContactApiRow>({
+        endpoint: API_CONFIG.ENDPOINTS.CONTACT,
+        spec: {
+          fields: ["id", "name", "full_name", "display_name", "disabled"],
+          limit: 500,
+        },
+        token,
+        requestInit: { headers: getAuthHeaders(token) },
+        errorMessage: "Gagal memuat contact lookup",
+      });
+      setContacts(rows.map(mapContact));
+      setContactLookupLoaded(true);
+    } catch (lookupError) {
+      setModalError(
+        lookupError instanceof Error ? lookupError.message : String(lookupError),
+      );
+    } finally {
+      setContactsLoading(false);
+    }
+  }, [contactLookupLoaded, contactsLoading, token]);
 
   const hydratedRelations = useMemo(() => {
     const contactMap = new Map(contacts.map((contact) => [contact.id, contact]));
@@ -434,8 +562,8 @@ export function BCContactRelationsPanel({
           method: payload.id ? "PUT" : "POST",
           headers: getAuthHeaders(token),
           body: JSON.stringify({
-            parent_type: "branch_customer",
-            parent_id: branchCustomerId,
+            parent_type: parentType,
+            parent_id: parentId,
             contact_id: Number(payload.contact_id),
             position_id: Number(payload.position_id),
             title: payload.title.trim() || null,
@@ -510,6 +638,7 @@ export function BCContactRelationsPanel({
             setModalError(null);
             setModalInitial(null);
             setModalOpen(true);
+            void loadContactLookup();
           }}
           className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-200 hover:bg-blue-700"
         >
@@ -544,7 +673,8 @@ export function BCContactRelationsPanel({
             Available Lookup
           </p>
           <p className="mt-2 text-base font-semibold text-slate-900">
-            {activeContacts.length} contact / {activePositions.length} position
+            {contactLookupLoaded ? activeContacts.length : "On demand"} contact /{" "}
+            {activePositions.length} position
           </p>
         </div>
       </div>
@@ -560,7 +690,7 @@ export function BCContactRelationsPanel({
             Belum ada contact relation
           </p>
           <p className="mt-1 text-sm text-slate-500">
-            Tambahkan contact master yang relevan lalu hubungkan ke branch customer ini.
+            Tambahkan contact master yang relevan lalu hubungkan ke customer ini.
           </p>
         </div>
       ) : (
@@ -592,26 +722,29 @@ export function BCContactRelationsPanel({
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setModalError(null);
-                      setModalInitial(relation);
-                      setModalOpen(true);
-                    }}
-                    className="rounded-xl border border-blue-200 p-2 text-blue-700 hover:bg-blue-50"
-                  >
-                    <FaEdit className="text-sm" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteRelation(relation)}
-                    className="rounded-xl border border-rose-200 p-2 text-rose-700 hover:bg-rose-50"
-                  >
-                    <FaTrash className="text-sm" />
-                  </button>
-                </div>
+                {relation.id > 0 ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalError(null);
+                        setModalInitial(relation);
+                        setModalOpen(true);
+                        void loadContactLookup();
+                      }}
+                      className="rounded-xl border border-blue-200 p-2 text-blue-700 hover:bg-blue-50"
+                    >
+                      <FaEdit className="text-sm" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteRelation(relation)}
+                      className="rounded-xl border border-rose-200 p-2 text-rose-700 hover:bg-rose-50"
+                    >
+                      <FaTrash className="text-sm" />
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -692,12 +825,15 @@ export function BCContactRelationsPanel({
         error={modalError}
         contacts={activeContacts}
         positions={activePositions}
+        contactsLoading={contactsLoading}
       />
 
       <ConfirmDialog
         open={confirmOpen}
         title="Hapus Relasi Contact"
-        description="Yakin ingin menghapus relasi contact dari branch customer ini?"
+        description={`Yakin ingin menghapus relasi contact dari ${
+          parentType === "group_customer" ? "group customer" : "branch customer"
+        } ini?`}
         confirmLabel="Hapus"
         cancelLabel="Batal"
         onCancel={() => {
@@ -717,5 +853,18 @@ export function BCContactRelationsPanel({
         }}
       />
     </section>
+  );
+}
+
+export function BCContactRelationsPanel({
+  branchCustomerId,
+}: {
+  branchCustomerId: number;
+}) {
+  return (
+    <CustomerContactRelationsPanel
+      parentId={branchCustomerId}
+      parentType="branch_customer"
+    />
   );
 }
