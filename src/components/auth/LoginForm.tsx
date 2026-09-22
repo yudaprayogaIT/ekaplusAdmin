@@ -4,7 +4,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { consumeLoginRedirect } from "@/lib/loginRedirect";
 import {
   FaUser,
   FaLock,
@@ -28,11 +30,24 @@ export default function LoginForm({
   onSuccess,
 }: LoginFormProps) {
   const { login } = useAuth();
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const identifierInputRef = useRef<HTMLInputElement | null>(null);
   const passwordInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleLoginSuccess = () => {
+    if (identifierInputRef.current) identifierInputRef.current.value = "";
+    if (passwordInputRef.current) passwordInputRef.current.value = "";
+    onClose();
+    onSuccess?.();
+
+    const redirectPath = consumeLoginRedirect();
+    if (redirectPath) {
+      router.replace(redirectPath);
+    }
+  };
 
   // Lock body scroll when modal open
   useEffect(() => {
@@ -68,19 +83,13 @@ export default function LoginForm({
 
       if (typeof result === "boolean") {
         if (result) {
-          if (identifierInputRef.current) identifierInputRef.current.value = "";
-          if (passwordInputRef.current) passwordInputRef.current.value = "";
-          onClose();
-          onSuccess?.();
+          handleLoginSuccess();
         } else {
           setError("Login gagal. Periksa username dan password Anda.");
         }
       } else if (typeof result === "object" && result !== null) {
         if (result.success) {
-          if (identifierInputRef.current) identifierInputRef.current.value = "";
-          if (passwordInputRef.current) passwordInputRef.current.value = "";
-          onClose();
-          onSuccess?.();
+          handleLoginSuccess();
         } else {
           setError(result.message || "Login gagal");
         }

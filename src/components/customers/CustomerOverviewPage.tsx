@@ -362,7 +362,7 @@ function renderCardIcon(type: CustomerType) {
 }
 
 export default function CustomerOverviewPage() {
-  const { token, isAuthenticated, currentRole } = useAuth();
+  const { token, isAuthenticated, hasRole } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -401,7 +401,7 @@ export default function CustomerOverviewPage() {
   const [exportProgress, setExportProgress] =
     useState<CustomerExportProgress | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
-  const canExportCustomer = currentRole?.name === "administrator";
+  const canExportCustomer = hasRole("administrator");
   const [contactCheckOpen, setContactCheckOpen] = useState(false);
   const [isScanningContacts, setIsScanningContacts] = useState(false);
   const [contactScanResult, setContactScanResult] =
@@ -412,7 +412,7 @@ export default function CustomerOverviewPage() {
     useState<CustomerContactGenerationProgress | null>(null);
   const [contactGenerationResult, setContactGenerationResult] =
     useState<CustomerContactGenerationResult | null>(null);
-  const canGenerateCustomerContact = currentRole?.name === "administrator";
+  const canGenerateCustomerContact = hasRole("administrator");
 
   const [selectedNB, setSelectedNB] = useState<NationalBrandDetailData | null>(
     null,
@@ -1485,7 +1485,7 @@ export default function CustomerOverviewPage() {
     try {
       const result = await scanMissingCustomerContacts({
         token,
-        roleName: currentRole?.name,
+        roleName: canGenerateCustomerContact ? "administrator" : undefined,
       });
       setContactScanResult(result);
     } catch (scanFailure) {
@@ -1523,7 +1523,7 @@ export default function CustomerOverviewPage() {
     try {
       const result = await generateMissingCustomerContacts({
         token,
-        roleName: currentRole?.name,
+        roleName: canGenerateCustomerContact ? "administrator" : undefined,
         scanResult: contactScanResult,
         onProgress: setContactGenerationProgress,
       });

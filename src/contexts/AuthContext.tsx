@@ -16,11 +16,11 @@ import {
   API_CONFIG,
   getApiUrl,
 } from "../config/api";
+import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import {
   PermissionRule,
   dedupePermissionRules,
   deriveFlatPermissions,
-  expandPermissionCandidates,
   extractPermissionRules,
 } from "@/lib/authz";
 import {
@@ -150,6 +150,7 @@ type ApiErrorResponse = {
 
 type AuthzSnapshot = {
   currentRole: Role | null;
+  roles: Role[];
   permissions: string[];
   permissionRules: PermissionRule[];
 };
@@ -166,6 +167,7 @@ type JwtPayload = {
 type AuthContextType = {
   currentUser: User | null;
   currentRole: Role | null;
+  roles: Role[];
   permissions: string[];
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -176,6 +178,8 @@ type AuthContextType = {
   hasPermission: (permission: string) => boolean;
   hasAnyPermission: (permissions: string[]) => boolean;
   hasAllPermissions: (permissions: string[]) => boolean;
+  hasRole: (role: string) => boolean;
+  hasAnyRole: (roles: string[]) => boolean;
   canAccessBranch: (branchId?: string | null) => boolean;
 };
 
@@ -337,77 +341,6 @@ function createRoleFromRecord(record: Record<string, unknown>): Role | null {
   };
 }
 
-function resolveCurrentRole(user: User, sources: unknown[]): Role | null {
-  for (const source of sources) {
-    if (!source || typeof source !== "object") continue;
-    const record = source as Record<string, unknown>;
-
-    const directRoleKeys = [
-      record.current_role,
-      record.currentRole,
-      record.primary_role,
-      record.primaryRole,
-      record.role_details,
-      record.roleDetails,
-    ];
-
-    for (const candidate of directRoleKeys) {
-      if (candidate && typeof candidate === "object") {
-        const role = createRoleFromRecord(candidate as Record<string, unknown>);
-        if (role) return role;
-      }
-    }
-
-    if (Array.isArray(record.roles)) {
-      for (const item of record.roles) {
-        if (typeof item === "object" && item) {
-          const role = createRoleFromRecord(item as Record<string, unknown>);
-          if (role) return role;
-        }
-        if (typeof item === "string" && item.trim()) {
-          const name = item.trim();
-          return {
-            id: normalizeRoleName(name),
-            name: normalizeRoleName(name),
-            display_name: name,
-            description: "",
-            level: 0,
-            color: resolveRoleColor(name, false),
-            icon: "",
-            is_system: false,
-            can_be_deleted: true,
-            status: "active",
-          };
-        }
-      }
-    }
-
-    if (typeof record.role === "object" && record.role) {
-      const role = createRoleFromRecord(record.role as Record<string, unknown>);
-      if (role) return role;
-    }
-  }
-
-  if (!user.role && !user.role_id) return null;
-
-  const displayName = user.role || user.role_id;
-  const roleName = normalizeRoleName(displayName);
-  const isSystem = Boolean(user.is_system || roleName.includes("admin"));
-
-  return {
-    id: user.role_id || roleName,
-    name: roleName,
-    display_name: displayName,
-    description: "",
-    level: 0,
-    color: resolveRoleColor(roleName, isSystem),
-    icon: "",
-    is_system: isSystem,
-    can_be_deleted: !isSystem,
-    status: user.status || "active",
-  };
-}
-
 function mergeUser(baseUser: User, nextUser: User): User {
   return {
     ...baseUser,
@@ -433,6 +366,15 @@ function safeParseAuthzSnapshot(rawValue: string | null): AuthzSnapshot | null {
         parsed.currentRole && typeof parsed.currentRole === "object"
           ? parsed.currentRole
           : null,
+      roles: Array.isArray(parsed.roles)
+        ? parsed.roles.filter(
+            (role): role is Role =>
+              Boolean(role) &&
+              typeof role === "object" &&
+              typeof role.id === "string" &&
+              typeof role.name === "string",
+          )
+        : [],
       permissions: Array.isArray(parsed.permissions)
         ? parsed.permissions.filter(
             (permission): permission is string => typeof permission === "string",
@@ -455,17 +397,6 @@ function safeParseAuthzSnapshot(rawValue: string | null): AuthzSnapshot | null {
   }
 }
 
-function hasElevatedAccess(
-  user: User | null,
-  role: Role | null,
-  currentPermissions: string[],
-): boolean {
-  if (!user) return false;
-  if (user.is_system || role?.is_system) return true;
-  if (role && ["administrator", "admin"].includes(role.name)) return true;
-  return currentPermissions.includes("*") || currentPermissions.includes("*.*");
-}
-
 async function fetchLatestUserPayload(token: string): Promise<Record<string, unknown> | null> {
   try {
     const response = await apiFetch(
@@ -481,6 +412,49 @@ async function fetchLatestUserPayload(token: string): Promise<Record<string, unk
   } catch {
     return null;
   }
+}
+
+async function fetchAssignedRoles(token: string, userId: string): Promise<Role[]> {
+  if (!userId) return [];
+
+  const numericUserId = Number(userId);
+  const userFilterValue = Number.isFinite(numericUserId)
+    ? numericUserId
+    : userId;
+  const userRoleRows = await fetchAllQueryRows<Record<string, unknown>>({
+    endpoint: API_CONFIG.ENDPOINTS.USER_ROLES,
+    spec: {
+      fields: ["*"],
+      filters: [["user_id", "=", userFilterValue]],
+    },
+    token,
+    errorMessage: "Gagal memuat role user",
+  });
+  const roleIds = new Set(
+    userRoleRows
+      .map((row) => row.role_id ?? row.RoleID ?? row.roleId)
+      .filter((roleId) => roleId !== null && roleId !== undefined)
+      .map(String),
+  );
+
+  if (roleIds.size === 0) return [];
+
+  const roleRows = await fetchAllQueryRows<Record<string, unknown>>({
+    endpoint: API_CONFIG.ENDPOINTS.ROLES,
+    spec: { fields: ["*"] },
+    token,
+    errorMessage: "Gagal memuat detail role user",
+  });
+
+  return roleRows
+    .filter((row) => roleIds.has(String(row.id ?? row.ID ?? "")))
+    .map(createRoleFromRecord)
+    .filter((role): role is Role => role !== null)
+    .sort((left, right) => {
+      if (left.name === "administrator") return -1;
+      if (right.name === "administrator") return 1;
+      return right.level - left.level || left.name.localeCompare(right.name);
+    });
 }
 
 async function resolveSessionState(
@@ -502,11 +476,13 @@ async function resolveSessionState(
     extractPermissionRules([user, ...effectiveSources]),
   );
   const permissions = deriveFlatPermissions(permissionRules);
-  const currentRole = resolveCurrentRole(user, effectiveSources);
+  const roles = await fetchAssignedRoles(token, user.id).catch(() => []);
+  const currentRole = roles[0] || null;
 
   return {
     user,
     currentRole,
+    roles,
     permissions,
     permissionRules,
   };
@@ -515,8 +491,9 @@ async function resolveSessionState(
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentRole, setCurrentRole] = useState<Role | null>(null);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [permissions, setPermissions] = useState<string[]>([]);
-  const [permissionRules, setPermissionRules] = useState<PermissionRule[]>([]);
+  const [, setPermissionRules] = useState<PermissionRule[]>([]);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [dataLoaded, setDataLoaded] = useState(false);
@@ -526,6 +503,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (session: ResolvedSessionState, tokenValue: string) => {
       setCurrentUser(session.user);
       setCurrentRole(session.currentRole);
+      setRoles(session.roles);
       setPermissions(session.permissions);
       setPermissionRules(session.permissionRules);
       setToken(tokenValue);
@@ -537,6 +515,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         AUTHZ_DATA_KEY,
         JSON.stringify({
           currentRole: session.currentRole,
+          roles: session.roles,
           permissions: session.permissions,
           permissionRules: session.permissionRules,
         } satisfies AuthzSnapshot),
@@ -548,6 +527,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const handleSessionExpired = useCallback(() => {
     setCurrentUser(null);
     setCurrentRole(null);
+    setRoles([]);
     setPermissions([]);
     setPermissionRules([]);
     setToken(null);
@@ -614,7 +594,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const savedAuthz = safeParseAuthzSnapshot(localStorage.getItem(AUTHZ_DATA_KEY));
 
         setCurrentUser(savedUser);
-        setCurrentRole(savedAuthz?.currentRole || resolveCurrentRole(savedUser, []));
+        setCurrentRole(savedAuthz?.roles[0] || null);
+        setRoles(savedAuthz?.roles || []);
         setPermissions(savedAuthz?.permissions || []);
         setPermissionRules(savedAuthz?.permissionRules || []);
         setToken(savedToken);
@@ -754,6 +735,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   function logout() {
     setCurrentUser(null);
     setCurrentRole(null);
+    setRoles([]);
     setPermissions([]);
     setPermissionRules([]);
     setToken(null);
@@ -778,6 +760,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return currentUser !== null;
   }
 
+  function hasRole(role: string): boolean {
+    const normalizedRole = normalizeRoleName(role);
+    return roles.some((assignedRole) => assignedRole.name === normalizedRole);
+  }
+
+  function hasAnyRole(requestedRoles: string[]): boolean {
+    return requestedRoles.some(hasRole);
+  }
+
   function canAccessBranch(branchId?: string | null): boolean {
     void branchId;
     return currentUser !== null;
@@ -786,6 +777,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value: AuthContextType = {
     currentUser,
     currentRole,
+    roles,
     permissions,
     isAuthenticated: currentUser !== null,
     isLoading,
@@ -796,6 +788,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     hasPermission,
     hasAnyPermission,
     hasAllPermissions,
+    hasRole,
+    hasAnyRole,
     canAccessBranch,
   };
 

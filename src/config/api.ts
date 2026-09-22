@@ -29,6 +29,8 @@ export const API_CONFIG = {
     USER_CREATE: "/api/user/create",
     USER_UPDATE: "/api/user",
     USER_ME: "/api/user/me",
+    ROLES: "/api/resource/roles",
+    USER_ROLES: "/api/resource/user_roles",
     INTEGRATION_TOKEN: "/api/user/integration-token",
 
     // Authorization (Authz)

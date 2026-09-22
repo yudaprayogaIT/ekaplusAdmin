@@ -1,5 +1,6 @@
 // src/app/users/page.tsx
 import RequireAuth from "@/components/auth/RequireAuth";
+import { RoleGate } from "@/components/auth/PermissionGate";
 import UserList from "@/components/users/UserList";
 
 export const metadata = {
@@ -10,7 +11,9 @@ export const metadata = {
 export default function UsersPage() {
   return (
     <RequireAuth>
-      <UserList />
+      <RoleGate roles={["administrator"]} showLocked>
+        <UserList />
+      </RoleGate>
     </RequireAuth>
   );
 }

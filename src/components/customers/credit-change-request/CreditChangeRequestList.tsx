@@ -174,7 +174,8 @@ function mapCreditChangeRequestRow(
 }
 
 export function CreditChangeRequestList() {
-  const { token, isAuthenticated } = useAuth();
+  const { token, isAuthenticated, hasRole } = useAuth();
+  const canCreateRequest = hasRole("administrator");
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -880,14 +881,16 @@ export function CreditChangeRequestList() {
               <FaSortAmountDown className="h-4 w-4" />
             )}
           </button>
-          <button
-            type="button"
-            onClick={() => setModalOpen(true)}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-200 transition hover:from-emerald-600 hover:to-teal-700"
-          >
-            <FaPlus className="h-4 w-4" />
-            Add New Request
-          </button>
+          {canCreateRequest ? (
+            <button
+              type="button"
+              onClick={() => setModalOpen(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-200 transition hover:from-emerald-600 hover:to-teal-700"
+            >
+              <FaPlus className="h-4 w-4" />
+              Add New Request
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -1111,15 +1114,17 @@ export function CreditChangeRequestList() {
         demoMode={approveTourActive && selectedItem?.id === tourItem.id}
         onActionExecuted={refreshList}
       />
-      <CreditChangeRequestFormModal
-        open={modalOpen}
-        onClose={() => {
-          if (saving) return;
-          setModalOpen(false);
-        }}
-        onSave={handleSave}
-        saving={saving}
-      />
+      {canCreateRequest ? (
+        <CreditChangeRequestFormModal
+          open={modalOpen}
+          onClose={() => {
+            if (saving) return;
+            setModalOpen(false);
+          }}
+          onSave={handleSave}
+          saving={saving}
+        />
+      ) : null}
     </div>
   );
 }

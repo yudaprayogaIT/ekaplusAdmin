@@ -8,6 +8,7 @@ import { FaLock, FaHome } from "react-icons/fa";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { dispatchOpenLoginModal } from "@/lib/loginPrompt";
+import { rememberLoginRedirect } from "@/lib/loginRedirect";
 
 type RequireAuthProps = {
   children: React.ReactNode;
@@ -59,6 +60,9 @@ export default function RequireAuth({
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
+      rememberLoginRedirect(
+        `${window.location.pathname}${window.location.search}${window.location.hash}`,
+      );
       router.replace(fallbackUrl);
       dispatchOpenLoginModal();
     }

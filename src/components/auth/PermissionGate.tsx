@@ -96,16 +96,16 @@ type RoleGateProps = {
 };
 
 export function RoleGate({ children, roles, fallback, showLocked = false }: RoleGateProps) {
-  const { currentRole, isAuthenticated } = useAuth();
+  const { hasAnyRole, isAuthenticated } = useAuth();
 
-  if (!isAuthenticated || !currentRole) {
+  if (!isAuthenticated) {
     if (showLocked) {
       return <LockedContent message="Silakan login untuk mengakses fitur ini" />;
     }
     return fallback ? <>{fallback}</> : null;
   }
 
-  if (!roles.includes(currentRole.name)) {
+  if (!hasAnyRole(roles)) {
     if (showLocked) {
       return <LockedContent message={`Role ${roles.join(' atau ')} diperlukan`} />;
     }

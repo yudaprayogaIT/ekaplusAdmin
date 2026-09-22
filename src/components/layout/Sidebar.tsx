@@ -43,6 +43,7 @@ export type MenuItem = {
   category?: string;
   permission?: string;
   permissions?: string[];
+  roles?: string[];
   requireAuth?: boolean;
 };
 
@@ -147,6 +148,7 @@ const ADMIN_MENU: MenuItem[] = [
     icon: <FaUser className="w-5 h-5" />,
     category: "System",
     requireAuth: true,
+    roles: ["administrator"],
   },
   {
     label: "Integration Token",
@@ -161,6 +163,7 @@ const ADMIN_MENU: MenuItem[] = [
     icon: <FaSitemap className="w-5 h-5" />,
     category: "System",
     requireAuth: true,
+    roles: ["administrator"],
   },
   {
     label: "Workflow States",
@@ -373,8 +376,14 @@ type SubmenuName = "master" | "catalog" | "customer" | "admin" | null;
 export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
   const pathname = usePathname() || "/";
   const router = useRouter();
-  const { hasPermission, hasAnyPermission, isAuthenticated, currentRole, logout } =
-    useAuth();
+  const {
+    hasPermission,
+    hasAnyPermission,
+    hasAnyRole,
+    isAuthenticated,
+    currentRole,
+    logout,
+  } = useAuth();
 
   // Single state for accordion - only one submenu can be open at a time
   const [openSubmenu, setOpenSubmenu] = useState<SubmenuName>(null);
@@ -390,6 +399,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
 
   const canSeeMenu = (item: MenuItem): boolean => {
     if (item.requireAuth && !isAuthenticated) return false;
+    if (item.roles && !hasAnyRole(item.roles)) return false;
     if (!item.permission && !item.permissions) return true;
     if (!isAuthenticated) return false;
     if (item.permission) return hasPermission(item.permission);
