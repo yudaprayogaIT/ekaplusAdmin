@@ -50,6 +50,9 @@ export const API_CONFIG = {
     CUSTOMER_REGISTER: "/api/resource/customer_register",
     CUSTOMER_REGISTER_ADDRESS: "/api/resource/customer_register_address",
     CUSTOMER_REGISTER_CONTACT: "/api/resource/customer_register_contact",
+    CUSTOMER_CHANGE_REQUEST: "/api/resource/customer_change_request",
+    CUSTOMER_CHANGE_REQUEST_DETAIL:
+      "/api/resource/customer_change_request_detail",
     CUSTOMER_LIMIT: "/api/resource/customer_limit",
     CREDIT_CHANGE_REQUEST: "/api/resource/credit_change_request",
     CREDIT_POLICY: "/api/resource/credit_policy",

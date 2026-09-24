@@ -258,6 +258,13 @@ const CUSTOMER_SUBMENU: MenuItem[] = [
     category: "Customer",
     requireAuth: true,
   },
+  {
+    label: "Customer Change Request",
+    href: "/customers/change-request",
+    icon: <FaDatabase className="w-4 h-4" />,
+    category: "Customer",
+    requireAuth: true,
+  },
   // {
   //   label: "Customer Limit",
   //   href: "/customers/limit",

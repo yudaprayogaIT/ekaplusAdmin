@@ -513,6 +513,78 @@ export const CUSTOMER_REGISTER_FILTER_FIELDS: EntityFilterConfig = {
   ],
 };
 
+// Customer Change Request filter fields
+export const CUSTOMER_CHANGE_REQUEST_FILTER_FIELDS: EntityFilterConfig = {
+  entity: "customer_change_request",
+  fields: [
+    {
+      field: "name",
+      label: "Request Number",
+      type: "string",
+      operators: ["=", "!=", "like", "not like"],
+    },
+    {
+      field: "entity_type",
+      label: "Customer Type",
+      type: "select",
+      operators: ["=", "!=", "in", "not in"],
+      options: [
+        { value: "national_brand", label: "National Brand" },
+        { value: "group_parent", label: "Group Parent" },
+        { value: "group_customer", label: "Group Customer" },
+        { value: "branch_customer", label: "Branch Customer" },
+      ],
+    },
+    {
+      field: "entity_id",
+      label: "Customer ID",
+      type: "number",
+      operators: ["=", "!=", ">", ">=", "<", "<="],
+    },
+    {
+      field: "status",
+      label: "Status",
+      type: "string",
+      operators: ["=", "!=", "like", "not like", "in", "not in"],
+    },
+    {
+      field: "reason",
+      label: "Reason",
+      type: "string",
+      operators: ["=", "!=", "like", "not like"],
+    },
+    {
+      field: "docstatus",
+      label: "Document Status",
+      type: "select",
+      operators: ["="],
+      options: [
+        { value: 0, label: "Draft" },
+        { value: 1, label: "Submitted" },
+        { value: 2, label: "Cancelled" },
+      ],
+    },
+    {
+      field: "created_at",
+      label: "Created Date",
+      type: "date",
+      operators: ["=", ">", ">=", "<", "<=", "between"],
+    },
+    {
+      field: "updated_at",
+      label: "Updated Date",
+      type: "date",
+      operators: ["=", ">", ">=", "<", "<=", "between"],
+    },
+    {
+      field: "applied_at",
+      label: "Applied Date",
+      type: "date",
+      operators: ["=", ">", ">=", "<", "<=", "between"],
+    },
+  ],
+};
+
 // Group Parent (GP) filter fields
 export const GROUP_PARENT_FILTER_FIELDS: EntityFilterConfig = {
   entity: "ekatalog_group_parent",
