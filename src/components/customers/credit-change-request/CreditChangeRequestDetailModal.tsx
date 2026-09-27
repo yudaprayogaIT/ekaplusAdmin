@@ -944,6 +944,39 @@ export function CreditChangeRequestDetailModal({
           await uploadCustomerApprovalAttachment();
         }
 
+        if (
+          isRejectAction &&
+          typeof payload?.rejected_note === "string" &&
+          payload.rejected_note.trim()
+        ) {
+          const updateResponse = await apiFetch(
+            getResourceUrl(
+              API_CONFIG.ENDPOINTS.CREDIT_CHANGE_REQUEST,
+              item.id,
+            ),
+            {
+              method: "PUT",
+              cache: "no-store",
+              body: JSON.stringify({
+                rejected_note: payload.rejected_note.trim(),
+              }),
+            },
+            token,
+          );
+
+          if (!updateResponse.ok) {
+            const updateBody = await updateResponse.json().catch(() => null);
+            const message =
+              updateBody &&
+              typeof updateBody === "object" &&
+              "message" in updateBody &&
+              typeof updateBody.message === "string"
+                ? updateBody.message
+                : `Gagal menyimpan rejected note (${updateResponse.status})`;
+            throw new Error(message);
+          }
+        }
+
         await executeWorkflowAction({
           token,
           resourceName: "credit_change_request",

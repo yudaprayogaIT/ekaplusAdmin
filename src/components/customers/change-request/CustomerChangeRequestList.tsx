@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -62,10 +56,7 @@ interface BranchCustomerRow {
   id: number;
   name?: string | null;
   gcid?: number | { id?: number; name?: string; gc_name?: string } | null;
-  branch?:
-    | number
-    | { id?: number; branch_name?: string; city?: string }
-    | null;
+  branch?: number | { id?: number; branch_name?: string; city?: string } | null;
 }
 
 function resolveUserName(
@@ -106,7 +97,9 @@ function entityTypeLabel(value: string): string {
     .join(" ");
 }
 
-function normalizedEntityType(value: string):
+function normalizedEntityType(
+  value: string,
+):
   | "national_brand"
   | "group_parent"
   | "group_customer"
@@ -202,7 +195,9 @@ async function enrichEntityDisplayNames(
         ? Number(row.gcid.id || 0)
         : Number(row.gcid || 0),
     )
-    .filter((id) => id > 0 && !directGroupCustomers.some((row) => row.id === id));
+    .filter(
+      (id) => id > 0 && !directGroupCustomers.some((row) => row.id === id),
+    );
   const relatedGroupCustomers = await fetchEntityRows<NamedEntityRow>({
     endpoint: API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
     ids: Array.from(new Set(relatedGcIds)),
@@ -227,12 +222,16 @@ async function enrichEntityDisplayNames(
       const gcObject =
         row.gcid && typeof row.gcid === "object" ? row.gcid : null;
       const gcId = gcObject ? Number(gcObject.id || 0) : Number(row.gcid || 0);
-      const gcName = gcObject?.gc_name || gcObject?.name || gcMap.get(gcId) || "";
+      const gcName =
+        gcObject?.gc_name || gcObject?.name || gcMap.get(gcId) || "";
       const branchObject =
         row.branch && typeof row.branch === "object" ? row.branch : null;
       const branchLabel =
         row.name || branchObject?.city || branchObject?.branch_name || "";
-      return [row.id, [gcName, branchLabel].filter(Boolean).join(" - ")] as const;
+      return [
+        row.id,
+        [gcName, branchLabel].filter(Boolean).join(" - "),
+      ] as const;
     }),
   );
 
@@ -289,11 +288,15 @@ export function CustomerChangeRequestList() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const idParam = searchParams.get("id");
-  const parsedRouteId = idParam && /^\d+$/.test(idParam) ? Number(idParam) : null;
+  const parsedRouteId =
+    idParam && /^\d+$/.test(idParam) ? Number(idParam) : null;
 
   const [items, setItems] = useState<CustomerChangeRequest[]>([]);
-  const [selectedItem, setSelectedItem] = useState<CustomerChangeRequest | null>(null);
-  const [routeDetailId, setRouteDetailId] = useState<number | null>(parsedRouteId);
+  const [selectedItem, setSelectedItem] =
+    useState<CustomerChangeRequest | null>(null);
+  const [routeDetailId, setRouteDetailId] = useState<number | null>(
+    parsedRouteId,
+  );
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -366,7 +369,9 @@ export function CustomerChangeRequestList() {
           token,
         );
         if (!response.ok) {
-          throw new Error(`Gagal memuat customer change request (${response.status})`);
+          throw new Error(
+            `Gagal memuat customer change request (${response.status})`,
+          );
         }
 
         const json = await response.json();
@@ -380,7 +385,8 @@ export function CustomerChangeRequestList() {
             : [
                 ...current,
                 ...mapped.filter(
-                  (item) => !current.some((existing) => existing.id === item.id),
+                  (item) =>
+                    !current.some((existing) => existing.id === item.id),
                 ),
               ],
         );
@@ -443,7 +449,8 @@ export function CustomerChangeRequestList() {
       setSelectedItem(loaded);
       return;
     }
-    if (!token || !isAuthenticated || directLoadRef.current === routeDetailId) return;
+    if (!token || !isAuthenticated || directLoadRef.current === routeDetailId)
+      return;
 
     directLoadRef.current = routeDetailId;
     const authToken = token;
@@ -461,7 +468,9 @@ export function CustomerChangeRequestList() {
         );
         if (!response.ok || cancelled) return;
         const json = await response.json();
-        const row = Array.isArray(json?.data) ? (json.data[0] as ApiRow | undefined) : undefined;
+        const row = Array.isArray(json?.data)
+          ? (json.data[0] as ApiRow | undefined)
+          : undefined;
         if (row && !cancelled) {
           const [mapped] = await enrichEntityDisplayNames(
             [mapRow(row)],
@@ -518,7 +527,9 @@ export function CustomerChangeRequestList() {
       <div className="flex items-center justify-center py-24">
         <div className="text-center">
           <div className="mx-auto mb-4 h-14 w-14 animate-spin rounded-full border-4 border-red-100 border-t-red-600" />
-          <p className="text-sm font-medium text-gray-600">Memuat customer change request...</p>
+          <p className="text-sm font-medium text-gray-600">
+            Memuat customer change request...
+          </p>
         </div>
       </div>
     );
@@ -574,17 +585,25 @@ export function CustomerChangeRequestList() {
           <button
             type="button"
             onClick={() =>
-              setSortDirection((current) => (current === "asc" ? "desc" : "asc"))
+              setSortDirection((current) =>
+                current === "asc" ? "desc" : "asc",
+              )
             }
             title={sortDirection === "asc" ? "Urut naik" : "Urut turun"}
             className="rounded-lg bg-gray-100 p-3 text-gray-700 transition hover:bg-gray-200"
           >
-            {sortDirection === "asc" ? <FaSortAmountUp /> : <FaSortAmountDown />}
+            {sortDirection === "asc" ? (
+              <FaSortAmountUp />
+            ) : (
+              <FaSortAmountDown />
+            )}
           </button>
           <div className="relative">
             <select
               value={sortField}
-              onChange={(event) => setSortField(event.target.value as SortField)}
+              onChange={(event) =>
+                setSortField(event.target.value as SortField)
+              }
               aria-label="Urutkan berdasarkan"
               className="appearance-none rounded-lg border-0 bg-gray-100 py-2.5 pl-4 pr-10 text-sm font-medium text-gray-700 transition hover:bg-gray-200 focus:ring-2 focus:ring-red-500"
             >
@@ -614,7 +633,9 @@ export function CustomerChangeRequestList() {
         <div className="rounded-2xl border-2 border-dashed border-gray-200 bg-white py-16 text-center">
           <FaBuilding className="mx-auto mb-3 text-4xl text-gray-300" />
           <p className="font-semibold text-gray-700">Data tidak ditemukan</p>
-          <p className="mt-1 text-sm text-gray-500">Coba ubah kata pencarian atau filter.</p>
+          <p className="mt-1 text-sm text-gray-500">
+            Coba ubah kata pencarian atau filter.
+          </p>
         </div>
       ) : (
         <>
@@ -655,7 +676,9 @@ export function CustomerChangeRequestList() {
                         </p>
                       </div>
                     </div>
-                    <span className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold ${statusTone(item.status)}`}>
+                    <span
+                      className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold ${statusTone(item.status)}`}
+                    >
                       {item.status}
                     </span>
                   </div>
@@ -667,10 +690,12 @@ export function CustomerChangeRequestList() {
                   </p>
                   <div className="space-y-2 border-t border-gray-100 pt-3 text-xs text-gray-500">
                     <p className="flex items-center gap-2">
-                      <FaCalendarAlt className="text-gray-400" /> Dibuat: {formatDate(item.createdAt)} · {item.createdBy}
+                      <FaCalendarAlt className="text-gray-400" /> Dibuat:{" "}
+                      {formatDate(item.createdAt)} · {item.createdBy}
                     </p>
                     <p className="flex items-center gap-2">
-                      <FaCalendarAlt className="text-gray-400" /> Diupdate: {formatDate(item.updatedAt)} · {item.updatedBy}
+                      <FaCalendarAlt className="text-gray-400" /> Diupdate:{" "}
+                      {formatDate(item.updatedAt)} · {item.updatedBy}
                     </p>
                   </div>
                   <button
@@ -688,19 +713,27 @@ export function CustomerChangeRequestList() {
             ))}
           </div>
 
-          {hasMore && <div ref={loadMoreRef} className="h-8" aria-hidden="true" />}
+          {hasMore && (
+            <div ref={loadMoreRef} className="h-8" aria-hidden="true" />
+          )}
           {loadingMore && (
             <div className="flex items-center justify-center py-8">
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-red-100 border-t-red-600" />
             </div>
           )}
           {!hasMore && items.length > 0 && (
-            <p className="py-8 text-center text-sm text-gray-400">Semua data sudah ditampilkan.</p>
+            <p className="py-8 text-center text-sm text-gray-400">
+              Semua data sudah ditampilkan.
+            </p>
           )}
         </>
       )}
 
-      <CustomerChangeRequestDetailModal item={selectedItem} onClose={closeDetail} />
+      <CustomerChangeRequestDetailModal
+        item={selectedItem}
+        onClose={closeDetail}
+        onActionExecuted={() => loadData(1, true)}
+      />
     </div>
   );
 }

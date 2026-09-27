@@ -2,12 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import {
-  FaExclamationTriangle,
-  FaReply,
-  FaSave,
-  FaTimes,
-} from "react-icons/fa";
+import { FaReply, FaSave, FaTimes } from "react-icons/fa";
 import { WorkflowActionItem } from "@/services/workflowActionService";
 
 type Props = {
@@ -39,7 +34,7 @@ export default function WorkflowRejectNoteModal({
   return (
     <AnimatePresence>
       <div
-        className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
+        className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4"
         onClick={(event) => {
           if (event.target === event.currentTarget && !loading) {
             onClose();

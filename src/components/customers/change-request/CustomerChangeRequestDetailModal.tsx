@@ -5,12 +5,24 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   FaArrowRight,
   FaCalendarAlt,
+  FaCheckCircle,
   FaExclamationCircle,
   FaHistory,
   FaTimes,
 } from "react-icons/fa";
-import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
+import {
+  API_CONFIG,
+  apiFetch,
+  getQueryUrl,
+  getResourceUrl,
+} from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
+import WorkflowActionBar from "@/components/workflow-actions/WorkflowActionBar";
+import WorkflowRejectNoteModal from "@/components/workflow-actions/WorkflowRejectNoteModal";
+import {
+  executeWorkflowAction,
+  type WorkflowActionItem,
+} from "@/services/workflowActionService";
 import type {
   CustomerChangeRequest,
   CustomerChangeRequestDetail,
@@ -26,9 +38,38 @@ interface DetailApiRow {
   new_value?: unknown;
 }
 
+interface ParentApiRow {
+  id: number;
+  name?: string | null;
+  reason?: string | null;
+  rejected_note?: string | null;
+  status?: string | null;
+  docstatus?: number | null;
+  applied_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  "created_by.full_name"?: string | null;
+  "updated_by.full_name"?: string | null;
+  created_by?: { full_name?: string | null } | number | null;
+  updated_by?: { full_name?: string | null } | number | null;
+}
+
 interface Props {
   item: CustomerChangeRequest | null;
   onClose: () => void;
+  onActionExecuted?: () => Promise<void> | void;
+}
+
+function resolveUserName(
+  explicitName: string | null | undefined,
+  value: { full_name?: string | null } | number | null | undefined,
+  fallback: string,
+): string {
+  if (explicitName?.trim()) return explicitName.trim();
+  if (value && typeof value === "object" && value.full_name?.trim()) {
+    return value.full_name.trim();
+  }
+  return fallback;
 }
 
 function formatDate(value: string | null): string {
@@ -72,16 +113,34 @@ function statusTone(status: string): string {
   return "border-sky-200 bg-sky-100 text-sky-700";
 }
 
-export function CustomerChangeRequestDetailModal({ item, onClose }: Props) {
+export function CustomerChangeRequestDetailModal({
+  item,
+  onClose,
+  onActionExecuted,
+}: Props) {
   const { token } = useAuth();
   const [details, setDetails] = useState<CustomerChangeRequestDetail[]>([]);
+  const [activeItem, setActiveItem] = useState<CustomerChangeRequest | null>(
+    item,
+  );
+  const [actions, setActions] = useState<WorkflowActionItem[]>([]);
+  const [executingActionId, setExecutingActionId] = useState<number | null>(
+    null,
+  );
+  const [pendingRejectAction, setPendingRejectAction] =
+    useState<WorkflowActionItem | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionResult, setActionResult] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!item || !token) return;
-    const itemId = item.id;
+    const baseItem = item;
+    const itemId = baseItem.id;
     let cancelled = false;
 
     async function loadDetails() {
@@ -89,23 +148,79 @@ export function CustomerChangeRequestDetailModal({ item, onClose }: Props) {
       setError(null);
       setDetails([]);
       try {
-        const response = await apiFetch(
-          getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_CHANGE_REQUEST_DETAIL, {
-            fields: ["*"],
-            filters: [["parent_id", "=", itemId]],
-            order_by: [["idx", "asc"]],
-          }),
-          { method: "GET", cache: "no-store" },
-          token,
-        );
-        if (!response.ok) {
-          throw new Error(`Gagal memuat detail perubahan (${response.status})`);
+        const [parentResponse, detailResponse] = await Promise.all([
+          apiFetch(
+            getQueryUrl(
+              `${API_CONFIG.ENDPOINTS.CUSTOMER_CHANGE_REQUEST}/${itemId}`,
+              {
+                fields: [
+                  "*",
+                  "created_by.full_name",
+                  "updated_by.full_name",
+                ],
+              },
+            ),
+            { method: "GET", cache: "no-store" },
+            token,
+          ),
+          apiFetch(
+            getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_CHANGE_REQUEST_DETAIL, {
+              fields: ["*"],
+              filters: [["parent_id", "=", itemId]],
+              order_by: [["idx", "asc"]],
+            }),
+            { method: "GET", cache: "no-store" },
+            token,
+          ),
+        ]);
+        if (!parentResponse.ok) {
+          throw new Error(
+            `Gagal memuat customer change request (${parentResponse.status})`,
+          );
         }
-        const json = await response.json();
-        const rows = Array.isArray(json?.data)
-          ? (json.data as DetailApiRow[])
+        if (!detailResponse.ok) {
+          throw new Error(
+            `Gagal memuat detail perubahan (${detailResponse.status})`,
+          );
+        }
+        const [parentJson, detailJson] = await Promise.all([
+          parentResponse.json(),
+          detailResponse.json(),
+        ]);
+        const parent = parentJson?.data as ParentApiRow | null | undefined;
+        const rows = Array.isArray(detailJson?.data)
+          ? (detailJson.data as DetailApiRow[])
           : [];
         if (!cancelled) {
+          setActiveItem(
+            parent
+              ? {
+                  ...baseItem,
+                  name: parent.name || baseItem.name,
+                  reason: parent.reason ?? baseItem.reason,
+                  rejectedNote:
+                    parent.rejected_note ?? baseItem.rejectedNote,
+                  status: parent.status || baseItem.status,
+                  docstatus: Number(parent.docstatus ?? baseItem.docstatus),
+                  appliedAt: parent.applied_at ?? baseItem.appliedAt,
+                  createdAt: parent.created_at ?? baseItem.createdAt,
+                  updatedAt: parent.updated_at ?? baseItem.updatedAt,
+                  createdBy: resolveUserName(
+                    parent["created_by.full_name"],
+                    parent.created_by,
+                    baseItem.createdBy,
+                  ),
+                  updatedBy: resolveUserName(
+                    parent["updated_by.full_name"],
+                    parent.updated_by,
+                    baseItem.updatedBy,
+                  ),
+                }
+              : baseItem,
+          );
+          setActions(
+            Array.isArray(parentJson?.action) ? parentJson.action : [],
+          );
           setDetails(
             rows.map((row) => ({
               id: Number(row.id),
@@ -121,6 +236,7 @@ export function CustomerChangeRequestDetailModal({ item, onClose }: Props) {
       } catch (loadError) {
         if (!cancelled) {
           setDetails([]);
+          setActions([]);
           setError(
             loadError instanceof Error
               ? loadError.message
@@ -139,6 +255,13 @@ export function CustomerChangeRequestDetailModal({ item, onClose }: Props) {
   }, [item, reloadKey, token]);
 
   useEffect(() => {
+    setActiveItem(item);
+    setActions([]);
+    setPendingRejectAction(null);
+    setActionResult(null);
+  }, [item]);
+
+  useEffect(() => {
     if (!item) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -152,9 +275,96 @@ export function CustomerChangeRequestDetailModal({ item, onClose }: Props) {
     };
   }, [item, onClose]);
 
+  async function executeAction(
+    workflowAction: WorkflowActionItem,
+    payload?: Record<string, unknown>,
+  ) {
+    if (!item || !token) return;
+
+    const isRejectAction = workflowAction.action
+      .trim()
+      .toLowerCase()
+      .includes("reject");
+
+    setExecutingActionId(workflowAction.id);
+    setActionResult(null);
+
+    try {
+      if (
+        isRejectAction &&
+        typeof payload?.rejected_note === "string" &&
+        payload.rejected_note.trim()
+      ) {
+        const updateResponse = await apiFetch(
+          getResourceUrl(
+            API_CONFIG.ENDPOINTS.CUSTOMER_CHANGE_REQUEST,
+            item.id,
+          ),
+          {
+            method: "PUT",
+            cache: "no-store",
+            body: JSON.stringify({
+              rejected_note: payload.rejected_note.trim(),
+            }),
+          },
+          token,
+        );
+
+        if (!updateResponse.ok) {
+          const updateBody = await updateResponse.json().catch(() => null);
+          const message =
+            updateBody &&
+            typeof updateBody === "object" &&
+            "message" in updateBody &&
+            typeof updateBody.message === "string"
+              ? updateBody.message
+              : `Gagal menyimpan rejected note (${updateResponse.status})`;
+          throw new Error(message);
+        }
+      }
+
+      await executeWorkflowAction({
+        token,
+        resourceName: "customer_change_request",
+        documentId: item.id,
+        actionId: workflowAction.id,
+        payload,
+      });
+
+      setPendingRejectAction(null);
+      setActionResult({
+        type: "success",
+        message: `${workflowAction.action} berhasil dijalankan.`,
+      });
+      setReloadKey((value) => value + 1);
+      await onActionExecuted?.();
+    } catch (actionError) {
+      setActionResult({
+        type: "error",
+        message:
+          actionError instanceof Error
+            ? actionError.message
+            : "Gagal menjalankan action workflow.",
+      });
+    } finally {
+      setExecutingActionId(null);
+    }
+  }
+
+  function handleActionClick(workflowAction: WorkflowActionItem) {
+    if (workflowAction.action.trim().toLowerCase().includes("reject")) {
+      setPendingRejectAction(workflowAction);
+      return;
+    }
+    void executeAction(workflowAction);
+  }
+
+  const displayedItem = activeItem || item;
+
   return (
-    <AnimatePresence>
-      {item && (
+    <>
+      <AnimatePresence>
+        {item && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -176,11 +386,11 @@ export function CustomerChangeRequestDetailModal({ item, onClose }: Props) {
                     Customer Change Request
                   </p>
                   <h2 className="truncate text-xl font-bold sm:text-2xl">
-                    {item.entityDisplayName}
+                    {displayedItem?.entityDisplayName}
                   </h2>
                   <p className="mt-1 flex items-center gap-2 text-sm text-red-100">
                     <span>
-                      {item.entityType
+                      {displayedItem?.entityType
                         .split("_")
                         .filter(Boolean)
                         .map(
@@ -193,7 +403,7 @@ export function CustomerChangeRequestDetailModal({ item, onClose }: Props) {
                       aria-hidden="true"
                       className="h-1 w-1 rounded-full bg-red-100"
                     />
-                    <span>{item.name}</span>
+                    <span>{displayedItem?.name}</span>
                   </p>
                 </div>
                 <button
@@ -212,29 +422,33 @@ export function CustomerChangeRequestDetailModal({ item, onClose }: Props) {
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                   <p className="text-xs text-gray-500">Status</p>
                   <span
-                    className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusTone(item.status)}`}
+                    className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusTone(displayedItem?.status || "")}`}
                   >
-                    {item.status}
+                    {displayedItem?.status}
                   </span>
                 </div>
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                   <p className="text-xs text-gray-500">Dibuat</p>
                   <p className="mt-2 text-sm font-semibold text-gray-800">
-                    {formatDate(item.createdAt)}
+                    {formatDate(displayedItem?.createdAt || null)}
                   </p>
-                  <p className="mt-1 text-xs text-gray-500">oleh {item.createdBy}</p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    oleh {displayedItem?.createdBy}
+                  </p>
                 </div>
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                   <p className="text-xs text-gray-500">Diperbarui</p>
                   <p className="mt-2 text-sm font-semibold text-gray-800">
-                    {formatDate(item.updatedAt)}
+                    {formatDate(displayedItem?.updatedAt || null)}
                   </p>
-                  <p className="mt-1 text-xs text-gray-500">oleh {item.updatedBy}</p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    oleh {displayedItem?.updatedBy}
+                  </p>
                 </div>
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                   <p className="text-xs text-gray-500">Diterapkan</p>
                   <p className="mt-2 text-sm font-semibold text-gray-800">
-                    {formatDate(item.appliedAt)}
+                    {formatDate(displayedItem?.appliedAt || null)}
                   </p>
                 </div>
               </div>
@@ -245,7 +459,7 @@ export function CustomerChangeRequestDetailModal({ item, onClose }: Props) {
                     Alasan Perubahan
                   </p>
                   <p className="whitespace-pre-wrap text-sm text-gray-800">
-                    {item.reason || "-"}
+                    {displayedItem?.reason || "-"}
                   </p>
                 </div>
                 <div className="rounded-xl border border-gray-200 p-4">
@@ -253,7 +467,7 @@ export function CustomerChangeRequestDetailModal({ item, onClose }: Props) {
                     Catatan Penolakan
                   </p>
                   <p className="whitespace-pre-wrap text-sm text-gray-800">
-                    {item.rejectedNote || "-"}
+                    {displayedItem?.rejectedNote || "-"}
                   </p>
                 </div>
               </div>
@@ -337,13 +551,70 @@ export function CustomerChangeRequestDetailModal({ item, onClose }: Props) {
                 </div>
               )}
 
+              {actionResult ? (
+                <div
+                  className={`mt-6 rounded-xl border px-4 py-3 text-sm ${
+                    actionResult.type === "success"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-red-200 bg-red-50 text-red-700"
+                  }`}
+                >
+                  {actionResult.message}
+                </div>
+              ) : null}
+
+              {actions.length > 0 ? (
+                <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+                  <div className="mb-4 flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-2">
+                      <FaCheckCircle className="text-emerald-600" />
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-900">
+                          Available Actions
+                        </h3>
+                        <p className="mt-1 text-sm text-slate-500">
+                          Action ini berasal dari workflow backend.
+                        </p>
+                      </div>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                      {actions.length} action tersedia
+                    </span>
+                  </div>
+                  <WorkflowActionBar
+                    actions={actions}
+                    loadingActionId={executingActionId}
+                    disabled={loading}
+                    onActionClick={handleActionClick}
+                  />
+                </section>
+              ) : null}
+
               <div className="mt-6 flex items-center gap-2 border-t border-gray-100 pt-4 text-xs text-gray-500">
-                <FaCalendarAlt /> Docstatus: {item.docstatus}
+                <FaCalendarAlt /> Docstatus: {displayedItem?.docstatus}
               </div>
             </div>
           </motion.div>
         </motion.div>
-      )}
-    </AnimatePresence>
+        )}
+      </AnimatePresence>
+
+      <WorkflowRejectNoteModal
+        open={pendingRejectAction !== null}
+        action={pendingRejectAction}
+        loading={
+          pendingRejectAction !== null &&
+          executingActionId === pendingRejectAction.id
+        }
+        onClose={() => {
+          if (executingActionId !== null) return;
+          setPendingRejectAction(null);
+        }}
+        onSubmit={async (note) => {
+          if (!pendingRejectAction) return;
+          await executeAction(pendingRejectAction, { rejected_note: note });
+        }}
+      />
+    </>
   );
 }

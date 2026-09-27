@@ -7,32 +7,16 @@ import type { CustomerRegistration } from "@/types/customerRegistration";
 import { REJECTION_REASONS } from "@/types/customerRegistration";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_CONFIG, apiFetch, getQueryUrl } from "@/config/api";
-
-interface CustomerRegisterAddressApiResponse {
-  id: number;
-  parent_id: number;
-  label?: string | null;
-  address?: string | null;
-  city?: string | null;
-  province?: string | null;
-  district?: string | null;
-  postal_code?: string | null;
-  pic_name?: string | null;
-  pic_phone?: string | null;
-  is_default?: number | boolean | null;
-}
+import {
+  executeWorkflowAction,
+  type WorkflowActionItem,
+} from "@/services/workflowActionService";
 
 interface RejectRegistrationModalProps {
   isOpen: boolean;
   onClose: () => void;
   registration: CustomerRegistration | null;
   onSuccess: (message: string) => void; // <-- diubah: kirim message ke parent
-}
-
-function normalizePhone(value?: string): string | undefined {
-  if (!value) return undefined;
-  const digits = value.replace(/\D/g, "");
-  return digits || undefined;
 }
 
 export function RejectRegistrationModal({
@@ -75,120 +59,71 @@ export function RejectRegistrationModal({
         REJECTION_REASONS.find((r) => r.code === selectedReason)?.label ||
         selectedReason;
       const notesText = notes.trim();
-
-      const shippingSpec = {
-        fields: ["*"],
-        filters: [
-          ["parent_id", "=", Number(registration.id)],
-          ["parent_type", "=", "customer_register"],
-        ],
-      };
-      const shippingRes = await apiFetch(
-        getQueryUrl(
-          API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER_ADDRESS,
-          shippingSpec,
-        ),
-        { method: "GET", cache: "no-store" },
-        token,
-      );
-      const shippingJson = shippingRes.ok
-        ? await shippingRes.json().catch(() => null)
-        : null;
-      const shippingRows: CustomerRegisterAddressApiResponse[] = Array.isArray(
-        shippingJson?.data,
-      )
-        ? shippingJson.data
-        : [];
-
-      const effectiveShippingAddresses: CustomerRegisterAddressApiResponse[] =
-        registration.same_as_company_address
-          ? shippingRows.length > 0
-            ? shippingRows
-            : [
-                {
-                  id: -1,
-                  parent_id: Number(registration.id),
-                  label: "Alamat Perusahaan",
-                  address: registration.address.full_address,
-                  city: registration.address.city_name,
-                  province: registration.address.province_name,
-                  district: registration.address.district_name,
-                  postal_code: registration.address.postal_code,
-                  pic_name:
-                    registration.branch_owner?.full_name ||
-                    registration.user.full_name,
-                  pic_phone:
-                    registration.branch_owner?.phone || registration.user.phone,
-                  is_default: 1,
-                },
-              ]
-          : shippingRows;
-
-      const shippingPayload = effectiveShippingAddresses.map((addr) => ({
-        label: addr.label || "Warehouse",
-        pic_name: addr.pic_name || undefined,
-        pic_phone: normalizePhone(addr.pic_phone || undefined),
-        address: addr.address || "",
-        city: addr.city || "",
-        district: addr.district || "",
-        postal_code: addr.postal_code || "",
-        province: addr.province || "",
-        is_default: addr.is_default ? 1 : undefined,
-      }));
-
-      const url = getQueryUrl(
+      const documentId = Number(registration.id);
+      const detailUrl = getQueryUrl(
         `${API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER}/${registration.id}`,
         { fields: ["*"] },
       );
-      const rawApplicantOwnerId = registration.ekaplus_user?.id;
-      const applicantOwnerId =
-        typeof rawApplicantOwnerId === "number"
-          ? rawApplicantOwnerId
-          : Number.parseInt(String(rawApplicantOwnerId || ""), 10);
-      const fallbackOwnerId =
-        Number(registration.created_by_id || 0) ||
-        Number(registration.user.user_id || 0);
-      const payload = {
-        owner:
-          Number.isFinite(applicantOwnerId) && applicantOwnerId > 0
-            ? applicantOwnerId
-            : fallbackOwnerId > 0
-              ? fallbackOwnerId
-              : undefined,
-        status: "Rejected",
-        docstatus: 0,
-        nbid: null,
-        gpid: null,
-        gcid: null,
-        bcid: null,
+      const detailResponse = await apiFetch(
+        detailUrl,
+        { method: "GET", cache: "no-store" },
+        token,
+      );
+
+      if (!detailResponse.ok) {
+        throw new Error(
+          `Gagal mengambil action workflow (${detailResponse.status})`,
+        );
+      }
+
+      const detailJson = await detailResponse.json();
+      const actions: WorkflowActionItem[] = Array.isArray(detailJson?.action)
+        ? detailJson.action
+        : [];
+      const rejectAction = actions.find((action) =>
+        action.action.trim().toLowerCase().includes("reject"),
+      );
+
+      if (!rejectAction) {
+        throw new Error(
+          "Action Reject tidak tersedia untuk status atau role pengguna saat ini.",
+        );
+      }
+
+      const rejectPayload = {
         reject_reason: selectedLabel,
-        reject_notes: notesText || null,
-        rejection_reason: selectedLabel,
-        rejection_notes: notesText || null,
-        customer_shipping_address: shippingPayload,
+        reject_notes: notesText || selectedLabel,
       };
 
-      const res = await apiFetch(
-        url,
+      const updateResponse = await apiFetch(
+        detailUrl,
         {
           method: "PUT",
           cache: "no-store",
-          body: JSON.stringify(payload),
+          body: JSON.stringify(rejectPayload),
         },
         token,
       );
 
-      if (!res.ok) {
-        const json = await res.json().catch(() => null);
+      if (!updateResponse.ok) {
+        const json = await updateResponse.json().catch(() => null);
         const message =
           json &&
           typeof json === "object" &&
           "message" in json &&
           typeof json.message === "string"
             ? json.message
-            : `Gagal reject registrasi (${res.status})`;
+            : `Gagal menyimpan alasan reject (${updateResponse.status})`;
         throw new Error(message);
       }
+
+      await executeWorkflowAction({
+        token,
+        resourceName: "customer_register",
+        documentId,
+        actionId: rejectAction.id,
+        payload: rejectPayload,
+      });
 
       window.dispatchEvent(new Event("ekatalog:customer_registrations_update"));
 

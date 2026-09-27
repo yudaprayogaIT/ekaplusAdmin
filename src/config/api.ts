@@ -105,7 +105,7 @@ export function getResourceUrl(endpoint: string, id?: number | string): string {
  */
 export function getQueryUrl(
   endpoint: string,
-  spec?: Record<string, unknown>
+  spec?: Record<string, unknown>,
 ): string {
   const baseUrl = `${API_CONFIG.BASE_URL}${endpoint}`;
   if (spec) {
@@ -192,7 +192,7 @@ export function unregisterSessionExpiredCallback() {
 export async function apiFetch(
   url: string,
   options: RequestInit = {},
-  token?: string | null
+  token?: string | null,
 ): Promise<Response> {
   // Add authorization header if token is provided
   const headers = new Headers(options.headers);
@@ -211,7 +211,8 @@ export async function apiFetch(
   });
 
   // Handle 401 Unauthorized - Session expired
-  const hasAuthHeader = headers.has("Authorization") || headers.has("authorization");
+  const hasAuthHeader =
+    headers.has("Authorization") || headers.has("authorization");
   if (response.status === 401 && sessionExpiredCallback && hasAuthHeader) {
     sessionExpiredCallback();
   }
