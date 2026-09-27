@@ -31,6 +31,8 @@ import {
   FaFolder,
   FaHome,
   FaSignOutAlt,
+  FaCreditCard,
+  FaEdit,
 } from "react-icons/fa";
 import { BiSolidPurchaseTag, BiSolidUserDetail } from "react-icons/bi";
 import { AiFillProduct } from "react-icons/ai";
@@ -261,7 +263,7 @@ const CUSTOMER_SUBMENU: MenuItem[] = [
   {
     label: "Customer Change Request",
     href: "/customers/change-request",
-    icon: <FaDatabase className="w-4 h-4" />,
+    icon: <FaEdit className="w-4 h-4" />,
     category: "Customer",
     requireAuth: true,
   },
@@ -282,7 +284,7 @@ const CUSTOMER_SUBMENU: MenuItem[] = [
   {
     label: "Credit Change Request",
     href: "/customers/credit-change-request",
-    icon: <FaDatabase className="w-4 h-4" />,
+    icon: <FaCreditCard className="w-4 h-4" />,
     category: "Customer",
     requireAuth: true,
   },
