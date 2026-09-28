@@ -95,6 +95,289 @@ function displayValue(value: unknown): string {
   return String(value);
 }
 
+type StructuredRecord = Record<string, unknown>;
+
+const ADDRESS_FIELDS = [
+  "type",
+  "label",
+  "address",
+  "province",
+  "city",
+  "district",
+  "village",
+  "pic_name",
+  "pic_phone",
+  "same_as_company_address",
+] as const;
+
+const CONTACT_FIELDS = [
+  "full_name",
+  "display_name",
+  "channel",
+  "handle",
+  "position_name",
+] as const;
+
+const FIELD_LABELS: Record<string, string> = {
+  type: "Tipe Alamat",
+  label: "Label Alamat",
+  address: "Alamat Lengkap",
+  province: "Provinsi",
+  city: "Kota / Kabupaten",
+  district: "Kecamatan",
+  village: "Kelurahan",
+  pic_name: "Nama PIC",
+  pic_phone: "Telepon PIC",
+  same_as_company_address: "Sama dengan Alamat Perusahaan",
+  full_name: "Nama Lengkap",
+  display_name: "Display Name",
+  channel: "Tipe Kontak",
+  handle: "Nomor / Email / Handle",
+  position_name: "Position",
+};
+
+function parseStructuredValue(value: unknown): unknown {
+  let parsed = value;
+
+  // JSON columns can arrive as arrays, JSON strings, or double-encoded strings.
+  for (let attempt = 0; attempt < 2 && typeof parsed === "string"; attempt += 1) {
+    const candidate = parsed.trim();
+    if (!candidate.startsWith("[") && !candidate.startsWith("{")) break;
+    try {
+      parsed = JSON.parse(candidate) as unknown;
+    } catch {
+      break;
+    }
+  }
+
+  return parsed;
+}
+
+function toRecordArray(value: unknown): StructuredRecord[] | null {
+  const parsed = parseStructuredValue(value);
+  const items = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
+  if (
+    !items.every(
+      (entry) => entry && typeof entry === "object" && !Array.isArray(entry),
+    )
+  ) {
+    return null;
+  }
+  return items as StructuredRecord[];
+}
+
+function comparableValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+
+function recordKey(
+  record: StructuredRecord,
+  index: number,
+  type: "address" | "contact",
+) {
+  const preferredKeys =
+    type === "contact" ? ["contact_id", "idx_row", "id"] : ["idx_row", "id"];
+  for (const key of preferredKeys) {
+    const value = record[key];
+    if (value !== null && value !== undefined && value !== "") {
+      return `${key}:${String(value)}`;
+    }
+  }
+  return `index:${index}`;
+}
+
+interface RecordPair {
+  key: string;
+  oldRecord?: StructuredRecord;
+  newRecord?: StructuredRecord;
+}
+
+function pairRecords(
+  oldRecords: StructuredRecord[],
+  newRecords: StructuredRecord[],
+  type: "address" | "contact",
+): RecordPair[] {
+  const pairs = new Map<string, RecordPair>();
+
+  oldRecords.forEach((record, index) => {
+    const key = recordKey(record, index, type);
+    pairs.set(key, { key, oldRecord: record });
+  });
+  newRecords.forEach((record, index) => {
+    const key = recordKey(record, index, type);
+    const existing = pairs.get(key);
+    pairs.set(
+      key,
+      existing ? { ...existing, newRecord: record } : { key, newRecord: record },
+    );
+  });
+
+  return Array.from(pairs.values());
+}
+
+function formattedFieldValue(field: string, value: unknown): string {
+  if (value === null || value === undefined || value === "") return "-";
+  if (field === "same_as_company_address") {
+    return value === true || value === 1 || value === "1" ? "Ya" : "Tidak";
+  }
+  return displayValue(value);
+}
+
+function recordTitle(
+  type: "address" | "contact",
+  record: StructuredRecord | undefined,
+  fallback: StructuredRecord | undefined,
+  index: number,
+): string {
+  const source = record || fallback || {};
+  const name =
+    type === "address"
+      ? source.label || source.type
+      : source.full_name || source.display_name;
+  const prefix = type === "address" ? "Alamat" : "Kontak";
+  return `${prefix} ${index + 1}${name ? ` · ${String(name)}` : ""}`;
+}
+
+function StructuredValueCard({
+  type,
+  record,
+  fallback,
+  fields,
+  index,
+  missingLabel,
+}: {
+  type: "address" | "contact";
+  record?: StructuredRecord;
+  fallback?: StructuredRecord;
+  fields: readonly string[];
+  index: number;
+  missingLabel?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-white/80 bg-white/75 p-3 shadow-sm">
+      <p className="mb-2 text-xs font-bold text-slate-700">
+        {recordTitle(type, record, fallback, index)}
+        {missingLabel ? ` (${missingLabel})` : ""}
+      </p>
+      <dl className="space-y-1.5">
+        {fields.map((field) => (
+          <div
+            key={field}
+            className="grid grid-cols-[minmax(0,42%)_minmax(0,58%)] gap-2 text-xs"
+          >
+            <dt className="text-slate-500">{FIELD_LABELS[field] || field}</dt>
+            <dd className="break-words font-medium text-slate-700">
+              {formattedFieldValue(field, record?.[field])}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+function StructuredComparison({
+  type,
+  oldValue,
+  newValue,
+}: {
+  type: "address" | "contact";
+  oldValue: unknown;
+  newValue: unknown;
+}) {
+  const oldRecords = toRecordArray(oldValue) || [];
+  const newRecords = toRecordArray(newValue) || [];
+  const allPairs = pairRecords(oldRecords, newRecords, type);
+  const pairs =
+    type === "address"
+      ? allPairs.filter((pair) =>
+          ADDRESS_FIELDS.some(
+            (field) =>
+              comparableValue(pair.oldRecord?.[field]) !==
+              comparableValue(pair.newRecord?.[field]),
+          ),
+        )
+      : allPairs;
+
+  const fieldsForPair = (pair: RecordPair) =>
+    type === "address"
+      ? ADDRESS_FIELDS.filter(
+          (field) =>
+            comparableValue(pair.oldRecord?.[field]) !==
+            comparableValue(pair.newRecord?.[field]),
+        )
+      : CONTACT_FIELDS;
+
+  return (
+    <div className="grid items-start gap-2 md:grid-cols-[1fr_auto_1fr]">
+      <div className="min-w-0 rounded-lg border border-rose-100 bg-rose-50 p-3">
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-rose-500">
+          {type === "address"
+            ? `${oldRecords.length} alamat`
+            : `${oldRecords.length} kontak`}
+        </p>
+        <div className="space-y-2">
+          {pairs.map((pair, index) => (
+            <StructuredValueCard
+              key={pair.key}
+              type={type}
+              record={pair.oldRecord}
+              fallback={pair.newRecord}
+              fields={fieldsForPair(pair)}
+              index={index}
+              missingLabel={!pair.oldRecord ? "ditambahkan" : undefined}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center justify-center px-2 py-1 text-gray-400">
+        <FaArrowRight className="rotate-90 md:rotate-0" />
+      </div>
+      <div className="min-w-0 rounded-lg border border-emerald-100 bg-emerald-50 p-3">
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-emerald-600">
+          {type === "address"
+            ? `${newRecords.length} alamat`
+            : `${newRecords.length} kontak`}
+        </p>
+        <div className="space-y-2">
+          {pairs.map((pair, index) => (
+            <StructuredValueCard
+              key={pair.key}
+              type={type}
+              record={pair.newRecord}
+              fallback={pair.oldRecord}
+              fields={fieldsForPair(pair)}
+              index={index}
+              missingLabel={!pair.newRecord ? "dihapus" : undefined}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function structuredFieldType(fieldName: string): "address" | "contact" | null {
+  const normalized = fieldName.trim().toLowerCase();
+  if (normalized === "customer_address") return "address";
+  if (normalized === "customer_contact") return "contact";
+  return null;
+}
+
+function isRejectWorkflowAction(action: WorkflowActionItem): boolean {
+  const mode = action.mode?.trim().toLowerCase();
+  const label = action.action.trim().toLowerCase();
+  return mode === "reject" || label.includes("reject") || label.includes("tolak");
+}
+
 function statusTone(status: string): string {
   const normalized = status.toLowerCase();
   if (normalized.includes("reject") || normalized.includes("cancel")) {
@@ -281,20 +564,21 @@ export function CustomerChangeRequestDetailModal({
   ) {
     if (!item || !token) return;
 
-    const isRejectAction = workflowAction.action
-      .trim()
-      .toLowerCase()
-      .includes("reject");
+    const isRejectAction = isRejectWorkflowAction(workflowAction);
+    const rejectedNote =
+      typeof payload?.rejected_note === "string"
+        ? payload.rejected_note.trim()
+        : "";
 
     setExecutingActionId(workflowAction.id);
     setActionResult(null);
 
     try {
-      if (
-        isRejectAction &&
-        typeof payload?.rejected_note === "string" &&
-        payload.rejected_note.trim()
-      ) {
+      if (isRejectAction && !rejectedNote) {
+        throw new Error("Rejected note wajib diisi sebelum workflow di-reject.");
+      }
+
+      if (isRejectAction) {
         const updateResponse = await apiFetch(
           getResourceUrl(
             API_CONFIG.ENDPOINTS.CUSTOMER_CHANGE_REQUEST,
@@ -304,7 +588,7 @@ export function CustomerChangeRequestDetailModal({
             method: "PUT",
             cache: "no-store",
             body: JSON.stringify({
-              rejected_note: payload.rejected_note.trim(),
+              rejected_note: rejectedNote,
             }),
           },
           token,
@@ -328,7 +612,9 @@ export function CustomerChangeRequestDetailModal({
         resourceName: "customer_change_request",
         documentId: item.id,
         actionId: workflowAction.id,
-        payload,
+        payload: isRejectAction
+          ? { ...payload, rejected_note: rejectedNote }
+          : payload,
       });
 
       setPendingRejectAction(null);
@@ -352,7 +638,7 @@ export function CustomerChangeRequestDetailModal({
   }
 
   function handleActionClick(workflowAction: WorkflowActionItem) {
-    if (workflowAction.action.trim().toLowerCase().includes("reject")) {
+    if (isRejectWorkflowAction(workflowAction)) {
       setPendingRejectAction(workflowAction);
       return;
     }
@@ -525,6 +811,15 @@ export function CustomerChangeRequestDetailModal({
                           </p>
                         </div>
                       </div>
+                      {structuredFieldType(detail.fieldName) &&
+                      toRecordArray(detail.oldValue) !== null &&
+                      toRecordArray(detail.newValue) !== null ? (
+                        <StructuredComparison
+                          type={structuredFieldType(detail.fieldName)!}
+                          oldValue={detail.oldValue}
+                          newValue={detail.newValue}
+                        />
+                      ) : (
                       <div className="grid items-stretch gap-2 md:grid-cols-[1fr_auto_1fr]">
                         <div className="min-w-0 rounded-lg border border-rose-100 bg-rose-50 p-3">
                           <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-rose-500">
@@ -546,6 +841,7 @@ export function CustomerChangeRequestDetailModal({
                           </pre>
                         </div>
                       </div>
+                      )}
                     </div>
                   ))}
                 </div>
