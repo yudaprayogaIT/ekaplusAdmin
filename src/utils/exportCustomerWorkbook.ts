@@ -122,6 +122,63 @@ function hasValue(value: unknown): boolean {
   return value !== null && value !== undefined && value !== "";
 }
 
+const INDONESIAN_MONTHS = [
+  "Januari",
+  "Februari",
+  "Maret",
+  "April",
+  "Mei",
+  "Juni",
+  "Juli",
+  "Agustus",
+  "September",
+  "Oktober",
+  "November",
+  "Desember",
+] as const;
+
+function formatReadableDate(value: unknown): unknown {
+  if (!hasValue(value)) return null;
+
+  let year: number | undefined;
+  let month: number | undefined;
+  let day: number | undefined;
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    year = value.getUTCFullYear();
+    month = value.getUTCMonth() + 1;
+    day = value.getUTCDate();
+  } else if (typeof value === "string") {
+    const normalized = value.trim();
+    const yearFirst = normalized.match(/^(\d{4})[-/]([01]?\d)[-/]([0-3]?\d)/);
+    const dayFirst = normalized.match(/^([0-3]?\d)[-/]([01]?\d)[-/](\d{4})/);
+
+    if (yearFirst) {
+      year = Number(yearFirst[1]);
+      month = Number(yearFirst[2]);
+      day = Number(yearFirst[3]);
+    } else if (dayFirst) {
+      day = Number(dayFirst[1]);
+      month = Number(dayFirst[2]);
+      year = Number(dayFirst[3]);
+    }
+  }
+
+  if (
+    !year ||
+    !month ||
+    !day ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31
+  ) {
+    return value;
+  }
+
+  return `${day} ${INDONESIAN_MONTHS[month - 1]} ${year}`;
+}
+
 function resolvePolicyValue(
   groupParent: DataRow | undefined,
   nationalBrand: DataRow | undefined,
@@ -154,13 +211,22 @@ function buildCustomerSummary(sourceRows: Map<string, DataRow[]>): unknown[][] {
   const groupParents = createLookup(sourceRows.get("group_parent") || []);
   const groupCustomers = createLookup(sourceRows.get("group_customer") || []);
   const branches = createLookup(sourceRows.get("branch") || []);
-  const addressesByBc = new Map<string, DataRow>();
+  const officeAddressesByBc = new Map<string, DataRow>();
+  const shippingAddressesByBc = new Map<string, DataRow>();
 
   (sourceRows.get("customer_address") || []).forEach((address) => {
-    if (Number(address.idx) !== 1) return;
+    const addressIndex = Number(address.idx);
+    const addressLookup =
+      addressIndex === 1
+        ? officeAddressesByBc
+        : addressIndex === 2
+          ? shippingAddressesByBc
+          : null;
+    if (!addressLookup) return;
+
     const parentKey = asKey(address.parent_id);
-    if (parentKey && !addressesByBc.has(parentKey)) {
-      addressesByBc.set(parentKey, address);
+    if (parentKey && !addressLookup.has(parentKey)) {
+      addressLookup.set(parentKey, address);
     }
   });
 
@@ -169,9 +235,14 @@ function buildCustomerSummary(sourceRows: Map<string, DataRow[]>): unknown[][] {
     const groupParent = findLinkedRow(groupParents, groupCustomer?.gpid);
     const nationalBrand = findLinkedRow(nationalBrands, groupParent?.nbid);
     const branch = findLinkedRow(branches, branchCustomer.branch);
-    const address =
-      addressesByBc.get(asKey(branchCustomer.id) || "") ||
-      addressesByBc.get(asKey(branchCustomer.name) || "");
+    const branchCustomerId = asKey(branchCustomer.id) || "";
+    const branchCustomerName = asKey(branchCustomer.name) || "";
+    const officeAddress =
+      officeAddressesByBc.get(branchCustomerId) ||
+      officeAddressesByBc.get(branchCustomerName);
+    const shippingAddress =
+      shippingAddressesByBc.get(branchCustomerId) ||
+      shippingAddressesByBc.get(branchCustomerName);
     const creditLimit = resolvePolicyValue(
       groupParent,
       nationalBrand,
@@ -201,13 +272,93 @@ function buildCustomerSummary(sourceRows: Map<string, DataRow[]>): unknown[][] {
       valueOrNull(creditLimit.level),
       valueOrNull(paymentTerm.value),
       valueOrNull(paymentTerm.level),
-      valueOrNull(firstValue(address?.type, address?.address_type)),
-      valueOrNull(address?.address),
-      valueOrNull(address?.province),
-      valueOrNull(address?.city),
-      valueOrNull(address?.district),
-      valueOrNull(address?.village),
+      valueOrNull(groupCustomer?.owner_full_name),
+      valueOrNull(groupCustomer?.owner_phone),
+      valueOrNull(groupCustomer?.owner_place_of_birth),
+      valueOrNull(formatReadableDate(groupCustomer?.owner_date_of_birth)),
+      valueOrNull(branchCustomer.branch_owner),
+      valueOrNull(branchCustomer.branch_owner_phone),
+      valueOrNull(branchCustomer.branch_owner_place_of_birth),
+      valueOrNull(
+        formatReadableDate(branchCustomer.branch_owner_date_of_birth),
+      ),
+      valueOrNull(officeAddress?.pic_name),
+      valueOrNull(officeAddress?.pic_phone),
+      valueOrNull(officeAddress?.address),
+      valueOrNull(officeAddress?.province),
+      valueOrNull(officeAddress?.city),
+      valueOrNull(officeAddress?.district),
+      valueOrNull(officeAddress?.village),
+      valueOrNull(shippingAddress?.pic_name),
+      valueOrNull(shippingAddress?.pic_phone),
+      valueOrNull(shippingAddress?.address),
+      valueOrNull(shippingAddress?.province),
+      valueOrNull(shippingAddress?.city),
+      valueOrNull(shippingAddress?.district),
+      valueOrNull(shippingAddress?.village),
     ];
+  });
+}
+
+function styleCustomerSummary(worksheet: Worksheet): void {
+  const groupHeader = worksheet.getRow(1);
+  const columnHeader = worksheet.getRow(2);
+
+  groupHeader.height = 22;
+  columnHeader.height = 24;
+  columnHeader.eachCell({ includeEmpty: true }, (cell) => {
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF17365D" },
+    };
+    cell.alignment = { vertical: "middle", horizontal: "center" };
+  });
+
+  worksheet.mergeCells("P1:S1");
+  worksheet.mergeCells("T1:W1");
+  worksheet.mergeCells("X1:AD1");
+  worksheet.mergeCells("AE1:AK1");
+  worksheet.getCell("P1").value = "Owner Group Customer";
+  worksheet.getCell("T1").value = "PIC Branch Customer";
+  worksheet.getCell("X1").value = "Alamat Kantor";
+  worksheet.getCell("AE1").value = "Alamat Shipping";
+  [
+    worksheet.getCell("P1"),
+    worksheet.getCell("T1"),
+    worksheet.getCell("X1"),
+    worksheet.getCell("AE1"),
+  ].forEach((cell) => {
+    cell.font = { bold: true, color: { argb: "FF000000" } };
+    cell.alignment = { vertical: "middle", horizontal: "center" };
+  });
+
+  [24, 31].forEach((columnNumber) => {
+    for (let rowNumber = 1; rowNumber <= worksheet.rowCount; rowNumber += 1) {
+      const cell = worksheet.getCell(rowNumber, columnNumber);
+      cell.border = {
+        ...cell.border,
+        left: { style: "medium", color: { argb: "FF17365D" } },
+      };
+    }
+  });
+
+  worksheet.autoFilter = {
+    from: { row: 2, column: 1 },
+    to: { row: 2, column: worksheet.columnCount },
+  };
+  worksheet.views = [{ state: "frozen", ySplit: 2 }];
+
+  const preferredWidths = [
+    28, 18, 14, 18, 14, 14, 28, 14, 28, 14, 28, 18, 20, 12, 22,
+    24, 18, 22, 22,
+    24, 18, 22, 22,
+    22, 18, 42, 18, 18, 20, 20,
+    22, 18, 42, 18, 18, 20, 20,
+  ];
+  worksheet.columns.forEach((column, index) => {
+    column.width = preferredWidths[index] || 12;
   });
 }
 
@@ -326,6 +477,7 @@ export async function exportCustomerWorkbook({
     label: "Menyusun customer_summary",
   });
 
+  summary.addRow(new Array(37).fill(""));
   summary.addRow([
     "CUSTOMER",
     "branch",
@@ -342,7 +494,23 @@ export async function exportCustomerWorkbook({
     "level credit limit",
     "payment term",
     "level payment term",
-    "address type",
+    "Owner Name",
+    "Owner Phone",
+    "Owner Place of Birth",
+    "Owner Date of Birth",
+    "PIC Name",
+    "PIC Phone",
+    "PIC Place of Birth",
+    "PIC Date of Birth",
+    "PIC Name",
+    "PIC Phone",
+    "address",
+    "province",
+    "city",
+    "district",
+    "village",
+    "PIC Name",
+    "PIC Phone",
     "address",
     "province",
     "city",
@@ -350,19 +518,17 @@ export async function exportCustomerWorkbook({
     "village",
   ]);
   summary.addRows(buildCustomerSummary(sourceRows));
-  styleWorksheet(
-    summary,
-    [
-      28, 18, 14, 18, 14, 14, 28, 14, 28, 14, 28, 18, 20, 12, 22, 18, 42, 18,
-      18, 20, 20,
-    ],
-  );
+  styleCustomerSummary(summary);
   summary.getColumn(12).numFmt = "#,##0";
   summary.getColumn(14).numFmt = "0";
   summary.getColumn(5).numFmt = "@";
   summary.getColumn(6).numFmt = "@";
   summary.getColumn(8).numFmt = "@";
   summary.getColumn(10).numFmt = "@";
+  summary.getColumn(17).numFmt = "@";
+  summary.getColumn(21).numFmt = "@";
+  summary.getColumn(25).numFmt = "@";
+  summary.getColumn(32).numFmt = "@";
 
   onProgress?.({
     completed: totalSteps,
