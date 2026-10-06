@@ -6,12 +6,10 @@ import {
   FaBox,
   FaCheckCircle,
   FaClock,
-  FaEdit,
   FaImage,
   FaMapMarkerAlt,
   FaRulerCombined,
   FaTag,
-  FaTrash,
   FaTimes,
 } from "react-icons/fa";
 import Image from "next/image";
@@ -38,8 +36,6 @@ type ItemDetailModalProps = {
   open: boolean;
   onClose: () => void;
   item?: Item | null;
-  onEdit?: (item: Item) => void;
-  onDelete?: (item: Item) => void;
 };
 
 function displayValue(value: unknown) {
@@ -332,8 +328,6 @@ export default function ItemDetailModal({
   open,
   onClose,
   item,
-  onEdit,
-  onDelete,
 }: ItemDetailModalProps) {
   const { token } = useAuth();
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -809,18 +803,6 @@ export default function ItemDetailModal({
                 className="flex-1 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 sm:flex-none sm:text-sm"
               >
                 Tutup
-              </button>
-              <button
-                onClick={() => onEdit?.(item)}
-                className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 sm:flex-none sm:text-sm"
-              >
-                <FaEdit /> Edit Item
-              </button>
-              <button
-                onClick={() => onDelete?.(item)}
-                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-700 sm:flex-none sm:text-sm"
-              >
-                <FaTrash /> Hapus
               </button>
             </footer>
           </motion.div>

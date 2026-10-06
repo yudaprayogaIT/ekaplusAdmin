@@ -23,6 +23,7 @@ interface FilterBuilderProps {
   onApply: (filters: FilterTriple[]) => void; // Callback when apply clicked
   initialFilters?: FilterTriple[]; // Optional initial filters
   categories?: Category[]; // For relation fields
+  dropdownAlign?: "left" | "right";
 }
 
 export default function FilterBuilder({
@@ -31,6 +32,7 @@ export default function FilterBuilder({
   onApply,
   initialFilters = [],
   categories,
+  dropdownAlign = "left",
 }: FilterBuilderProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [filters, setFilters] = useState<FilterState[]>([]);
@@ -73,13 +75,13 @@ export default function FilterBuilder({
 
       if (filterParam) {
         const currentTriples = urlParamToFilters(filterParam);
-        // Only update if different from current state
-        const currentStateTriples = stateToTriple(filters);
-        if (
-          JSON.stringify(currentTriples) !== JSON.stringify(currentStateTriples)
-        ) {
-          setFilters(tripleToState(currentTriples));
-        }
+        setFilters((currentFilters) => {
+          const currentStateTriples = stateToTriple(currentFilters);
+          return JSON.stringify(currentTriples) !==
+            JSON.stringify(currentStateTriples)
+            ? tripleToState(currentTriples)
+            : currentFilters;
+        });
       }
     }
   }, [isOpen]);
@@ -197,18 +199,22 @@ export default function FilterBuilder({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
-            className="absolute left-0 z-50 mt-2 flex max-h-[min(75vh,640px)] w-[calc(100vw-2rem)] max-w-[700px] flex-col overflow-hidden rounded-xl border-2 border-blue-100 bg-white shadow-2xl md:w-[min(700px,calc(100vw-22rem))]"
+            className={`absolute z-50 mt-2 flex max-h-[min(75vh,640px)] w-[calc(100vw-2rem)] max-w-[640px] flex-col overflow-hidden rounded-xl border border-blue-100 bg-white shadow-2xl sm:w-[min(640px,calc(100vw-3rem))] ${
+              dropdownAlign === "right"
+                ? "right-0 origin-top-right"
+                : "left-0 origin-top-left"
+            }`}
           >
             {/* Header with Gradient */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4 border-b border-blue-100">
+            <div className="border-b border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3.5 sm:px-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                  <h3 className="flex items-center gap-2 text-base font-bold text-gray-800 sm:text-lg">
                     <FaFilter className="text-blue-600" />
-                    Advanced Filters
+                    Filter Lanjutan
                   </h3>
                   <p className="text-xs text-gray-600 mt-1">
-                    Build powerful filter combinations for {config.entity}
+                    Atur kombinasi filter untuk {config.entity}
                   </p>
                 </div>
                 <FilterPresetDropdown
@@ -223,13 +229,13 @@ export default function FilterBuilder({
               {/* Filter Rows */}
               <div className="mb-4 space-y-3">
                 {filters.length === 0 ? (
-                  <div className="rounded-xl border-2 border-dashed border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 py-8 text-center sm:py-10">
-                    <FaFilter className="mx-auto text-4xl text-blue-300 mb-3" />
+                  <div className="rounded-xl border-2 border-dashed border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 py-6 text-center sm:py-8">
+                    <FaFilter className="mx-auto mb-2 text-3xl text-blue-300" />
                     <p className="text-sm font-medium text-gray-600">
-                      No filters yet
+                      Belum ada filter
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      Click &quot;+ Add Filter&quot; below to start
+                      Klik &quot;+ Tambah Filter&quot; untuk mulai
                     </p>
                   </div>
                 ) : (
@@ -253,7 +259,7 @@ export default function FilterBuilder({
                   className="flex items-center gap-2 px-4 py-2.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-all text-sm font-semibold border-2 border-blue-200 hover:border-blue-300"
                 >
                   <FaPlus className="text-xs" />
-                  <span>Add Filter</span>
+                  <span>Tambah Filter</span>
                 </button>
 
                 <div className="flex justify-end gap-2">
@@ -262,13 +268,13 @@ export default function FilterBuilder({
                     disabled={filters.length === 0}
                     className="px-4 py-2.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed border border-gray-300"
                   >
-                    Clear All
+                    Hapus Semua
                   </button>
                   <button
                     onClick={() => handleApply()}
                     className="px-6 py-2.5 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:from-blue-600 hover:to-indigo-700 transition-all text-sm font-semibold shadow-lg shadow-blue-200 hover:shadow-xl"
                   >
-                    Apply Filters
+                    Terapkan Filter
                   </button>
                 </div>
               </div>

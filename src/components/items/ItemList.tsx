@@ -1,14 +1,18 @@
 // src/components/items/ItemList.tsx
 "use client";
 
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+} from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import ItemCard from "./ItemCard";
 import AddItemModal from "./AddItemModal";
 import ItemDetailModal from "./ItemDetailModal";
 import BulkProductCreationModal from "@/components/variants/BulkProductCreationModal";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import Pagination from "@/components/ui/Pagination";
 import {
   FaPlus,
   FaSearch,
@@ -21,14 +25,12 @@ import {
   FaBoxOpen,
   FaTimes,
   FaCheckSquare,
-  FaFilter,
   FaExclamationTriangle,
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getQueryUrl,
-  getResourceUrl,
   getAuthHeaders,
   getFileUrl,
   API_CONFIG,
@@ -222,30 +224,36 @@ type ItemAPIResponse = {
   message: string;
   data: Array<{
     id: number;
-    name: string;
+    name?: string;
     item_name: string;
     item_code: string;
-    item_desc: string | null;
+    item_desc?: string | null;
     item_group: string;
     item_category: string;
-    generator_item: string;
-    uom: string;
+    generator_item?: string;
+    uom?: string;
     image: string | null;
     disabled: number;
-    status: string;
-    docstatus: number;
-    created_at: string;
-    updated_at: string;
-    created_by: number | { id?: number; full_name?: string };
-    updated_by: number | { id?: number; full_name?: string };
-    owner: number | { id?: number; full_name?: string };
+    status?: string;
+    docstatus?: number;
+    created_at?: string;
+    updated_at?: string;
+    created_by?: number | { id?: number; full_name?: string };
+    updated_by?: number | { id?: number; full_name?: string };
+    owner?: number | { id?: number; full_name?: string };
     variants?: Array<{
       id: number;
       parent_id: number;
       item: number;
     }>;
   }>;
-  meta: Record<string, unknown>;
+  meta?: {
+    page?: number;
+    per_page?: number;
+    total?: number;
+    total_pages?: number;
+    [key: string]: unknown;
+  };
   total?: number;
   count?: number;
   total_count?: number;
@@ -280,6 +288,9 @@ export default function ItemList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState(urlState.searchQuery);
+  const [debouncedSearch, setDebouncedSearch] = useState(
+    urlState.searchQuery.trim(),
+  );
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortField, setSortField] = useState<SortField>(
     (urlState.sortField as SortField) || "created_at",
@@ -292,22 +303,18 @@ export default function ItemList() {
     urlState.showOnlyUnmapped,
   );
 
-  // Server-side pagination state
-  const [currentPage, setCurrentPage] = useState(urlState.page);
-  const [totalPages, setTotalPages] = useState(1);
+  // Infinite-scroll state
+  const [currentPage, setCurrentPage] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const itemsPerPage = 20;
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalInitial, setModalInitial] = useState<Item | null>(null);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<Item | null>(null);
-
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [confirmTitle, setConfirmTitle] = useState("");
-  const [confirmDesc, setConfirmDesc] = useState("");
-  const actionRef = useRef<(() => Promise<void>) | null>(null);
 
   // Multi-select state for mapping to products
   const [selectionMode, setSelectionMode] = useState(false);
@@ -330,6 +337,14 @@ export default function ItemList() {
   useEffect(() => {
     setRouteDetailId(searchRouteDetailId);
   }, [searchRouteDetailId]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(
+      () => setDebouncedSearch(searchQuery.trim()),
+      300,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [searchQuery]);
 
   useEffect(() => {
     const syncRouteFromBrowser = () => {
@@ -383,8 +398,14 @@ export default function ItemList() {
     sort_by?: SortField,
     sort_order?: SortDirection,
     page: number = 1,
-  ): Promise<{ items: Item[]; totalItems: number; totalPages: number }> {
-    if (!token) return { items: [], totalItems: 0, totalPages: 0 };
+    search?: string,
+  ): Promise<{
+    items: Item[];
+    totalItems: number;
+    totalPages: number;
+    page: number;
+  }> {
+    if (!token) return { items: [], totalItems: 0, totalPages: 0, page: 1 };
 
     const headers = getAuthHeaders(token);
 
@@ -402,16 +423,22 @@ export default function ItemList() {
       order_by?: [string, string][];
       limit: number;
       page: number;
+      with_total: boolean;
+      search?: string;
       childs?: ChildQuerySpec[];
     } = {
       fields: [
-        "*",
-        "created_by.full_name",
-        "updated_by.full_name",
-        "owner.full_name",
+        "id",
+        "image",
+        "item_code",
+        "item_name",
+        "item_category",
+        "item_group",
+        "disabled",
       ],
-      limit: 20,
+      limit: itemsPerPage,
       page: page,
+      with_total: true,
       childs: [
         {
           alias: "variants",
@@ -425,6 +452,10 @@ export default function ItemList() {
 
     if (filterTriples.length > 0) {
       itemSpec.filters = filterTriples;
+    }
+
+    if (search) {
+      itemSpec.search = search;
     }
 
     // Add server-side sorting - Goback format: [["field", "direction"]]
@@ -443,28 +474,19 @@ export default function ItemList() {
     if (res.ok) {
       const response = (await res.json()) as ItemAPIResponse;
 
-      // Parse pagination metadata - check multiple possible field names
-      let totalItems =
-        response.total || response.count || response.total_count || 0;
-      let totalPages = 0;
-
-      if (totalItems > 0) {
-        // API returned total count
-        totalPages = Math.ceil(totalItems / 20);
-      } else if (response.data.length > 0) {
-        if (response.data.length < 20) {
-          // Less than page size means this is the last page
-          totalPages = page;
-          totalItems = (page - 1) * 20 + response.data.length;
-        } else {
-          // Full page (exactly 20 items), assume there might be more pages
-          totalPages = page + 1; // Show "next" button
-          totalItems = (page + 1) * 20; // Approximate total to show pagination
-        }
-      } else {
-        totalPages = 1;
-        totalItems = 0;
-      }
+      const responsePage = Number(response.meta?.page ?? page);
+      const perPage = Number(response.meta?.per_page ?? itemsPerPage);
+      const totalItems = Number(
+        response.meta?.total ??
+          response.total ??
+          response.count ??
+          response.total_count ??
+          0,
+      );
+      const totalPages = Number(
+        response.meta?.total_pages ??
+          (totalItems > 0 ? Math.ceil(totalItems / perPage) : responsePage),
+      );
 
       // console.log("[ItemList] Pagination metadata:", {
       //   totalItems,
@@ -481,17 +503,17 @@ export default function ItemList() {
         item_code: item.item_code,
         name: item.item_name,
         item_name: item.item_name,
-        uom: item.uom,
+        uom: item.uom || "",
         group: item.item_group,
         item_group: item.item_group,
         category: item.item_category,
-        generator_item: item.generator_item,
+        generator_item: item.generator_item || "",
         image: getFileUrl(item.image),
         description: item.item_desc || undefined,
         item_desc: item.item_desc || undefined,
         disabled: item.disabled,
-        status: item.status,
-        docstatus: item.docstatus,
+        status: item.disabled === 0 ? "Aktif" : "Nonaktif",
+        docstatus: item.docstatus ?? 0,
         created_at: item.created_at,
         updated_at: item.updated_at,
         created_by:
@@ -510,7 +532,12 @@ export default function ItemList() {
         variantCount: item.variants ? item.variants.length : 0,
       }));
 
-      return { items: mappedItems, totalItems, totalPages };
+      return {
+        items: mappedItems,
+        totalItems,
+        totalPages,
+        page: responsePage,
+      };
     }
 
     // Log error details for debugging
@@ -530,13 +557,13 @@ export default function ItemList() {
     throw new Error(`Failed to fetch items (${res.status}): ${errorDetail}`);
   }
 
-  // Sync state to URL whenever filter, sort, page, or search changes
+  // Sync filter, sort, and search state to URL. Loaded pages are transient.
   useEffect(() => {
     const params = buildSearchParams({
       filters,
       sortField,
       sortDirection,
-      page: currentPage,
+      page: 1,
       searchQuery,
       showOnlyUnmapped,
     });
@@ -550,7 +577,6 @@ export default function ItemList() {
     filters,
     sortField,
     sortDirection,
-    currentPage,
     searchQuery,
     showOnlyUnmapped,
     routeDetailId,
@@ -560,87 +586,123 @@ export default function ItemList() {
   // Handle filter apply
   function handleApplyFilters(newFilters: FilterTriple[]) {
     setFilters(newFilters);
-    setCurrentPage(1); // Reset to first page when filters change
   }
 
-  // Load items from API with filters and sorting
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
-      setError(null);
+  const loadItems = useCallback(
+    async (page: number, replace = false) => {
+      if (replace) {
+        setLoading(true);
+        setError(null);
+      } else {
+        setLoadingMore(true);
+      }
 
       try {
         if (!isAuthenticated || !token) {
-          setLoading(false);
+          setItems([]);
+          setHasMore(false);
           return;
         }
 
-        const {
-          items: mappedItems,
-          totalItems,
-          totalPages,
-        } = await loadAllData(filters, sortField, sortDirection, currentPage);
+        const result = await loadAllData(
+          filters,
+          sortField,
+          sortDirection,
+          page,
+          debouncedSearch,
+        );
 
-        if (!cancelled) {
-          setItems(mappedItems);
-          setTotalItems(totalItems);
-          setTotalPages(totalPages);
+        setItems((current) => {
+          const next = replace
+            ? result.items
+            : [
+                ...current,
+                ...result.items.filter(
+                  (item) =>
+                    !current.some((existing) => existing.id === item.id),
+                ),
+              ];
           try {
-            localStorage.setItem(SNAP_KEY, JSON.stringify(mappedItems));
-          } catch (e) {
-            // console.error("Failed to save snapshot:", e);
-          }
-        }
+            localStorage.setItem(SNAP_KEY, JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+        setTotalItems(result.totalItems);
+        setCurrentPage(result.page);
+        setHasMore(
+          result.totalPages > 0
+            ? result.page < result.totalPages
+            : result.items.length >= itemsPerPage,
+        );
       } catch (err: unknown) {
-        if (!cancelled) {
-          const errorMessage = err instanceof Error ? err.message : String(err);
-          if (errorMessage.includes("Failed to fetch")) {
-            setError(
-              "Tidak dapat terhubung ke server. Periksa koneksi Anda atau pastikan backend berjalan.",
-            );
-          } else if (errorMessage.includes("401")) {
-            setError("Session expired. Silakan login kembali.");
-          } else if (errorMessage.includes("403")) {
-            setError("Akses ditolak. Anda tidak memiliki izin.");
-          } else {
-            setError(errorMessage);
-          }
+        if (replace) setItems([]);
+        setHasMore(false);
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        if (errorMessage.includes("Failed to fetch")) {
+          setError(
+            "Tidak dapat terhubung ke server. Periksa koneksi Anda atau pastikan backend berjalan.",
+          );
+        } else if (errorMessage.includes("401")) {
+          setError("Session expired. Silakan login kembali.");
+        } else if (errorMessage.includes("403")) {
+          setError("Akses ditolak. Anda tidak memiliki izin.");
+        } else {
+          setError(errorMessage);
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (replace) setLoading(false);
+        else setLoadingMore(false);
       }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
+    },
+    // loadAllData is scoped to this component and uses the latest auth token.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, token, filters, sortField, sortDirection, currentPage]);
+    [
+      debouncedSearch,
+      filters,
+      isAuthenticated,
+      sortDirection,
+      sortField,
+      token,
+    ],
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+    setHasMore(true);
+    void loadItems(1, true);
+  }, [loadItems]);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || loading || loadingMore || !hasMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          void loadItems(currentPage + 1, false);
+        }
+      },
+      { root: null, rootMargin: "240px 0px", threshold: 0 },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [currentPage, hasMore, loadItems, loading, loadingMore]);
 
   // Listen for updates - reload from API when triggered
   useEffect(() => {
-    async function handler(eventName: string) {
+    async function handler() {
       if (!isAuthenticated || !token) return;
 
       try {
-        const {
-          items: mappedItems,
-          totalItems,
-          totalPages,
-        } = await loadAllData(filters, sortField, sortDirection, currentPage);
-        setItems(mappedItems);
-        setTotalItems(totalItems);
-        setTotalPages(totalPages);
-        localStorage.setItem(SNAP_KEY, JSON.stringify(mappedItems));
-      } catch (error) {
+        await loadItems(1, true);
+      } catch {
         // console.error("[ItemList] ❌ Failed to reload items:", error);
       }
     }
 
-    const itemsHandler = () => handler("items_update");
-    const variantsHandler = () => handler("variants_update");
-    const productsHandler = () => handler("products_update");
+    const itemsHandler = () => handler();
+    const variantsHandler = () => handler();
+    const productsHandler = () => handler();
 
     window.addEventListener("ekatalog:items_update", itemsHandler);
     window.addEventListener("ekatalog:variants_update", variantsHandler);
@@ -651,102 +713,10 @@ export default function ItemList() {
       window.removeEventListener("ekatalog:variants_update", variantsHandler);
       window.removeEventListener("ekatalog:products_update", productsHandler);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, token, filters, sortField, sortDirection, currentPage]);
-
-  function saveSnapshot(arr: Item[]) {
-    try {
-      localStorage.setItem(SNAP_KEY, JSON.stringify(arr));
-    } catch {}
-    window.dispatchEvent(new Event("ekatalog:items_update"));
-  }
-
-  function promptDeleteItem(item: Item) {
-    setConfirmTitle("Hapus Item");
-    setConfirmDesc(`Yakin ingin menghapus item "${item.name}"?`);
-    actionRef.current = async () => {
-      try {
-        if (!token) {
-          throw new Error("Not authenticated");
-        }
-
-        const headers = getAuthHeaders(token);
-
-        const response = await apiFetch(
-          getResourceUrl(API_CONFIG.ENDPOINTS.ITEM, item.id),
-          {
-            method: "DELETE",
-            headers,
-          },
-        );
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(
-            errorData.message || `Failed to delete item (${response.status})`,
-          );
-        }
-
-        // Remove from local state
-        const next = items.filter((x) => x.id !== item.id);
-        setItems(next);
-        saveSnapshot(next);
-      } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        setError(errorMessage);
-      }
-    };
-    setConfirmOpen(true);
-  }
+  }, [isAuthenticated, loadItems, token]);
 
   function handleAdd() {
-    setModalInitial(null);
     setModalOpen(true);
-  }
-
-  async function handleEdit(item: Item) {
-    // Fetch detail item dengan branches menggunakan childs
-    if (!token) return;
-
-    try {
-      const headers = getAuthHeaders(token);
-
-      // Fetch item detail dengan childs untuk branches
-      const itemDetailUrl = getQueryUrl(
-        `${API_CONFIG.ENDPOINTS.ITEM}/${item.id}`,
-        {
-          fields: ["*"],
-          childs: [
-            {
-              alias: "branches",
-              table: "item_branches",
-              fields: ["branch", "branch.id", "branch.branch_name"],
-            },
-          ],
-        },
-      );
-
-      const itemRes = await apiFetch(itemDetailUrl, {
-        method: "GET",
-        cache: "no-store",
-        headers,
-      });
-
-      if (itemRes.ok) {
-        const itemResponse = await itemRes.json();
-        const detailItem = itemResponse.data;
-
-        const itemWithBranches = enrichItemDetail(item, detailItem);
-
-        setModalInitial(itemWithBranches);
-        setModalOpen(true);
-      }
-    } catch (error) {
-      // console.error("Failed to fetch item detail:", error);
-      // Fallback: buka modal dengan data yang ada
-      setModalInitial(item);
-      setModalOpen(true);
-    }
   }
 
   async function openDetail(item: Item, updateRoute = true) {
@@ -805,7 +775,7 @@ export default function ItemList() {
         setDetailItem(item);
         setDetailOpen(true);
       }
-    } catch (error) {
+    } catch {
       // console.error("Failed to fetch item detail:", error);
       // Fallback: buka modal dengan data yang ada
       setDetailItem(item);
@@ -881,29 +851,6 @@ export default function ItemList() {
     routeDetailId,
     token,
   ]);
-
-  function onDetailEdit(item: Item) {
-    closeDetail();
-    setTimeout(() => handleEdit(item), 80);
-  }
-
-  function onDetailDelete(item: Item) {
-    closeDetail();
-    setTimeout(() => promptDeleteItem(item), 80);
-  }
-
-  async function confirmOk() {
-    setConfirmOpen(false);
-    if (actionRef.current) {
-      await actionRef.current();
-      actionRef.current = null;
-    }
-  }
-
-  function confirmCancel() {
-    actionRef.current = null;
-    setConfirmOpen(false);
-  }
 
   // Multi-select handlers
   const toggleItem = (itemId: number) => {
@@ -999,7 +946,7 @@ export default function ItemList() {
         );
         setProducts(productsData);
       }
-    } catch (error) {
+    } catch {
       // console.error("Failed to load products and categories:", error);
     }
   }, [token]);
@@ -1024,24 +971,8 @@ export default function ItemList() {
     };
   }, [loadProductsAndCategories]);
 
-  // Get unique categories and UOMs for stats cards (MUST be before early returns to comply with Hooks rules)
-  const categories = Array.from(new Set(items.map((item) => item.category)));
-  const uomList = Array.from(new Set(items.map((item) => item.uom)));
-
-  // Client-side filtering for quick search (for better UX)
-  // Note: With server-side pagination, client-side filters are limited to current page only
+  // Filtering for mapping status remains client-side because it uses child data.
   let displayedItems = items;
-
-  if (searchQuery.trim()) {
-    displayedItems = displayedItems.filter(
-      (item) =>
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.group.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (item.description &&
-          item.description.toLowerCase().includes(searchQuery.toLowerCase())),
-    );
-  }
 
   // Filter for unmapped items
   if (showOnlyUnmapped) {
@@ -1049,11 +980,6 @@ export default function ItemList() {
       (item) => !item.variantCount || item.variantCount === 0,
     );
   }
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
 
   // Early returns AFTER all hooks
   if (!isAuthenticated) {
@@ -1079,7 +1005,7 @@ export default function ItemList() {
     );
   }
 
-  if (loading) {
+  if (loading && items.length === 0) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
@@ -1113,17 +1039,17 @@ export default function ItemList() {
   return (
     <div>
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">
+      <div className="mb-4 flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
+        <div className="min-w-0 lg:flex lg:items-baseline lg:gap-3">
+          <h1 className="mb-1 text-2xl font-bold text-gray-800 lg:mb-0">
             Items
           </h1>
-          <p className="text-sm md:text-base text-gray-600">
+          <p className="text-sm text-gray-600">
             Kelola item produk dan mapping ke products
           </p>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           {/* Selection Mode Toggle */}
           <motion.button
             whileHover={{ scale: 1.02 }}
@@ -1134,7 +1060,7 @@ export default function ItemList() {
                 clearSelection();
               }
             }}
-            className={`flex items-center justify-center gap-2 px-5 py-3 rounded-xl shadow-lg transition-all font-medium ${
+            className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium shadow-md transition-all ${
               selectionMode
                 ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-blue-200"
                 : "bg-white text-gray-700 border-2 border-gray-200 hover:border-blue-300"
@@ -1149,7 +1075,7 @@ export default function ItemList() {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={handleAdd}
-            className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl shadow-lg shadow-red-200 hover:shadow-xl transition-all font-medium"
+            className="flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-red-500 to-red-600 px-4 py-2.5 text-sm font-medium text-white shadow-md shadow-red-200 transition-all hover:shadow-lg"
           >
             <FaPlus className="w-4 h-4" />
             <span>Tambah Item</span>
@@ -1157,89 +1083,61 @@ export default function ItemList() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border-2 border-blue-200">
-          <div className="text-sm text-blue-700 font-medium mb-1">
-            Total Items
-          </div>
-          <div className="text-3xl font-bold text-blue-900">{items.length}</div>
-        </div>
-        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-5 border-2 border-green-200">
-          <div className="text-sm text-green-700 font-medium mb-1">
-            Categories
-          </div>
-          <div className="text-3xl font-bold text-green-900">
-            {categories.length}
-          </div>
-        </div>
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-5 border-2 border-purple-200">
-          <div className="text-sm text-purple-700 font-medium mb-1">Active</div>
-          <div className="text-3xl font-bold text-purple-900">
-            {items.filter((i) => i.disabled === 0).length}
-          </div>
-        </div>
-        <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-5 border-2 border-orange-200">
-          <div className="text-sm text-orange-700 font-medium mb-1">
-            UOM Types
-          </div>
-          <div className="text-3xl font-bold text-orange-900">
-            {uomList.length}
-          </div>
-        </div>
-      </div>
-
       {/* Search & Filter Bar */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 mb-6">
-        <div className="flex flex-col gap-4">
+      <div className="mb-3 rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
+        <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
           {/* Search Row */}
-          <div className="flex flex-col md:flex-row gap-3">
+          <div className="flex min-w-0 flex-1 gap-2">
             <div className="flex-1 relative">
-              <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 z-10" />
+              <FaSearch className="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari item, kode, atau group..."
-                className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all text-sm"
+                className="w-full rounded-lg border border-gray-200 py-2.5 pl-9 pr-3 text-sm transition-all focus:border-transparent focus:ring-2 focus:ring-red-500"
               />
             </div>
 
-            {/* View Toggle */}
             <div className="flex gap-2">
               <button
+                type="button"
                 onClick={() => setViewMode("grid")}
-                className={`px-4 py-3 rounded-xl font-medium transition-all ${
+                className={`rounded-lg px-3 py-2.5 transition-all ${
                   viewMode === "grid"
-                    ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-md shadow-red-200"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
-                title="Grid View"
+                title="Tampilan card"
+                aria-label="Tampilan card"
               >
-                <FaTh className="w-5 h-5" />
+                <FaTh className="h-4 w-4" />
               </button>
               <button
+                type="button"
                 onClick={() => setViewMode("list")}
-                className={`px-4 py-3 rounded-xl font-medium transition-all ${
+                className={`rounded-lg px-3 py-2.5 transition-all ${
                   viewMode === "list"
-                    ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-md shadow-red-200"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
-                title="List View"
+                title="Tampilan list"
+                aria-label="Tampilan list"
               >
-                <FaList className="w-5 h-5" />
+                <FaList className="h-4 w-4" />
               </button>
             </div>
           </div>
 
           {/* Filters Row */}
-          <div className="flex flex-wrap items-center gap-3 justify-between">
-            <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 xl:flex-none">
+            <div className="flex flex-wrap items-center gap-2">
               {/* Advanced FilterBuilder Component */}
               <FilterBuilder
                 entity="item"
                 config={itemFilterConfig}
                 onApply={handleApplyFilters}
+                dropdownAlign="right"
               />
 
               {/* Unmapped Items Filter */}
@@ -1368,7 +1266,7 @@ export default function ItemList() {
       </div>
 
       {/* Items Display */}
-      {displayedItems.length === 0 ? (
+      {displayedItems.length === 0 && !hasMore ? (
         <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
           <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <FaSearch className="w-8 h-8 text-gray-400" />
@@ -1385,46 +1283,71 @@ export default function ItemList() {
       ) : (
         // All items view (no grouping)
         <>
-          <div
-            className={
-              viewMode === "grid"
-                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-                : "space-y-4"
-            }
-          >
-            {displayedItems.map((item) => (
-              <ItemCard
-                key={item.id}
-                item={item}
-                viewMode={viewMode}
-                onEdit={() => handleEdit(item)}
-                onDelete={() => promptDeleteItem(item)}
-                onView={() => openDetail(item)}
-                selected={selectedItemIds.has(item.id)}
-                onToggleSelect={
-                  selectionMode ? () => toggleItem(item.id) : undefined
-                }
-              />
-            ))}
-          </div>
-
-          {/* Pagination */}
-          {totalItems > 0 && (
+          {viewMode === "list" ? (
+            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+              <div className="overflow-x-auto">
+                <div className="grid min-w-[920px] grid-cols-[minmax(260px,2fr)_110px_minmax(150px,1fr)_minmax(190px,1.2fr)_minmax(180px,1fr)] items-center gap-4 bg-gray-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  <span>Nama Item</span>
+                  <span>Status</span>
+                  <span>Kategori</span>
+                  <span>Item Group</span>
+                  <span className="flex items-center justify-between gap-3">
+                    <span>Kode Item</span>
+                    <span className="whitespace-nowrap text-[11px] font-medium normal-case tracking-normal text-gray-400">
+                      {items.length} dari {totalItems}
+                    </span>
+                  </span>
+                </div>
+                <div>
+                  {displayedItems.map((item) => (
+                    <ItemCard
+                      key={item.id}
+                      item={item}
+                      viewMode="list"
+                      onView={() => openDetail(item)}
+                      selected={selectedItemIds.has(item.id)}
+                      onToggleSelect={
+                        selectionMode ? () => toggleItem(item.id) : undefined
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
             <>
-              {/* {console.log("[ItemList] Rendering Pagination with:", {
-                currentPage,
-                totalPages,
-                totalItems,
-                itemsPerPage,
-              })} */}
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-                totalItems={totalItems}
-                itemsPerPage={itemsPerPage}
-              />
+              <div className="mb-2 text-sm text-gray-500">
+                Menampilkan {items.length} dari {totalItems} item
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                {displayedItems.map((item) => (
+                  <ItemCard
+                    key={item.id}
+                    item={item}
+                    viewMode="grid"
+                    onView={() => openDetail(item)}
+                    selected={selectedItemIds.has(item.id)}
+                    onToggleSelect={
+                      selectionMode ? () => toggleItem(item.id) : undefined
+                    }
+                  />
+                ))}
+              </div>
             </>
+          )}
+
+          {hasMore && (
+            <div ref={loadMoreRef} className="h-8" aria-hidden="true" />
+          )}
+          {loadingMore && (
+            <div className="flex items-center justify-center py-8">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-red-100 border-t-red-600" />
+            </div>
+          )}
+          {!hasMore && items.length > 0 && (
+            <p className="py-8 text-center text-sm text-gray-400">
+              Semua item sudah ditampilkan.
+            </p>
           )}
         </>
       )}
@@ -1480,15 +1403,13 @@ export default function ItemList() {
       <AddItemModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        initial={modalInitial}
+        initial={null}
       />
 
       <ItemDetailModal
         open={detailOpen}
         onClose={closeDetail}
         item={detailItem}
-        onEdit={onDetailEdit}
-        onDelete={onDetailDelete}
       />
 
       <BulkProductCreationModal
@@ -1498,16 +1419,6 @@ export default function ItemList() {
         categories={categoriesData}
         products={products}
         onSuccess={handleBulkProductSuccess}
-      />
-
-      <ConfirmDialog
-        open={confirmOpen}
-        title={confirmTitle}
-        description={confirmDesc}
-        onConfirm={confirmOk}
-        onCancel={confirmCancel}
-        confirmLabel="Ya, Hapus"
-        cancelLabel="Batal"
       />
     </div>
   );
