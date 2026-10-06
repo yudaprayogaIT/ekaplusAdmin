@@ -13,6 +13,10 @@ export interface CustomerChangeRequest {
   updatedAt: string | null;
   createdBy: string;
   updatedBy: string;
+  sagaStatus: string | null;
+  syncSagaId: string | null;
+  syncLastError: string | null;
+  syncLastRollbackError: string | null;
 }
 
 export interface CustomerChangeRequestDetail {

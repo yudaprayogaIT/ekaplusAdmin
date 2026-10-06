@@ -26,6 +26,7 @@ import {
   getResourceUrl,
 } from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { ResourceHistory } from "@/components/customers/ResourceHistory";
 
 interface GPDetailModalProps {
   isOpen: boolean;
@@ -1634,8 +1635,9 @@ export function GPDetailModal({
                   )}
 
                   {activeTab === "activity" && (
-                    <section className="grid gap-4 md:grid-cols-2">
-                      <div className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-sm">
+                    <div className="space-y-5">
+                      <section className="grid gap-4 md:grid-cols-2">
+                        <div className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-sm">
                         <div className="mb-4 flex items-center gap-3">
                           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500 text-white">
                             <FaClock className="h-5 w-5" />
@@ -1654,9 +1656,9 @@ export function GPDetailModal({
                         <p className="text-sm text-slate-800">
                           {formatDateTime(gp.created_at)}
                         </p>
-                      </div>
+                        </div>
 
-                      <div className="rounded-3xl border border-blue-100 bg-white p-5 shadow-sm">
+                        <div className="rounded-3xl border border-blue-100 bg-white p-5 shadow-sm">
                         <div className="mb-4 flex items-center gap-3">
                           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500 text-white">
                             <FaEdit className="h-5 w-5" />
@@ -1675,8 +1677,16 @@ export function GPDetailModal({
                         <p className="text-sm text-slate-800">
                           {formatDateTime(gp.updated_at)}
                         </p>
-                      </div>
-                    </section>
+                        </div>
+                      </section>
+                      <ResourceHistory
+                        key={`group-parent-history-${gp.id}`}
+                        endpoint={API_CONFIG.ENDPOINTS.GROUP_PARENT}
+                        resourceId={gp.id}
+                        token={token}
+                        title="History Group Parent"
+                      />
+                    </div>
                   )}
                 </div>
               </div>

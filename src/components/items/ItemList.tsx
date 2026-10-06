@@ -57,6 +57,7 @@ export type Item = {
   group: string;
   item_group: string;
   category: string;
+  subcategory?: string;
   generator_item: string;
   image?: string;
   description?: string;
@@ -84,12 +85,135 @@ export type Item = {
   lebar?: string;
   tinggi?: string;
   diameter?: string;
+  length?: string | number | null;
+  width?: string | number | null;
+  height?: string | number | null;
+  weight?: string | number | null;
+  purchasing?: string | number | null;
+  standard_colly_item?: string | number | null;
+  default_expense_account?: string | null;
+  default_income_account?: string | null;
+  ppn_name?: string | null;
+  uom_ppn?: string | null;
+  igen_created_by?: string | null;
+  igen_updated_by?: string | null;
+  last_item_updater?: string | null;
+  version?: number;
   // Branches
   branches?: Array<{
     id: number;
     name: string;
   }>;
 };
+
+type ItemDetailResponse = Partial<{
+  item_code: string;
+  item_name: string;
+  item_desc: string | null;
+  item_group: string;
+  item_category: string;
+  item_subcategory: string;
+  generator_item: string;
+  uom: string;
+  image: string | null;
+  disabled: number;
+  status: string;
+  docstatus: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string | number;
+  updated_by: string | number;
+  owner: string | number;
+  panjang: string;
+  lebar: string;
+  tinggi: string;
+  diameter: string;
+  length: string | number | null;
+  width: string | number | null;
+  height: string | number | null;
+  weight: string | number | null;
+  purchasing: string | number | null;
+  standard_colly_item: string | number | null;
+  default_expense_account: string | null;
+  default_income_account: string | null;
+  ppn_name: string | null;
+  uom_ppn: string | null;
+  igen_created_by: string | null;
+  igen_updated_by: string | null;
+  last_item_updater: string | null;
+  version: number;
+  branches: Array<{
+    branch?: number | { id?: number; branch_name?: string };
+    branch_id?: number;
+    branch_name?: string;
+  }>;
+}>;
+
+function enrichItemDetail(item: Item, detail: ItemDetailResponse): Item {
+  const branches = Array.isArray(detail.branches)
+    ? detail.branches
+        .map((row) => {
+          const nested =
+            typeof row.branch === "object" && row.branch !== null
+              ? row.branch
+              : undefined;
+          const id =
+            nested?.id ??
+            row.branch_id ??
+            (typeof row.branch === "number" ? row.branch : 0);
+          return {
+            id,
+            name: nested?.branch_name ?? row.branch_name ?? `Cabang #${id}`,
+          };
+        })
+        .filter((branch) => branch.id > 0)
+    : item.branches || [];
+
+  return {
+    ...item,
+    code: detail.item_code ?? item.code,
+    item_code: detail.item_code ?? item.item_code,
+    name: detail.item_name ?? item.name,
+    item_name: detail.item_name ?? item.item_name,
+    description: detail.item_desc ?? item.description,
+    item_desc: detail.item_desc ?? item.item_desc,
+    group: detail.item_group ?? item.group,
+    item_group: detail.item_group ?? item.item_group,
+    category: detail.item_category ?? item.category,
+    subcategory: detail.item_subcategory ?? item.subcategory,
+    generator_item: detail.generator_item ?? item.generator_item,
+    uom: detail.uom ?? item.uom,
+    image: detail.image !== undefined ? getFileUrl(detail.image) : item.image,
+    disabled: detail.disabled ?? item.disabled,
+    status: detail.status ?? item.status,
+    docstatus: detail.docstatus ?? item.docstatus,
+    created_at: detail.created_at ?? item.created_at,
+    updated_at: detail.updated_at ?? item.updated_at,
+    created_by: detail.created_by ?? item.created_by,
+    updated_by: detail.updated_by ?? item.updated_by,
+    owner: detail.owner ?? item.owner,
+    panjang: detail.panjang ?? item.panjang,
+    lebar: detail.lebar ?? item.lebar,
+    tinggi: detail.tinggi ?? item.tinggi,
+    diameter: detail.diameter ?? item.diameter,
+    length: detail.length ?? item.length,
+    width: detail.width ?? item.width,
+    height: detail.height ?? item.height,
+    weight: detail.weight ?? item.weight,
+    purchasing: detail.purchasing ?? item.purchasing,
+    standard_colly_item: detail.standard_colly_item ?? item.standard_colly_item,
+    default_expense_account:
+      detail.default_expense_account ?? item.default_expense_account,
+    default_income_account:
+      detail.default_income_account ?? item.default_income_account,
+    ppn_name: detail.ppn_name ?? item.ppn_name,
+    igen_created_by: detail.igen_created_by ?? item.igen_created_by,
+    igen_updated_by: detail.igen_updated_by ?? item.igen_updated_by,
+    last_item_updater: detail.last_item_updater ?? item.last_item_updater,
+    version: detail.version ?? item.version,
+    branches,
+  };
+}
 
 // API Response structure
 type ItemAPIResponse = {
@@ -612,26 +736,7 @@ export default function ItemList() {
         const itemResponse = await itemRes.json();
         const detailItem = itemResponse.data;
 
-        // Map branches dari response
-        let mappedBranches: { id: number; name: string }[] = [];
-
-        if (detailItem.branches && Array.isArray(detailItem.branches)) {
-          mappedBranches = detailItem.branches.map(
-            (b: { branch: { id?: number; branch_name: string } }) => ({
-              id: b.branch.id || 0,
-              name: b.branch.branch_name,
-            }),
-          );
-        }
-
-        const itemWithBranches: Item = {
-          ...item,
-          branches: mappedBranches,
-          panjang: detailItem.panjang,
-          lebar: detailItem.lebar,
-          tinggi: detailItem.tinggi,
-          diameter: detailItem.diameter,
-        };
+        const itemWithBranches = enrichItemDetail(item, detailItem);
 
         setModalInitial(itemWithBranches);
         setModalOpen(true);
@@ -691,26 +796,7 @@ export default function ItemList() {
         const itemResponse = await itemRes.json();
         const detailItem = itemResponse.data;
 
-        // Map branches dari response
-        let mappedBranches: { id: number; name: string }[] = [];
-
-        if (detailItem.branches && Array.isArray(detailItem.branches)) {
-          mappedBranches = detailItem.branches.map(
-            (b: { branch: { id?: number; branch_name: string } }) => ({
-              id: b.branch.id || 0,
-              name: b.branch.branch_name,
-            }),
-          );
-        }
-
-        const itemWithBranches: Item = {
-          ...item,
-          branches: mappedBranches,
-          panjang: detailItem.panjang,
-          lebar: detailItem.lebar,
-          tinggi: detailItem.tinggi,
-          diameter: detailItem.diameter,
-        };
+        const itemWithBranches = enrichItemDetail(item, detailItem);
 
         setDetailItem(itemWithBranches);
         setDetailOpen(true);
@@ -787,7 +873,14 @@ export default function ItemList() {
     };
     // openDetail/loadAllData intentionally use the current auth and route state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detailItem?.id, detailOpen, isAuthenticated, items, routeDetailId, token]);
+  }, [
+    detailItem?.id,
+    detailOpen,
+    isAuthenticated,
+    items,
+    routeDetailId,
+    token,
+  ]);
 
   function onDetailEdit(item: Item) {
     closeDetail();

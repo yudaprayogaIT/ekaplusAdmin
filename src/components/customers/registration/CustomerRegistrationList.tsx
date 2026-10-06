@@ -18,10 +18,8 @@ import {
   FaSearch,
   FaSortAmountUp,
   FaSortAmountDown,
-  FaChevronDown,
   FaPlayCircle,
 } from "react-icons/fa";
-import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { getQueryUrl, API_CONFIG, apiFetch } from "@/config/api";
 import FilterBuilder from "@/components/filters/FilterBuilder";
@@ -40,6 +38,7 @@ import {
   waitForElementToDisappear,
 } from "@/lib/driverTour";
 import type { Driver } from "driver.js";
+import { useResourceStatusOptions } from "@/hooks/useResourceStatusOptions";
 
 type SortField =
   | "company_name"
@@ -277,7 +276,20 @@ async function enrichMasterLinkNames(
 }
 
 export function CustomerRegistrationList() {
-  const { token, isAuthenticated } = useAuth();
+  const { token, isAuthenticated, hasRole, roles, currentUser } = useAuth();
+  const { statuses: statusOptions, loading: loadingStatusOptions } =
+    useResourceStatusOptions(
+      API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER,
+      "customer_register",
+      roles.length > 0
+        ? roles.map((role) => role.id)
+        : currentUser?.role_id
+          ? [currentUser.role_id]
+          : [],
+      token,
+      isAuthenticated,
+    );
+  const canManageSaga = hasRole("administrator");
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -305,7 +317,6 @@ export function CustomerRegistrationList() {
   // Sort state
   const [sortField, setSortField] = useState<SortField>("updated_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
 
   // Approve/Reject modals state
   const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
@@ -1553,7 +1564,7 @@ export function CustomerRegistrationList() {
   };
 
   const handleSync = async (registration: CustomerRegistration) => {
-    if (!token) return;
+    if (!token || !canManageSaga) return;
     if (isSyncReadOnly(registration)) return;
 
     setSyncingIds((prev) => ({ ...prev, [registration.id]: true }));
@@ -1613,7 +1624,7 @@ export function CustomerRegistrationList() {
   };
 
   const handleRollback = async (registration: CustomerRegistration) => {
-    if (!token) return;
+    if (!token || !canManageSaga) return;
 
     setRollbackingIds((prev) => ({ ...prev, [registration.id]: true }));
 
@@ -1707,12 +1718,12 @@ export function CustomerRegistrationList() {
   return (
     <div>
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
+      <div className="mb-4 flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">
+          <h1 className="text-2xl font-bold text-gray-800 md:text-3xl">
             Customer Registrations
           </h1>
-          <p className="text-sm md:text-base text-gray-600">
+          <p className="mt-1 text-sm text-gray-600">
             Kelola pengajuan registrasi member dari customer
           </p>
         </div>
@@ -1768,50 +1779,53 @@ export function CustomerRegistrationList() {
       </div> */}
 
       {/* Search & Filter Bar */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 mb-6">
-        {/* Search Row */}
-        <div className="flex flex-col md:flex-row gap-4 mb-4">
+      <div className="mb-4 rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
+        <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
           {/* Search */}
-          <div className="flex-1 relative">
-            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 z-10" />
+          <div className="relative min-w-0 flex-1">
+            <FaSearch className="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
-              type="text"
+              type="search"
               value={searchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
               placeholder="Cari perusahaan, pemilik, tipe bisnis, atau cabang..."
-              className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all text-sm"
+              className="w-full rounded-lg border border-gray-200 py-2.5 pl-9 pr-3 text-sm transition focus:border-transparent focus:ring-2 focus:ring-red-500"
             />
           </div>
 
-          {/* Status Filter */}
-          {/* <div className="relative">
+          <div className="flex flex-wrap items-center gap-2">
             <select
               value={selectedStatus}
-              onChange={(e) => handleStatusFilterChange(e.target.value)}
-              className="pl-4 pr-10 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all font-medium text-gray-700 bg-white appearance-none cursor-pointer min-w-[200px]"
+              onChange={(event) => setSelectedStatus(event.target.value)}
+              aria-label="Filter status"
+              className="min-w-40 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 focus:border-transparent focus:ring-2 focus:ring-red-500"
             >
               <option value="all">Semua Status</option>
-              <option value="request">Request</option>
-              <option value="approved">Approved</option>
-              <option value="rejected">Rejected</option>
+              {loadingStatusOptions ? (
+                <option disabled>Memuat status...</option>
+              ) : (
+                statusOptions.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))
+              )}
             </select>
-          </div> */}
 
-          {/* Advanced Filters Row */}
-          <div className="flex flex-wrap items-center gap-3 border-t border-gray-100">
             <FilterBuilder
               entity="customer_register"
               config={CUSTOMER_REGISTER_FILTER_FIELDS}
               onApply={handleApplyFilters}
+              initialFilters={filters}
             />
 
-            {/* Sort Direction Button */}
             <button
+              type="button"
               onClick={() => {
                 const newDirection = sortDirection === "asc" ? "desc" : "asc";
                 setSortDirection(newDirection);
               }}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
+              className="rounded-lg bg-gray-100 p-2.5 text-gray-700 transition hover:bg-gray-200"
               title={
                 sortDirection === "asc"
                   ? "Ascending (A-Z, 1-9, Oldest)"
@@ -1825,78 +1839,20 @@ export function CustomerRegistrationList() {
               )}
             </button>
 
-            {/* Sort Field Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setSortFieldDropdownOpen(!sortFieldDropdownOpen)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
-              >
-                <span>
-                  {sortField === "company_name" && "Nama Perusahaan"}
-                  {sortField === "created_at" && "Tanggal Dibuat"}
-                  {sortField === "updated_at" && "Tanggal Diupdate"}
-                  {sortField === "status" && "Status"}
-                  {sortField === "company_type" && "Tipe Bisnis"}
-                </span>
-                <FaChevronDown
-                  className={`w-3 h-3 transition-transform ${
-                    sortFieldDropdownOpen ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
-
-              <AnimatePresence>
-                {sortFieldDropdownOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={() => setSortFieldDropdownOpen(false)}
-                    />
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="absolute top-full rigth-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 py-2 min-w-[200px] z-20"
-                    >
-                      {[
-                        {
-                          value: "company_name" as SortField,
-                          label: "Nama Perusahaan",
-                        },
-                        {
-                          value: "created_at" as SortField,
-                          label: "Tanggal Dibuat",
-                        },
-                        {
-                          value: "updated_at" as SortField,
-                          label: "Tanggal Diupdate",
-                        },
-                        { value: "status" as SortField, label: "Status" },
-                        {
-                          value: "company_type" as SortField,
-                          label: "Tipe Bisnis",
-                        },
-                      ].map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => {
-                            setSortField(option.value);
-                            setSortFieldDropdownOpen(false);
-                          }}
-                          className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors ${
-                            sortField === option.value
-                              ? "text-red-600 bg-red-50"
-                              : "text-gray-700"
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </motion.div>
-                  </>
-                )}
-              </AnimatePresence>
-            </div>
+            <select
+              value={sortField}
+              onChange={(event) =>
+                setSortField(event.target.value as SortField)
+              }
+              aria-label="Urutkan berdasarkan"
+              className="rounded-lg border-0 bg-gray-100 px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-200 focus:ring-2 focus:ring-red-500"
+            >
+              <option value="company_name">Nama Perusahaan</option>
+              <option value="created_at">Tanggal Dibuat</option>
+              <option value="updated_at">Tanggal Diupdate</option>
+              <option value="status">Status</option>
+              <option value="company_type">Tipe Bisnis</option>
+            </select>
           </div>
         </div>
       </div>
@@ -1944,7 +1900,9 @@ export function CustomerRegistrationList() {
                 onSync={() => handleSync(registration)}
                 isSyncing={Boolean(syncingIds[registration.id])}
                 syncLabel={getSyncLabel(registration)}
-                syncReadOnly={isSyncReadOnly(registration)}
+                syncReadOnly={
+                  !canManageSaga || isSyncReadOnly(registration)
+                }
               />
             ))}
           </div>
@@ -1999,10 +1957,13 @@ export function CustomerRegistrationList() {
           selectedRegistration ? getSyncLabel(selectedRegistration) : "Sync"
         }
         syncReadOnly={
-          selectedRegistration ? isSyncReadOnly(selectedRegistration) : false
+          !canManageSaga ||
+          (selectedRegistration
+            ? isSyncReadOnly(selectedRegistration)
+            : false)
         }
         rollbackLabel="Rollback"
-        rollbackReadOnly={false}
+        rollbackReadOnly={!canManageSaga}
       />
 
       {/* Approve Modal */}

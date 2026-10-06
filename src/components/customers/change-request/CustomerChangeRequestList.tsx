@@ -20,6 +20,7 @@ import { useFilters } from "@/hooks/useFilters";
 import type { FilterTriple } from "@/types/filter";
 import { CustomerChangeRequestDetailModal } from "./CustomerChangeRequestDetailModal";
 import type { CustomerChangeRequest } from "./types";
+import { useResourceStatusOptions } from "@/hooks/useResourceStatusOptions";
 
 type SortField = "created_at" | "updated_at" | "applied_at" | "status" | "name";
 type SortDirection = "asc" | "desc";
@@ -38,6 +39,10 @@ interface ApiRow {
   applied_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  saga_status?: string | null;
+  sync_saga_id?: string | null;
+  sync_last_error?: string | null;
+  sync_last_rollback_error?: string | null;
   "created_by.full_name"?: string | null;
   "updated_by.full_name"?: string | null;
   created_by?: number | { id?: number; full_name?: string } | null;
@@ -86,6 +91,10 @@ function mapRow(row: ApiRow): CustomerChangeRequest {
     updatedAt: row.updated_at || row.created_at || null,
     createdBy: resolveUserName(row["created_by.full_name"], row.created_by),
     updatedBy: resolveUserName(row["updated_by.full_name"], row.updated_by),
+    sagaStatus: row.saga_status || null,
+    syncSagaId: row.sync_saga_id || null,
+    syncLastError: row.sync_last_error || null,
+    syncLastRollbackError: row.sync_last_rollback_error || null,
   };
 }
 
@@ -283,7 +292,19 @@ function statusTone(status: string): string {
 }
 
 export function CustomerChangeRequestList() {
-  const { token, isAuthenticated } = useAuth();
+  const { token, isAuthenticated, roles, currentUser } = useAuth();
+  const { statuses: statusOptions, loading: loadingStatusOptions } =
+    useResourceStatusOptions(
+      API_CONFIG.ENDPOINTS.CUSTOMER_CHANGE_REQUEST,
+      "customer_change_request",
+      roles.length > 0
+        ? roles.map((role) => role.id)
+        : currentUser?.role_id
+          ? [currentUser.role_id]
+          : [],
+      token,
+      isAuthenticated,
+    );
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -537,83 +558,85 @@ export function CustomerChangeRequestList() {
 
   return (
     <div>
-      <div className="mb-8">
+      <div className="mb-4 lg:flex lg:items-baseline lg:gap-3">
         <h1 className="text-2xl font-bold text-gray-800 md:text-3xl">
           Customer Change Request
         </h1>
-        <p className="mt-2 text-sm text-gray-600 md:text-base">
+        <p className="mt-1 text-sm text-gray-600 lg:mt-0">
           Pantau pengajuan dan detail perubahan data customer
         </p>
       </div>
 
-      <div className="mb-6 rounded-xl border border-gray-100 bg-white p-4 shadow-sm md:p-6">
-        <div className="flex flex-col gap-4 lg:flex-row">
+      <div className="mb-4 rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
+        <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
           <div className="relative min-w-0 flex-1">
-            <FaSearch className="absolute left-4 top-1/2 z-10 -translate-y-1/2 text-gray-400" />
+            <FaSearch className="absolute left-3 top-1/2 z-10 -translate-y-1/2 text-sm text-gray-400" />
             <input
               type="search"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Cari nomor request, customer, alasan, atau status..."
-              className="w-full rounded-xl border border-gray-200 py-3 pl-11 pr-4 text-sm transition focus:border-transparent focus:ring-2 focus:ring-red-500"
+              className="w-full rounded-lg border border-gray-200 py-2.5 pl-9 pr-3 text-sm transition focus:border-transparent focus:ring-2 focus:ring-red-500"
             />
           </div>
 
-          <select
-            value={selectedStatus}
-            onChange={(event) => setSelectedStatus(event.target.value)}
-            aria-label="Filter status"
-            className="min-w-48 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 focus:border-transparent focus:ring-2 focus:ring-red-500"
-          >
-            <option value="all">Semua Status</option>
-            <option value="Draft">Draft</option>
-            <option value="Request">Request</option>
-            <option value="Approved">Approved</option>
-            <option value="Rejected">Rejected</option>
-            <option value="Syncing">Syncing</option>
-            <option value="Sync">Sync</option>
-          </select>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-4">
-          <FilterBuilder
-            entity="customer_change_request"
-            config={CUSTOMER_CHANGE_REQUEST_FILTER_FIELDS}
-            onApply={setFilters}
-            initialFilters={filters}
-          />
-          <button
-            type="button"
-            onClick={() =>
-              setSortDirection((current) =>
-                current === "asc" ? "desc" : "asc",
-              )
-            }
-            title={sortDirection === "asc" ? "Urut naik" : "Urut turun"}
-            className="rounded-lg bg-gray-100 p-3 text-gray-700 transition hover:bg-gray-200"
-          >
-            {sortDirection === "asc" ? (
-              <FaSortAmountUp />
-            ) : (
-              <FaSortAmountDown />
-            )}
-          </button>
-          <div className="relative">
+          <div className="flex flex-wrap items-center gap-2">
             <select
-              value={sortField}
-              onChange={(event) =>
-                setSortField(event.target.value as SortField)
-              }
-              aria-label="Urutkan berdasarkan"
-              className="appearance-none rounded-lg border-0 bg-gray-100 py-2.5 pl-4 pr-10 text-sm font-medium text-gray-700 transition hover:bg-gray-200 focus:ring-2 focus:ring-red-500"
+              value={selectedStatus}
+              onChange={(event) => setSelectedStatus(event.target.value)}
+              aria-label="Filter status"
+              className="min-w-40 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 focus:border-transparent focus:ring-2 focus:ring-red-500"
             >
-              {sortOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
+              <option value="all">Semua Status</option>
+              {loadingStatusOptions ? (
+                <option disabled>Memuat status...</option>
+              ) : (
+                statusOptions.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))
+              )}
             </select>
-            <FaChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500" />
+            <FilterBuilder
+              entity="customer_change_request"
+              config={CUSTOMER_CHANGE_REQUEST_FILTER_FIELDS}
+              onApply={setFilters}
+              initialFilters={filters}
+            />
+            <button
+              type="button"
+              onClick={() =>
+                setSortDirection((current) =>
+                  current === "asc" ? "desc" : "asc",
+                )
+              }
+              title={sortDirection === "asc" ? "Urut naik" : "Urut turun"}
+              className="rounded-lg bg-gray-100 p-2.5 text-gray-700 transition hover:bg-gray-200"
+            >
+              {sortDirection === "asc" ? (
+                <FaSortAmountUp />
+              ) : (
+                <FaSortAmountDown />
+              )}
+            </button>
+            <div className="relative">
+              <select
+                value={sortField}
+                onChange={(event) =>
+                  setSortField(event.target.value as SortField)
+                }
+                aria-label="Urutkan berdasarkan"
+                className="appearance-none rounded-lg border-0 bg-gray-100 py-2.5 pl-3 pr-9 text-sm font-medium text-gray-700 transition hover:bg-gray-200 focus:ring-2 focus:ring-red-500"
+              >
+                {sortOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <FaChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500" />
+            </div>
           </div>
         </div>
       </div>
@@ -642,7 +665,7 @@ export function CustomerChangeRequestList() {
           <div className="mb-3 text-sm text-gray-500">
             Menampilkan {items.length} request
           </div>
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {items.map((item) => (
               <motion.article
                 key={item.id}
@@ -652,17 +675,17 @@ export function CustomerChangeRequestList() {
                 onClick={() => openDetail(item)}
                 className="group cursor-pointer overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-shadow hover:shadow-xl"
               >
-                <div className="border-b border-gray-100 bg-gradient-to-br from-gray-50 to-white p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-600">
-                        <FaBuilding />
+                <div className="border-b border-gray-100 bg-gradient-to-br from-gray-50 to-white p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-100 text-sm text-red-600">
+                        <FaBuilding className="h-3.5 w-3.5" />
                       </div>
                       <div className="min-w-0">
-                        <h2 className="truncate font-bold text-gray-900 transition group-hover:text-red-600">
+                        <h2 className="truncate text-sm font-bold text-gray-900 transition group-hover:text-red-600">
                           {item.entityDisplayName}
                         </h2>
-                        <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-gray-500">
+                        <p className="mt-0.5 flex min-w-0 items-center gap-1 text-[11px] text-gray-500">
                           <span className="shrink-0">
                             {entityTypeLabel(item.entityType)}
                           </span>
@@ -677,25 +700,24 @@ export function CustomerChangeRequestList() {
                       </div>
                     </div>
                     <span
-                      className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold ${statusTone(item.status)}`}
+                      className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusTone(item.status)}`}
                     >
                       {item.status}
                     </span>
                   </div>
                 </div>
 
-                <div className="p-5">
-                  <p className="mb-4 line-clamp-2 min-h-10 text-sm text-gray-700">
+                <div className="p-4">
+                  <p className="mb-3 line-clamp-2 min-h-9 text-xs leading-relaxed text-gray-600">
                     {item.reason || "Tidak ada alasan perubahan"}
                   </p>
-                  <div className="space-y-2 border-t border-gray-100 pt-3 text-xs text-gray-500">
-                    <p className="flex items-center gap-2">
-                      <FaCalendarAlt className="text-gray-400" /> Dibuat:{" "}
-                      {formatDate(item.createdAt)} · {item.createdBy}
+                  <div className="flex items-center justify-between gap-3 border-t border-gray-100 pt-3 text-[11px] text-gray-500">
+                    <p className="flex min-w-0 items-center gap-2 whitespace-nowrap">
+                      <FaCalendarAlt className="h-3 w-3 shrink-0 text-gray-400" />
+                      <span>{formatDate(item.updatedAt)}</span>
                     </p>
-                    <p className="flex items-center gap-2">
-                      <FaCalendarAlt className="text-gray-400" /> Diupdate:{" "}
-                      {formatDate(item.updatedAt)} · {item.updatedBy}
+                    <p className="truncate text-right" title={item.updatedBy}>
+                      {item.updatedBy || "-"}
                     </p>
                   </div>
                   <button
@@ -704,9 +726,9 @@ export function CustomerChangeRequestList() {
                       event.stopPropagation();
                       openDetail(item);
                     }}
-                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-500 to-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:shadow-lg"
+                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-red-500 to-red-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:shadow-lg"
                   >
-                    <FaEye /> Lihat Detail Perubahan
+                    <FaEye className="h-3.5 w-3.5" /> Lihat Detail Perubahan
                   </button>
                 </div>
               </motion.article>

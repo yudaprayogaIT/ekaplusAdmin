@@ -1,44 +1,332 @@
-// src/components/items/ItemDetailModal.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { ReactNode, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  FaTimes,
-  FaEdit,
-  FaTrash,
-  FaBarcode,
-  FaTag,
-  FaCube,
-  FaCheckCircle,
-  FaMapMarkerAlt,
   FaBox,
-  FaUser,
+  FaCheckCircle,
   FaClock,
-  FaHistory,
+  FaEdit,
+  FaImage,
+  FaMapMarkerAlt,
+  FaRulerCombined,
+  FaTag,
+  FaTrash,
+  FaTimes,
 } from "react-icons/fa";
 import Image from "next/image";
 import { Item } from "./ItemList";
 import {
-  getFileUrl,
-  getQueryUrl,
-  getAuthHeaders,
   API_CONFIG,
   apiFetch,
+  getAuthHeaders,
+  getFileUrl,
+  getQueryUrl,
 } from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
 
-type Branch = {
-  id: number;
-  name: string;
-};
+type Branch = { id: number; name: string };
 
 type Variant = {
-  id: number;
+  id: number | string;
   idx: number;
-  parent_id: number;
+  parent_id: number | string;
   product_name?: string;
 };
+
+type ItemDetailModalProps = {
+  open: boolean;
+  onClose: () => void;
+  item?: Item | null;
+  onEdit?: (item: Item) => void;
+  onDelete?: (item: Item) => void;
+};
+
+function displayValue(value: unknown) {
+  return value === null || value === undefined || value === ""
+    ? "-"
+    : String(value);
+}
+
+function InfoCell({ label, value }: { label: string; value: unknown }) {
+  return (
+    <div className="min-w-0 border-b border-slate-100 py-3">
+      <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">
+        {label}
+      </p>
+      <p
+        className="mt-1.5 truncate text-sm font-bold text-slate-900"
+        title={displayValue(value)}
+      >
+        {displayValue(value)}
+      </p>
+    </div>
+  );
+}
+
+function SectionTitle({
+  icon,
+  children,
+  count,
+}: {
+  icon: ReactNode;
+  children: ReactNode;
+  count?: number;
+}) {
+  return (
+    <div className="mb-3 flex items-center gap-2.5 border-b border-slate-100 pb-3">
+      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-sm text-rose-500">
+        {icon}
+      </span>
+      <h3 className="text-sm font-bold text-slate-900 sm:text-base">
+        {children}
+      </h3>
+      {count !== undefined && (
+        <span className="ml-auto rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
+          {count} data
+        </span>
+      )}
+    </div>
+  );
+}
+
+function formatDate(value?: string) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("id-ID", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+function formatSyncDate(value?: string) {
+  if (!value) return "Belum pernah";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("id-ID", {
+    timeZone: "Asia/Jakarta",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function ItemImagePreview({
+  item,
+  token,
+}: {
+  item: Item;
+  token?: string | null;
+}) {
+  const imageUrl = getFileUrl(item.image);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [zoomed, setZoomed] = useState(false);
+  const [zoomOrigin, setZoomOrigin] = useState({ x: 50, y: 50 });
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    async function loadImage() {
+      if (!imageUrl) {
+        setBlobUrl(null);
+        setError(null);
+        return;
+      }
+
+      if (!token) {
+        setBlobUrl(null);
+        setError(null);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await apiFetch(
+          imageUrl,
+          { method: "GET", cache: "no-store" },
+          token,
+        );
+        if (!response.ok) {
+          throw new Error(`Gagal memuat gambar (${response.status})`);
+        }
+
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+        if (!cancelled) setBlobUrl(objectUrl);
+      } catch (loadError) {
+        if (!cancelled) {
+          setBlobUrl(null);
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Gagal memuat gambar item",
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void loadImage();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [imageUrl, token]);
+
+  const previewUrl = blobUrl || imageUrl || "";
+  const fileName = imageUrl
+    ? decodeURIComponent(imageUrl.split("/").pop() || "Gambar item")
+    : "Belum ada gambar";
+
+  return (
+    <aside className="w-full self-start rounded-xl border border-slate-200 bg-slate-50/50 p-4 md:sticky md:top-0">
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wide text-slate-800">
+          <FaImage className="text-slate-400" />
+          <span>Gambar Item</span>
+        </div>
+        <span
+          className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${
+            imageUrl
+              ? "border-emerald-100 bg-emerald-50 text-emerald-600"
+              : "border-slate-200 bg-slate-100 text-slate-500"
+          }`}
+        >
+          {imageUrl ? "File tersedia" : "Tanpa gambar"}
+        </span>
+      </div>
+
+      {loading ? (
+        <div className="flex aspect-square w-full items-center justify-center rounded-lg border border-slate-200 bg-white text-sm text-slate-400">
+          Memuat gambar...
+        </div>
+      ) : error ? (
+        <div className="flex aspect-square w-full items-center justify-center rounded-lg border border-red-100 bg-red-50 p-3 text-center text-sm text-red-600">
+          {error}
+        </div>
+      ) : previewUrl ? (
+        <button
+          type="button"
+          onClick={() => {
+            setPreviewOpen(true);
+            setZoomed(false);
+            setZoomOrigin({ x: 50, y: 50 });
+          }}
+          className="group block w-full overflow-hidden rounded-lg border border-slate-200 bg-white transition hover:border-rose-300"
+        >
+          <div className="relative aspect-square w-full overflow-hidden bg-white">
+            <Image
+              src={previewUrl}
+              alt={item.name}
+              fill
+              unoptimized
+              className="object-contain p-2 transition-transform duration-300 group-hover:scale-[1.03]"
+            />
+          </div>
+        </button>
+      ) : (
+        <div className="flex aspect-square w-full flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white text-slate-400">
+          <FaImage className="mb-3 h-10 w-10 text-slate-300" />
+          <span className="text-sm">Gambar belum tersedia</span>
+        </div>
+      )}
+
+      <p className="mt-3 truncate text-[11px] text-slate-400" title={fileName}>
+        {fileName}
+      </p>
+      {previewUrl && !loading && !error && (
+        <p className="mt-1 text-xs text-slate-500">
+          Klik gambar untuk memperbesar.
+        </p>
+      )}
+
+      <AnimatePresence>
+        {previewOpen && previewUrl && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-100/90 p-4 backdrop-blur-sm"
+            onClick={(event) =>
+              event.target === event.currentTarget
+                ? setPreviewOpen(false)
+                : undefined
+            }
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              className="relative w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setPreviewOpen(false);
+                  setZoomed(false);
+                  setZoomOrigin({ x: 50, y: 50 });
+                }}
+                className="absolute right-4 top-4 z-10 rounded-xl bg-white/90 p-2 text-slate-700 shadow-sm transition hover:bg-white"
+                aria-label="Tutup preview gambar"
+              >
+                <FaTimes className="h-5 w-5" />
+              </button>
+              <div
+                className={`relative h-[80vh] w-full overflow-hidden bg-slate-100 ${
+                  zoomed ? "cursor-zoom-out" : "cursor-zoom-in"
+                }`}
+                onDoubleClick={(event) => {
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  const x = ((event.clientX - rect.left) / rect.width) * 100;
+                  const y = ((event.clientY - rect.top) / rect.height) * 100;
+                  setZoomOrigin({ x, y });
+                  setZoomed((current) => !current);
+                }}
+                onMouseMove={(event) => {
+                  if (!zoomed) return;
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  const x = ((event.clientX - rect.left) / rect.width) * 100;
+                  const y = ((event.clientY - rect.top) / rect.height) * 100;
+                  setZoomOrigin({
+                    x: Math.min(100, Math.max(0, x)),
+                    y: Math.min(100, Math.max(0, y)),
+                  });
+                }}
+              >
+                <Image
+                  src={previewUrl}
+                  alt={item.name}
+                  fill
+                  unoptimized
+                  className={`object-contain transition-transform duration-200 ${
+                    zoomed ? "scale-[1.8]" : "scale-100"
+                  }`}
+                  style={{
+                    transformOrigin: `${zoomOrigin.x}% ${zoomOrigin.y}%`,
+                  }}
+                />
+                <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-white/85 px-3 py-1 text-center text-xs font-medium text-slate-600 shadow-sm">
+                  {zoomed
+                    ? "Arahkan mouse ke area yang ingin dilihat, double click untuk reset zoom."
+                    : "Double click untuk zoom."}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </aside>
+  );
+}
 
 export default function ItemDetailModal({
   open,
@@ -46,550 +334,495 @@ export default function ItemDetailModal({
   item,
   onEdit,
   onDelete,
-}: {
-  open: boolean;
-  onClose: () => void;
-  item?: Item | null;
-  onEdit?: (i: Item) => void;
-  onDelete?: (i: Item) => void;
-}) {
+}: ItemDetailModalProps) {
   const { token } = useAuth();
-  const [imageError, setImageError] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [variants, setVariants] = useState<Variant[]>([]);
   const [loadingVariants, setLoadingVariants] = useState(false);
 
-  // Load all branches untuk display nama yang benar
   useEffect(() => {
+    setBranches(item?.branches || []);
+    setLoadingBranches(false);
+
     if (!open || !token || !item?.branches?.length) return;
 
-    async function loadBranches() {
-      if (!token) return; // Guard for async function
+    const authToken = token;
+    const itemBranches = item.branches;
+    let cancelled = false;
+    async function loadBranchNames() {
       setLoadingBranches(true);
       try {
-        const DATA_URL = getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH, {
-          fields: ["*"],
-        });
-        const headers = getAuthHeaders(token);
+        const response = await apiFetch(
+          getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH, {
+            fields: ["id", "branch_name"],
+          }),
+          {
+            method: "GET",
+            cache: "no-store",
+            headers: getAuthHeaders(authToken),
+          },
+        );
+        if (!response.ok) return;
 
-        const res = await apiFetch(DATA_URL, {
-          method: "GET",
-          cache: "no-store",
-          headers,
-        });
-
-        if (res.ok) {
-          const response = await res.json();
-          const allBranches: Branch[] = response.data.map(
-            (b: { id: number; branch_name: string }) => ({
-              id: b.id,
-              name: b.branch_name,
-            }),
+        const json = await response.json();
+        const names = new Map<number, string>(
+          (json.data || []).map(
+            (branch: { id: number; branch_name: string }) => [
+              branch.id,
+              branch.branch_name,
+            ],
+          ),
+        );
+        if (!cancelled) {
+          setBranches(
+            itemBranches.map((branch) => ({
+              ...branch,
+              name: names.get(branch.id) || branch.name,
+            })),
           );
-
-          // Filter hanya branches yang ada di item
-          if (item && item.branches) {
-            const itemBranchIds = item.branches.map((b) => b.id);
-            const filteredBranches = allBranches.filter((b) =>
-              itemBranchIds.includes(b.id),
-            );
-            setBranches(filteredBranches);
-          }
         }
-      } catch (error) {
-        // console.error("Failed to load branches:", error);
       } finally {
-        setLoadingBranches(false);
+        if (!cancelled) setLoadingBranches(false);
       }
     }
 
-    loadBranches();
-  }, [open, token, item]);
+    void loadBranchNames();
+    return () => {
+      cancelled = true;
+    };
+  }, [item, open, token]);
 
-  // Load variants (products this item belongs to)
   useEffect(() => {
+    setVariants([]);
+    setLoadingVariants(false);
     if (!open || !token || !item) return;
 
-    async function loadVariants() {
-      if (!token || !item) return;
+    const authToken = token;
+    const currentItem = item;
+    let cancelled = false;
+    async function loadProducts() {
       setLoadingVariants(true);
       try {
-        // Use the API structure with childs to fetch variants
-        const spec = {
-          fields: ["*"],
-          filters: [["id", "=", item.id]],
-          childs: [
-            {
-              alias: "variants",
-              table: "ekatalog_variant",
-              fields: ["*"],
-              parent_key: "item",
-              parent_value: "id",
-            },
-          ],
-        };
+        const headers = getAuthHeaders(authToken);
+        const response = await apiFetch(
+          getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, {
+            fields: ["id"],
+            filters: [["id", "=", currentItem.id]],
+            childs: [
+              {
+                alias: "variants",
+                table: "ekatalog_variant",
+                fields: ["id", "idx", "parent_id"],
+                parent_key: "item",
+                parent_value: "id",
+              },
+            ],
+          }),
+          { method: "GET", cache: "no-store", headers },
+        );
+        if (!response.ok) return;
 
-        const itemUrl = getQueryUrl(API_CONFIG.ENDPOINTS.ITEM, spec);
-        const headers = getAuthHeaders(token);
+        const json = await response.json();
+        const itemRow = Array.isArray(json.data) ? json.data[0] : json.data;
+        const rows: Variant[] = itemRow?.variants || [];
+        if (rows.length === 0) return;
 
-        const res = await apiFetch(itemUrl, {
-          method: "GET",
-          cache: "no-store",
-          headers,
-        });
-
-        if (res.ok) {
-          const response = await res.json();
-          if (response.data && response.data.length > 0) {
-            const itemData = response.data[0];
-            const variantsData: Variant[] = itemData.variants || [];
-
-            // Fetch product names for each variant
-            if (variantsData.length > 0) {
-              const productIds = Array.from(
-                new Set(variantsData.map((v: Variant) => v.parent_id)),
-              );
-
-              // Load products to get their names
-              const productsSpec = {
-                fields: ["id", "product_name"],
-                filters: [["id", "in", productIds]],
-              };
-              const productsUrl = getQueryUrl(
-                API_CONFIG.ENDPOINTS.PRODUCT,
-                productsSpec,
-              );
-              const productsRes = await apiFetch(productsUrl, {
-                method: "GET",
-                cache: "no-store",
-                headers,
-              });
-
-              if (productsRes.ok) {
-                const productsJson = await productsRes.json();
-                const productsMap = new Map<number, string>(
-                  productsJson.data.map(
-                    (p: { id: number; product_name: string }) => [
-                      p.id,
-                      p.product_name,
-                    ],
-                  ),
-                );
-
-                // Merge product names into variants
-                const enrichedVariants: Variant[] = variantsData.map(
-                  (v: Variant): Variant => {
-                    const productName = productsMap.get(v.parent_id);
-                    return {
-                      id: v.id,
-                      idx: v.idx,
-                      parent_id: v.parent_id,
-                      product_name: productName || `Product ${v.parent_id}`,
-                    };
-                  },
-                );
-
-                setVariants(enrichedVariants);
-              } else {
-                // Set variants without product names
-                const basicVariants: Variant[] = variantsData.map(
-                  (v: Variant): Variant => ({
-                    id: v.id,
-                    idx: v.idx,
-                    parent_id: v.parent_id,
-                    product_name: `Product ${v.parent_id}`,
-                  }),
-                );
-                setVariants(basicVariants);
-              }
-            } else {
-              setVariants([]);
-            }
+        // API dapat mengembalikan ID sebagai number atau string. Map memakai
+        // strict equality, sedangkan React mengubah keduanya menjadi key string.
+        // Normalisasi mencegah produk 123 dan "123" dianggap dua data berbeda.
+        const productsByKey = new Map<string, number | string>();
+        rows.forEach((row) => {
+          if (row.parent_id !== null && row.parent_id !== undefined) {
+            productsByKey.set(String(row.parent_id), row.parent_id);
           }
+        });
+        const productIds = [...productsByKey.values()];
+        if (productIds.length === 0) return;
+
+        const productsResponse = await apiFetch(
+          getQueryUrl(API_CONFIG.ENDPOINTS.PRODUCT, {
+            fields: ["id", "product_name"],
+            filters: [["id", "in", productIds]],
+          }),
+          { method: "GET", cache: "no-store", headers },
+        );
+
+        const productNames = new Map<string, string>();
+        if (productsResponse.ok) {
+          const productsJson = await productsResponse.json();
+          (productsJson.data || []).forEach(
+            (product: { id: number | string; product_name: string }) => {
+              productNames.set(String(product.id), product.product_name);
+            },
+          );
         }
-      } catch (error) {
-        // console.error("Failed to load variants:", error);
+
+        const uniqueProducts = new Map<string, Variant>();
+        rows.forEach((row) => {
+          if (row.parent_id === null || row.parent_id === undefined) return;
+          const productKey = String(row.parent_id);
+          if (!uniqueProducts.has(productKey)) {
+            uniqueProducts.set(productKey, {
+              ...row,
+              product_name:
+                productNames.get(productKey) || `Produk #${row.parent_id}`,
+            });
+          }
+        });
+        if (!cancelled) setVariants([...uniqueProducts.values()]);
       } finally {
-        setLoadingVariants(false);
+        if (!cancelled) setLoadingVariants(false);
       }
     }
 
-    loadVariants();
-  }, [open, token, item]);
+    void loadProducts();
+    return () => {
+      cancelled = true;
+    };
+  }, [item, open, token]);
 
   if (!item) return null;
+
+  const dimensions = [
+    ["Panjang", item.length ?? item.panjang, "CM"],
+    ["Lebar", item.width ?? item.lebar, "CM"],
+    ["Tinggi", item.height ?? item.tinggi, "CM"],
+    ["Berat Bersih", item.weight, "KG"],
+  ];
 
   return (
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center p-1.5 sm:p-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-md"
+          <button
+            aria-label="Tutup detail"
+            className="absolute inset-0 bg-black/55 backdrop-blur-sm"
             onClick={onClose}
           />
 
           <motion.div
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            initial={{ scale: 0.97, opacity: 0, y: 12 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            transition={{ type: "spring", duration: 0.3 }}
-            className="relative z-10 w-full max-w-5xl bg-white rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
+            exit={{ scale: 0.97, opacity: 0, y: 12 }}
+            className="relative z-10 flex h-[96dvh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl sm:h-[min(94vh,820px)] sm:w-[94%] sm:rounded-xl lg:w-[90%] lg:max-w-[1400px]"
           >
-            {/* Header with Gradient */}
-            <div className="bg-gradient-to-r from-red-500 via-red-600 to-red-700 px-8 py-10 text-white relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full -mr-48 -mt-48" />
-              <div className="absolute bottom-0 left-0 w-64 h-64 bg-black/10 rounded-full -ml-32 -mb-32" />
-
-              <button
-                onClick={onClose}
-                className="absolute top-5 right-5 p-2.5 hover:bg-white/20 rounded-xl transition-colors z-10"
-              >
-                <FaTimes className="w-6 h-6" />
-              </button>
-
-              <div className="relative">
-                {/* Badges */}
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="px-4 py-1.5 bg-white/20 backdrop-blur-sm rounded-full text-sm font-semibold">
-                    {item.category}
-                  </span>
-                  <span className="px-4 py-1.5 bg-purple-500/90 backdrop-blur-sm rounded-full text-sm font-semibold">
-                    {item.uom}
-                  </span>
+            <header className="flex shrink-0 items-start gap-3 bg-gradient-to-r from-rose-600 to-red-700 px-4 py-5 text-white sm:px-6">
+              <div className="min-w-0 flex-1">
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <code className="rounded bg-white/20 px-2.5 py-1 text-[11px] font-extrabold shadow-sm sm:text-xs">
+                    {displayValue(item.code)}
+                  </code>
+                  {/* {item.subcategory && (
+                    <span className="rounded bg-white/20 px-2.5 py-1 text-[11px] font-extrabold uppercase shadow-sm sm:text-xs">
+                      {item.subcategory}
+                    </span>
+                  )} */}
+                  {/* <span className="rounded bg-white/20 px-2.5 py-1 text-[11px] font-extrabold uppercase shadow-sm sm:text-xs">
+                    {displayValue(item.uom)}
+                  </span> */}
                   <span
-                    className={`px-4 py-1.5 backdrop-blur-sm rounded-full text-sm font-semibold ${
-                      item.disabled === 0 ? "bg-green-500/90" : "bg-gray-500/90"
+                    className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold sm:text-xs ${
+                      item.disabled === 0 ? "bg-emerald-500" : "bg-gray-500"
                     }`}
                   >
-                    {item.disabled === 0 ? "Aktif" : "Nonaktif"}
+                    <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                    {item.status}
                   </span>
                 </div>
-
-                {/* Title */}
-                <h2 className="text-4xl font-bold mb-3">{item.name}</h2>
-
-                <div className="flex items-center gap-2 text-lg text-red-100">
-                  <FaBarcode className="w-5 h-5" />
-                  <code className="font-mono">{item.code}</code>
+                <h2
+                  className="line-clamp-2 text-xl font-extrabold tracking-tight sm:text-[28px] sm:leading-tight"
+                  title={item.name}
+                >
+                  {item.name}
+                </h2>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-medium text-red-50 sm:text-xs">
+                  {/* <span className="flex max-w-[320px] items-center gap-1.5 rounded bg-red-950/25 px-2 py-1">
+                    <FaBarcode className="shrink-0" />
+                    <code className="truncate">{item.code}</code>
+                  </span>
+                  <span>•</span> */}
+                  <span>ID Item: #{item.id}</span>
+                  <span>•</span>
+                  <span>Versi{displayValue(item.version)}</span>
                 </div>
               </div>
-            </div>
+              <button
+                onClick={onClose}
+                className="rounded-lg p-2 hover:bg-white/15"
+                aria-label="Tutup"
+              >
+                <FaTimes className="h-5 w-5" />
+              </button>
+            </header>
 
-            {/* Content */}
-            <div className="p-8">
-              {/* Image Preview */}
-              <div className="mb-8">
-                <label className="block text-sm font-semibold text-gray-700 mb-3">
-                  Product Image
-                </label>
-                <div className="relative rounded-2xl overflow-hidden border-2 border-gray-200 shadow-lg bg-gradient-to-br from-gray-50 to-white">
-                  {item.image && !imageError ? (
-                    <div className="w-full h-80 flex items-center justify-center p-8">
-                      <Image
-                        src={item.image}
-                        alt={item.name}
-                        width={600}
-                        height={600}
-                        className="object-contain w-full h-full"
-                        onError={() => setImageError(true)}
-                        unoptimized
-                        priority
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-full h-80 flex items-center justify-center">
-                      <div className="text-center">
-                        <FaTag className="w-16 h-16 text-gray-300 mx-auto mb-3" />
-                        <span className="text-sm text-gray-400">
-                          No image available
-                        </span>
+            <div className="min-h-0 flex-1 overflow-y-auto bg-white p-3 sm:p-5 lg:p-6">
+              <div className="grid items-start gap-5 md:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)]">
+                <ItemImagePreview item={item} token={token} />
+
+                <main className="min-w-0 space-y-4">
+                  <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                    <div className="mb-2 flex items-start gap-2.5 border-b border-slate-100 pb-3">
+                      <span className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-sm text-rose-500">
+                        <FaTag />
+                      </span>
+                      <div>
+                        <h3 className="text-sm font-extrabold text-slate-900 sm:text-base">
+                          Informasi Item
+                        </h3>
+                        <p className="mt-0.5 text-xs text-slate-400 sm:text-sm">
+                          Konfigurasi atribut teknis dan status dokumen
+                        </p>
                       </div>
                     </div>
-                  )}
-                </div>
-              </div>
+                    <div className="grid grid-cols-1 gap-x-6 min-[430px]:grid-cols-2 sm:grid-cols-3 lg:gap-x-8">
+                      {/* <InfoCell label="Item Name" value={item.item_name} />
+                      <InfoCell label="Item Code" value={item.item_code} /> */}
+                      <InfoCell label="Grup" value={item.group} />
+                      <InfoCell label="Kategori" value={item.category} />
+                      <InfoCell label="Subkategori" value={item.subcategory} />
+                      <InfoCell label="UOM" value={item.uom} />
+                      <div className="min-w-0 border-b border-slate-100 py-3">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">
+                          Generator
+                        </p>
+                        <code className="mt-1.5 inline-block max-w-full truncate rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-bold text-blue-600">
+                          {displayValue(item.generator_item)}
+                        </code>
+                      </div>
+                      <div className="min-w-0 border-b border-slate-100 py-3">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">
+                          Last Item Updater
+                        </p>
+                        <code className="mt-1.5 inline-block max-w-full truncate rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-bold text-blue-600">
+                          {displayValue(item.last_item_updater)}
+                        </code>
+                      </div>
+                      {/* <div className="min-w-0 border-b border-slate-100 py-3">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">
+                          Status Item
+                        </p>
+                        <p className="mt-1.5 flex items-center gap-1.5 text-sm font-bold text-slate-900">
+                          <span
+                            className={`h-2 w-2 rounded-full ${item.disabled === 0 ? "bg-emerald-500" : "bg-slate-400"}`}
+                          />
+                          {item.status}
+                        </p>
+                      </div> */}
+                      {/* <div className="min-w-0 border-b border-slate-100 py-3">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">
+                          Docstatus
+                        </p>
+                        <p className="mt-1.5 text-sm font-bold text-slate-900">
+                          {item.docstatus}{" "}
+                          <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-600">
+                            {item.docstatus === 1 ? "Approved" : "Draft"}
+                          </span>
+                        </p>
+                      </div>
+                      <InfoCell label="Purchasing" value={item.purchasing} /> */}
+                      <InfoCell
+                        label="Standard Colly Item"
+                        value={item.standard_colly_item}
+                      />
+                      <InfoCell label="NAma Item PPN" value={item.ppn_name} />
+                      <InfoCell label="UOM PPN" value={item.uom_ppn} />
+                      {/* <InfoCell
+                        label="Akun Beban"
+                        value={item.default_expense_account}
+                      />
+                      <InfoCell
+                        label="Akun Pendapatan"
+                        value={item.default_income_account}
+                      /> */}
+                    </div>
+                  </section>
 
-              {/* Info Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                {/* Basic Info */}
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-6 border-2 border-blue-200">
-                  <div className="flex items-center gap-3 mb-4">
-                    <FaTag className="w-5 h-5 text-blue-600" />
-                    <label className="text-sm font-bold text-blue-900 uppercase tracking-wide">
-                      Detail Info
-                    </label>
-                  </div>
-                  <div className="space-y-3">
-                    <div>
-                      <span className="text-sm font-medium text-blue-700">
-                        Group:
+                  <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                    <div className="mb-4 flex items-start gap-2.5">
+                      <span className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-sm text-rose-500">
+                        <FaRulerCombined />
                       </span>
-                      <p className="text-blue-900 font-semibold">
-                        {item.group}
-                      </p>
+                      <div>
+                        <h3 className="text-sm font-extrabold text-slate-900 sm:text-base">
+                          Dimensi &amp; Spesifikasi Fisik
+                        </h3>
+                        <p className="mt-0.5 text-xs text-slate-400 sm:text-sm">
+                          Ukuran volumetrik untuk penanganan logistik dan
+                          pengiriman
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-sm font-medium text-blue-700">
-                        Generator:
-                      </span>
-                      <code className="text-sm text-blue-900 bg-white px-2 py-1 rounded">
-                        {item.generator_item}
-                      </code>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Dimensions */}
-                {(item.panjang ||
-                  item.lebar ||
-                  item.tinggi ||
-                  item.diameter) && (
-                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-6 border-2 border-purple-200">
-                    <div className="flex items-center gap-3 mb-4">
-                      <FaCube className="w-5 h-5 text-purple-600" />
-                      <label className="text-sm font-bold text-purple-900 uppercase tracking-wide">
-                        Dimensi
-                      </label>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      {item.panjang && (
-                        <div>
-                          <span className="text-xs text-purple-700">
-                            Panjang
-                          </span>
-                          <p className="text-purple-900 font-semibold">
-                            {item.panjang}
-                          </p>
-                        </div>
-                      )}
-                      {item.lebar && (
-                        <div>
-                          <span className="text-xs text-purple-700">Lebar</span>
-                          <p className="text-purple-900 font-semibold">
-                            {item.lebar}
-                          </p>
-                        </div>
-                      )}
-                      {item.tinggi && (
-                        <div>
-                          <span className="text-xs text-purple-700">
-                            Tinggi
-                          </span>
-                          <p className="text-purple-900 font-semibold">
-                            {item.tinggi}
-                          </p>
-                        </div>
-                      )}
-                      {item.diameter && (
-                        <div>
-                          <span className="text-xs text-purple-700">
-                            Diameter
-                          </span>
-                          <p className="text-purple-900 font-semibold">
-                            {item.diameter}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Description */}
-              {item.description && (
-                <div className="mb-8">
-                  <label className="block text-sm font-semibold text-gray-700 mb-3">
-                    Deskripsi
-                  </label>
-                  <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl p-6 border-2 border-gray-100">
-                    <p className="text-gray-700 leading-relaxed">
-                      {item.description}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Branches */}
-              {(branches.length > 0 || loadingBranches) && (
-                <div className="mb-8">
-                  <div className="flex items-center gap-3 mb-4">
-                    <FaMapMarkerAlt className="w-5 h-5 text-green-600" />
-                    <label className="text-lg font-bold text-gray-800">
-                      Tersedia di {loadingBranches ? "..." : branches.length}{" "}
-                      Cabang
-                    </label>
-                  </div>
-                  {loadingBranches ? (
-                    <div className="text-center py-8">
-                      <div className="w-8 h-8 border-2 border-green-200 border-t-green-500 rounded-full animate-spin mx-auto mb-2"></div>
-                      <p className="text-xs text-gray-500">Memuat cabang...</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {branches.map((branch) => (
+                    <div className="grid grid-cols-2 rounded-xl border border-slate-100 bg-slate-50/60 sm:grid-cols-4 sm:divide-x sm:divide-slate-100">
+                      {dimensions.map(([label, value, unit], index) => (
                         <div
-                          key={branch.id}
-                          className="flex items-center gap-2 px-4 py-3 bg-gradient-to-br from-green-50 to-green-100 rounded-xl border-2 border-green-200"
+                          key={String(label)}
+                          className={`border-b border-slate-100 px-4 py-4 sm:border-b-0 ${index === 3 ? "text-rose-600" : "text-slate-900"}`}
                         >
-                          <FaCheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
-                          <span className="text-sm font-medium text-green-900">
-                            {branch.name}
-                          </span>
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 sm:text-[11px]">
+                            {label}
+                          </p>
+                          <p className="mt-2 text-xl font-extrabold leading-none sm:text-2xl">
+                            {displayValue(value)}{" "}
+                            <span className="text-[11px] font-bold">
+                              {value === null ||
+                              value === undefined ||
+                              value === ""
+                                ? ""
+                                : unit}
+                            </span>
+                          </p>
                         </div>
                       ))}
                     </div>
-                  )}
-                </div>
-              )}
+                    {item.description && (
+                      <div className="mt-3 border-t border-slate-100 pt-3">
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                          Deskripsi
+                        </p>
+                        <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
+                          {item.description}
+                        </p>
+                      </div>
+                    )}
+                  </section>
 
-              {/* Products (Variants) - Products this item belongs to */}
-              <div className="mb-8">
-                <div className="flex items-center gap-3 mb-4">
-                  <FaBox className="w-5 h-5 text-blue-600" />
-                  <label className="text-lg font-bold text-gray-800">
-                    Terdaftar di Produk
-                  </label>
-                </div>
-                {loadingVariants ? (
-                  <div className="text-center py-8">
-                    <div className="w-8 h-8 border-2 border-blue-200 border-t-blue-500 rounded-full animate-spin mx-auto mb-2"></div>
-                    <p className="text-xs text-gray-500">Memuat produk...</p>
-                  </div>
-                ) : variants.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {variants.map((variant) => (
-                      <div
-                        key={variant.id}
-                        className="flex items-center gap-2 px-4 py-3 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl border-2 border-blue-200"
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <section className="rounded-xl border border-gray-200 p-4">
+                      <SectionTitle
+                        icon={<FaMapMarkerAlt />}
+                        count={branches.length}
                       >
-                        <FaBox className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <span className="text-sm font-medium text-blue-900 block truncate">
-                            {variant.product_name ||
-                              `Product #${variant.parent_id}`}
-                          </span>
-                          <span className="text-xs text-blue-700">
-                            Urutan: {variant.idx}
-                          </span>
+                        Item Branches
+                      </SectionTitle>
+                      {loadingBranches && branches.length === 0 ? (
+                        <p className="py-6 text-center text-sm text-gray-400">
+                          Memuat cabang...
+                        </p>
+                      ) : branches.length > 0 ? (
+                        <div className="grid max-h-48 grid-cols-1 gap-2 overflow-y-auto pr-1 xl:grid-cols-2">
+                          {branches.map((branch) => (
+                            <div
+                              key={branch.id}
+                              className="flex min-w-0 items-center gap-2.5 rounded-lg bg-emerald-50 px-3 py-2.5 text-sm font-medium text-emerald-800"
+                            >
+                              <FaCheckCircle className="shrink-0 text-emerald-500" />
+                              <span className="truncate" title={branch.name}>
+                                {branch.name}
+                              </span>
+                            </div>
+                          ))}
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                    <FaBox className="w-12 h-12 text-gray-300 mx-auto mb-2" />
-                    <p className="text-sm text-gray-500">
-                      Item ini belum terdaftar di produk manapun
-                    </p>
-                  </div>
-                )}
-              </div>
+                      ) : (
+                        <p className="rounded-lg bg-gray-50 py-6 text-center text-sm text-gray-400">
+                          Belum tersedia di cabang
+                        </p>
+                      )}
+                    </section>
 
-              {/* Catatan Aktivitas */}
-              {(item.created_at || item.updated_at) && (
-                <div className="mb-8">
-                  <div className="flex items-center gap-3 mb-6">
-                    <FaHistory className="w-5 h-5 text-blue-500" />
-                    <h3 className="text-xl font-bold text-gray-900">
+                    <section className="rounded-xl border border-gray-200 p-4">
+                      <SectionTitle icon={<FaBox />} count={variants.length}>
+                        Terdaftar di Produk
+                      </SectionTitle>
+                      {loadingVariants ? (
+                        <p className="py-6 text-center text-sm text-gray-400">
+                          Memuat produk...
+                        </p>
+                      ) : variants.length > 0 ? (
+                        <div className="grid max-h-48 grid-cols-1 gap-2 overflow-y-auto pr-1 xl:grid-cols-2">
+                          {variants.map((variant) => (
+                            <div
+                              key={`product-${String(variant.parent_id)}`}
+                              className="flex min-w-0 items-center gap-2.5 rounded-lg bg-blue-50 px-3 py-2.5"
+                            >
+                              <FaBox className="shrink-0 text-xs text-blue-500" />
+                              <div className="min-w-0">
+                                <p
+                                  className="truncate text-sm font-semibold text-blue-900"
+                                  title={variant.product_name}
+                                >
+                                  {variant.product_name}
+                                </p>
+                                <p className="text-xs text-blue-600">
+                                  Urutan {variant.idx}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="rounded-lg bg-gray-50 py-6 text-center text-sm text-gray-400">
+                          Belum terdaftar di produk
+                        </p>
+                      )}
+                    </section>
+                  </div>
+
+                  <section className="rounded-xl border border-gray-200 p-4">
+                    <SectionTitle icon={<FaClock />}>
                       Catatan Aktivitas
-                    </h3>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {item.created_at && (
-                      <div className="bg-gradient-to-br from-green-50 to-white rounded-2xl p-5 border-2 border-green-100">
-                        <div className="flex items-center gap-3 mb-4">
-                          <div className="w-10 h-10 rounded-xl bg-green-500 flex items-center justify-center">
-                            <FaUser className="w-5 h-5 text-white" />
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 font-medium">
-                              Created
-                            </p>
-                            <p className="text-sm font-bold text-gray-900">
-                              {item.created_by
-                                ? typeof item.created_by === "string"
-                                  ? item.created_by
-                                  : `User #${item.created_by}`
-                                : "Unknown"}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <FaClock className="w-4 h-4 text-green-500" />
-                          <p className="text-sm">
-                            {new Date(item.created_at).toLocaleString("id-ID", {
-                              dateStyle: "long",
-                              timeStyle: "short",
-                            })}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    {item.updated_at && (
-                      <div className="bg-gradient-to-br from-blue-50 to-white rounded-2xl p-5 border-2 border-blue-100">
-                        <div className="flex items-center gap-3 mb-4">
-                          <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center">
-                            <FaEdit className="w-5 h-5 text-white" />
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 font-medium">
-                              Last Updated
-                            </p>
-                            <p className="text-sm font-bold text-gray-900">
-                              {item.updated_by
-                                ? typeof item.updated_by === "string"
-                                  ? item.updated_by
-                                  : `User #${item.updated_by}`
-                                : "Unknown"}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <FaClock className="w-4 h-4 text-blue-500" />
-                          <p className="text-sm">
-                            {new Date(item.updated_at).toLocaleString("id-ID", {
-                              dateStyle: "long",
-                              timeStyle: "short",
-                            })}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex gap-4 pt-6 border-t-2 border-gray-100">
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => onEdit?.(item)}
-                  className="flex-1 flex items-center justify-center gap-3 px-6 py-4 bg-gray-100 hover:bg-gray-200 rounded-2xl transition-all font-semibold text-gray-800 shadow-sm"
-                >
-                  <FaEdit className="w-5 h-5" />
-                  <span>Edit Item</span>
-                </motion.button>
-
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => onDelete?.(item)}
-                  className="flex-1 flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-2xl transition-all font-semibold shadow-lg shadow-red-200"
-                >
-                  <FaTrash className="w-5 h-5" />
-                  <span>Hapus</span>
-                </motion.button>
+                    </SectionTitle>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                      <InfoCell
+                        label="Dibuat oleh"
+                        value={item.igen_created_by || item.created_by}
+                      />
+                      <InfoCell
+                        label="Dibuat pada"
+                        value={formatDate(item.created_at)}
+                      />
+                      <InfoCell
+                        label="Diperbarui oleh"
+                        value={
+                          item.igen_updated_by ||
+                          item.last_item_updater ||
+                          item.updated_by
+                        }
+                      />
+                      <InfoCell
+                        label="Diperbarui pada"
+                        value={formatDate(item.updated_at)}
+                      />
+                    </div>
+                  </section>
+                </main>
               </div>
             </div>
+
+            <footer className="flex shrink-0 flex-wrap items-center gap-2 border-t border-slate-200 bg-slate-50/80 px-3 py-3 sm:px-6">
+              <div className="mr-auto flex w-full min-w-0 items-center gap-2 text-[11px] text-slate-400 sm:w-auto sm:text-xs">
+                <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+                <span className="truncate">
+                  Terakhir disinkronisasi:{" "}
+                  <strong className="text-slate-600">
+                    {formatSyncDate(item.updated_at)} WIB
+                  </strong>
+                </span>
+              </div>
+              <button
+                onClick={onClose}
+                className="flex-1 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 sm:flex-none sm:text-sm"
+              >
+                Tutup
+              </button>
+              <button
+                onClick={() => onEdit?.(item)}
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 sm:flex-none sm:text-sm"
+              >
+                <FaEdit /> Edit Item
+              </button>
+              <button
+                onClick={() => onDelete?.(item)}
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-700 sm:flex-none sm:text-sm"
+              >
+                <FaTrash /> Hapus
+              </button>
+            </footer>
           </motion.div>
         </motion.div>
       )}

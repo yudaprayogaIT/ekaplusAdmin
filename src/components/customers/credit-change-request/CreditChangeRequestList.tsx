@@ -43,6 +43,7 @@ import {
   waitForElement,
 } from "@/lib/driverTour";
 import type { Driver } from "driver.js";
+import { useResourceStatusOptions } from "@/hooks/useResourceStatusOptions";
 
 type SortField = "created_at" | "updated_at" | "status";
 type SortDirection = "asc" | "desc";
@@ -174,7 +175,19 @@ function mapCreditChangeRequestRow(
 }
 
 export function CreditChangeRequestList() {
-  const { token, isAuthenticated, hasRole } = useAuth();
+  const { token, isAuthenticated, hasRole, roles, currentUser } = useAuth();
+  const { statuses: statusOptions, loading: loadingStatusOptions } =
+    useResourceStatusOptions(
+      API_CONFIG.ENDPOINTS.CREDIT_CHANGE_REQUEST,
+      "credit_change_request",
+      roles.length > 0
+        ? roles.map((role) => role.id)
+        : currentUser?.role_id
+          ? [currentUser.role_id]
+          : [],
+      token,
+      isAuthenticated,
+    );
   const canCreateRequest = hasRole("administrator");
   const pathname = usePathname();
   const router = useRouter();
@@ -195,6 +208,7 @@ export function CreditChangeRequestList() {
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState("all");
   const [sortField, setSortField] = useState<SortField>("updated_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [currentPage, setCurrentPage] = useState(1);
@@ -261,6 +275,9 @@ export function CreditChangeRequestList() {
             endpoint: API_CONFIG.ENDPOINTS.CREDIT_CHANGE_REQUEST,
             spec: {
               fields: ["*", "created_by.full_name", "updated_by.full_name"],
+              ...(selectedStatus !== "all"
+                ? { filters: [["status", "=", selectedStatus]] }
+                : {}),
               order_by:
                 sortField === "status"
                   ? [["status", sortDirection]]
@@ -280,6 +297,9 @@ export function CreditChangeRequestList() {
           getQueryUrl(API_CONFIG.ENDPOINTS.CREDIT_CHANGE_REQUEST, {
             fields: ["*", "created_by.full_name", "updated_by.full_name"],
             page,
+            ...(selectedStatus !== "all"
+              ? { filters: [["status", "=", selectedStatus]] }
+              : {}),
             order_by:
               sortField === "status"
                 ? [["status", sortDirection]]
@@ -333,7 +353,14 @@ export function CreditChangeRequestList() {
         }
       }
     },
-    [debouncedSearchQuery, isAuthenticated, sortDirection, sortField, token],
+    [
+      debouncedSearchQuery,
+      isAuthenticated,
+      selectedStatus,
+      sortDirection,
+      sortField,
+      token,
+    ],
   );
 
   useEffect(() => {
@@ -782,12 +809,12 @@ export function CreditChangeRequestList() {
 
   return (
     <div>
-      <div className="mb-4 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+      <div className="mb-4 flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 md:text-3xl">
             Credit Change Request
           </h1>
-          <p className="text-sm text-gray-600 md:text-base">
+          <p className="mt-1 text-sm text-gray-600">
             Kelola pengajuan perubahan credit limit dan payment term customer
           </p>
         </div>
@@ -843,54 +870,78 @@ export function CreditChangeRequestList() {
         </div>
       </div> */}
 
-      <div className="mb-6 rounded-xl border border-gray-100 bg-white p-4 shadow-sm md:p-6">
-        <div className="flex flex-col gap-4 md:flex-row">
-          <div></div>
-          <div className="relative flex-1">
-            <FaSearch className="absolute left-4 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-gray-400" />
+      <div className="mb-4 rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
+        <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
+          <div className="relative min-w-0 flex-1">
+            <FaSearch className="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
-              type="text"
+              type="search"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Cari nama, policy type, status, atau alasan..."
-              className="w-full rounded-xl border border-gray-200 py-3 pl-11 pr-4 text-sm transition-all focus:border-transparent focus:ring-2 focus:ring-emerald-500"
+              className="w-full rounded-lg border border-gray-200 py-2.5 pl-9 pr-3 text-sm transition focus:border-transparent focus:ring-2 focus:ring-emerald-500"
             />
           </div>
 
-          <select
-            value={sortField}
-            onChange={(event) => setSortField(event.target.value as SortField)}
-            className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 focus:border-transparent focus:ring-2 focus:ring-emerald-500"
-          >
-            {sortOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={() =>
-              setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"))
-            }
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-100 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-200"
-          >
-            {sortDirection === "asc" ? (
-              <FaSortAmountUp className="h-4 w-4" />
-            ) : (
-              <FaSortAmountDown className="h-4 w-4" />
-            )}
-          </button>
-          {canCreateRequest ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={selectedStatus}
+              onChange={(event) => setSelectedStatus(event.target.value)}
+              aria-label="Filter status"
+              className="min-w-40 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 focus:border-transparent focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="all">Semua Status</option>
+              {loadingStatusOptions ? (
+                <option disabled>Memuat status...</option>
+              ) : (
+                statusOptions.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))
+              )}
+            </select>
+            <button
+              type="button"
+              onClick={() =>
+                setSortDirection((prev) =>
+                  prev === "asc" ? "desc" : "asc",
+                )
+              }
+              title={sortDirection === "asc" ? "Urut naik" : "Urut turun"}
+              className="rounded-lg bg-gray-100 p-2.5 text-gray-700 transition hover:bg-gray-200"
+            >
+              {sortDirection === "asc" ? (
+                <FaSortAmountUp className="h-4 w-4" />
+              ) : (
+                <FaSortAmountDown className="h-4 w-4" />
+              )}
+            </button>
+            <select
+              value={sortField}
+              onChange={(event) =>
+                setSortField(event.target.value as SortField)
+              }
+              aria-label="Urutkan berdasarkan"
+              className="rounded-lg border-0 bg-gray-100 px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-200 focus:ring-2 focus:ring-emerald-500"
+            >
+              {sortOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            {canCreateRequest ? (
             <button
               type="button"
               onClick={() => setModalOpen(true)}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-200 transition hover:from-emerald-600 hover:to-teal-700"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:from-emerald-600 hover:to-teal-700"
             >
               <FaPlus className="h-4 w-4" />
               Add New Request
             </button>
-          ) : null}
+            ) : null}
+          </div>
         </div>
       </div>
 

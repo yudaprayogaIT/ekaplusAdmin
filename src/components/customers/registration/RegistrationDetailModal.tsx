@@ -370,7 +370,8 @@ export function RegistrationDetailModal({
   rollbackLabel = "Rollback",
   rollbackReadOnly = false,
 }: RegistrationDetailModalProps) {
-  const { token } = useAuth();
+  const { token, hasRole } = useAuth();
+  const canManageSaga = hasRole("administrator");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [shippingAddresses, setShippingAddresses] = useState<
     CustomerRegisterAddressApiResponse[]
@@ -863,11 +864,13 @@ export function RegistrationDetailModal({
                   <button
                     type="button"
                     onClick={() => {
-                      if (!syncReadOnly && !isSyncing) onSync?.(registration);
+                      if (canManageSaga && !syncReadOnly && !isSyncing) {
+                        onSync?.(registration);
+                      }
                     }}
-                    disabled={syncReadOnly || isSyncing}
+                    disabled={!canManageSaga || syncReadOnly || isSyncing}
                     className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold border-2 transition-all ${
-                      syncReadOnly
+                      !canManageSaga || syncReadOnly
                         ? "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed"
                         : "bg-white text-blue-700 border-blue-200 hover:bg-blue-50"
                     }`}
@@ -880,12 +883,18 @@ export function RegistrationDetailModal({
                   <button
                     type="button"
                     onClick={() => {
-                      if (!rollbackReadOnly && !isRollbacking)
+                      if (
+                        canManageSaga &&
+                        !rollbackReadOnly &&
+                        !isRollbacking
+                      )
                         onRollback?.(registration);
                     }}
-                    disabled={rollbackReadOnly || isRollbacking}
+                    disabled={
+                      !canManageSaga || rollbackReadOnly || isRollbacking
+                    }
                     className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold border-2 transition-all ${
-                      rollbackReadOnly
+                      !canManageSaga || rollbackReadOnly
                         ? "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed"
                         : "bg-white text-rose-700 border-rose-200 hover:bg-rose-50"
                     }`}

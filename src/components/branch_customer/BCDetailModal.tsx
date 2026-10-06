@@ -44,6 +44,7 @@ import {
 } from "@/utils/paymentAccount";
 import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import LoadMoreButton from "@/components/ui/LoadMoreButton";
+import { ResourceHistory } from "@/components/customers/ResourceHistory";
 import { BCContactRelationsPanel } from "./BCContactRelationsPanel";
 
 interface BCDetailModalProps {
@@ -132,6 +133,12 @@ interface AddressRow {
   parent_type?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+}
+
+interface CustomerContactHistoryRow {
+  id: number;
+  name?: string | null;
+  title?: string | null;
 }
 
 interface WilayahOption {
@@ -469,6 +476,13 @@ export function BCDetailModal({
   const [addressError, setAddressError] = useState<string | null>(null);
   const [detail, setDetail] = useState<BCDetailApi | null>(null);
   const [rows, setRows] = useState<AddressRow[]>([]);
+  const [contactHistoryRows, setContactHistoryRows] = useState<
+    CustomerContactHistoryRow[]
+  >([]);
+  const [contactHistoryLoading, setContactHistoryLoading] = useState(false);
+  const [contactHistoryError, setContactHistoryError] = useState<string | null>(
+    null,
+  );
   const [gp, setGp] = useState<GroupParent | null>(null);
   const [gc, setGc] = useState<GroupCustomer | null>(null);
   const [nb, setNb] = useState<{ code: string; name: string } | null>(null);
@@ -843,6 +857,55 @@ export function BCDetailModal({
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadContactHistoryRows() {
+      if (
+        activeTab !== "activity" ||
+        !isOpen ||
+        !bc?.id ||
+        !token ||
+        !isAuthenticated
+      ) {
+        return;
+      }
+
+      setContactHistoryLoading(true);
+      setContactHistoryError(null);
+      setContactHistoryRows([]);
+      try {
+        const contactRows = await fetchAllQueryRows<CustomerContactHistoryRow>({
+          endpoint: API_CONFIG.ENDPOINTS.CUSTOMER_CONTACT,
+          spec: {
+            fields: ["id", "name", "title"],
+            filters: [
+              ["parent_id", "=", detail?.id ?? bc.id],
+              ["parent_type", "=", "branch_customer"],
+            ],
+          },
+          token,
+          errorMessage: "Gagal memuat customer_contact untuk history",
+        });
+        if (!cancelled) setContactHistoryRows(contactRows);
+      } catch (error) {
+        if (!cancelled) {
+          setContactHistoryRows([]);
+          setContactHistoryError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      } finally {
+        if (!cancelled) setContactHistoryLoading(false);
+      }
+    }
+
+    void loadContactHistoryRows();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, bc?.id, detail?.id, isAuthenticated, isOpen, token]);
 
   useEffect(() => {
     if (isOpen) return;
@@ -1775,6 +1838,7 @@ export function BCDetailModal({
     policyActiveInfo?.relation,
     `${displayName} - ${bcCode}`,
   );
+  const persistedAddressRows = rows.filter((row) => Number(row.id) > 0);
   const creditLimitSiblings = (
     policyActiveInfo?.scopes?.credit_limit?.bcs || []
   ).filter((row) => Number(row.id) !== Number(bc.id));
@@ -3569,8 +3633,9 @@ export function BCDetailModal({
                     )}
 
                     {activeTab === "activity" && (
-                      <section className="grid gap-4 md:grid-cols-2">
-                        <div className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-sm">
+                      <div className="space-y-5">
+                        <section className="grid gap-4 md:grid-cols-2">
+                          <div className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-sm">
                           <div className="mb-4 flex items-center gap-3">
                             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500 text-white">
                               <FaClock className="h-5 w-5" />
@@ -3587,9 +3652,9 @@ export function BCDetailModal({
                           <p className="text-sm text-slate-800">
                             {dt(detail?.created_at || bc.created_at)}
                           </p>
-                        </div>
+                          </div>
 
-                        <div className="rounded-3xl border border-blue-100 bg-white p-5 shadow-sm">
+                          <div className="rounded-3xl border border-blue-100 bg-white p-5 shadow-sm">
                           <div className="mb-4 flex items-center gap-3">
                             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500 text-white">
                               <FaEdit className="h-5 w-5" />
@@ -3606,8 +3671,84 @@ export function BCDetailModal({
                           <p className="text-sm text-slate-800">
                             {dt(detail?.updated_at || bc.updated_at)}
                           </p>
-                        </div>
-                      </section>
+                          </div>
+                        </section>
+
+                        <ResourceHistory
+                          key={`branch-customer-history-${bc.id}`}
+                          endpoint={API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2}
+                          resourceId={bc.id}
+                          token={token}
+                          title="History Branch Customer"
+                        />
+
+                        <section className="space-y-3">
+                          <div>
+                            <h4 className="font-bold text-slate-900">
+                              History Customer Address
+                            </h4>
+                            <p className="text-sm text-slate-500">
+                              Riwayat setiap alamat yang terdaftar pada branch customer.
+                            </p>
+                          </div>
+                          {addressError && (
+                            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                              {addressError}
+                            </div>
+                          )}
+                          {!addressError && persistedAddressRows.length === 0 && (
+                            <div className="rounded-2xl bg-white px-4 py-6 text-center text-sm text-slate-500">
+                              Belum ada customer address.
+                            </div>
+                          )}
+                          {persistedAddressRows.map((address, index) => (
+                              <ResourceHistory
+                                key={`customer-address-history-${address.id}`}
+                                endpoint={API_CONFIG.ENDPOINTS.CUSTOMER_ADDRESS}
+                                resourceId={address.id}
+                                token={token}
+                                title={`History Address: ${address.label || address.type || `Alamat ${index + 1}`}`}
+                              />
+                          ))}
+                        </section>
+
+                        <section className="space-y-3">
+                          <div>
+                            <h4 className="font-bold text-slate-900">
+                              History Customer Contact
+                            </h4>
+                            <p className="text-sm text-slate-500">
+                              Riwayat relasi contact yang terdaftar pada branch customer.
+                            </p>
+                          </div>
+                          {contactHistoryLoading && (
+                            <div className="rounded-2xl bg-white px-4 py-6 text-center text-sm text-slate-500">
+                              Memuat daftar customer contact...
+                            </div>
+                          )}
+                          {!contactHistoryLoading && contactHistoryError && (
+                            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                              {contactHistoryError}
+                            </div>
+                          )}
+                          {!contactHistoryLoading &&
+                            !contactHistoryError &&
+                            contactHistoryRows.length === 0 && (
+                              <div className="rounded-2xl bg-white px-4 py-6 text-center text-sm text-slate-500">
+                                Belum ada customer contact.
+                              </div>
+                            )}
+                          {contactHistoryRows.map((contact, index) => (
+                            <ResourceHistory
+                              key={`customer-contact-history-${contact.id}`}
+                              endpoint={API_CONFIG.ENDPOINTS.CUSTOMER_CONTACT}
+                              resourceId={contact.id}
+                              token={token}
+                              title={`History Contact: ${contact.title || contact.name || `Contact ${index + 1}`}`}
+                            />
+                          ))}
+                        </section>
+                      </div>
                     )}
                   </div>
                 </div>

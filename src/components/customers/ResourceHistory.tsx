@@ -28,6 +28,8 @@ interface ResourceHistoryProps {
   resourceId: number | string;
   token?: string | null;
   demoMode?: boolean;
+  title?: string;
+  description?: string;
 }
 
 function displayHistoryValue(displayValue: unknown, rawValue: unknown) {
@@ -123,6 +125,8 @@ export function ResourceHistory({
   resourceId,
   token,
   demoMode = false,
+  title = "History Perubahan",
+  description = "Klik untuk melihat riwayat",
 }: ResourceHistoryProps) {
   const [expanded, setExpanded] = useState(false);
   const [history, setHistory] = useState<ResourceHistoryItem[]>([]);
@@ -213,10 +217,10 @@ export function ResourceHistory({
           </span>
           <span>
             <span className="block text-lg font-bold text-slate-900">
-              History Perubahan
+              {title}
             </span>
             <span className="mt-0.5 block text-xs text-slate-500">
-              {loaded ? `${history.length} versi tercatat` : "Klik untuk melihat riwayat"}
+              {loaded ? `${history.length} versi tercatat` : description}
             </span>
           </span>
         </span>

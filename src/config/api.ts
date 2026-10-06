@@ -60,6 +60,7 @@ export const API_CONFIG = {
     GROUP_PARENT: "/api/resource/group_parent",
     GROUP_CUSTOMER: "/api/resource/group_customer",
     BRANCH_CUSTOMER_V2: "/api/resource/branch_customer",
+    CUSTOMER_ADDRESS: "/api/resource/customer_address",
     CONTACT: "/api/resource/contact",
     CUSTOMER_POSITION: "/api/resource/customer_position",
     CUSTOMER_CONTACT: "/api/resource/customer_contact",

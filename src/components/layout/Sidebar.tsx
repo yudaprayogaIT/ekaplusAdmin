@@ -837,7 +837,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
               </span>
             </div>
           )}
-          <div className="text-center text-xs text-gray-400">v2.0.0</div>
+          <div className="text-center text-xs text-gray-400">v3.0.0</div>
         </div>
       </motion.aside>
     </>
