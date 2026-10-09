@@ -45,12 +45,16 @@ import {
 import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 import LoadMoreButton from "@/components/ui/LoadMoreButton";
 import { ResourceHistory } from "@/components/customers/ResourceHistory";
-import { BCContactRelationsPanel } from "./BCContactRelationsPanel";
+import {
+  BCContactRelationsPanel,
+  CustomerContactRelationsPanel,
+} from "./BCContactRelationsPanel";
 
 interface BCDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   bc: BranchCustomer | null;
+  displayMode?: "tabs" | "sections";
   onBCUpdate?: (updatedBC: BranchCustomer) => void;
   onViewBC?: (bc: BranchCustomer) => void;
   onViewGP?: (gp: GroupParent) => void;
@@ -115,6 +119,33 @@ type DetailTab =
   | "contacts"
   | "activity";
 
+function DetailSectionHeading({
+  number,
+  title,
+  description,
+  icon,
+}: {
+  number: string;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-4 pt-3 first:pt-0">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-sm font-black text-white shadow-lg shadow-slate-200">
+        {number}
+      </div>
+      <div className="min-w-0 flex-1 border-b border-slate-200 pb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-blue-600">{icon}</span>
+          <h3 className="text-lg font-black text-slate-900">{title}</h3>
+        </div>
+        <p className="mt-0.5 text-sm text-slate-500">{description}</p>
+      </div>
+    </div>
+  );
+}
+
 interface AddressRow {
   id: number;
   idx?: number | null;
@@ -139,6 +170,40 @@ interface CustomerContactHistoryRow {
   id: number;
   name?: string | null;
   title?: string | null;
+}
+
+type CustomerEntityDetail = Record<string, unknown>;
+
+function entityText(
+  row: CustomerEntityDetail | null,
+  key: string,
+  fallback = "-",
+): string {
+  const value = row?.[key];
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "number") return String(value);
+  return fallback;
+}
+
+function EntityDetailField({
+  label,
+  value,
+  wide = false,
+}: {
+  label: string;
+  value: React.ReactNode;
+  wide?: boolean;
+}) {
+  return (
+    <div className={wide ? "sm:col-span-2" : ""}>
+      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+        {label}
+      </p>
+      <div className="mt-1 break-words text-sm font-semibold text-slate-800">
+        {value || "-"}
+      </div>
+    </div>
+  );
 }
 
 interface WilayahOption {
@@ -311,6 +376,13 @@ function toNum(v: unknown): number | undefined {
   return undefined;
 }
 
+function toRelationId(value: unknown): number | undefined {
+  if (value && typeof value === "object" && "id" in value) {
+    return toNum((value as { id?: unknown }).id);
+  }
+  return toNum(value);
+}
+
 function dt(v?: string | null): string {
   if (!v) return "-";
   const d = new Date(v);
@@ -341,6 +413,11 @@ function formatNullableNumber(value?: number | null): string {
     return "-";
   }
   return new Intl.NumberFormat("id-ID").format(Number(value));
+}
+
+function formatEntityCurrency(value: unknown): string {
+  const amount = toNum(value);
+  return amount === undefined ? "-" : `Rp ${formatNullableNumber(amount)}`;
 }
 
 function renderReadOnlyField(
@@ -465,6 +542,7 @@ export function BCDetailModal({
   isOpen,
   onClose,
   bc,
+  displayMode = "tabs",
   onBCUpdate,
   onViewBC,
   onViewGP,
@@ -486,6 +564,9 @@ export function BCDetailModal({
   const [gp, setGp] = useState<GroupParent | null>(null);
   const [gc, setGc] = useState<GroupCustomer | null>(null);
   const [nb, setNb] = useState<{ code: string; name: string } | null>(null);
+  const [gpDetail, setGpDetail] = useState<CustomerEntityDetail | null>(null);
+  const [gcDetail, setGcDetail] = useState<CustomerEntityDetail | null>(null);
+  const [nbDetail, setNbDetail] = useState<CustomerEntityDetail | null>(null);
   const [relatedBCs, setRelatedBCs] = useState<BranchCustomer[]>([]);
   const [relatedBCsLoading, setRelatedBCsLoading] = useState(false);
   const [relatedBCsError, setRelatedBCsError] = useState<string | null>(null);
@@ -600,6 +681,9 @@ export function BCDetailModal({
     setGp(null);
     setGc(null);
     setNb(null);
+    setGpDetail(null);
+    setGcDetail(null);
+    setNbDetail(null);
     setRelatedBCs([]);
     setRelatedBCsError(null);
     try {
@@ -649,7 +733,7 @@ export function BCDetailModal({
       setRows(sorted);
       setEditedRows(sorted);
 
-      const gcid = toNum(dRow?.gcid) ?? bc.gc_id;
+      const gcid = toRelationId(dRow?.gcid) ?? bc.gc_id;
       if (!gcid) return;
       const gcRes = await apiFetch(
         getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, {
@@ -663,11 +747,12 @@ export function BCDetailModal({
       const gcJson = gcRes.ok ? await gcRes.json() : { data: [] };
       const gcRow = Array.isArray(gcJson?.data) ? gcJson.data[0] : null;
       if (!gcRow) return;
+      setGcDetail(gcRow as CustomerEntityDetail);
       const gcMapped: GroupCustomer = {
         id: Number(gcRow.id),
         name: gcRow.name || `GC${gcRow.id}`,
         gc_name: gcRow.gc_name || "-",
-        gp_id: Number(gcRow.gpid || 0),
+        gp_id: toRelationId(gcRow.gpid) || 0,
         created_at: gcRow.created_at || new Date(0).toISOString(),
         updated_at:
           gcRow.updated_at || gcRow.created_at || new Date(0).toISOString(),
@@ -818,6 +903,7 @@ export function BCDetailModal({
       const gpJson = gpRes.ok ? await gpRes.json() : { data: [] };
       const gpRow = Array.isArray(gpJson?.data) ? gpJson.data[0] : null;
       if (!gpRow) return;
+      setGpDetail(gpRow as CustomerEntityDetail);
       const gpMapped: GroupParent = {
         id: Number(gpRow.id),
         name: gpRow.name || `GP${gpRow.id}`,
@@ -828,12 +914,11 @@ export function BCDetailModal({
         disabled: Number(gpRow.disabled || 0),
       };
       setGp(gpMapped);
-      const nbId =
-        typeof gpRow.nbid === "number" ? gpRow.nbid : toNum(gpRow.nbid?.id);
+      const nbId = toRelationId(gpRow.nbid);
       if (!nbId) return;
       const nbRes = await apiFetch(
         getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, {
-          fields: ["id", "name", "nb_name"],
+          fields: ["*", "created_by.full_name", "updated_by.full_name"],
           filters: [["id", "=", nbId]],
           limit: 1,
         }),
@@ -842,11 +927,13 @@ export function BCDetailModal({
       );
       const nbJson = nbRes.ok ? await nbRes.json() : { data: [] };
       const nbRow = Array.isArray(nbJson?.data) ? nbJson.data[0] : null;
-      if (nbRow)
+      if (nbRow) {
+        setNbDetail(nbRow as CustomerEntityDetail);
         setNb({
           code: nbRow.name || `NB${nbRow.id}`,
           name: nbRow.nb_name || nbRow.name || "-",
         });
+      }
     } catch (e) {
       setDetailError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -863,7 +950,7 @@ export function BCDetailModal({
 
     async function loadContactHistoryRows() {
       if (
-        activeTab !== "activity" ||
+        (displayMode !== "sections" && activeTab !== "activity") ||
         !isOpen ||
         !bc?.id ||
         !token ||
@@ -905,7 +992,7 @@ export function BCDetailModal({
     return () => {
       cancelled = true;
     };
-  }, [activeTab, bc?.id, detail?.id, isAuthenticated, isOpen, token]);
+  }, [activeTab, bc?.id, detail?.id, displayMode, isAuthenticated, isOpen, token]);
 
   useEffect(() => {
     if (isOpen) return;
@@ -1755,9 +1842,9 @@ export function BCDetailModal({
   };
 
   const displayName = useMemo(() => {
-    const gcName = (bc?.gc_name || "").trim();
+    const gcName = (gc?.gc_name || bc?.gc_name || "").trim();
     return gcName || "-";
-  }, [bc?.gc_name]);
+  }, [bc?.gc_name, gc?.gc_name]);
   const selectedHierarchyBc =
     relatedBCs.find((item) => Number(item.id) === selectedHierarchyBcId) ||
     (bc && Number(bc.id) === selectedHierarchyBcId ? bc : null);
@@ -1787,8 +1874,15 @@ export function BCDetailModal({
       ? detail.customer_register.name || "-"
       : "-";
   const isCashLabel = Number(detail?.is_cash || 0) === 1 ? "Cash" : "Non Cash";
+  const detailBranch =
+    detail?.branch && typeof detail.branch === "object" ? detail.branch : null;
   const branchLocation =
-    [bc.branch_name, bc.branch_city].filter(Boolean).join(", ") || "-";
+    [
+      detailBranch?.branch_name || bc.branch_name,
+      detailBranch?.city || bc.branch_city,
+    ]
+      .filter(Boolean)
+      .join(", ") || "-";
   const availableRekeningOptions =
     editedPaymentAccount &&
     !rekeningOptions.some((item) => item.name === editedPaymentAccount)
@@ -1839,6 +1933,7 @@ export function BCDetailModal({
     `${displayName} - ${bcCode}`,
   );
   const persistedAddressRows = rows.filter((row) => Number(row.id) > 0);
+  const showAllSections = displayMode === "sections";
   const creditLimitSiblings = (
     policyActiveInfo?.scopes?.credit_limit?.bcs || []
   ).filter((row) => Number(row.id) !== Number(bc.id));
@@ -1925,38 +2020,80 @@ export function BCDetailModal({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="flex max-h-[94vh] w-full max-w-[96vw] 2xl:max-w-[1320px] flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl md:max-w-[92vw] md:rounded-3xl"
+            className={`flex max-h-[94vh] w-full max-w-[96vw] flex-col overflow-hidden rounded-[28px] shadow-2xl md:max-w-[92vw] md:rounded-3xl ${
+              showAllSections
+                ? "bg-slate-100 2xl:max-w-[1280px]"
+                : "bg-white 2xl:max-w-[1320px]"
+            }`}
           >
-            <header className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 md:px-6">
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-2.5 md:gap-3">
-                    <FaBuilding className="text-lg text-blue-600 md:text-xl" />
-                    <h2 className="text-lg font-bold text-slate-900 md:text-xl">
-                      Branch Customer Details
-                    </h2>
-                    <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
-                      {headerStatus}
-                    </span>
+            {showAllSections ? (
+              <header className="sticky top-0 z-10 border-b border-white/10 bg-[linear-gradient(135deg,#0f172a_0%,#172554_55%,#1d4ed8_100%)] px-5 py-5 text-white md:px-8 md:py-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex min-w-0 items-start gap-4">
+                    <div className="hidden h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/20 sm:flex">
+                      <FaBuilding className="text-2xl text-blue-100" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-blue-200">
+                        Customer Profile
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2.5">
+                        <h2 className="truncate text-xl font-black md:text-2xl">
+                          {displayName}
+                        </h2>
+                        <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold ring-1 ring-white/20">
+                          {bcCode}
+                        </span>
+                        <span className="rounded-full bg-emerald-400/20 px-3 py-1 text-xs font-bold text-emerald-100 ring-1 ring-emerald-300/20">
+                          {headerStatus}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm text-blue-100">
+                        {branchLocation} · Seluruh informasi customer dalam satu halaman
+                      </p>
+                    </div>
                   </div>
-                  <p className="pl-8 text-sm font-semibold text-slate-500">
-                    {displayName} - {bcCode}
-                  </p>
+                  <button
+                    onClick={attemptClose}
+                    className="rounded-xl bg-white/10 p-2.5 text-blue-100 ring-1 ring-white/15 transition hover:bg-white/20 hover:text-white"
+                    aria-label="Tutup detail customer"
+                  >
+                    <HiXMark className="h-5 w-5" />
+                  </button>
                 </div>
-                <button
-                  onClick={attemptClose}
-                  className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                >
-                  <HiXMark className="h-5 w-5" />
-                </button>
-              </div>
-            </header>
+              </header>
+            ) : (
+              <header className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 md:px-6">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2.5 md:gap-3">
+                      <FaBuilding className="text-lg text-blue-600 md:text-xl" />
+                      <h2 className="text-lg font-bold text-slate-900 md:text-xl">
+                        Branch Customer Details
+                      </h2>
+                      <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+                        {headerStatus}
+                      </span>
+                    </div>
+                    <p className="pl-8 text-sm font-semibold text-slate-500">
+                      {displayName} - {bcCode}
+                    </p>
+                  </div>
+                  <button
+                    onClick={attemptClose}
+                    className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                  >
+                    <HiXMark className="h-5 w-5" />
+                  </button>
+                </div>
+              </header>
+            )}
 
             <div
               ref={contentScrollRef}
-              className="flex-1 overflow-y-auto bg-slate-50"
+              className={`flex-1 overflow-y-auto ${showAllSections ? "bg-slate-100" : "bg-slate-50"}`}
             >
-              <div className="space-y-4 p-4 md:p-5">
+              <div className={`space-y-4 p-4 ${showAllSections ? "md:p-7" : "md:p-5"}`}>
                 {detailError && (
                   <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                     <FaExclamationTriangle className="mt-0.5" />
@@ -1974,8 +2111,15 @@ export function BCDetailModal({
                   </div>
                 ) : null}
 
-                <div className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)]">
-                  <aside className="xl:sticky xl:top-6 xl:self-start">
+                <div
+                  className={
+                    showAllSections
+                      ? "grid gap-4"
+                      : "grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)]"
+                  }
+                >
+                  {!showAllSections ? (
+                    <aside className="xl:sticky xl:top-6 xl:self-start">
                     <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
                       <div className="hidden border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.16),_transparent_55%),linear-gradient(135deg,#eff6ff,#ffffff_55%,#f8fafc)] px-4 py-3 xl:block">
                         <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-blue-700">
@@ -2031,10 +2175,19 @@ export function BCDetailModal({
                         })}
                       </div>
                     </div>
-                  </aside>
+                    </aside>
+                  ) : null}
 
                   <div className="space-y-5">
-                    {activeTab === "company" && (
+                    {showAllSections ? (
+                      <DetailSectionHeading
+                        number="01"
+                        title="Identitas & Perusahaan"
+                        description="Profil customer, penanggung jawab, dan informasi operasional."
+                        icon={<FaBuilding className="h-4 w-4" />}
+                      />
+                    ) : null}
+                    {(showAllSections || activeTab === "company") && (
                       <>
                         {isEditMode ? (
                           <>
@@ -2604,7 +2757,15 @@ export function BCDetailModal({
                       </>
                     )}
 
-                    {activeTab === "finance" && (
+                    {showAllSections ? (
+                      <DetailSectionHeading
+                        number="02"
+                        title="Keuangan & Pembayaran"
+                        description="Credit limit, payment term, rekening, dan cakupan kebijakan aktif."
+                        icon={<FaWarehouse className="h-4 w-4" />}
+                      />
+                    ) : null}
+                    {(showAllSections || activeTab === "finance") && (
                       <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
                         <div className="mb-6 flex items-center gap-3">
                           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
@@ -2756,14 +2917,109 @@ export function BCDetailModal({
 
                         {isEditMode ? (
                           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                            Pengaturan pembayaran telah dipindahkan ke tab Data
-                            Perusahaan.
+                            Pengaturan pembayaran tersedia pada bagian Data
+                            Perusahaan di atas.
                           </div>
                         ) : null}
                       </section>
                     )}
 
-                    {activeTab === "hierarchy" && (
+                    {showAllSections ? (
+                      <DetailSectionHeading
+                        number="03"
+                        title="Data Entity & Hierarki Customer"
+                        description="Profil lengkap National Brand, Group Parent, Group Customer, dan relasinya ke Branch Customer."
+                        icon={<FaUsers className="h-4 w-4" />}
+                      />
+                    ) : null}
+                    {showAllSections ? (
+                      <div className="grid gap-4 xl:grid-cols-3">
+                        <section className="overflow-hidden rounded-3xl border border-indigo-200 bg-white shadow-sm">
+                          <div className="border-b border-indigo-100 bg-indigo-50 px-5 py-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-indigo-600">
+                                  National Brand
+                                </p>
+                                <h4 className="mt-1 text-lg font-black text-slate-900">
+                                  {entityText(nbDetail, "nb_name", nb?.name || "-")}
+                                </h4>
+                              </div>
+                              <span className="rounded-full bg-indigo-600 px-3 py-1 text-xs font-bold text-white">
+                                {entityText(nbDetail, "name", nb?.code || "-")}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                            <EntityDetailField label="Nama Brand" value={entityText(nbDetail, "nb_name", nb?.name || "-")} wide />
+                            <EntityDetailField label="Status" value={Number(nbDetail?.disabled || 0) === 1 ? "Nonaktif" : "Aktif"} />
+                            <EntityDetailField label="Dibuat" value={dt(entityText(nbDetail, "created_at", ""))} />
+                            <EntityDetailField label="Diubah" value={dt(entityText(nbDetail, "updated_at", ""))} />
+                          </div>
+                        </section>
+
+                        <section className="overflow-hidden rounded-3xl border border-orange-200 bg-white shadow-sm">
+                          <div className="border-b border-orange-100 bg-orange-50 px-5 py-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-orange-600">
+                                  Group Parent
+                                </p>
+                                <h4 className="mt-1 text-lg font-black text-slate-900">
+                                  {entityText(gpDetail, "gp_name", gp?.gp_name || "-")}
+                                </h4>
+                              </div>
+                              <span className="rounded-full bg-orange-500 px-3 py-1 text-xs font-bold text-white">
+                                {entityText(gpDetail, "name", gp?.name || "-")}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                            <EntityDetailField label="Deskripsi" value={entityText(gpDetail, "description")} wide />
+                            <EntityDetailField label="Credit Limit" value={formatEntityCurrency(gpDetail?.credit_limit)} />
+                            <EntityDetailField label="Payment Term" value={gpDetail?.payment_term != null ? `${formatNullableNumber(toNum(gpDetail.payment_term))} hari` : "-"} />
+                            <EntityDetailField label="Limit Overdue" value={gpDetail?.limit_customer_overdue != null ? `${formatNullableNumber(toNum(gpDetail.limit_customer_overdue))} hari` : "-"} />
+                            <EntityDetailField label="Status" value={Number(gpDetail?.disabled || 0) === 1 ? "Nonaktif" : "Aktif"} />
+                            <EntityDetailField label="Dibuat" value={dt(entityText(gpDetail, "created_at", ""))} />
+                            <EntityDetailField label="Diubah" value={dt(entityText(gpDetail, "updated_at", ""))} />
+                          </div>
+                        </section>
+
+                        <section className="overflow-hidden rounded-3xl border border-violet-200 bg-white shadow-sm">
+                          <div className="border-b border-violet-100 bg-violet-50 px-5 py-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-violet-600">
+                                  Group Customer
+                                </p>
+                                <h4 className="mt-1 truncate text-lg font-black text-slate-900">
+                                  {entityText(gcDetail, "gc_name", gc?.gc_name || "-")}
+                                </h4>
+                              </div>
+                              <span className="shrink-0 rounded-full bg-violet-600 px-3 py-1 text-xs font-bold text-white">
+                                {entityText(gcDetail, "name", gc?.name || "-")}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                            <EntityDetailField label="Nama Perusahaan" value={entityText(gcDetail, "company_name", gc?.gc_name || "-")} wide />
+                            <EntityDetailField label="Tipe Perusahaan" value={entityText(gcDetail, "company_type")} />
+                            <EntityDetailField label="Badan Usaha" value={entityText(gcDetail, "company_title")} />
+                            <EntityDetailField label="Nama Owner" value={entityText(gcDetail, "owner_full_name", entityText(gcDetail, "owner_name"))} />
+                            <EntityDetailField label="Telepon Owner" value={entityText(gcDetail, "owner_phone")} />
+                            <EntityDetailField label="Email Owner" value={entityText(gcDetail, "owner_email")} wide />
+                            <EntityDetailField label="Tempat / Tanggal Lahir" value={`${entityText(gcDetail, "owner_place_of_birth")} / ${entityText(gcDetail, "owner_date_of_birth")}`} wide />
+                            <EntityDetailField label="Status Pajak" value={Number(gcDetail?.tax_status || 0) === 1 ? "PKP" : "Non PKP"} />
+                            <EntityDetailField label="NPWP" value={entityText(gcDetail, "npwp")} />
+                            <EntityDetailField label="Credit Limit" value={formatEntityCurrency(gcDetail?.credit_limit)} />
+                            <EntityDetailField label="Payment Term" value={gcDetail?.payment_term != null ? `${formatNullableNumber(toNum(gcDetail.payment_term))} hari` : "-"} />
+                            <EntityDetailField label="Status" value={Number(gcDetail?.disabled || 0) === 1 ? "Nonaktif" : "Aktif"} />
+                            <EntityDetailField label="Diubah" value={dt(entityText(gcDetail, "updated_at", ""))} />
+                          </div>
+                        </section>
+                      </div>
+                    ) : null}
+                    {(showAllSections || activeTab === "hierarchy") && (
                       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
                         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-4 xl:px-5">
                           <div className="flex items-center gap-3">
@@ -3151,14 +3407,22 @@ export function BCDetailModal({
                       </section>
                     )}
 
-                    {addressError && activeTab === "address" && (
+                    {showAllSections ? (
+                      <DetailSectionHeading
+                        number="04"
+                        title="Alamat Customer"
+                        description="Daftar alamat kantor, pengiriman, dan PIC pada branch customer."
+                        icon={<FaMapMarkerAlt className="h-4 w-4" />}
+                      />
+                    ) : null}
+                    {addressError && (showAllSections || activeTab === "address") && (
                       <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                         <FaExclamationTriangle className="mt-0.5" />
                         <span>{addressError}</span>
                       </div>
                     )}
 
-                    {activeTab === "address" && (
+                    {(showAllSections || activeTab === "address") && (
                       <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
                         <div className="mb-5 flex items-start justify-between gap-4">
                           <div>
@@ -3169,7 +3433,7 @@ export function BCDetailModal({
                               Registered Addresses
                             </h3>
                             <p className="mt-1 text-sm text-slate-500">
-                              Tab ini hanya menampilkan alamat branch customer.
+                              Bagian ini hanya menampilkan alamat branch customer.
                             </p>
                           </div>
                           <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
@@ -3628,11 +3892,39 @@ export function BCDetailModal({
                       </section>
                     )}
 
-                    {activeTab === "contacts" && (
-                      <BCContactRelationsPanel branchCustomerId={bc.id} />
+                    {showAllSections ? (
+                      <DetailSectionHeading
+                        number="05"
+                        title="Contact Customer"
+                        description="PIC, jabatan, dan channel komunikasi yang terhubung."
+                        icon={<FaAddressBook className="h-4 w-4" />}
+                      />
+                    ) : null}
+                    {(showAllSections || activeTab === "contacts") && (
+                      showAllSections ? (
+                        <div className="space-y-5">
+                          {gc?.id ? (
+                            <CustomerContactRelationsPanel
+                              parentId={gc.id}
+                              parentType="group_customer"
+                            />
+                          ) : null}
+                          <BCContactRelationsPanel branchCustomerId={bc.id} />
+                        </div>
+                      ) : (
+                        <BCContactRelationsPanel branchCustomerId={bc.id} />
+                      )
                     )}
 
-                    {activeTab === "activity" && (
+                    {showAllSections ? (
+                      <DetailSectionHeading
+                        number="06"
+                        title="Aktivitas & Riwayat"
+                        description="Informasi pembuatan, perubahan, serta histori resource customer."
+                        icon={<FaClock className="h-4 w-4" />}
+                      />
+                    ) : null}
+                    {(showAllSections || activeTab === "activity") && (
                       <div className="space-y-5">
                         <section className="grid gap-4 md:grid-cols-2">
                           <div className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-sm">
@@ -3799,7 +4091,11 @@ export function BCDetailModal({
                 <button
                   type="button"
                   onClick={() => void applyEdit()}
-                  disabled={!isEditMode || isSaving || activeTab === "contacts"}
+                  disabled={
+                    !isEditMode ||
+                    isSaving ||
+                    (!showAllSections && activeTab === "contacts")
+                  }
                   className="w-full rounded-lg bg-blue-600 px-6 py-2 text-sm font-semibold text-white disabled:opacity-50 md:w-auto"
                 >
                   {isSaving ? "Saving..." : "Apply Changes"}

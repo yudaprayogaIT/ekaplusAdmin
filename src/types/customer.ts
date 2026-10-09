@@ -10,11 +10,16 @@ export interface GroupParent {
   credit_limit?: number | null;
   payment_term_active?: number;
   payment_term?: number | null;
+  identity_attachment?: string | null;
+  identity_number?: string | null;
+  last_customer_change_request?: string | null;
   limit_customer_overdue_active?: number;
   limit_customer_overdue?: number | null;
   owner_name?: string; // Owner full name (from registration)
   owner_phone?: string; // Owner phone number
   owner_email?: string; // Owner email address
+  owner_place_of_birth?: string;
+  owner_date_of_birth?: string;
   created_at: string;
   created_by?: string;
   updated_at: string;
@@ -38,6 +43,7 @@ export interface GroupCustomer {
   credit_limit?: number | null;
   payment_term_active?: number;
   payment_term?: number | null;
+  last_customer_change_request?: string | null;
   limit_customer_overdue_active?: number;
   limit_customer_overdue?: number | null;
   owner_name?: string; // Owner full name (from registration)
@@ -69,6 +75,7 @@ export interface BranchCustomer {
   credit_limit?: number | null;
   payment_term_active?: number;
   payment_term?: number | null;
+  last_customer_change_request?: string | null;
   limit_customer_overdue_active?: number;
   limit_customer_overdue?: number | null;
   branch_id: number; // Foreign key to Branch
@@ -101,6 +108,8 @@ export interface GroupParentApiResponse {
   id: number;
   name: string;
   gp_name: string;
+  identity_attachment?: string | null;
+  identity_number?: string | null;
   credit_limit_active?: number | null;
   credit_limit?: number | null;
   payment_term_active?: number | null;
@@ -108,8 +117,11 @@ export interface GroupParentApiResponse {
   limit_customer_overdue_active?: number | null;
   limit_customer_overdue?: number | null;
   owner_name?: string;
+  owner_full_name?: string;
   owner_phone?: string;
   owner_email?: string;
+  owner_place_of_birth?: string;
+  owner_date_of_birth?: string;
   created_at: string;
   created_by?: number | { id: number; full_name: string };
   updated_at: string;

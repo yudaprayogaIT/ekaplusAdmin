@@ -24,6 +24,8 @@ import { GPDetailModal } from "@/components/group_parent/GPDetailModal";
 import { GCDetailModal } from "@/components/group_customer/GCDetailModal";
 import { BCDetailModal } from "@/components/branch_customer/BCDetailModal";
 import { MissingCustomerContactModal } from "@/components/customers/MissingCustomerContactModal";
+import { IdentityAttachmentSyncModal } from "@/components/customers/IdentityAttachmentSyncModal";
+import { OwnerIdentitySyncModal } from "@/components/customers/OwnerIdentitySyncModal";
 import {
   exportCustomerWorkbook,
   type CustomerExportProgress,
@@ -36,6 +38,21 @@ import {
   type CustomerContactScanResult,
 } from "@/utils/generateCustomerContacts";
 import {
+  scanCustomerRegisterIdentityAttachments,
+  syncCustomerRegisterIdentityAttachments,
+  type IdentityAttachmentScanResult,
+  type IdentityAttachmentSyncProgress,
+  type IdentityAttachmentSyncResult,
+} from "@/utils/syncIdentityAttachments";
+import {
+  scanOwnerIdentities,
+  summarizeOwnerIdentityRows,
+  syncReadyOwnerIdentities,
+  type OwnerIdentityScanResult,
+  type OwnerIdentitySyncProgress,
+  type OwnerIdentitySyncResult,
+} from "@/utils/syncOwnerIdentities";
+import {
   FaBuilding,
   FaEye,
   FaRegBuilding,
@@ -47,6 +64,8 @@ import {
   FaChevronDown,
   FaFileExcel,
   FaAddressBook,
+  FaFileImage,
+  FaUserCheck,
 } from "react-icons/fa";
 
 type CustomerType = "nb" | "gp" | "gc" | "bc";
@@ -107,6 +126,14 @@ interface GroupParentApiResponse {
   gp_name?: string | null;
   nbid?: number | { id?: number | string } | null;
   description?: string | null;
+  identity_attachment?: string | null;
+  identity_number?: string | null;
+  owner_name?: string | null;
+  owner_full_name?: string | null;
+  owner_phone?: string | null;
+  owner_email?: string | null;
+  owner_place_of_birth?: string | null;
+  owner_date_of_birth?: string | null;
   credit_limit_active?: number | null;
   credit_limit?: number | null;
   payment_term_active?: number | null;
@@ -382,6 +409,7 @@ export default function CustomerOverviewPage() {
   const [sortDirection, setSortDirection] =
     useState<CustomerSortDirection>("desc");
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
+  const [actionsDropdownOpen, setActionsDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -413,6 +441,29 @@ export default function CustomerOverviewPage() {
   const [contactGenerationResult, setContactGenerationResult] =
     useState<CustomerContactGenerationResult | null>(null);
   const canGenerateCustomerContact = hasRole("administrator");
+  const [identityCheckOpen, setIdentityCheckOpen] = useState(false);
+  const [isScanningIdentity, setIsScanningIdentity] = useState(false);
+  const [identityScanResult, setIdentityScanResult] =
+    useState<IdentityAttachmentScanResult | null>(null);
+  const [identityScanError, setIdentityScanError] = useState<string | null>(null);
+  const [isSyncingIdentity, setIsSyncingIdentity] = useState(false);
+  const [identitySyncProgress, setIdentitySyncProgress] =
+    useState<IdentityAttachmentSyncProgress | null>(null);
+  const [identitySyncResult, setIdentitySyncResult] =
+    useState<IdentityAttachmentSyncResult | null>(null);
+  const canSyncIdentityAttachment = hasRole("administrator");
+  const [ownerIdentityCheckOpen, setOwnerIdentityCheckOpen] = useState(false);
+  const [isScanningOwnerIdentity, setIsScanningOwnerIdentity] = useState(false);
+  const [ownerIdentityScanResult, setOwnerIdentityScanResult] =
+    useState<OwnerIdentityScanResult | null>(null);
+  const [ownerIdentityScanError, setOwnerIdentityScanError] =
+    useState<string | null>(null);
+  const [isSyncingOwnerIdentity, setIsSyncingOwnerIdentity] = useState(false);
+  const [ownerIdentitySyncProgress, setOwnerIdentitySyncProgress] =
+    useState<OwnerIdentitySyncProgress | null>(null);
+  const [ownerIdentitySyncResult, setOwnerIdentitySyncResult] =
+    useState<OwnerIdentitySyncResult | null>(null);
+  const canSyncOwnerIdentity = hasRole("administrator");
 
   const [selectedNB, setSelectedNB] = useState<NationalBrandDetailData | null>(
     null,
@@ -786,6 +837,13 @@ export default function CustomerOverviewPage() {
               name: row.name || `GP${row.id}`,
               gp_name: row.gp_name || "-",
               description: row.description || undefined,
+              identity_attachment: row.identity_attachment ?? null,
+              identity_number: row.identity_number ?? null,
+              owner_name: row.owner_full_name || row.owner_name || undefined,
+              owner_phone: row.owner_phone || undefined,
+              owner_email: row.owner_email || undefined,
+              owner_place_of_birth: row.owner_place_of_birth || undefined,
+              owner_date_of_birth: row.owner_date_of_birth || undefined,
               credit_limit_active: Number(row.credit_limit_active || 0),
               credit_limit: row.credit_limit ?? null,
               payment_term_active: Number(row.payment_term_active || 0),
@@ -1539,6 +1597,134 @@ export default function CustomerOverviewPage() {
     }
   };
 
+  const handleCheckIdentityAttachments = async () => {
+    if (!token || !canSyncIdentityAttachment || isScanningIdentity) return;
+    setIdentityCheckOpen(true);
+    setIsScanningIdentity(true);
+    setIdentityScanError(null);
+    setIdentityScanResult(null);
+    setIdentitySyncResult(null);
+    setIdentitySyncProgress(null);
+
+    try {
+      const result = await scanCustomerRegisterIdentityAttachments({
+        token,
+        roleName: canSyncIdentityAttachment ? "administrator" : undefined,
+      });
+      setIdentityScanResult(result);
+    } catch (scanFailure) {
+      setIdentityScanError(
+        scanFailure instanceof Error
+          ? scanFailure.message
+          : "Gagal mengecek identity attachment",
+      );
+    } finally {
+      setIsScanningIdentity(false);
+    }
+  };
+
+  const handleSyncIdentityAttachments = async () => {
+    if (
+      !token ||
+      !canSyncIdentityAttachment ||
+      !identityScanResult ||
+      isSyncingIdentity
+    ) {
+      return;
+    }
+
+    setIsSyncingIdentity(true);
+    setIdentityScanError(null);
+    setIdentitySyncResult(null);
+    setIdentitySyncProgress({
+      completed: 0,
+      total: identityScanResult.ready,
+      label: "Menyiapkan proses sync",
+    });
+
+    try {
+      const result = await syncCustomerRegisterIdentityAttachments({
+        token,
+        roleName: canSyncIdentityAttachment ? "administrator" : undefined,
+        scanResult: identityScanResult,
+        onProgress: setIdentitySyncProgress,
+      });
+      setIdentitySyncResult(result);
+    } catch (syncFailure) {
+      setIdentityScanError(
+        syncFailure instanceof Error
+          ? syncFailure.message
+          : "Gagal menjalankan sync identity attachment",
+      );
+    } finally {
+      setIsSyncingIdentity(false);
+    }
+  };
+
+  const handleCheckOwnerIdentities = async () => {
+    if (!token || !canSyncOwnerIdentity || isScanningOwnerIdentity) return;
+    setOwnerIdentityCheckOpen(true);
+    setIsScanningOwnerIdentity(true);
+    setOwnerIdentityScanError(null);
+    setOwnerIdentityScanResult(null);
+    setOwnerIdentitySyncResult(null);
+    setOwnerIdentitySyncProgress(null);
+    try {
+      const result = await scanOwnerIdentities({
+        token,
+        roleName: canSyncOwnerIdentity ? "administrator" : undefined,
+      });
+      setOwnerIdentityScanResult(result);
+    } catch (scanFailure) {
+      setOwnerIdentityScanError(
+        scanFailure instanceof Error
+          ? scanFailure.message
+          : "Gagal mengecek owner identity",
+      );
+    } finally {
+      setIsScanningOwnerIdentity(false);
+    }
+  };
+
+  const handleSyncReadyOwnerIdentities = async () => {
+    if (
+      !token ||
+      !canSyncOwnerIdentity ||
+      !ownerIdentityScanResult ||
+      isSyncingOwnerIdentity
+    ) return;
+    setIsSyncingOwnerIdentity(true);
+    setOwnerIdentityScanError(null);
+    setOwnerIdentitySyncResult(null);
+    setOwnerIdentitySyncProgress({
+      completed: 0,
+      total: ownerIdentityScanResult.ready,
+      label: "Menyiapkan proses sync",
+    });
+    try {
+      const result = await syncReadyOwnerIdentities({
+        token,
+        roleName: canSyncOwnerIdentity ? "administrator" : undefined,
+        scanResult: ownerIdentityScanResult,
+        onProgress: setOwnerIdentitySyncProgress,
+      });
+      setOwnerIdentitySyncResult(result);
+      const refreshed = await scanOwnerIdentities({
+        token,
+        roleName: canSyncOwnerIdentity ? "administrator" : undefined,
+      });
+      setOwnerIdentityScanResult(refreshed);
+    } catch (syncFailure) {
+      setOwnerIdentityScanError(
+        syncFailure instanceof Error
+          ? syncFailure.message
+          : "Gagal menjalankan sync owner identity",
+      );
+    } finally {
+      setIsSyncingOwnerIdentity(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -1647,33 +1833,110 @@ export default function CustomerOverviewPage() {
             />
           </label>
 
-          <div className="flex items-center gap-3 self-start lg:self-auto">
-            {canGenerateCustomerContact ? (
-              <button
-                type="button"
-                onClick={handleCheckMissingCustomerContacts}
-                disabled={isScanningContacts || isGeneratingContacts || !token}
-                className="flex h-11 items-center gap-2 rounded-xl bg-orange-500 px-4 text-sm font-bold text-white transition-all hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300"
-                title="Cek GC dan BC yang belum memiliki customer contact"
-              >
-                <FaAddressBook className="h-4 w-4" />
-                {isScanningContacts ? "Checking..." : "Check Customer Contact"}
-              </button>
-            ) : null}
+          <div className="flex flex-wrap items-center gap-3 self-start lg:justify-end lg:self-auto">
+            {canGenerateCustomerContact ||
+            canSyncIdentityAttachment ||
+            canSyncOwnerIdentity ||
+            canExportCustomer ? (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActionsDropdownOpen((current) => !current);
+                    setSortFieldDropdownOpen(false);
+                  }}
+                  disabled={!token}
+                  className="flex h-11 items-center gap-2 rounded-xl bg-orange-500 px-5 text-sm font-bold text-white transition-all hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300"
+                  aria-haspopup="menu"
+                  aria-expanded={actionsDropdownOpen}
+                >
+                  Actions
+                  <FaChevronDown
+                    className={`h-3 w-3 transition-transform ${
+                      actionsDropdownOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
 
-            {canExportCustomer ? (
-              <button
-                type="button"
-                onClick={handleExportCustomer}
-                disabled={isExporting || !token}
-                className="flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white transition-all hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
-                title="Export seluruh data customer ke satu file Excel"
-              >
-                <FaFileExcel className="h-4 w-4" />
-                {isExporting && exportProgress
-                  ? `${exportProgress.completed}/${exportProgress.total}`
-                  : "Export Customer"}
-              </button>
+                <AnimatePresence>
+                  {actionsDropdownOpen ? (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setActionsDropdownOpen(false)}
+                      />
+                      <motion.div
+                        role="menu"
+                        initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                        className="absolute right-0 top-full z-20 mt-2 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white py-2 shadow-xl"
+                      >
+                        {canGenerateCustomerContact ? (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setActionsDropdownOpen(false);
+                              void handleCheckMissingCustomerContacts();
+                            }}
+                            disabled={isScanningContacts || isGeneratingContacts}
+                            className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-100 text-orange-600"><FaAddressBook /></span>
+                            <span><span className="block text-sm font-bold text-slate-800">Check Customer Contact</span><span className="block text-xs text-slate-500">Periksa contact GC dan BC</span></span>
+                          </button>
+                        ) : null}
+                        {canSyncIdentityAttachment ? (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setActionsDropdownOpen(false);
+                              void handleCheckIdentityAttachments();
+                            }}
+                            disabled={isScanningIdentity || isSyncingIdentity}
+                            className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-600"><FaFileImage /></span>
+                            <span><span className="block text-sm font-bold text-slate-800">Check Identity Attachment</span><span className="block text-xs text-slate-500">Periksa lampiran identitas GP</span></span>
+                          </button>
+                        ) : null}
+                        {canSyncOwnerIdentity ? (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setActionsDropdownOpen(false);
+                              void handleCheckOwnerIdentities();
+                            }}
+                            disabled={isScanningOwnerIdentity || isSyncingOwnerIdentity}
+                            className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600"><FaUserCheck /></span>
+                            <span><span className="block text-sm font-bold text-slate-800">Check Owner Identity</span><span className="block text-xs text-slate-500">Periksa owner identity GP</span></span>
+                          </button>
+                        ) : null}
+                        {canExportCustomer ? (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setActionsDropdownOpen(false);
+                              void handleExportCustomer();
+                            }}
+                            disabled={isExporting}
+                            className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600"><FaFileExcel /></span>
+                            <span><span className="block text-sm font-bold text-slate-800">Export Customer</span><span className="block text-xs text-slate-500">Export seluruh data customer</span></span>
+                          </button>
+                        ) : null}
+                      </motion.div>
+                    </>
+                  ) : null}
+                </AnimatePresence>
+              </div>
             ) : null}
 
             <button
@@ -1694,7 +1957,10 @@ export default function CustomerOverviewPage() {
             <div className="relative">
               <button
                 type="button"
-                onClick={() => setSortFieldDropdownOpen(!sortFieldDropdownOpen)}
+                onClick={() => {
+                  setSortFieldDropdownOpen(!sortFieldDropdownOpen);
+                  setActionsDropdownOpen(false);
+                }}
                 className="flex h-11 items-center gap-2 rounded-xl bg-slate-100 px-4 text-sm font-medium text-slate-700 transition-all hover:bg-slate-200"
               >
                 <span>{sortFieldLabel}</span>
@@ -1922,6 +2188,57 @@ export default function CustomerOverviewPage() {
         onRescan={handleCheckMissingCustomerContacts}
         onGenerate={handleGenerateMissingCustomerContacts}
       />
+
+      <IdentityAttachmentSyncModal
+        open={identityCheckOpen}
+        scanning={isScanningIdentity}
+        scanResult={identityScanResult}
+        scanError={identityScanError}
+        syncing={isSyncingIdentity}
+        progress={identitySyncProgress}
+        syncResult={identitySyncResult}
+        onClose={() => {
+          if (!isSyncingIdentity) setIdentityCheckOpen(false);
+        }}
+        onRescan={handleCheckIdentityAttachments}
+        onSync={handleSyncIdentityAttachments}
+      />
+
+      {token ? (
+        <OwnerIdentitySyncModal
+          open={ownerIdentityCheckOpen}
+          token={token}
+          scanning={isScanningOwnerIdentity}
+          scanResult={ownerIdentityScanResult}
+          scanError={ownerIdentityScanError}
+          syncing={isSyncingOwnerIdentity}
+          progress={ownerIdentitySyncProgress}
+          syncResult={ownerIdentitySyncResult}
+          onClose={() => {
+            if (!isSyncingOwnerIdentity) setOwnerIdentityCheckOpen(false);
+          }}
+          onRescan={handleCheckOwnerIdentities}
+          onSyncReady={handleSyncReadyOwnerIdentities}
+          onReviewSynced={(gpId, identity) => {
+            setOwnerIdentityScanResult((current) => {
+              if (!current) return current;
+              return summarizeOwnerIdentityRows(
+                current.rows.map((row) =>
+                  row.gpId === gpId
+                    ? {
+                        ...row,
+                        currentIdentity: identity,
+                        candidateIdentity: identity,
+                        uniqueIdentityCount: 1,
+                        action: "already_same" as const,
+                      }
+                    : row,
+                ),
+              );
+            });
+          }}
+        />
+      ) : null}
 
       <NBDetailModal
         isOpen={selectedNB !== null}

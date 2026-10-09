@@ -1,14 +1,20 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   FaBuilding,
   FaChevronRight,
   FaClock,
+  FaCopy,
   FaEdit,
+  FaFileAlt,
+  FaIdCard,
+  FaInfoCircle,
   FaSave,
   FaTimes,
+  FaUser,
   FaUsers,
 } from "react-icons/fa";
 import { HiXMark } from "react-icons/hi2";
@@ -22,11 +28,16 @@ import {
   API_CONFIG,
   apiFetch,
   getApiUrl,
+  getFileUrl,
   getQueryUrl,
   getResourceUrl,
 } from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { ResourceHistory } from "@/components/customers/ResourceHistory";
+import {
+  CopyOwnerIdentityModal,
+  type OwnerIdentityValues,
+} from "@/components/group_parent/CopyOwnerIdentityModal";
 
 interface GPDetailModalProps {
   isOpen: boolean;
@@ -40,7 +51,20 @@ interface GPDetailModalProps {
 
 interface GroupParentMetaRow {
   id: number;
+  name?: string | null;
+  gp_name?: string | null;
   description?: string | null;
+  identity_attachment?: string | null;
+  identity_number?: string | null;
+  owner_name?: string | null;
+  owner_full_name?: string | null;
+  owner_phone?: string | null;
+  owner_email?: string | null;
+  owner_place_of_birth?: string | null;
+  owner_date_of_birth?: string | null;
+  disabled?: number | string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
   "created_by.full_name"?: string | null;
   "updated_by.full_name"?: string | null;
   created_by?: number | { full_name?: string } | null;
@@ -101,8 +125,7 @@ interface PolicyHierarchyResponse {
   } | null;
 }
 
-// type DetailTab = "company" | "finance" | "hierarchy" | "activity";
-type DetailTab = "hierarchy" | "activity";
+type DetailTab = "details" | "hierarchy" | "activity";
 
 function toNumber(value: unknown): number | undefined {
   if (typeof value === "number") return value;
@@ -130,9 +153,23 @@ function formatDays(value?: number | null): string {
 
 function formatDateTime(value?: string | null): string {
   if (!value) return "-";
-  return new Date(value).toLocaleString("id-ID", {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("id-ID", {
     dateStyle: "long",
     timeStyle: "short",
+  });
+}
+
+function formatOwnerBirthDate(value?: string | null): string {
+  if (!value) return "-";
+  const normalized = value.split("T")[0];
+  const date = new Date(`${normalized}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
   });
 }
 
@@ -161,6 +198,237 @@ function parseNullableFloat(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function getAttachmentPreviewType({
+  url,
+  contentType,
+}: {
+  url?: string | null;
+  contentType?: string | null;
+}): "image" | "pdf" | "file" | "none" {
+  if (contentType) {
+    const normalizedType = contentType.toLowerCase();
+    if (normalizedType.startsWith("image/")) return "image";
+    if (normalizedType.includes("pdf")) return "pdf";
+    return "file";
+  }
+  if (!url) return "none";
+  const normalizedUrl = url.toLowerCase().split("?")[0];
+  if (/\.(png|jpe?g|webp|gif)$/.test(normalizedUrl)) return "image";
+  if (normalizedUrl.endsWith(".pdf")) return "pdf";
+  return "file";
+}
+
+function IdentityAttachmentField({
+  value,
+  token,
+}: {
+  value?: string | null;
+  token?: string | null;
+}) {
+  const url = getFileUrl(value);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [contentType, setContentType] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [zoomed, setZoomed] = useState(false);
+  const [zoomOrigin, setZoomOrigin] = useState({ x: 50, y: 50 });
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    async function loadPreview() {
+      setPreviewOpen(false);
+      setZoomed(false);
+      if (!url || !token) {
+        setBlobUrl(null);
+        setContentType(null);
+        setError(null);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await apiFetch(
+          url,
+          { method: "GET", cache: "no-store" },
+          token,
+        );
+        if (!response.ok) {
+          throw new Error(`Gagal memuat lampiran (${response.status})`);
+        }
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+        if (!cancelled) {
+          setBlobUrl(objectUrl);
+          setContentType(blob.type || response.headers.get("Content-Type"));
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setBlobUrl(null);
+          setContentType(null);
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Gagal memuat preview lampiran",
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void loadPreview();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [token, url]);
+
+  const previewType = useMemo(
+    () => getAttachmentPreviewType({ url, contentType }),
+    [contentType, url],
+  );
+  const previewUrl = blobUrl || url || "";
+
+  if (!url) {
+    return (
+      <p className="mt-2 text-sm font-semibold text-slate-400">
+        Belum ada attachment
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-3 space-y-3">
+      {loading ? (
+        <div className="flex h-72 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-500">
+          Memuat preview lampiran...
+        </div>
+      ) : null}
+      {error ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      ) : null}
+      {!loading && !error && previewType === "image" ? (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              setPreviewOpen(true);
+              setZoomed(false);
+              setZoomOrigin({ x: 50, y: 50 });
+            }}
+            className="block w-full overflow-hidden rounded-xl border border-slate-200 bg-white transition hover:border-blue-300"
+            title="Buka preview gambar"
+          >
+            <div className="relative h-72 w-full bg-slate-50">
+              <Image
+                src={previewUrl}
+                alt="Identity Attachment"
+                fill
+                unoptimized
+                className="object-contain"
+              />
+            </div>
+          </button>
+          <p className="text-xs text-slate-500">
+            Klik gambar untuk melihat preview lebih besar.
+          </p>
+        </>
+      ) : null}
+      {!loading && !error && previewType === "pdf" ? (
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+          <iframe
+            src={previewUrl}
+            title="Identity Attachment PDF"
+            className="h-72 w-full"
+          />
+        </div>
+      ) : null}
+      {!loading && !error && previewType === "file" ? (
+        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+          Preview tidak tersedia untuk tipe file ini.
+        </div>
+      ) : null}
+
+      <AnimatePresence>
+        {previewOpen && previewType === "image" ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-sm"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) setPreviewOpen(false);
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              className="relative w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+            >
+              <button
+                type="button"
+                onClick={() => setPreviewOpen(false)}
+                className="absolute right-4 top-4 z-10 rounded-xl bg-white/90 p-2 text-slate-700 shadow-sm transition hover:bg-white"
+                aria-label="Tutup preview"
+              >
+                <FaTimes className="h-5 w-5" />
+              </button>
+              <div
+                className={`relative h-[80vh] w-full overflow-hidden bg-slate-100 ${zoomed ? "cursor-zoom-out" : "cursor-zoom-in"}`}
+                onDoubleClick={(event) => {
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  setZoomOrigin({
+                    x: ((event.clientX - rect.left) / rect.width) * 100,
+                    y: ((event.clientY - rect.top) / rect.height) * 100,
+                  });
+                  setZoomed((current) => !current);
+                }}
+                onMouseMove={(event) => {
+                  if (!zoomed) return;
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  setZoomOrigin({
+                    x: Math.min(
+                      100,
+                      Math.max(0, ((event.clientX - rect.left) / rect.width) * 100),
+                    ),
+                    y: Math.min(
+                      100,
+                      Math.max(0, ((event.clientY - rect.top) / rect.height) * 100),
+                    ),
+                  });
+                }}
+              >
+                <Image
+                  src={previewUrl}
+                  alt="Preview Identity Attachment"
+                  fill
+                  unoptimized
+                  className={`object-contain transition-transform duration-200 ${zoomed ? "scale-[1.8]" : "scale-100"}`}
+                  style={{
+                    transformOrigin: `${zoomOrigin.x}% ${zoomOrigin.y}%`,
+                  }}
+                />
+                <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-white/85 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm">
+                  {zoomed
+                    ? "Arahkan mouse ke area yang ingin dilihat, double click untuk reset zoom."
+                    : "Double click untuk zoom."}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 export function GPDetailModal({
   isOpen,
   onClose,
@@ -171,7 +439,7 @@ export function GPDetailModal({
   onViewBC,
 }: GPDetailModalProps) {
   const { token, isAuthenticated } = useAuth();
-  const [activeTab, setActiveTab] = useState<DetailTab>("hierarchy");
+  const [activeTab, setActiveTab] = useState<DetailTab>("details");
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedName, setEditedName] = useState("");
   const [editedDescription, setEditedDescription] = useState("");
@@ -186,6 +454,7 @@ export function GPDetailModal({
   const [editedLimitCustomerOverdue, setEditedLimitCustomerOverdue] =
     useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [copyOwnerModalOpen, setCopyOwnerModalOpen] = useState(false);
   const [loadingChildren, setLoadingChildren] = useState(false);
   const [childGCs, setChildGCs] = useState<GroupCustomer[]>([]);
   const [childBCs, setChildBCs] = useState<BranchCustomer[]>([]);
@@ -211,6 +480,8 @@ export function GPDetailModal({
     createdBy?: string;
     updatedBy?: string;
   }>({});
+  const [gpMetaDetails, setGpMetaDetails] =
+    useState<GroupParentMetaRow | null>(null);
 
   const syncEditState = useCallback((source: GroupParent) => {
     setEditedName(source.name);
@@ -240,16 +511,21 @@ export function GPDetailModal({
 
   useEffect(() => {
     if (isOpen && gp) {
-      setActiveTab("hierarchy");
+      setActiveTab("details");
       setIsEditMode(false);
       setExpandedGcId(null);
       setSelectedHierarchyNode(null);
       setChildGCs([]);
       setChildBCs([]);
       setLinkedNB(null);
+      setGpMetaDetails(null);
       syncEditState(gp);
     }
   }, [gp, isOpen, syncEditState]);
+
+  useEffect(() => {
+    setCopyOwnerModalOpen(false);
+  }, [gp?.id]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -268,17 +544,7 @@ export function GPDetailModal({
       setHierarchyGp(null);
       const gpMetaRes = await apiFetch(
         getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, {
-          fields: [
-            "id",
-            "nbid",
-            "name",
-            "gp_name",
-            "description",
-            "created_by.full_name",
-            "updated_by.full_name",
-            "created_by",
-            "updated_by",
-          ],
+          fields: ["*", "created_by.full_name", "updated_by.full_name"],
           filters: [["id", "=", gp.id]],
           limit: 1,
         }),
@@ -297,6 +563,7 @@ export function GPDetailModal({
           : gpMeta?.nbid && typeof gpMeta.nbid === "object"
             ? toNumber(gpMeta.nbid.id)
             : undefined;
+      setGpMetaDetails(gpMeta || null);
       setActivityUsers({
         createdBy: resolveUserName(
           gpMeta?.["created_by.full_name"],
@@ -643,6 +910,12 @@ export function GPDetailModal({
 
   const detailTabs = useMemo(
     () => [
+      {
+        key: "details" as const,
+        label: "Detail GP",
+        caption: "Identitas & dokumen",
+        icon: <FaIdCard className="h-4 w-4" />,
+      },
       // {
       //   key: "company" as const,
       //   label: "Data Perusahaan",
@@ -720,10 +993,29 @@ export function GPDetailModal({
 
   if (!gp) return null;
 
+  const identityAttachment =
+    gpMetaDetails?.identity_attachment ?? gp.identity_attachment;
+  const identityNumber = gpMetaDetails?.identity_number ?? gp.identity_number;
+  const ownerName =
+    gpMetaDetails?.owner_full_name ??
+    gpMetaDetails?.owner_name ??
+    gp.owner_name;
+  const ownerPhone = gpMetaDetails?.owner_phone ?? gp.owner_phone;
+  const ownerEmail = gpMetaDetails?.owner_email ?? gp.owner_email;
+  const ownerPlaceOfBirth =
+    gpMetaDetails?.owner_place_of_birth ?? gp.owner_place_of_birth;
+  const ownerDateOfBirth =
+    gpMetaDetails?.owner_date_of_birth ?? gp.owner_date_of_birth;
+  const gpDescription = gpMetaDetails?.description ?? gp.description;
+  const gpDisabled = Number(gpMetaDetails?.disabled ?? gp.disabled ?? 0);
+  const gpCreatedAt = gpMetaDetails?.created_at ?? gp.created_at;
+  const gpUpdatedAt = gpMetaDetails?.updated_at ?? gp.updated_at;
+
   return (
     <AnimatePresence>
       {isOpen && (
         <div
+          key="group-parent-detail"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           onClick={(e) => {
             if (e.target === e.currentTarget) onClose();
@@ -1192,6 +1484,116 @@ export function GPDetailModal({
                       </div>
                     </section>
                   )} */}
+
+                  {activeTab === "details" && (
+                    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+                      <section className="rounded-3xl border border-purple-100 bg-white p-6 shadow-sm">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-purple-100 text-purple-700">
+                            <FaIdCard className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-purple-500">
+                              Identitas Group Parent
+                            </p>
+                            <h4 className="mt-1 text-xl font-bold text-slate-900">
+                              Data Utama
+                            </h4>
+                          </div>
+                        </div>
+
+                        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">GPID</p>
+                            <p className="mt-2 font-semibold text-slate-900">{gp.name || `GP${gp.id}`}</p>
+                          </div>
+                          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</p>
+                            <span className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-bold ${gpDisabled === 1 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>
+                              {gpDisabled === 1 ? "Disabled" : "Active"}
+                            </span>
+                          </div>
+                          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 sm:col-span-2">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nama Group Parent</p>
+                            <p className="mt-2 font-semibold text-slate-900">{gp.gp_name || "-"}</p>
+                          </div>
+                          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 sm:col-span-2">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Description</p>
+                            <p className="mt-2 whitespace-pre-wrap text-sm font-medium text-slate-900">{gpDescription || "-"}</p>
+                          </div>
+                        </div>
+                      </section>
+
+                      <section className="rounded-3xl border border-blue-100 bg-white p-6 shadow-sm">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
+                            <FaFileAlt className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-500">Dokumen Identitas</p>
+                            <h4 className="mt-1 text-xl font-bold text-slate-900">Identity Information</h4>
+                          </div>
+                        </div>
+                        <div className="mt-6">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Identity Number</p>
+                          <p className="mt-2 text-base font-semibold text-slate-900">{identityNumber || "-"}</p>
+                        </div>
+                        <div className="mt-5 border-t border-slate-100 pt-5">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Identity Attachment</p>
+                          <IdentityAttachmentField
+                            value={identityAttachment}
+                            token={token}
+                          />
+                        </div>
+                      </section>
+
+                      <section className="rounded-3xl border border-orange-100 bg-white p-6 shadow-sm">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-100 text-orange-700">
+                            <FaUser className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-500">Pemilik</p>
+                            <h4 className="mt-1 text-xl font-bold text-slate-900">Owner Information</h4>
+                          </div>
+                        </div>
+                        <div className="mt-6 space-y-4 text-sm">
+                          <div><p className="text-xs text-slate-500">Nama Owner</p><p className="mt-1 font-semibold text-slate-900">{ownerName || "-"}</p></div>
+                          <div><p className="text-xs text-slate-500">Telepon</p><p className="mt-1 font-semibold text-slate-900">{ownerPhone || "-"}</p></div>
+                          <div><p className="text-xs text-slate-500">Email</p><p className="mt-1 break-all font-semibold text-slate-900">{ownerEmail || "-"}</p></div>
+                          <div><p className="text-xs text-slate-500">Tempat Lahir</p><p className="mt-1 font-semibold text-slate-900">{ownerPlaceOfBirth || "-"}</p></div>
+                          <div><p className="text-xs text-slate-500">Tanggal Lahir</p><p className="mt-1 font-semibold text-slate-900">{formatOwnerBirthDate(ownerDateOfBirth)}</p></div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setCopyOwnerModalOpen(true)}
+                          disabled={!token || !isAuthenticated}
+                          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        >
+                          <FaCopy className="h-4 w-4" />
+                          Salin Identitas Pemilik dari GC
+                        </button>
+                      </section>
+
+                      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                            <FaInfoCircle className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Metadata</p>
+                            <h4 className="mt-1 text-xl font-bold text-slate-900">Informasi Data</h4>
+                          </div>
+                        </div>
+                        <div className="mt-6 grid gap-4 text-sm sm:grid-cols-2">
+                          <div><p className="text-xs text-slate-500">Dibuat</p><p className="mt-1 font-semibold text-slate-900">{formatDateTime(gpCreatedAt)}</p></div>
+                          <div><p className="text-xs text-slate-500">Diperbarui</p><p className="mt-1 font-semibold text-slate-900">{formatDateTime(gpUpdatedAt)}</p></div>
+                          <div><p className="text-xs text-slate-500">Dibuat oleh</p><p className="mt-1 font-semibold text-slate-900">{activityUsers.createdBy || gp.created_by || "-"}</p></div>
+                          <div><p className="text-xs text-slate-500">Diperbarui oleh</p><p className="mt-1 font-semibold text-slate-900">{activityUsers.updatedBy || gp.updated_by || "-"}</p></div>
+                        </div>
+                      </section>
+                    </div>
+                  )}
 
                   {activeTab === "hierarchy" && (
                     <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -1717,6 +2119,39 @@ export function GPDetailModal({
           </motion.div>
         </div>
       )}
+      {token ? (
+        <CopyOwnerIdentityModal
+          key="copy-owner-identity"
+          isOpen={copyOwnerModalOpen}
+          gpId={gp.id}
+          gpCode={gp.name || `GP${gp.id}`}
+          token={token}
+          currentIdentity={{
+            owner_name: ownerName,
+            owner_phone: ownerPhone,
+            owner_email: ownerEmail,
+            owner_place_of_birth: ownerPlaceOfBirth,
+            owner_date_of_birth: ownerDateOfBirth,
+          }}
+          onClose={() => setCopyOwnerModalOpen(false)}
+          onCopied={(identity: OwnerIdentityValues) => {
+            setGpMetaDetails((current) => ({
+              ...(current || { id: gp.id }),
+              ...identity,
+            }));
+            onGPUpdate?.({
+              ...gp,
+              owner_name: identity.owner_name || undefined,
+              owner_phone: identity.owner_phone || undefined,
+              owner_email: identity.owner_email || undefined,
+              owner_place_of_birth:
+                identity.owner_place_of_birth || undefined,
+              owner_date_of_birth: identity.owner_date_of_birth || undefined,
+              updated_at: new Date().toISOString(),
+            });
+          }}
+        />
+      ) : null}
     </AnimatePresence>
   );
 }

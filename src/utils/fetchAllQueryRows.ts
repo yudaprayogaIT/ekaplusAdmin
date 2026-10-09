@@ -57,7 +57,9 @@ export async function fetchAllQueryRows<T>({
     );
 
     if (!response.ok) {
-      throw new Error(errorMessage || `Failed to fetch ${endpoint} (${response.status})`);
+      throw new Error(
+        `${errorMessage || `Failed to fetch ${endpoint}`} (${response.status})`,
+      );
     }
 
     const json = await response.json();
