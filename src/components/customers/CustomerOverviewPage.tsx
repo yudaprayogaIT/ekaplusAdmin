@@ -572,7 +572,8 @@ export default function CustomerOverviewPage() {
             bcFilters = [["name", "like", `%${trimmedSearch.toUpperCase()}%`]];
           }
 
-          const fetchBcPage = async (filters?: unknown[]) => {
+          const fetchBcPage = async (filters: unknown[] = []) => {
+            const activeBcFilters = [["disabled", "=", 0], ...filters];
             let response = await apiFetch(
               getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2, {
                 fields: [
@@ -584,7 +585,7 @@ export default function CustomerOverviewPage() {
                   "updated_at",
                 ],
                 ...baseBcSpec,
-                ...(filters ? { filters } : {}),
+                filters: activeBcFilters,
               }),
               { method: "GET", cache: "no-store" },
               token,
@@ -602,7 +603,7 @@ export default function CustomerOverviewPage() {
                     "updated_at",
                   ],
                   ...baseBcSpec,
-                  ...(filters ? { filters } : {}),
+                  filters: activeBcFilters,
                 }),
                 { method: "GET", cache: "no-store" },
                 token,
@@ -814,6 +815,7 @@ export default function CustomerOverviewPage() {
           const gpRes = await apiFetch(
             getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, {
               fields: ["*", "created_by.full_name", "updated_by.full_name"],
+              filters: [["disabled", "=", 0]],
               page,
               ...(debouncedSearch ? { search: debouncedSearch } : {}),
               order_by: [[orderByField, sortDirection]],
@@ -909,6 +911,7 @@ export default function CustomerOverviewPage() {
           const gcRes = await apiFetch(
             getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER, {
               fields: ["*", "created_by.full_name", "updated_by.full_name"],
+              filters: [["disabled", "=", 0]],
               page,
               ...(debouncedSearch ? { search: debouncedSearch } : {}),
               order_by: [[orderByField, sortDirection]],
@@ -1030,6 +1033,7 @@ export default function CustomerOverviewPage() {
           const nbRes = await apiFetch(
             getQueryUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND, {
               fields: ["*"],
+              filters: [["disabled", "=", 0]],
               page,
               ...(debouncedSearch ? { search: debouncedSearch } : {}),
               order_by: [[orderByField, sortDirection]],

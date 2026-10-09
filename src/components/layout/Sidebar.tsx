@@ -246,13 +246,13 @@ const CATALOG_SUBMENU: MenuItem[] = [
 ];
 
 const CUSTOMER_SUBMENU: MenuItem[] = [
-  {
-    label: "Data Customer",
-    href: "/customers/data",
-    icon: <FaIdBadge className="w-4 h-4" />,
-    category: "Customer",
-    requireAuth: true,
-  },
+  // {
+  //   label: "Data Customer",
+  //   href: "/customers/data",
+  //   icon: <FaIdBadge className="w-4 h-4" />,
+  //   category: "Customer",
+  //   requireAuth: true,
+  // },
   {
     label: "All Customers",
     href: "/customers/company",

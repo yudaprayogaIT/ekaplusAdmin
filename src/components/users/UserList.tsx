@@ -103,7 +103,7 @@ export type UserMutationPayload = {
   first_name: string;
   last_name: string;
   username: string;
-  email: string;
+  email?: string;
   phone: string;
   password?: string;
   gender: string;
@@ -1207,7 +1207,6 @@ export default function UserList() {
         full_name:
           `${payload.first_name.trim()} ${payload.last_name.trim()}`.trim(),
         username: payload.username.trim(),
-        email: payload.email.trim(),
         phone: normalizePhoneForDb(payload.phone),
         gender: payload.gender.trim() || null,
         date_of_birth: payload.date_of_birth || null,
@@ -1224,6 +1223,11 @@ export default function UserList() {
         status: 1,
         workflow_state: "Active",
       } as Record<string, unknown>;
+
+      const normalizedEmail = payload.email?.trim() || "";
+      if (modalInitial || normalizedEmail) {
+        body.email = normalizedEmail;
+      }
 
       if (payload.password?.trim()) {
         body.password = payload.password.trim();

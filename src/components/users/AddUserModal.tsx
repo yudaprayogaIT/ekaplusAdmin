@@ -230,7 +230,7 @@ export default function AddUserModal({
       first_name: firstName.trim(),
       last_name: lastName.trim(),
       username: username.trim(),
-      email: email.trim(),
+      ...(initial || email.trim() ? { email: email.trim() } : {}),
       phone: phone.trim(),
       password: password.trim() || undefined,
       gender,
@@ -365,9 +365,7 @@ export default function AddUserModal({
                       </label>
                       <input
                         value={lastName}
-                        onChange={(e) =>
-                          setLastName(toCapitalizedInput(e.target.value))
-                        }
+                        onChange={(e) => setLastName(e.target.value)}
                         className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 transition-all focus:border-red-500 focus:ring-2 focus:ring-red-500"
                         placeholder="Doe"
                         required
