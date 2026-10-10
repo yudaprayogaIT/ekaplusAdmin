@@ -429,7 +429,7 @@ export default function CustomerOverviewPage() {
   const [exportProgress, setExportProgress] =
     useState<CustomerExportProgress | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
-  const canExportCustomer = hasRole("administrator");
+  const canManageCustomerActions = hasRole("administrator");
   const [contactCheckOpen, setContactCheckOpen] = useState(false);
   const [isScanningContacts, setIsScanningContacts] = useState(false);
   const [contactScanResult, setContactScanResult] =
@@ -440,7 +440,6 @@ export default function CustomerOverviewPage() {
     useState<CustomerContactGenerationProgress | null>(null);
   const [contactGenerationResult, setContactGenerationResult] =
     useState<CustomerContactGenerationResult | null>(null);
-  const canGenerateCustomerContact = hasRole("administrator");
   const [identityCheckOpen, setIdentityCheckOpen] = useState(false);
   const [isScanningIdentity, setIsScanningIdentity] = useState(false);
   const [identityScanResult, setIdentityScanResult] =
@@ -451,7 +450,6 @@ export default function CustomerOverviewPage() {
     useState<IdentityAttachmentSyncProgress | null>(null);
   const [identitySyncResult, setIdentitySyncResult] =
     useState<IdentityAttachmentSyncResult | null>(null);
-  const canSyncIdentityAttachment = hasRole("administrator");
   const [ownerIdentityCheckOpen, setOwnerIdentityCheckOpen] = useState(false);
   const [isScanningOwnerIdentity, setIsScanningOwnerIdentity] = useState(false);
   const [ownerIdentityScanResult, setOwnerIdentityScanResult] =
@@ -463,7 +461,6 @@ export default function CustomerOverviewPage() {
     useState<OwnerIdentitySyncProgress | null>(null);
   const [ownerIdentitySyncResult, setOwnerIdentitySyncResult] =
     useState<OwnerIdentitySyncResult | null>(null);
-  const canSyncOwnerIdentity = hasRole("administrator");
 
   const [selectedNB, setSelectedNB] = useState<NationalBrandDetailData | null>(
     null,
@@ -1516,7 +1513,7 @@ export default function CustomerOverviewPage() {
   };
 
   const handleExportCustomer = async () => {
-    if (!token || !canExportCustomer || isExporting) return;
+    if (!token || !canManageCustomerActions || isExporting) return;
     setIsExporting(true);
     setExportError(null);
     setExportProgress({ completed: 0, total: 8, label: "Menyiapkan export" });
@@ -1536,7 +1533,7 @@ export default function CustomerOverviewPage() {
   };
 
   const handleCheckMissingCustomerContacts = async () => {
-    if (!token || !canGenerateCustomerContact || isScanningContacts) return;
+    if (!token || !canManageCustomerActions || isScanningContacts) return;
     setContactCheckOpen(true);
     setIsScanningContacts(true);
     setContactScanError(null);
@@ -1547,7 +1544,7 @@ export default function CustomerOverviewPage() {
     try {
       const result = await scanMissingCustomerContacts({
         token,
-        roleName: canGenerateCustomerContact ? "administrator" : undefined,
+        roleName: canManageCustomerActions ? "administrator" : undefined,
       });
       setContactScanResult(result);
     } catch (scanFailure) {
@@ -1564,7 +1561,7 @@ export default function CustomerOverviewPage() {
   const handleGenerateMissingCustomerContacts = async () => {
     if (
       !token ||
-      !canGenerateCustomerContact ||
+      !canManageCustomerActions ||
       !contactScanResult ||
       isGeneratingContacts
     ) {
@@ -1585,7 +1582,7 @@ export default function CustomerOverviewPage() {
     try {
       const result = await generateMissingCustomerContacts({
         token,
-        roleName: canGenerateCustomerContact ? "administrator" : undefined,
+        roleName: canManageCustomerActions ? "administrator" : undefined,
         scanResult: contactScanResult,
         onProgress: setContactGenerationProgress,
       });
@@ -1602,7 +1599,7 @@ export default function CustomerOverviewPage() {
   };
 
   const handleCheckIdentityAttachments = async () => {
-    if (!token || !canSyncIdentityAttachment || isScanningIdentity) return;
+    if (!token || !canManageCustomerActions || isScanningIdentity) return;
     setIdentityCheckOpen(true);
     setIsScanningIdentity(true);
     setIdentityScanError(null);
@@ -1613,7 +1610,7 @@ export default function CustomerOverviewPage() {
     try {
       const result = await scanCustomerRegisterIdentityAttachments({
         token,
-        roleName: canSyncIdentityAttachment ? "administrator" : undefined,
+        roleName: canManageCustomerActions ? "administrator" : undefined,
       });
       setIdentityScanResult(result);
     } catch (scanFailure) {
@@ -1630,7 +1627,7 @@ export default function CustomerOverviewPage() {
   const handleSyncIdentityAttachments = async () => {
     if (
       !token ||
-      !canSyncIdentityAttachment ||
+      !canManageCustomerActions ||
       !identityScanResult ||
       isSyncingIdentity
     ) {
@@ -1649,7 +1646,7 @@ export default function CustomerOverviewPage() {
     try {
       const result = await syncCustomerRegisterIdentityAttachments({
         token,
-        roleName: canSyncIdentityAttachment ? "administrator" : undefined,
+        roleName: canManageCustomerActions ? "administrator" : undefined,
         scanResult: identityScanResult,
         onProgress: setIdentitySyncProgress,
       });
@@ -1666,7 +1663,7 @@ export default function CustomerOverviewPage() {
   };
 
   const handleCheckOwnerIdentities = async () => {
-    if (!token || !canSyncOwnerIdentity || isScanningOwnerIdentity) return;
+    if (!token || !canManageCustomerActions || isScanningOwnerIdentity) return;
     setOwnerIdentityCheckOpen(true);
     setIsScanningOwnerIdentity(true);
     setOwnerIdentityScanError(null);
@@ -1676,7 +1673,7 @@ export default function CustomerOverviewPage() {
     try {
       const result = await scanOwnerIdentities({
         token,
-        roleName: canSyncOwnerIdentity ? "administrator" : undefined,
+        roleName: canManageCustomerActions ? "administrator" : undefined,
       });
       setOwnerIdentityScanResult(result);
     } catch (scanFailure) {
@@ -1693,7 +1690,7 @@ export default function CustomerOverviewPage() {
   const handleSyncReadyOwnerIdentities = async () => {
     if (
       !token ||
-      !canSyncOwnerIdentity ||
+      !canManageCustomerActions ||
       !ownerIdentityScanResult ||
       isSyncingOwnerIdentity
     ) return;
@@ -1708,14 +1705,14 @@ export default function CustomerOverviewPage() {
     try {
       const result = await syncReadyOwnerIdentities({
         token,
-        roleName: canSyncOwnerIdentity ? "administrator" : undefined,
+        roleName: canManageCustomerActions ? "administrator" : undefined,
         scanResult: ownerIdentityScanResult,
         onProgress: setOwnerIdentitySyncProgress,
       });
       setOwnerIdentitySyncResult(result);
       const refreshed = await scanOwnerIdentities({
         token,
-        roleName: canSyncOwnerIdentity ? "administrator" : undefined,
+        roleName: canManageCustomerActions ? "administrator" : undefined,
       });
       setOwnerIdentityScanResult(refreshed);
     } catch (syncFailure) {
@@ -1838,10 +1835,7 @@ export default function CustomerOverviewPage() {
           </label>
 
           <div className="flex flex-wrap items-center gap-3 self-start lg:justify-end lg:self-auto">
-            {canGenerateCustomerContact ||
-            canSyncIdentityAttachment ||
-            canSyncOwnerIdentity ||
-            canExportCustomer ? (
+            {canManageCustomerActions ? (
               <div className="relative">
                 <button
                   type="button"
@@ -1876,7 +1870,7 @@ export default function CustomerOverviewPage() {
                         exit={{ opacity: 0, y: -8, scale: 0.98 }}
                         className="absolute right-0 top-full z-20 mt-2 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white py-2 shadow-xl"
                       >
-                        {canGenerateCustomerContact ? (
+                        {canManageCustomerActions ? (
                           <button
                             type="button"
                             role="menuitem"
@@ -1891,7 +1885,7 @@ export default function CustomerOverviewPage() {
                             <span><span className="block text-sm font-bold text-slate-800">Check Customer Contact</span><span className="block text-xs text-slate-500">Periksa contact GC dan BC</span></span>
                           </button>
                         ) : null}
-                        {canSyncIdentityAttachment ? (
+                        {canManageCustomerActions ? (
                           <button
                             type="button"
                             role="menuitem"
@@ -1906,7 +1900,7 @@ export default function CustomerOverviewPage() {
                             <span><span className="block text-sm font-bold text-slate-800">Check Identity Attachment</span><span className="block text-xs text-slate-500">Periksa lampiran identitas GP</span></span>
                           </button>
                         ) : null}
-                        {canSyncOwnerIdentity ? (
+                        {canManageCustomerActions ? (
                           <button
                             type="button"
                             role="menuitem"
@@ -1921,7 +1915,7 @@ export default function CustomerOverviewPage() {
                             <span><span className="block text-sm font-bold text-slate-800">Check Owner Identity</span><span className="block text-xs text-slate-500">Periksa owner identity GP</span></span>
                           </button>
                         ) : null}
-                        {canExportCustomer ? (
+                        {canManageCustomerActions ? (
                           <button
                             type="button"
                             role="menuitem"

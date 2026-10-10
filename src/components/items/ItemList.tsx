@@ -715,9 +715,9 @@ export default function ItemList() {
     };
   }, [isAuthenticated, loadItems, token]);
 
-  function handleAdd() {
-    setModalOpen(true);
-  }
+  // function handleAdd() {
+  //   setModalOpen(true);
+  // }
 
   async function openDetail(item: Item, updateRoute = true) {
     if (updateRoute) {
@@ -1071,7 +1071,7 @@ export default function ItemList() {
           </motion.button>
 
           {/* Add Item Button */}
-          <motion.button
+          {/* <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={handleAdd}
@@ -1079,7 +1079,7 @@ export default function ItemList() {
           >
             <FaPlus className="w-4 h-4" />
             <span>Tambah Item</span>
-          </motion.button>
+          </motion.button> */}
         </div>
       </div>
 
