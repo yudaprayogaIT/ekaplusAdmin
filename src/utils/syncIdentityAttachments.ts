@@ -48,8 +48,19 @@ export interface IdentityAttachmentSyncFailure {
   message: string;
 }
 
+export type IdentityAttachmentConflictResolution =
+  | "keep_existing"
+  | "use_register";
+
+export type IdentityAttachmentConflictResolutions = Record<
+  number,
+  IdentityAttachmentConflictResolution
+>;
+
 export interface IdentityAttachmentSyncResult {
   updated: number;
+  overwritten: number;
+  keptExisting: number;
   alreadySynced: number;
   conflict: number;
   skippedMissingGroupParent: number;
@@ -233,19 +244,53 @@ export async function syncCustomerRegisterIdentityAttachments({
   token,
   roleName,
   scanResult,
+  conflictResolutions = {},
   onProgress,
 }: {
   token: string;
   roleName: string | null | undefined;
   scanResult: IdentityAttachmentScanResult;
+  conflictResolutions?: IdentityAttachmentConflictResolutions;
   onProgress?: (progress: IdentityAttachmentSyncProgress) => void;
 }): Promise<IdentityAttachmentSyncResult> {
   assertAdministrator(roleName);
-  const rows = scanResult.rows.filter((row) => row.action === "ready");
+  const overwriteAttachmentByGp = new Map<number, string>();
+  const invalidOverwriteGpIds = new Set<number>();
+  scanResult.rows.forEach((row) => {
+    if (
+      row.action !== "conflict" ||
+      !row.gpid ||
+      conflictResolutions[row.customerRegisterId] !== "use_register"
+    ) {
+      return;
+    }
+    const selectedAttachment = overwriteAttachmentByGp.get(row.gpid);
+    if (
+      selectedAttachment &&
+      selectedAttachment !== row.customerRegisterAttachment
+    ) {
+      invalidOverwriteGpIds.add(row.gpid);
+      return;
+    }
+    overwriteAttachmentByGp.set(row.gpid, row.customerRegisterAttachment);
+  });
+
+  const rows = scanResult.rows.filter(
+    (row) =>
+      row.action === "ready" ||
+      (row.action === "conflict" &&
+        Boolean(conflictResolutions[row.customerRegisterId])),
+  );
   const result: IdentityAttachmentSyncResult = {
     updated: 0,
+    overwritten: 0,
+    keptExisting: 0,
     alreadySynced: 0,
-    conflict: 0,
+    conflict: scanResult.rows.filter(
+      (row) =>
+        row.action === "conflict" &&
+        !conflictResolutions[row.customerRegisterId],
+    ).length,
     skippedMissingGroupParent: 0,
     failed: [],
   };
@@ -263,6 +308,20 @@ export async function syncCustomerRegisterIdentityAttachments({
       continue;
     }
 
+    if (
+      row.action === "conflict" &&
+      conflictResolutions[row.customerRegisterId] === "use_register" &&
+      invalidOverwriteGpIds.has(row.gpid)
+    ) {
+      result.failed.push({
+        customerRegisterId: row.customerRegisterId,
+        customerRegisterCode: row.customerRegisterCode,
+        gpid: row.gpid,
+        message: `${row.gpCode || `GP${row.gpid}`} dipilih untuk ditimpa oleh lebih dari satu attachment Register. Pilih hanya satu attachment pemenang.`,
+      });
+      continue;
+    }
+
     try {
       const currentGroupParent = await fetchGroupParent(row.gpid, token);
       if (!currentGroupParent) {
@@ -273,11 +332,20 @@ export async function syncCustomerRegisterIdentityAttachments({
       const currentAttachment = normalizeIdentityAttachment(
         currentGroupParent.identity_attachment,
       );
+      const resolution = conflictResolutions[row.customerRegisterId];
       if (currentAttachment === row.customerRegisterAttachment) {
         result.alreadySynced += 1;
         continue;
       }
-      if (currentAttachment) {
+
+      if (row.action === "conflict" && resolution === "keep_existing") {
+        result.keptExisting += 1;
+        continue;
+      }
+
+      const overwriteAuthorized =
+        row.action === "conflict" && resolution === "use_register";
+      if (currentAttachment && !overwriteAuthorized) {
         result.conflict += 1;
         continue;
       }
@@ -302,7 +370,8 @@ export async function syncCustomerRegisterIdentityAttachments({
           ),
         );
       }
-      result.updated += 1;
+      if (currentAttachment && overwriteAuthorized) result.overwritten += 1;
+      else result.updated += 1;
     } catch (error) {
       result.failed.push({
         customerRegisterId: row.customerRegisterId,

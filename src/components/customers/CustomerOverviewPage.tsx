@@ -40,6 +40,7 @@ import {
 import {
   scanCustomerRegisterIdentityAttachments,
   syncCustomerRegisterIdentityAttachments,
+  type IdentityAttachmentConflictResolutions,
   type IdentityAttachmentScanResult,
   type IdentityAttachmentSyncProgress,
   type IdentityAttachmentSyncResult,
@@ -1624,7 +1625,9 @@ export default function CustomerOverviewPage() {
     }
   };
 
-  const handleSyncIdentityAttachments = async () => {
+  const handleSyncIdentityAttachments = async (
+    conflictResolutions: IdentityAttachmentConflictResolutions,
+  ) => {
     if (
       !token ||
       !canManageCustomerActions ||
@@ -1639,7 +1642,8 @@ export default function CustomerOverviewPage() {
     setIdentitySyncResult(null);
     setIdentitySyncProgress({
       completed: 0,
-      total: identityScanResult.ready,
+      total:
+        identityScanResult.ready + Object.keys(conflictResolutions).length,
       label: "Menyiapkan proses sync",
     });
 
@@ -1648,6 +1652,7 @@ export default function CustomerOverviewPage() {
         token,
         roleName: canManageCustomerActions ? "administrator" : undefined,
         scanResult: identityScanResult,
+        conflictResolutions,
         onProgress: setIdentitySyncProgress,
       });
       setIdentitySyncResult(result);
@@ -2189,6 +2194,7 @@ export default function CustomerOverviewPage() {
 
       <IdentityAttachmentSyncModal
         open={identityCheckOpen}
+        token={token || ""}
         scanning={isScanningIdentity}
         scanResult={identityScanResult}
         scanError={identityScanError}

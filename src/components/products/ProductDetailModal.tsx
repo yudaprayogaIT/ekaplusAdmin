@@ -145,8 +145,26 @@ export default function ProductDetailModal({
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: idx * 0.05 }}
-                        className="bg-gradient-to-br from-gray-50 to-white rounded-2xl p-5 border-2 border-gray-100 hover:border-red-200 hover:shadow-lg transition-all group"
+                        className="relative overflow-hidden bg-gradient-to-br from-gray-50 to-white rounded-2xl p-5 border-2 border-gray-100 hover:border-red-200 hover:shadow-lg transition-all group"
                       >
+                        {/* Status ribbon */}
+                        <div
+                          className={`absolute -right-10 top-5 z-10 w-36 rotate-45 py-1 text-center text-[10px] font-extrabold uppercase tracking-wider text-white shadow-md ring-1 ring-white/40 ${
+                            variant.item.disabled === 1
+                              ? "bg-gradient-to-r from-gray-500 to-gray-700"
+                              : "bg-gradient-to-r from-emerald-500 to-green-600"
+                          }`}
+                          title={
+                            variant.item.disabled === 1
+                              ? "Item disabled"
+                              : "Item enabled"
+                          }
+                        >
+                          {variant.item.disabled === 1
+                            ? "Disabled"
+                            : "Enabled"}
+                        </div>
+
                         <div className="flex gap-4">
                           {/* Image */}
                           <div className="w-24 h-24 bg-white rounded-xl flex-shrink-0 overflow-hidden border-2 border-gray-200 group-hover:border-red-300 transition-all">
@@ -175,11 +193,6 @@ export default function ProductDetailModal({
                               {variant.item.code}
                             </p>
                             <div className="flex flex-wrap gap-1.5">
-                              {variant.item.disabled === 1 && (
-                                <span className="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-semibold">
-                                  Disabled
-                                </span>
-                              )}
                               {variant.item.color && (
                                 <span className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold">
                                   {variant.item.color}

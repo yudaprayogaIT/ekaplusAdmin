@@ -12,6 +12,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   API_CONFIG,
   apiFetch,
+  getAuthHeadersFormData,
+  getFileUrl,
   getQueryUrl,
   getResourceUrl,
 } from "@/config/api";
@@ -298,7 +300,8 @@ export function EditRegistrationModal({
   demoMode = false,
   onDemoSave,
 }: EditRegistrationModalProps) {
-  const { token, isAuthenticated } = useAuth();
+  const { token, isAuthenticated, hasRole } = useAuth();
+  const canManageAttachment = hasRole("administrator");
   const [form, setForm] = useState<FormState | null>(null);
   const [snapshot, setSnapshot] = useState("");
   const [branches, setBranches] = useState<BranchOption[]>([]);
@@ -321,11 +324,17 @@ export function EditRegistrationModal({
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [attachmentRemoved, setAttachmentRemoved] = useState(false);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
 
-  const hasChanges = useMemo(() => {
+  const hasFormChanges = useMemo(() => {
     if (!form || !snapshot) return false;
     return JSON.stringify(form) !== snapshot;
   }, [form, snapshot]);
+  const hasAttachmentChanges =
+    canManageAttachment && (Boolean(attachmentFile) || attachmentRemoved);
+  const hasChanges = hasFormChanges || hasAttachmentChanges;
   const isWilayahApiAvailable = provinces.length > 0;
   const shippingAddressesLength = form?.shipping_addresses.length ?? 0;
   const sameAsCompanyAddressItemsKey = sameAsCompanyAddressItems
@@ -390,6 +399,9 @@ export function EditRegistrationModal({
       setIsLoading(true);
       setIsLoadingWilayah(true);
       setError(null);
+      setAttachmentFile(null);
+      setAttachmentRemoved(false);
+      if (attachmentInputRef.current) attachmentInputRef.current.value = "";
       try {
         if (demoMode) {
           const shipping = (registration.shipping_addresses || []).map((x) => ({
@@ -1275,6 +1287,11 @@ export function EditRegistrationModal({
               "",
           },
           shipping_addresses: form.shipping_addresses,
+          identity_attachment: attachmentRemoved
+            ? undefined
+            : attachmentFile
+              ? attachmentFile.name
+              : registration.identity_attachment,
           updated_at: new Date().toISOString(),
         };
         onDemoSave?.(nextRegistration);
@@ -1323,6 +1340,9 @@ export function EditRegistrationModal({
         company_village: form.company_village.trim(),
         same_as_company_address: 0,
         customer_shipping_address: form.shipping_addresses.map(payloadShipping),
+        ...(canManageAttachment && attachmentRemoved
+          ? { identity_attachment: null }
+          : {}),
       };
 
       const res = await apiFetch(
@@ -1340,6 +1360,35 @@ export function EditRegistrationModal({
             json.message) ||
           `Failed to update registration (${res.status})`;
         throw new Error(msg);
+      }
+
+      if (canManageAttachment && attachmentFile) {
+        const attachmentFormData = new FormData();
+        attachmentFormData.append("identity_attachment", attachmentFile);
+        const attachmentRes = await apiFetch(
+          getResourceUrl(
+            API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER,
+            registration.id,
+          ),
+          {
+            method: "PUT",
+            headers: getAuthHeadersFormData(token),
+            cache: "no-store",
+            body: attachmentFormData,
+          },
+          token,
+        );
+        if (!attachmentRes.ok) {
+          const json = await attachmentRes.json().catch(() => null);
+          const message =
+            (json &&
+              typeof json === "object" &&
+              "message" in json &&
+              typeof json.message === "string" &&
+              json.message) ||
+            `Gagal mengunggah foto attachment (${attachmentRes.status})`;
+          throw new Error(message);
+        }
       }
       window.dispatchEvent(new Event("ekatalog:customer_registrations_update"));
       onSuccess();
@@ -1681,6 +1730,112 @@ export function EditRegistrationModal({
                   </div>
                 </div>
               </div>
+
+              {canManageAttachment && (
+                <div className={sectionCardClass}>
+                  <h3 className="mb-1 text-lg font-bold text-slate-900">
+                    Foto Attachment
+                  </h3>
+                  <p className="mb-4 text-sm text-slate-500">
+                    Khusus administrator. Pilih foto baru untuk mengganti
+                    attachment yang tersimpan.
+                  </p>
+
+                  {attachmentFile ? (
+                    <div className="flex flex-col gap-3 rounded-xl border border-orange-200 bg-orange-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-orange-700">
+                          Foto baru
+                        </p>
+                        <p className="truncate text-sm font-medium text-slate-900">
+                          {attachmentFile.name}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAttachmentFile(null);
+                          if (attachmentInputRef.current) {
+                            attachmentInputRef.current.value = "";
+                          }
+                        }}
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                      >
+                        Batalkan pilihan
+                      </button>
+                    </div>
+                  ) : attachmentRemoved ? (
+                    <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-sm font-medium text-red-700">
+                        Foto attachment akan dihapus saat perubahan disimpan.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setAttachmentRemoved(false)}
+                        className="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50"
+                      >
+                        Batalkan hapus
+                      </button>
+                    </div>
+                  ) : registration.identity_attachment ? (
+                    <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <a
+                        href={getFileUrl(registration.identity_attachment)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="min-w-0 text-sm font-medium text-orange-600 hover:text-orange-700 hover:underline"
+                      >
+                        Lihat foto attachment saat ini
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => setAttachmentRemoved(true)}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50"
+                      >
+                        <FaTrash className="h-3.5 w-3.5" />
+                        Hapus foto
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="mb-3 text-sm text-slate-500">
+                      Belum ada foto attachment.
+                    </p>
+                  )}
+
+                  {!attachmentRemoved && (
+                    <label className="mt-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-600 transition hover:border-orange-400 hover:bg-orange-50">
+                      <span className="truncate">
+                        {attachmentFile
+                          ? attachmentFile.name
+                          : registration.identity_attachment
+                            ? "Pilih foto pengganti"
+                            : "Pilih foto attachment"}
+                      </span>
+                      <span className="rounded-lg bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700">
+                        Upload
+                      </span>
+                      <input
+                        ref={attachmentInputRef}
+                        type="file"
+                        accept="image/*"
+                        disabled={isSaving}
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0] || null;
+                          if (file && !file.type.startsWith("image/")) {
+                            setError("Attachment harus berupa file gambar");
+                            event.target.value = "";
+                            return;
+                          }
+                          setError(null);
+                          setAttachmentRemoved(false);
+                          setAttachmentFile(file);
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+              )}
 
               <div className={sectionCardClass}>
                 <h3 className="mb-4 text-lg font-bold text-slate-900">

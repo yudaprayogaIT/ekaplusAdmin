@@ -13,7 +13,6 @@ import ProductCard from "./ProductCard";
 import AddProductModal from "./AddProductModal";
 import ProductDetailModal from "./ProductDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import Pagination from "@/components/ui/Pagination";
 import ErrorMessage from "@/components/ui/ErrorMessage";
 import {
   FaPlus,
@@ -149,14 +148,19 @@ export default function ProductList() {
   );
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState(urlState.searchQuery);
+  const [debouncedSearch, setDebouncedSearch] = useState(
+    urlState.searchQuery.trim(),
+  );
   const [showHotDealsOnly, setShowHotDealsOnly] = useState(
     urlState.showHotDealsOnly,
   );
 
-  // Server-side pagination state
-  const [currentPage, setCurrentPage] = useState(urlState.page);
-  const [totalPages, setTotalPages] = useState(1);
+  // Infinite-scroll state
+  const [currentPage, setCurrentPage] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const itemsPerPage = 20;
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -172,13 +176,20 @@ export default function ProductList() {
   const [confirmDesc, setConfirmDesc] = useState("");
   const actionRef = useRef<(() => Promise<void>) | null>(null);
   const routedDetailRequestRef = useRef<number | null>(null);
-
-  // Track if this is initial mount to prevent resetting page on first load
-  const isInitialMount = useRef(true);
+  const hasLoadedOnceRef = useRef(false);
+  const latestRequestRef = useRef(0);
 
   useEffect(() => {
     setRouteDetailId(searchRouteDetailId);
   }, [searchRouteDetailId]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(
+      () => setDebouncedSearch(searchQuery.trim()),
+      300,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [searchQuery]);
 
   useEffect(() => {
     const syncRouteFromBrowser = () => {
@@ -195,13 +206,21 @@ export default function ProductList() {
     sort_by?: SortField,
     sort_order?: SortDirection,
     page: number = 1,
+    search?: string,
+    hotDealsOnly = false,
   ): Promise<{
     productsWithVariants: Product[];
     totalItems: number;
     totalPages: number;
+    page: number;
   }> {
     if (!token)
-      return { productsWithVariants: [], totalItems: 0, totalPages: 0 };
+      return {
+        productsWithVariants: [],
+        totalItems: 0,
+        totalPages: 0,
+        page: 1,
+      };
 
     const headers = getAuthHeaders(token);
 
@@ -213,6 +232,8 @@ export default function ProductList() {
       order_by?: [string, string][];
       limit: number;
       page: number;
+      with_total: boolean;
+      search?: string;
       childs?: Array<{
         alias: string;
         table: string;
@@ -237,15 +258,24 @@ export default function ProductList() {
             "item.item_code",
             "item.item_name",
             "item.image",
+            "item.disabled",
           ],
         },
       ],
-      limit: 20,
+      limit: itemsPerPage,
       page: page,
+      with_total: true,
     };
 
-    if (filterTriples.length > 0) {
-      productSpec.filters = filterTriples;
+    const effectiveFilters = hotDealsOnly
+      ? [...filterTriples, ["hot_deals", "=", 1] as FilterTriple]
+      : filterTriples;
+    if (effectiveFilters.length > 0) {
+      productSpec.filters = effectiveFilters;
+    }
+
+    if (search) {
+      productSpec.search = search;
     }
 
     // Server-side sorting with correct array of arrays format
@@ -266,23 +296,19 @@ export default function ProductList() {
     if (productsRes.ok) {
       const response = await productsRes.json();
 
-      totalItems =
-        response.total || response.count || response.total_count || 0;
-
-      if (totalItems > 0) {
-        totalPages = Math.ceil(totalItems / 20);
-      } else if (response.data.length > 0) {
-        if (response.data.length < 20) {
-          totalPages = page;
-          totalItems = (page - 1) * 20 + response.data.length;
-        } else {
-          totalPages = page + 1; // Show "next" button
-          totalItems = (page + 1) * 20; // Approximate total to show pagination
-        }
-      } else {
-        totalPages = 1;
-        totalItems = 0;
-      }
+      const responsePage = Number(response.meta?.page ?? page);
+      const perPage = Number(response.meta?.per_page ?? itemsPerPage);
+      totalItems = Number(
+        response.meta?.total ??
+          response.total ??
+          response.count ??
+          response.total_count ??
+          0,
+      );
+      totalPages = Number(
+        response.meta?.total_pages ??
+          (totalItems > 0 ? Math.ceil(totalItems / perPage) : responsePage),
+      );
 
       productsWithVariants = response.data
         .map(
@@ -294,6 +320,7 @@ export default function ProductList() {
                   item_code: string;
                   item_name: string;
                   image?: string;
+                  disabled?: number | string;
                 };
               }>;
               item_category:
@@ -371,7 +398,7 @@ export default function ProductList() {
                     type: "",
                     uom: "",
                     image: v.item.image ? getFileUrl(v.item.image) : undefined,
-                    disabled: 0,
+                    disabled: toNumber(v.item.disabled) ?? 0,
                   },
                   productid: productId,
                   displayOrder: 0,
@@ -418,9 +445,20 @@ export default function ProductList() {
         .filter(
           (product: Product | null): product is Product => product !== null,
         );
+      return {
+        productsWithVariants,
+        totalItems,
+        totalPages,
+        page: responsePage,
+      };
     }
 
-    return { productsWithVariants, totalItems, totalPages };
+    let errorMessage = `Gagal mengambil produk (HTTP ${productsRes.status})`;
+    try {
+      const errorBody = await productsRes.json();
+      errorMessage = errorBody.message || errorBody.error || errorMessage;
+    } catch {}
+    throw new Error(errorMessage);
   }
 
   // Use filter system with initial filters from URL
@@ -455,15 +493,13 @@ export default function ProductList() {
     [itemsLoaded, itemsLoading, token],
   );
 
-  // Sync state to URL whenever filter, sort, page, or search changes
-  const currentQueryString = searchParams.toString();
-
+  // Sync filter, sort, and search state to URL. Loaded pages are transient.
   useEffect(() => {
     const params = buildSearchParams({
       filters,
       sortField,
       sortDirection,
-      page: currentPage,
+      page: 1,
       searchQuery,
       showHotDealsOnly,
     });
@@ -471,67 +507,104 @@ export default function ProductList() {
       params.set("id", String(routeDetailId));
     }
 
-    const nextQueryString = params.toString();
-    if (nextQueryString === currentQueryString) {
-      return;
-    }
-
-    const newUrl = nextQueryString ? `?${nextQueryString}` : "";
+    const newUrl = params.toString() ? `?${params.toString()}` : "";
     router.replace(newUrl, { scroll: false });
   }, [
     filters,
     sortField,
     sortDirection,
-    currentPage,
     searchQuery,
     showHotDealsOnly,
     routeDetailId,
-    currentQueryString,
     router,
   ]);
 
-  // Function to load data with filters (wrapped in useCallback to fix warning)
-  const loadDataWithFilters = useCallback(
-    async (filterTriples: FilterTriple[] = [], page: number = 1) => {
-      setLoading(true);
-      setError(null);
+  const loadProductPage = useCallback(
+    async (page: number, replace = false) => {
+      const requestId = replace
+        ? ++latestRequestRef.current
+        : latestRequestRef.current;
+
+      if (replace) {
+        setLoading(true);
+        setError(null);
+      } else {
+        setLoadingMore(true);
+      }
+
       try {
-        // console.log(
-        //   "[ProductList] Loading data with server-side sort and pagination:",
-        //   sortField,
-        //   sortDirection,
-        //   "page:",
-        //   page,
-        // );
-        const { productsWithVariants, totalItems, totalPages } =
-          await loadProducts(filterTriples, sortField, sortDirection, page);
-
-        setProducts(productsWithVariants);
-        setTotalItems(totalItems);
-        setTotalPages(totalPages);
-        localStorage.setItem(SNAP_KEY, JSON.stringify(productsWithVariants));
-
-        // Mark initial mount as complete after first successful load
-        if (isInitialMount.current) {
-          isInitialMount.current = false;
+        if (!token) {
+          setProducts([]);
+          setHasMore(false);
+          return;
         }
+
+        const result = await loadProducts(
+          filters,
+          sortField,
+          sortDirection,
+          page,
+          debouncedSearch,
+          showHotDealsOnly,
+        );
+
+        // Ignore an older response if the user has already changed the query.
+        if (requestId !== latestRequestRef.current) return;
+
+        setProducts((current) => {
+          const next = replace
+            ? result.productsWithVariants
+            : [
+                ...current,
+                ...result.productsWithVariants.filter(
+                  (product) =>
+                    !current.some((existing) => existing.id === product.id),
+                ),
+              ];
+          try {
+            localStorage.setItem(SNAP_KEY, JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+        setTotalItems(result.totalItems);
+        setCurrentPage(result.page);
+        setHasMore(
+          result.totalPages > 0
+            ? result.page < result.totalPages
+            : result.productsWithVariants.length >= itemsPerPage,
+        );
       } catch (err: unknown) {
+        if (requestId !== latestRequestRef.current) return;
+        if (replace) setProducts([]);
+        setHasMore(false);
         const errorMessage = err instanceof Error ? err.message : String(err);
         setError({ message: errorMessage });
       } finally {
-        setLoading(false);
+        if (replace) {
+          if (requestId === latestRequestRef.current) {
+            hasLoadedOnceRef.current = true;
+            setLoading(false);
+          }
+        } else {
+          setLoadingMore(false);
+        }
       }
     },
+    // loadProducts is scoped to this component and uses the latest auth token.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [token, sortField, sortDirection],
+    [
+      debouncedSearch,
+      filters,
+      showHotDealsOnly,
+      sortDirection,
+      sortField,
+      token,
+    ],
   );
 
   // Handle filter apply
   function handleApplyFilters(newFilters: FilterTriple[]) {
     setFilters(newFilters);
-    setCurrentPage(1); // Reset to first page when filters change
-    // Reload data when filters are applied
-    loadDataWithFilters(newFilters, 1);
   }
 
   // Load static category data once on mount. Items are loaded lazily when
@@ -586,27 +659,30 @@ export default function ProductList() {
     };
   }, [itemsLoaded, loadAvailableItems]);
 
-  // Initial load with filters from URL/localStorage (only after static data is loaded)
+  // Reset the list whenever the query changes.
   useEffect(() => {
     if (!staticDataLoaded || !token) return;
+    setCurrentPage(1);
+    setHasMore(true);
+    void loadProductPage(1, true);
+  }, [loadProductPage, staticDataLoaded, token]);
 
-    let cancelled = false;
+  // Load the next page when the sentinel approaches the viewport.
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || loading || loadingMore || !hasMore) return;
 
-    async function load() {
-      if (!cancelled) {
-        await loadDataWithFilters(filters, currentPage);
-      }
-    }
-
-    if (token) {
-      load();
-    }
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [staticDataLoaded, token, filters, currentPage]);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          void loadProductPage(currentPage + 1, false);
+        }
+      },
+      { root: null, rootMargin: "240px 0px", threshold: 0 },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [currentPage, hasMore, loadProductPage, loading, loadingMore]);
 
   useEffect(() => {
     if (routeDetailId === null) {
@@ -643,34 +719,12 @@ export default function ProductList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products, routeDetailId, staticDataLoaded, token]);
 
-  // Reload data when sort changes (only after static data is loaded, but not on initial mount)
-  useEffect(() => {
-    if (staticDataLoaded && token && !isInitialMount.current) {
-      // console.log(
-      //   "[ProductList] Sort changed, reloading data with:",
-      //   sortField,
-      //   sortDirection,
-      // );
-      setCurrentPage(1); // Reset to first page when sort changes
-      loadDataWithFilters(filters, 1);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [staticDataLoaded, sortField, sortDirection]);
-
   // Listen for updates (only after static data is loaded)
   useEffect(() => {
     if (!staticDataLoaded) return;
 
     async function handler() {
-      try {
-        const { productsWithVariants, totalItems, totalPages } =
-          await loadProducts(filters, sortField, sortDirection, currentPage);
-
-        setProducts(productsWithVariants);
-        setTotalItems(totalItems);
-        setTotalPages(totalPages);
-        localStorage.setItem(SNAP_KEY, JSON.stringify(productsWithVariants));
-      } catch {}
+      await loadProductPage(1, true);
     }
 
     window.addEventListener("ekatalog:products_update", handler);
@@ -680,8 +734,7 @@ export default function ProductList() {
       window.removeEventListener("ekatalog:products_update", handler);
       window.removeEventListener("ekatalog:variants_update", handler);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [staticDataLoaded, filters, sortField, sortDirection, currentPage]);
+  }, [loadProductPage, staticDataLoaded]);
 
   function saveSnapshot(arr: Product[]) {
     localStorage.setItem(SNAP_KEY, JSON.stringify(arr));
@@ -793,36 +846,13 @@ export default function ProductList() {
     setConfirmOpen(false);
   }
 
-  // Client-side filtering for quick search and hot deals
-  // Note: With server-side pagination, client-side filters are limited to current page only
-  let displayedProducts = products;
   const selectableItems = useMemo(
     () => availableItems.filter((item) => item.disabled !== 1),
     [availableItems],
   );
 
-  // Quick search filter (client-side for better UX, limited to current page)
-  if (searchQuery.trim()) {
-    const query = searchQuery.toLowerCase();
-    displayedProducts = displayedProducts.filter(
-      (p) =>
-        p.name.toLowerCase().includes(query) ||
-        p.variants.some((v) => v.item.name.toLowerCase().includes(query)),
-    );
-  }
-
-  // Hot deals quick filter (client-side toggle, limited to current page)
-  if (showHotDealsOnly) {
-    displayedProducts = displayedProducts.filter((p) => p.isHotDeals);
-  }
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
   // Early returns AFTER all hooks
-  if (loading) {
+  if (loading && !hasLoadedOnceRef.current) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
@@ -836,7 +866,7 @@ export default function ProductList() {
   if (error) {
     const handleRetry = () => {
       setError(null);
-      loadDataWithFilters(filters, currentPage);
+      void loadProductPage(1, true);
     };
 
     return (
@@ -852,12 +882,12 @@ export default function ProductList() {
   return (
     <div>
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">
+      <div className="mb-4 flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
+        <div className="min-w-0 lg:flex lg:items-baseline lg:gap-3">
+          <h1 className="mb-1 text-2xl font-bold text-gray-800 lg:mb-0">
             Products
           </h1>
-          <p className="text-sm md:text-base text-gray-600">
+          <p className="text-sm text-gray-600">
             Kelola produk dengan varian material dan furniture
           </p>
         </div>
@@ -866,7 +896,7 @@ export default function ProductList() {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={handleAdd}
-          className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl shadow-lg shadow-red-200 hover:shadow-xl transition-all font-medium"
+          className="flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-red-500 to-red-600 px-4 py-2.5 text-sm font-medium text-white shadow-md shadow-red-200 transition-all hover:shadow-lg"
         >
           <FaPlus className="w-4 h-4" />
           <span>Tambah Produk</span>
@@ -874,57 +904,63 @@ export default function ProductList() {
       </div>
 
       {/* Search & Filter Controls */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 mb-6">
-        <div className="flex flex-col gap-4">
+      <div className="mb-3 rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
+        <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
           {/* Search Bar Row */}
-          <div className="flex flex-col md:flex-row gap-3">
+          <div className="flex min-w-0 flex-1 gap-2">
             <div className="flex-1 relative">
-              <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 z-10" />
+              <FaSearch className="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari produk atau varian..."
-                className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all text-sm"
+                className="w-full rounded-lg border border-gray-200 py-2.5 pl-9 pr-10 text-sm transition-all focus:border-transparent focus:ring-2 focus:ring-red-500"
               />
+              {loading && (
+                <div className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin rounded-full border-2 border-red-100 border-t-red-500" />
+              )}
             </div>
 
             {/* View Toggle */}
             <div className="flex gap-2">
               <button
                 onClick={() => setViewMode("grid")}
-                className={`px-4 py-3 rounded-xl font-medium transition-all ${
+                className={`rounded-lg px-3 py-2.5 transition-all ${
                   viewMode === "grid"
                     ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
-                title="Grid View"
+                title="Tampilan card"
+                aria-label="Tampilan card"
               >
-                <FaTh className="w-5 h-5" />
+                <FaTh className="h-4 w-4" />
               </button>
               <button
                 onClick={() => setViewMode("list")}
-                className={`px-4 py-3 rounded-xl font-medium transition-all ${
+                className={`rounded-lg px-3 py-2.5 transition-all ${
                   viewMode === "list"
                     ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
-                title="List View"
+                title="Tampilan list"
+                aria-label="Tampilan list"
               >
-                <FaList className="w-5 h-5" />
+                <FaList className="h-4 w-4" />
               </button>
             </div>
           </div>
 
           {/* Filters Row */}
-          <div className="flex flex-wrap items-center gap-3 justify-between">
-            <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 xl:flex-none">
+            <div className="flex flex-wrap items-center gap-2">
               {/* Advanced FilterBuilder Component */}
               <FilterBuilder
                 entity="product"
                 config={PRODUCT_FILTER_FIELDS}
                 onApply={handleApplyFilters}
                 categories={categories}
+                dropdownAlign="right"
               />
 
               {/* Hot Deals Quick Filter */}
@@ -1046,7 +1082,7 @@ export default function ProductList() {
       </div>
 
       {/* Products Display */}
-      {displayedProducts.length === 0 ? (
+      {products.length === 0 && !hasMore ? (
         <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
           <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <FaSearch className="w-8 h-8 text-gray-400" />
@@ -1055,20 +1091,25 @@ export default function ProductList() {
             Tidak ada produk
           </h3>
           <p className="text-sm text-gray-500">
-            Belum ada produk yang ditambahkan atau coba ubah filter
+            {searchQuery
+              ? "Coba ubah kata kunci pencarian"
+              : "Belum ada produk yang ditambahkan atau coba ubah filter"}
           </p>
         </div>
       ) : (
         // All products view (no grouping)
         <>
+          <div className="mb-2 text-sm text-gray-500">
+            Menampilkan {products.length} dari {totalItems} produk
+          </div>
           <div
             className={
               viewMode === "grid"
-                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-                : "space-y-4"
+                ? "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+                : "space-y-2"
             }
           >
-            {displayedProducts.map((p) => (
+            {products.map((p) => (
               <ProductCard
                 key={p.id}
                 product={p}
@@ -1080,15 +1121,18 @@ export default function ProductList() {
             ))}
           </div>
 
-          {/* Pagination */}
-          {totalItems > 0 && (
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={handlePageChange}
-              totalItems={totalItems}
-              itemsPerPage={itemsPerPage}
-            />
+          {hasMore && (
+            <div ref={loadMoreRef} className="h-8" aria-hidden="true" />
+          )}
+          {loadingMore && (
+            <div className="flex items-center justify-center py-8">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-red-100 border-t-red-600" />
+            </div>
+          )}
+          {!hasMore && products.length > 0 && (
+            <p className="py-8 text-center text-sm text-gray-400">
+              Semua produk sudah ditampilkan.
+            </p>
           )}
         </>
       )}
