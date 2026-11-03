@@ -1,7 +1,7 @@
 // src/components/products/VariantSuggestions.tsx (Enhanced Version)
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaLightbulb,
@@ -13,21 +13,24 @@ import {
 } from "react-icons/fa";
 import Image from "next/image";
 import type { Item } from "@/types";
+import { useAuth } from "@/contexts/AuthContext";
+import { fetchProductItemPage } from "./itemQuery";
 
 export function VariantSuggestions({
   productName,
-  items,
   currentVariants,
   onSelect,
 }: {
   productName: string;
-  items: Item[];
   currentVariants: Item[];
   onSelect: (items: Item[]) => void;
 }) {
+  const { token } = useAuth();
   const [expanded, setExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterCategory, setFilterCategory] = useState<string>("");
+  const [items, setItems] = useState<Item[]>([]);
+  const [loading, setLoading] = useState(false);
 
   // Extract prefix dari product name (first 3 words)
   const getPrefix = (name: string) => {
@@ -35,6 +38,38 @@ export function VariantSuggestions({
   };
 
   const productPrefix = getPrefix(productName);
+
+  useEffect(() => {
+    if (!token || !productPrefix) {
+      setItems([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      setLoading(true);
+      try {
+        const result = await fetchProductItemPage({
+          token,
+          limit: 16,
+          filters: [["item_name", "like", `${productPrefix}%`]],
+          signal: controller.signal,
+        });
+        setItems(result.items);
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          setItems([]);
+        }
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [productPrefix, token]);
 
   // Find suggested items based on prefix matching
   const suggestions = useMemo(() => {
@@ -65,7 +100,7 @@ export function VariantSuggestions({
     });
   }, [suggestions, searchQuery, filterCategory]);
 
-  if (suggestions.length === 0 || !productName.trim()) return null;
+  if ((suggestions.length === 0 && !loading) || !productName.trim()) return null;
 
   const displayItems = expanded ? filteredSuggestions : filteredSuggestions.slice(0, 8);
 
@@ -75,6 +110,10 @@ export function VariantSuggestions({
       animate={{ opacity: 1, y: 0 }}
       className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl shadow-sm"
     >
+      {loading ? (
+        <p className="text-sm text-blue-700">Mencari saran varian...</p>
+      ) : (
+        <>
       <div className="flex items-start justify-between mb-3">
         <div>
           <h4 className="font-semibold text-blue-900 flex items-center gap-2">
@@ -154,6 +193,8 @@ export function VariantSuggestions({
                     src={item.image}
                     alt={item.name}
                     unoptimized
+                    loading="lazy"
+                    decoding="async"
                     className="object-contain w-full h-full p-1"
                   />
                 ) : (
@@ -209,6 +250,8 @@ export function VariantSuggestions({
       <p className="text-xs text-blue-600 mt-3 flex items-center gap-1">
         💡 <span>Click individual items to add one by one</span>
       </p>
+        </>
+      )}
     </motion.div>
   );
 }

@@ -73,6 +73,8 @@ function DraggableVariantItem({
         alt={item.name}
         width={500}
         height={500}
+        loading="lazy"
+        decoding="async"
         className="w-12 h-12 rounded-lg object-cover"
       />
 

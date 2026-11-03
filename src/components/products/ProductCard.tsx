@@ -41,7 +41,7 @@ export default function ProductCard({
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         onClick={() => onView?.()}
-        className="group cursor-pointer rounded-xl border border-gray-100 bg-white p-3 shadow-sm transition-colors hover:bg-red-50/40"
+        className="group cursor-pointer rounded-xl border border-gray-100 bg-white p-3 shadow-sm transition-colors hover:bg-red-50/40 [content-visibility:auto] [contain-intrinsic-size:88px]"
       >
         <div className="flex items-center gap-3">
           {/* Image Preview */}
@@ -54,6 +54,8 @@ export default function ProductCard({
                 alt={product.name}
                 unoptimized
                 loading="lazy"
+                decoding="async"
+                sizes="64px"
                 className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-105"
               />
             ) : (
@@ -136,7 +138,7 @@ export default function ProductCard({
         boxShadow: "0 14px 30px -12px rgba(239, 68, 68, 0.2)",
       }}
       onClick={() => onView?.()}
-      className="group cursor-pointer overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all"
+      className="group cursor-pointer overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all [content-visibility:auto] [contain-intrinsic-size:240px]"
     >
       {/* Image Container */}
       <div className="relative h-32 overflow-hidden bg-gradient-to-br from-gray-50 via-white to-gray-50">
@@ -149,6 +151,8 @@ export default function ProductCard({
               alt={product.name}
               unoptimized
               loading="lazy"
+              decoding="async"
+              sizes="(min-width: 1536px) 20vw, (min-width: 1280px) 25vw, (min-width: 1024px) 33vw, 50vw"
               className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-105"
             />
           </div>

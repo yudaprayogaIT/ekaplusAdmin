@@ -6,7 +6,6 @@ import React, {
   useRef,
   useState,
   useCallback,
-  useMemo,
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import ProductCard from "./ProductCard";
@@ -25,7 +24,7 @@ import {
   FaChevronDown,
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
-import type { Item, Product, ProductFormData, Category } from "@/types";
+import type { Product, ProductFormData, Category } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   API_CONFIG,
@@ -50,8 +49,6 @@ type SortField =
   | "hot_deals";
 type SortDirection = "asc" | "desc";
 
-const SNAP_KEY = "ekatalog_products_snapshot";
-
 function toNumber(value: number | string | null | undefined): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   if (typeof value === "string" && value.trim() !== "") {
@@ -62,20 +59,6 @@ function toNumber(value: number | string | null | undefined): number | null {
 }
 
 // API Response Types
-interface ItemApiResponse {
-  id: number | string;
-  item_code: string;
-  item_name: string;
-  uom?: string;
-  item_desc?: string;
-  item_category: string;
-  item_group: string;
-  image?: string;
-  disabled: number;
-  created_by: string;
-  created_at: string;
-}
-
 interface ProductApiResponse {
   id: number | string;
   product_name: string;
@@ -90,28 +73,6 @@ interface ProductApiResponse {
   updated_at?: string;
   updated_by?: number | string | { id: number; full_name: string };
   owner?: number | string | { id: number; full_name: string };
-}
-
-function mapItemRows(rows: ItemApiResponse[]): Item[] {
-  return rows
-    .map((item: ItemApiResponse): Item | null => {
-      const id = toNumber(item.id);
-      if (id === null) return null;
-      return {
-        id,
-        code: item.item_code,
-        name: item.item_name,
-        uom: item.uom || "",
-        description: item.item_desc || "",
-        category: item.item_category,
-        group: item.item_group,
-        type: "",
-        color: "",
-        image: getFileUrl(item.image),
-        disabled: item.disabled,
-      };
-    })
-    .filter((item): item is Item => item !== null);
 }
 
 export default function ProductList() {
@@ -131,9 +92,6 @@ export default function ProductList() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [availableItems, setAvailableItems] = useState<Item[]>([]);
-  const [itemsLoaded, setItemsLoaded] = useState(false);
-  const [itemsLoading, setItemsLoading] = useState(false);
   const [staticDataLoaded, setStaticDataLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ code?: number; message: string } | null>(
@@ -178,6 +136,7 @@ export default function ProductList() {
   const routedDetailRequestRef = useRef<number | null>(null);
   const hasLoadedOnceRef = useRef(false);
   const latestRequestRef = useRef(0);
+  const listRequestAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setRouteDetailId(searchRouteDetailId);
@@ -208,6 +167,7 @@ export default function ProductList() {
     page: number = 1,
     search?: string,
     hotDealsOnly = false,
+    signal?: AbortSignal,
   ): Promise<{
     productsWithVariants: Product[];
     totalItems: number;
@@ -241,7 +201,16 @@ export default function ProductList() {
       }>;
     } = {
       fields: [
-        "*",
+        "id",
+        "product_name",
+        "item_category",
+        "hot_deals",
+        "disabled",
+        "created_at",
+        "created_by",
+        "updated_at",
+        "updated_by",
+        "owner",
         "item_category.id",
         "item_category.category_name",
         "created_by.full_name",
@@ -288,6 +257,7 @@ export default function ProductList() {
       method: "GET",
       cache: "no-store",
       headers,
+      signal,
     });
     let productsWithVariants: Product[] = [];
     let totalItems = 0;
@@ -383,14 +353,9 @@ export default function ProductList() {
                 const itemId = toNumber(v.item.id);
                 if (itemId === null) return null;
 
-                // Find full item data from availableItems state
-                const fullItem = availableItems.find(
-                  (item) => item.id === itemId,
-                );
-
                 return {
                   id: itemId, // Use item ID as variant ID for now
-                  item: fullItem || {
+                  item: {
                     id: itemId,
                     code: v.item.item_code,
                     name: v.item.item_name,
@@ -467,32 +432,6 @@ export default function ProductList() {
     initialFilters: urlState.filters,
   });
 
-  const loadAvailableItems = useCallback(
-    async (force = false) => {
-      if (!token || itemsLoading || (itemsLoaded && !force)) return;
-
-      setItemsLoading(true);
-      try {
-        const headers = getAuthHeaders(token);
-        const itemRows = await fetchAllQueryRows<ItemApiResponse>({
-          endpoint: API_CONFIG.ENDPOINTS.ITEM,
-          spec: { fields: ["*"] },
-          token,
-          requestInit: { headers },
-        });
-
-        setAvailableItems(mapItemRows(itemRows));
-        setItemsLoaded(true);
-      } catch {
-        // Keep the modal usable with the variants already attached to products.
-        setItemsLoaded(false);
-      } finally {
-        setItemsLoading(false);
-      }
-    },
-    [itemsLoaded, itemsLoading, token],
-  );
-
   // Sync filter, sort, and search state to URL. Loaded pages are transient.
   useEffect(() => {
     const params = buildSearchParams({
@@ -539,6 +478,10 @@ export default function ProductList() {
           return;
         }
 
+        if (replace) listRequestAbortRef.current?.abort();
+        const controller = new AbortController();
+        listRequestAbortRef.current = controller;
+
         const result = await loadProducts(
           filters,
           sortField,
@@ -546,6 +489,7 @@ export default function ProductList() {
           page,
           debouncedSearch,
           showHotDealsOnly,
+          controller.signal,
         );
 
         // Ignore an older response if the user has already changed the query.
@@ -561,9 +505,6 @@ export default function ProductList() {
                     !current.some((existing) => existing.id === product.id),
                 ),
               ];
-          try {
-            localStorage.setItem(SNAP_KEY, JSON.stringify(next));
-          } catch {}
           return next;
         });
         setTotalItems(result.totalItems);
@@ -574,6 +515,7 @@ export default function ProductList() {
             : result.productsWithVariants.length >= itemsPerPage,
         );
       } catch (err: unknown) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
         if (requestId !== latestRequestRef.current) return;
         if (replace) setProducts([]);
         setHasMore(false);
@@ -607,26 +549,27 @@ export default function ProductList() {
     setFilters(newFilters);
   }
 
-  // Load static category data once on mount. Items are loaded lazily when
-  // the add/edit modal needs the selector data.
+  // Load the small category lookup once. Product rows themselves already
+  // include nested category data.
   useEffect(() => {
     if (!token) return;
+    const controller = new AbortController();
 
     async function loadStatic() {
       if (!token) return;
       const headers = getAuthHeaders(token);
 
       // Load categories
-      const categoryRows = await fetchAllQueryRows<{
-        id: number | string;
-        category_name: string;
-      }>({
-        endpoint: API_CONFIG.ENDPOINTS.CATEGORY,
-        spec: { fields: ["*"] },
-        token,
-        requestInit: { headers },
-      });
-      if (categoryRows.length > 0) {
+      try {
+        const categoryRows = await fetchAllQueryRows<{
+          id: number | string;
+          category_name: string;
+        }>({
+          endpoint: API_CONFIG.ENDPOINTS.CATEGORY,
+          spec: { fields: ["id", "category_name"], limit: 100 },
+          token,
+          requestInit: { headers, signal: controller.signal },
+        });
         const categoriesData = categoryRows
           .map((cat: { id: number | string; category_name: string }) => {
             const id = toNumber(cat.id);
@@ -637,27 +580,21 @@ export default function ProductList() {
               category !== null,
           );
         setCategories(categoriesData);
+      } catch {
+        if (controller.signal.aborted) return;
+        setCategories([]);
+      } finally {
+        // Product rows include nested category data, so a category lookup
+        // failure must not leave the entire page in an endless loading state.
+        if (!controller.signal.aborted) setStaticDataLoaded(true);
       }
-
-      setStaticDataLoaded(true);
     }
 
     loadStatic();
-
+    return () => controller.abort();
   }, [token]);
 
-  useEffect(() => {
-    const handleItemsUpdate = () => {
-      if (itemsLoaded) {
-        void loadAvailableItems(true);
-      }
-    };
-
-    window.addEventListener("ekatalog:items_update", handleItemsUpdate);
-    return () => {
-      window.removeEventListener("ekatalog:items_update", handleItemsUpdate);
-    };
-  }, [itemsLoaded, loadAvailableItems]);
+  useEffect(() => () => listRequestAbortRef.current?.abort(), []);
 
   // Reset the list whenever the query changes.
   useEffect(() => {
@@ -670,7 +607,7 @@ export default function ProductList() {
   // Load the next page when the sentinel approaches the viewport.
   useEffect(() => {
     const target = loadMoreRef.current;
-    if (!target || loading || loadingMore || !hasMore) return;
+    if (!target || loading || loadingMore || !hasMore || modalOpen) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -682,7 +619,7 @@ export default function ProductList() {
     );
     observer.observe(target);
     return () => observer.disconnect();
-  }, [currentPage, hasMore, loadProductPage, loading, loadingMore]);
+  }, [currentPage, hasMore, loadProductPage, loading, loadingMore, modalOpen]);
 
   useEffect(() => {
     if (routeDetailId === null) {
@@ -703,16 +640,32 @@ export default function ProductList() {
     let cancelled = false;
 
     async function loadRoutedProduct() {
-      const result = await loadProducts([["id", "=", routeDetailId]], undefined, undefined, 1);
-      const product = result.productsWithVariants[0];
-      if (!cancelled && product) {
-        setDetailItem(product);
-        setDetailOpen(true);
+      try {
+        const result = await loadProducts(
+          [["id", "=", routeDetailId]],
+          undefined,
+          undefined,
+          1,
+          undefined,
+          false,
+          controller.signal,
+        );
+        const product = result.productsWithVariants[0];
+        if (!cancelled && product) {
+          setDetailItem(product);
+          setDetailOpen(true);
+        }
+      } catch (loadError) {
+        if (!(loadError instanceof DOMException && loadError.name === "AbortError")) {
+          routedDetailRequestRef.current = null;
+        }
       }
     }
+    const controller = new AbortController();
     void loadRoutedProduct();
     return () => {
       cancelled = true;
+      controller.abort();
     };
     // loadProducts maps against the latest category/item state and is
     // intentionally invoked only once per routed ID.
@@ -736,8 +689,7 @@ export default function ProductList() {
     };
   }, [loadProductPage, staticDataLoaded]);
 
-  function saveSnapshot(arr: Product[]) {
-    localStorage.setItem(SNAP_KEY, JSON.stringify(arr));
+  function notifyProductsUpdate() {
     window.dispatchEvent(new Event("ekatalog:products_update"));
   }
 
@@ -756,7 +708,7 @@ export default function ProductList() {
           // Remove from local state
           const next = products.filter((x) => x.id !== p.id);
           setProducts(next);
-          saveSnapshot(next);
+          notifyProductsUpdate();
         } else {
           const errorData = await response.json();
           alert(
@@ -773,7 +725,6 @@ export default function ProductList() {
   function handleAdd() {
     setModalInitial(null);
     setModalOpen(true);
-    void loadAvailableItems();
   }
 
   // Convert Product (with ItemVariant[]) to ProductFormData (with Item[])
@@ -791,7 +742,6 @@ export default function ProductList() {
   function handleEdit(p: Product) {
     setModalInitial(convertToModalFormat(p));
     setModalOpen(true);
-    void loadAvailableItems();
   }
 
   function openDetail(p: Product) {
@@ -845,11 +795,6 @@ export default function ProductList() {
     actionRef.current = null;
     setConfirmOpen(false);
   }
-
-  const selectableItems = useMemo(
-    () => availableItems.filter((item) => item.disabled !== 1),
-    [availableItems],
-  );
 
   // Early returns AFTER all hooks
   if (loading && !hasLoadedOnceRef.current) {
@@ -1143,8 +1088,6 @@ export default function ProductList() {
         onClose={() => setModalOpen(false)}
         initial={modalInitial}
         categories={categories}
-        availableItems={selectableItems}
-        itemsLoading={itemsLoading}
       />
 
       <ProductDetailModal

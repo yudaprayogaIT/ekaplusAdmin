@@ -1,7 +1,7 @@
 // src/components/products/AddProductModal.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   FaTimes,
@@ -29,6 +29,11 @@ import {
 } from "@/config/api";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
+import type { FilterTriple } from "@/types/filter";
+import {
+  fetchProductItemPage,
+  PRODUCT_ITEM_PAGE_SIZE,
+} from "./itemQuery";
 
 // Props interface
 interface AddProductModalProps {
@@ -36,8 +41,6 @@ interface AddProductModalProps {
   onClose: () => void;
   initial?: ProductFormData | null;
   categories: Category[];
-  availableItems: Item[];
-  itemsLoading?: boolean;
 }
 
 function isItemVariant(value: unknown): value is ItemVariant {
@@ -53,78 +56,134 @@ function isItemVariant(value: unknown): value is ItemVariant {
 function ItemSelectorModal({
   open,
   onClose,
-  items,
   selectedItems,
+  categories,
   onSelect,
 }: {
   open: boolean;
   onClose: () => void;
-  items: Item[];
   selectedItems: Item[];
+  categories: Category[];
   onSelect: (items: Item[]) => void;
 }) {
+  const { token } = useAuth();
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selected, setSelected] = useState<Item[]>(selectedItems);
-  const [filterCategory, setFilterCategory] = useState<string | null>(null);
-  const [filterType, setFilterType] = useState<string | null>(null);
-  const [filterColor, setFilterColor] = useState<string | null>(null);
+  const [items, setItems] = useState<Item[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [bulkSelecting, setBulkSelecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [filterCategory, setFilterCategory] = useState("");
+  const requestRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (open) {
       setSelected(selectedItems);
-      setSearch("");
-      setFilterCategory(null);
-      setFilterType(null);
-      setFilterColor(null);
+      setItems([]);
+      setPage(1);
+      setTotal(0);
+      setHasMore(false);
+      setError(null);
+      setFilterCategory("");
     }
   }, [open, selectedItems]);
 
-  // Extract first 3 words dari item name untuk smart prefix matching
-  const getItemPrefix = (itemName: string): string => {
-    const words = itemName.trim().split(/\s+/);
-    return words.slice(0, 3).join(" ").toUpperCase();
-  };
+  useEffect(() => {
+    const timeout = window.setTimeout(
+      () => setDebouncedSearch(search.trim()),
+      300,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [search]);
 
-  // Select semua items dengan prefix yang sama
-  const selectByPrefix = (query: string) => {
-    if (!query.trim()) return;
-    const prefix = getItemPrefix(query);
-    const matching = items.filter((item) => {
-      const itemPrefix = getItemPrefix(item.name);
-      return itemPrefix === prefix;
-    });
-    setSelected([
-      ...selected,
-      ...matching.filter((m) => !selected.some((s) => s.id === m.id)),
-    ]);
-  };
+  const activeFilters = useMemo<FilterTriple[]>(
+    () =>
+      filterCategory
+        ? [["item_category", "=", filterCategory]]
+        : [],
+    [filterCategory],
+  );
 
-  // Get unique values untuk filters
-  const uniqueCategories = [
-    ...new Set(items.map((i) => i.category).filter(Boolean)),
-  ];
-  const uniqueTypes = [...new Set(items.map((i) => i.type).filter(Boolean))];
-  const uniqueColors = [...new Set(items.map((i) => i.color).filter(Boolean))];
+  const categoryOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          categories
+            .map((category) => category.name?.trim())
+            .filter((name): name is string => Boolean(name)),
+        ),
+      ).sort((a, b) => a.localeCompare(b)),
+    [categories],
+  );
 
-  const filteredItems = items.filter((item) => {
-    // Text search
-    const matchesSearch =
-      item.name.toLowerCase().includes(search.toLowerCase()) ||
-      item.code.toLowerCase().includes(search.toLowerCase()) ||
-      item.color?.toLowerCase().includes(search.toLowerCase()) ||
-      item.type?.toLowerCase().includes(search.toLowerCase());
+  const loadPage = useCallback(
+    async (nextPage: number, replace: boolean) => {
+      if (!token) return;
+      requestRef.current?.abort();
+      const controller = new AbortController();
+      requestRef.current = controller;
+      if (replace) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+      setError(null);
 
-    // Category filter
-    const matchesCategory = !filterCategory || item.category === filterCategory;
+      try {
+        const result = await fetchProductItemPage({
+          token,
+          page: nextPage,
+          limit: PRODUCT_ITEM_PAGE_SIZE,
+          search: debouncedSearch,
+          filters: activeFilters,
+          signal: controller.signal,
+        });
+        setItems((current) =>
+          replace
+            ? result.items
+            : [
+                ...current,
+                ...result.items.filter(
+                  (item) => !current.some((existing) => existing.id === item.id),
+                ),
+              ],
+        );
+        setPage(result.page);
+        setTotal(result.total);
+        setHasMore(result.hasMore);
+      } catch (loadError) {
+        if (!(loadError instanceof DOMException && loadError.name === "AbortError")) {
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Gagal mengambil daftar item.",
+          );
+        }
+      } finally {
+        if (requestRef.current === controller) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
+      }
+    },
+    [activeFilters, debouncedSearch, token],
+  );
 
-    // Type filter
-    const matchesType = !filterType || item.type === filterType;
+  useEffect(() => {
+    if (!open || !token) return;
+    void loadPage(1, true);
+    return () => requestRef.current?.abort();
+  }, [loadPage, open, token]);
 
-    // Color filter
-    const matchesColor = !filterColor || item.color === filterColor;
-
-    return matchesSearch && matchesCategory && matchesType && matchesColor;
-  });
+  const selectedIds = useMemo(
+    () => new Set(selected.map((item) => item.id)),
+    [selected],
+  );
 
   const toggleItem = (item: Item) => {
     const exists = selected.some((s) => s.id === item.id);
@@ -135,6 +194,66 @@ function ItemSelectorModal({
     }
   };
 
+  const mergeSelected = useCallback((newItems: Item[]) => {
+    setSelected((current) => {
+      const byId = new Map(current.map((item) => [item.id, item]));
+      newItems.forEach((item) => byId.set(item.id, item));
+      return Array.from(byId.values());
+    });
+  }, []);
+
+  const fetchAllResults = useCallback(
+    async (searchValue: string, filters: FilterTriple[]) => {
+      if (!token) return [];
+
+      const allItems: Item[] = [];
+      const seenIds = new Set<number>();
+      let nextPage = 1;
+      let more = true;
+
+      while (more) {
+        const result = await fetchProductItemPage({
+          token,
+          page: nextPage,
+          limit: 100,
+          search: searchValue,
+          filters,
+        });
+        let addedCount = 0;
+        result.items.forEach((item) => {
+          if (!seenIds.has(item.id)) {
+            seenIds.add(item.id);
+            allItems.push(item);
+            addedCount += 1;
+          }
+        });
+        more = result.hasMore && result.items.length > 0 && addedCount > 0;
+        nextPage += 1;
+      }
+
+      return allItems;
+    },
+    [token],
+  );
+
+  const handleSelectAllMatching = async () => {
+    const query = search.trim();
+    if (!query) return;
+    setBulkSelecting(true);
+    setError(null);
+    try {
+      mergeSelected(await fetchAllResults(query, []));
+    } catch (selectionError) {
+      setError(
+        selectionError instanceof Error
+          ? selectionError.message
+          : "Gagal memilih semua item yang cocok.",
+      );
+    } finally {
+      setBulkSelecting(false);
+    }
+  };
+
   const handleConfirm = () => {
     // Deduplicate selected items before passing back
     const unique = selected.filter(
@@ -142,6 +261,13 @@ function ItemSelectorModal({
     );
 
     onSelect(unique);
+    handleSelectorClose();
+  };
+
+  const handleSelectorClose = () => {
+    requestRef.current?.abort();
+    setSearch("");
+    setDebouncedSearch("");
     onClose();
   };
 
@@ -156,7 +282,7 @@ function ItemSelectorModal({
     >
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
+        onClick={handleSelectorClose}
       />
 
       <motion.div
@@ -172,10 +298,11 @@ function ItemSelectorModal({
               <h3 className="text-xl font-bold text-gray-900">Pilih Item</h3>
               <p className="text-sm text-gray-500 mt-1">
                 {selected.length} item dipilih
+                {total > 0 ? ` · ${total} item aktif ditemukan` : ""}
               </p>
             </div>
             <button
-              onClick={onClose}
+              onClick={handleSelectorClose}
               className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
             >
               <FaTimes className="w-5 h-5 text-gray-500" />
@@ -189,36 +316,21 @@ function ItemSelectorModal({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cari item berdasarkan nama, kode, warna, atau tipe..."
+              placeholder="Cari item berdasarkan nama atau kode..."
               className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent"
             />
           </div>
 
-          {/* Bulk Action Buttons */}
           <div className="flex gap-2 flex-wrap mb-4">
             <button
-              onClick={() => selectByPrefix(search)}
-              disabled={!search.trim()}
+              onClick={() => void handleSelectAllMatching()}
+              disabled={!search.trim() || bulkSelecting}
               className="px-3 py-1.5 bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-blue-600 transition-colors"
             >
-              Select all matching &quot;{search}&quot;
+              {bulkSelecting
+                ? "Memilih..."
+                : `Select all matching \"${search}\"`}
             </button>
-
-            <button
-              onClick={() =>
-                setSelected([
-                  ...selected,
-                  ...filteredItems.filter(
-                    (f) => !selected.some((s) => s.id === f.id),
-                  ),
-                ])
-              }
-              disabled={filteredItems.length === 0}
-              className="px-3 py-1.5 bg-purple-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-purple-600 transition-colors"
-            >
-              Select all filtered ({filteredItems.length})
-            </button>
-
             <button
               onClick={() => setSelected([])}
               disabled={selected.length === 0}
@@ -228,71 +340,52 @@ function ItemSelectorModal({
             </button>
           </div>
 
-          {/* Filter Dropdowns */}
-          <div className="flex gap-2 flex-wrap">
-            {uniqueCategories.length > 0 && (
+          {categoryOptions.length > 0 && (
+            <div className="flex gap-2 flex-wrap">
               <select
-                value={filterCategory || ""}
-                onChange={(e) => setFilterCategory(e.target.value || null)}
+                value={filterCategory}
+                onChange={(event) => setFilterCategory(event.target.value)}
                 className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
               >
                 <option value="">All Categories</option>
-                {uniqueCategories.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
+                {categoryOptions.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
                   </option>
                 ))}
               </select>
-            )}
-
-            {uniqueTypes.length > 0 && (
-              <select
-                value={filterType || ""}
-                onChange={(e) => setFilterType(e.target.value || null)}
-                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
-              >
-                <option value="">All Types</option>
-                {uniqueTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            {uniqueColors.length > 0 && (
-              <select
-                value={filterColor || ""}
-                onChange={(e) => setFilterColor(e.target.value || null)}
-                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
-              >
-                <option value="">All Colors</option>
-                {uniqueColors.map((color) => (
-                  <option key={color} value={color}>
-                    {color}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Items Grid */}
         <div className="flex-1 overflow-y-auto p-6">
-          {filteredItems.length === 0 ? (
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <div className="h-9 w-9 animate-spin rounded-full border-4 border-red-100 border-t-red-500" />
+            </div>
+          ) : error ? (
+            <div className="py-12 text-center">
+              <p className="mb-3 text-sm text-red-600">{error}</p>
+              <button
+                onClick={() => void loadPage(1, true)}
+                className="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white"
+              >
+                Coba lagi
+              </button>
+            </div>
+          ) : items.length === 0 ? (
             <div className="text-center py-12">
               <FaBox className="w-16 h-16 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-500">Tidak ada item ditemukan</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {filteredItems.map((item) => {
-                const isSelected = selected.some((s) => s.id === item.id);
+              {items.map((item) => {
+                const isSelected = selectedIds.has(item.id);
                 return (
-                  <motion.div
+                  <div
                     key={item.id}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
                     onClick={() => toggleItem(item)}
                     className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all ${
                       isSelected
@@ -314,6 +407,8 @@ function ItemSelectorModal({
                           src={item.image}
                           alt={item.name}
                           unoptimized
+                          loading="lazy"
+                          decoding="async"
                           className="object-contain w-full h-full p-2"
                         />
                       ) : (
@@ -339,9 +434,20 @@ function ItemSelectorModal({
                         </span>
                       )}
                     </div>
-                  </motion.div>
+                  </div>
                 );
               })}
+            </div>
+          )}
+          {!loading && !error && hasMore && (
+            <div className="flex justify-center pt-6">
+              <button
+                onClick={() => void loadPage(page + 1, false)}
+                disabled={loadingMore}
+                className="rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 disabled:opacity-60"
+              >
+                {loadingMore ? "Memuat..." : "Muat item berikutnya"}
+              </button>
             </div>
           )}
         </div>
@@ -349,7 +455,7 @@ function ItemSelectorModal({
         {/* Footer */}
         <div className="p-6 border-t border-gray-100 flex justify-end gap-3">
           <button
-            onClick={onClose}
+            onClick={handleSelectorClose}
             className="px-6 py-3 border border-gray-300 rounded-xl font-medium text-gray-700 hover:bg-gray-50 transition-colors"
           >
             Batal
@@ -371,8 +477,6 @@ export default function AddProductModal({
   onClose,
   initial,
   categories,
-  availableItems,
-  itemsLoading = false,
 }: AddProductModalProps) {
   const { token } = useAuth();
   const [name, setName] = useState("");
@@ -475,32 +579,7 @@ export default function AddProductModal({
     }
   }, [open, initial, categories]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    if (!open) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+S or Cmd+S to save
-      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-        e.preventDefault();
-        if (!saving && name.trim() && categoryId) {
-          handleSave();
-        }
-      }
-      // Escape to cancel
-      if (e.key === "Escape") {
-        e.preventDefault();
-        if (!saving) {
-          handleClose();
-        }
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, saving, name, categoryId, handleClose]);
-
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!name.trim() || !categoryId || !token) return;
 
     setSaving(true);
@@ -577,7 +656,28 @@ export default function AddProductModal({
     } finally {
       setSaving(false);
     }
-  };
+  }, [categoryId, disabled, initial, isHotDeals, name, onClose, selectedVariants, token]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        if (!saving && name.trim() && categoryId) {
+          void handleSave();
+        }
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (!saving) handleClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [categoryId, handleClose, handleSave, name, open, saving]);
 
   if (!open) return null;
 
@@ -717,25 +817,17 @@ export default function AddProductModal({
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => setItemSelectorOpen(true)}
-                    disabled={itemsLoading}
-                    className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors"
                   >
                     <FaPlus className="w-3.5 h-3.5" />
-                    {itemsLoading ? "Memuat item..." : "Pilih Item"}
+                    Pilih Item
                   </motion.button>
                 </div>
 
-                {itemsLoading && (
-                  <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg text-sm text-purple-700">
-                    Mengambil daftar item untuk varian produk...
-                  </div>
-                )}
-
                 {/* Smart Suggestions */}
-                {name.trim() && !itemsLoading && (
+                {name.trim() && (
                   <VariantSuggestions
                     productName={name}
-                    items={availableItems}
                     currentVariants={selectedVariants}
                     onSelect={(items) => {
                       // Deduplicate: merge new items with existing, remove duplicates by ID
@@ -840,8 +932,8 @@ export default function AddProductModal({
         <ItemSelectorModal
           open={itemSelectorOpen}
           onClose={() => setItemSelectorOpen(false)}
-          items={availableItems}
           selectedItems={selectedVariants}
+          categories={categories}
           onSelect={setSelectedVariants}
         />
 
