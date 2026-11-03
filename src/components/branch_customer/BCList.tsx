@@ -5,6 +5,7 @@ import React, {
   useMemo,
   useEffect,
   useCallback,
+  useRef,
 } from "react";
 import { BCCard } from "./BCCard";
 import { BCDetailModal } from "./BCDetailModal";
@@ -109,11 +110,24 @@ export default function BCList() {
   const [selectedGC, setSelectedGC] = useState<GroupCustomer | null>(null);
   const [selectedBC, setSelectedBC] = useState<BranchCustomer | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
 
   const [sortField, setSortField] = useState<SortField>("gc_name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [sortFieldDropdownOpen, setSortFieldDropdownOpen] = useState(false);
+  const hasLoadedOnceRef = useRef(false);
+  const latestListRequestRef = useRef(0);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim());
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
+
   const loadData = useCallback(async () => {
+    const requestId = ++latestListRequestRef.current;
     setLoading(true);
     setError(null);
 
@@ -130,7 +144,7 @@ export default function BCList() {
             ? "gcid.gc_name"
             : sortField;
 
-      const trimmedSearchQuery = searchQuery.trim();
+      const trimmedSearchQuery = debouncedSearchQuery;
       const bcSpec: {
         fields: string[];
         order_by: [string, string][];
@@ -374,14 +388,19 @@ export default function BCList() {
         };
       });
 
+      if (requestId !== latestListRequestRef.current) return;
       setBcs(mapped);
     } catch (err) {
+      if (requestId !== latestListRequestRef.current) return;
       setError(err instanceof Error ? err.message : String(err));
       setBcs([]);
     } finally {
-      setLoading(false);
+      if (requestId === latestListRequestRef.current) {
+        hasLoadedOnceRef.current = true;
+        setLoading(false);
+      }
     }
-  }, [isAuthenticated, searchQuery, sortDirection, sortField, token]);
+  }, [debouncedSearchQuery, isAuthenticated, sortDirection, sortField, token]);
 
   useEffect(() => {
     void loadData();
@@ -403,7 +422,7 @@ export default function BCList() {
     setSelectedBC(bc);
   };
 
-  if (loading) {
+  if (loading && !hasLoadedOnceRef.current) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="w-16 h-16 border-4 border-orange-200 border-t-orange-600 rounded-full animate-spin" />

@@ -500,7 +500,7 @@ export default function ProductList() {
       sortField,
       sortDirection,
       page: 1,
-      searchQuery,
+      searchQuery: debouncedSearch,
       showHotDealsOnly,
     });
     if (routeDetailId !== null) {
@@ -513,7 +513,7 @@ export default function ProductList() {
     filters,
     sortField,
     sortDirection,
-    searchQuery,
+    debouncedSearch,
     showHotDealsOnly,
     routeDetailId,
     router,

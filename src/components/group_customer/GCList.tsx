@@ -102,6 +102,8 @@ export default function GCList() {
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const hasLoadedOnceRef = useRef(false);
+  const latestListRequestRef = useRef(0);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -114,6 +116,10 @@ export default function GCList() {
   }, [searchQuery]);
 
   const loadData = useCallback(async (page: number, replace = false) => {
+    const requestId = replace
+      ? ++latestListRequestRef.current
+      : latestListRequestRef.current;
+
     if (replace) {
       setLoading(true);
       setError(null);
@@ -244,6 +250,8 @@ export default function GCList() {
         };
       });
 
+      if (requestId !== latestListRequestRef.current) return;
+
       setGcs((current) =>
         replace
           ? mapped
@@ -257,22 +265,25 @@ export default function GCList() {
       setCurrentPage(page);
       setHasMore(gcRows.length >= perPage);
     } catch (err) {
+      if (requestId !== latestListRequestRef.current) return;
       setError(err instanceof Error ? err.message : String(err));
       if (replace) {
         setGcs([]);
       }
       setHasMore(false);
     } finally {
-      if (replace) {
-        setLoading(false);
-      } else {
-        setLoadingMore(false);
+      if (requestId === latestListRequestRef.current) {
+        if (replace) {
+          hasLoadedOnceRef.current = true;
+          setLoading(false);
+        } else {
+          setLoadingMore(false);
+        }
       }
     }
   }, [debouncedSearchQuery, isAuthenticated, sortDirection, sortField, token]);
 
   useEffect(() => {
-    setGcs([]);
     setCurrentPage(1);
     setHasMore(true);
     void loadData(1, true);
@@ -318,7 +329,7 @@ export default function GCList() {
     setSelectedGC(gc);
   };
 
-  if (loading) {
+  if (loading && !hasLoadedOnceRef.current) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />

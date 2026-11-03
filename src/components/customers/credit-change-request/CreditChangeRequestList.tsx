@@ -224,6 +224,8 @@ export function CreditChangeRequestList() {
   const tourStartedRef = useRef(false);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const routedDetailRequestRef = useRef<number | null>(null);
+  const hasLoadedOnceRef = useRef(false);
+  const latestListRequestRef = useRef(0);
 
   useEffect(() => {
     setRouteDetailId(searchRouteDetailId);
@@ -256,6 +258,10 @@ export function CreditChangeRequestList() {
 
   const loadData = useCallback(
     async (page: number, replace = false) => {
+      const requestId = replace
+        ? ++latestListRequestRef.current
+        : latestListRequestRef.current;
+
       if (replace) {
         setLoading(true);
         setError(null);
@@ -287,6 +293,7 @@ export function CreditChangeRequestList() {
             errorMessage: "Failed to fetch credit change request",
           });
 
+          if (requestId !== latestListRequestRef.current) return;
           setItems(rows.map(mapCreditChangeRequestRow));
           setCurrentPage(1);
           setHasMore(false);
@@ -322,6 +329,8 @@ export function CreditChangeRequestList() {
         const perPage = Number(json?.meta?.per_page || DEFAULT_PAGE_SIZE);
         const mapped = rows.map(mapCreditChangeRequestRow);
 
+        if (requestId !== latestListRequestRef.current) return;
+
         setItems((current) =>
           replace
             ? mapped
@@ -336,6 +345,7 @@ export function CreditChangeRequestList() {
         setCurrentPage(page);
         setHasMore(rows.length >= perPage);
       } catch (loadError) {
+        if (requestId !== latestListRequestRef.current) return;
         if (replace) {
           setItems([]);
         }
@@ -346,10 +356,13 @@ export function CreditChangeRequestList() {
             : "Gagal memuat credit change request",
         );
       } finally {
-        if (replace) {
-          setLoading(false);
-        } else {
-          setLoadingMore(false);
+        if (requestId === latestListRequestRef.current) {
+          if (replace) {
+            hasLoadedOnceRef.current = true;
+            setLoading(false);
+          } else {
+            setLoadingMore(false);
+          }
         }
       }
     },
@@ -789,7 +802,7 @@ export function CreditChangeRequestList() {
     [refreshList, token],
   );
 
-  if (loading && items.length === 0) {
+  if (loading && !hasLoadedOnceRef.current) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="h-16 w-16 animate-spin rounded-full border-4 border-emerald-200 border-t-emerald-600" />

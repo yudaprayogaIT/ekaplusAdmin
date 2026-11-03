@@ -33,6 +33,8 @@ import {
   FaSignOutAlt,
   FaCreditCard,
   FaEdit,
+  FaUsers,
+  FaStar,
 } from "react-icons/fa";
 import { BiSolidPurchaseTag, BiSolidUserDetail } from "react-icons/bi";
 import { AiFillProduct } from "react-icons/ai";
@@ -178,6 +180,13 @@ const ADMIN_MENU: MenuItem[] = [
 
 const MASTER_MENU: MenuItem[] = [
   {
+    label: "Member Of",
+    href: "/member-of",
+    icon: <FaUsers className="w-4 h-4" />,
+    category: "Master Data",
+    requireAuth: true,
+  },
+  {
     label: "Branches",
     href: "/branches",
     icon: <FaBuilding className="w-4 h-4" />,
@@ -274,20 +283,6 @@ const CUSTOMER_SUBMENU: MenuItem[] = [
     category: "Customer",
     requireAuth: true,
   },
-  // {
-  //   label: "Customer Limit",
-  //   href: "/customers/limit",
-  //   icon: <FaDatabase className="w-4 h-4" />,
-  //   category: "Customer",
-  //   requireAuth: true,
-  // },
-  // {
-  //   label: "Credit Policy",
-  //   href: "/customers/credit-policy",
-  //   icon: <FaDatabase className="w-4 h-4" />,
-  //   category: "Customer",
-  //   requireAuth: true,
-  // },
   {
     label: "Credit Change Request",
     href: "/customers/credit-change-request",
@@ -296,33 +291,14 @@ const CUSTOMER_SUBMENU: MenuItem[] = [
     requireAuth: true,
   },
   // {
-  //   label: "National Brand",
-  //   href: "/customers/national_brand",
-  //   icon: <FaLayerGroup className="w-4 h-4" />,
+  //   label: "Loyalty Point",
+  //   href: "/customer/loyalty-point",
+  //   icon: <FaStar className="w-4 h-4" />,
   //   category: "Customer",
+  //   permission: "loyalty.read",
   //   requireAuth: true,
   // },
-  // {
-  //   label: "Group Parent",
-  //   href: "/customers/group_party",
-  //   icon: <FaUsers className="w-4 h-4" />,
-  //   category: "Customer",
-  //   requireAuth: true,
-  // },
-  // {
-  //   label: "Group Customer",
-  //   href: "/customers/group_customer",
-  //   icon: <FaUserGroup className="w-4 h-4" />,
-  //   category: "Customer",
-  //   requireAuth: true,
-  // },
-  // {
-  //   label: "Branch Customer",
-  //   href: "/customers/branch_customer",
-  //   icon: <FaUserShield className="w-4 h-4" />,
-  //   category: "Customer",
-  //   requireAuth: true,
-  // },
+
   // {
   //   label: "Members",
   //   href: "/members",
@@ -444,7 +420,8 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
     if (
       pathname.startsWith("/branches") ||
       pathname.startsWith("/sales-teams") ||
-      pathname.startsWith("/items")
+      pathname.startsWith("/items") ||
+      pathname.startsWith("/member-of")
     ) {
       setOpenSubmenu("master");
     } else if (
@@ -456,6 +433,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
       setOpenSubmenu("catalog");
     } else if (
       pathname.startsWith("/customers") ||
+      pathname.startsWith("/customer/loyalty-point") ||
       pathname.startsWith("/members") ||
       pathname.startsWith("/memberGroups") ||
       pathname.startsWith("/member-tiers")

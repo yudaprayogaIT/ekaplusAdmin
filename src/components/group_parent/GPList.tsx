@@ -105,6 +105,8 @@ export default function GPList() {
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const hasLoadedOnceRef = useRef(false);
+  const latestListRequestRef = useRef(0);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -117,6 +119,10 @@ export default function GPList() {
   }, [searchQuery]);
 
   const loadData = useCallback(async (page: number, replace = false) => {
+    const requestId = replace
+      ? ++latestListRequestRef.current
+      : latestListRequestRef.current;
+
     if (replace) {
       setLoading(true);
       setError(null);
@@ -154,6 +160,8 @@ export default function GPList() {
         : [];
       const perPage = Number(json?.meta?.per_page || DEFAULT_PAGE_SIZE);
       const mapped = rows.map(mapGpRow);
+      if (requestId !== latestListRequestRef.current) return;
+
       setGps((current) =>
         replace
           ? mapped
@@ -167,22 +175,25 @@ export default function GPList() {
       setCurrentPage(page);
       setHasMore(rows.length >= perPage);
     } catch (err) {
+      if (requestId !== latestListRequestRef.current) return;
       setError(err instanceof Error ? err.message : String(err));
       if (replace) {
         setGps([]);
       }
       setHasMore(false);
     } finally {
-      if (replace) {
-        setLoading(false);
-      } else {
-        setLoadingMore(false);
+      if (requestId === latestListRequestRef.current) {
+        if (replace) {
+          hasLoadedOnceRef.current = true;
+          setLoading(false);
+        } else {
+          setLoadingMore(false);
+        }
       }
     }
   }, [debouncedSearchQuery, isAuthenticated, sortDirection, sortField, token]);
 
   useEffect(() => {
-    setGps([]);
     setCurrentPage(1);
     setHasMore(true);
     void loadData(1, true);
@@ -228,7 +239,7 @@ export default function GPList() {
     setSelectedGP(gp);
   };
 
-  if (loading) {
+  if (loading && !hasLoadedOnceRef.current) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="w-16 h-16 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin" />

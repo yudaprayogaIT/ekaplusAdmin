@@ -330,6 +330,8 @@ export function CustomerChangeRequestList() {
   const [hasMore, setHasMore] = useState(true);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const directLoadRef = useRef<number | null>(null);
+  const hasLoadedOnceRef = useRef(false);
+  const latestListRequestRef = useRef(0);
   const { filters, setFilters } = useFilters({
     entity: "customer_change_request",
   });
@@ -357,6 +359,10 @@ export function CustomerChangeRequestList() {
 
   const loadData = useCallback(
     async (page: number, replace = false) => {
+      const requestId = replace
+        ? ++latestListRequestRef.current
+        : latestListRequestRef.current;
+
       if (replace) {
         setLoading(true);
         setError(null);
@@ -400,6 +406,8 @@ export function CustomerChangeRequestList() {
         const mapped = await enrichEntityDisplayNames(rows.map(mapRow), token);
         const perPage = Number(json?.meta?.per_page || PAGE_SIZE);
 
+        if (requestId !== latestListRequestRef.current) return;
+
         setItems((current) =>
           replace
             ? mapped
@@ -414,6 +422,7 @@ export function CustomerChangeRequestList() {
         setCurrentPage(page);
         setHasMore(rows.length >= perPage);
       } catch (loadError) {
+        if (requestId !== latestListRequestRef.current) return;
         if (replace) setItems([]);
         setHasMore(false);
         setError(
@@ -422,8 +431,14 @@ export function CustomerChangeRequestList() {
             : "Gagal memuat customer change request",
         );
       } finally {
-        if (replace) setLoading(false);
-        else setLoadingMore(false);
+        if (requestId === latestListRequestRef.current) {
+          if (replace) {
+            hasLoadedOnceRef.current = true;
+            setLoading(false);
+          } else {
+            setLoadingMore(false);
+          }
+        }
       }
     },
     [
@@ -543,7 +558,7 @@ export function CustomerChangeRequestList() {
     [],
   );
 
-  if (loading && items.length === 0) {
+  if (loading && !hasLoadedOnceRef.current) {
     return (
       <div className="flex items-center justify-center py-24">
         <div className="text-center">
@@ -576,8 +591,11 @@ export function CustomerChangeRequestList() {
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Cari nomor request, customer, alasan, atau status..."
-              className="w-full rounded-lg border border-gray-200 py-2.5 pl-9 pr-3 text-sm transition focus:border-transparent focus:ring-2 focus:ring-red-500"
+              className="w-full rounded-lg border border-gray-200 py-2.5 pl-9 pr-10 text-sm transition focus:border-transparent focus:ring-2 focus:ring-red-500"
             />
+            {loading && (
+              <div className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin rounded-full border-2 border-red-100 border-t-red-500" />
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">

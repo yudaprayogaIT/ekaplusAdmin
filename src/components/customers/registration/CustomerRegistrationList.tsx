@@ -100,6 +100,7 @@ interface CustomerRegistrationApiResponse {
   erp_customer_group?: string | null;
   same_as_company_address?: number | boolean | null;
   identity_attachment?: string | null;
+  npwp_attachment?: string | null;
   nbid?: number | { id?: number; name?: string; nb_name?: string } | null;
   nbid_id?: number | null;
   nbid_name?: string | null;
@@ -313,6 +314,8 @@ export function CustomerRegistrationList() {
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const loadMoreRef = React.useRef<HTMLDivElement | null>(null);
+  const hasLoadedOnceRef = useRef(false);
+  const latestListRequestRef = useRef(0);
 
   // Sort state
   const [sortField, setSortField] = useState<SortField>("updated_at");
@@ -545,6 +548,7 @@ export function CustomerRegistrationList() {
       same_as_company_address: Boolean(apiData.same_as_company_address),
       shipping_addresses: [],
       identity_attachment: apiData.identity_attachment || undefined,
+      npwp_attachment: apiData.npwp_attachment || undefined,
 
       // Documents
       documents: {
@@ -666,6 +670,10 @@ export function CustomerRegistrationList() {
       sort_by?: SortField,
       sort_order?: SortDirection,
     ) => {
+      const requestId = replace
+        ? ++latestListRequestRef.current
+        : latestListRequestRef.current;
+
       if (replace) {
         setLoading(true);
         setError(null);
@@ -735,6 +743,8 @@ export function CustomerRegistrationList() {
           const mapped = apiData.map((item) => mapToFrontendType(item));
           const enrichedPage = await enrichMasterLinkNames(mapped, token);
           const perPage = Number(response?.meta?.per_page || DEFAULT_PAGE_SIZE);
+          if (requestId !== latestListRequestRef.current) return;
+
           let nextRegistrations: CustomerRegistration[] = [];
           setRegistrations(
             (current) =>
@@ -754,16 +764,24 @@ export function CustomerRegistrationList() {
             localStorage.setItem(SNAP_KEY, JSON.stringify(nextRegistrations));
           } catch {}
         } else {
+          if (requestId !== latestListRequestRef.current) return;
           setError(`Failed to fetch registrations (${res.status})`);
           setHasMore(false);
         }
       } catch (err: unknown) {
+        if (requestId !== latestListRequestRef.current) return;
         setError(err instanceof Error ? err.message : String(err));
         if (replace) setRegistrations([]);
         setHasMore(false);
       } finally {
-        if (replace) setLoading(false);
-        else setLoadingMore(false);
+        if (requestId === latestListRequestRef.current) {
+          if (replace) {
+            hasLoadedOnceRef.current = true;
+            setLoading(false);
+          } else {
+            setLoadingMore(false);
+          }
+        }
       }
     },
     [debouncedSearchQuery, isAuthenticated, selectedStatus, token],
@@ -1684,7 +1702,7 @@ export function CustomerRegistrationList() {
   };
 
   // Loading state
-  if (loading && registrations.length === 0) {
+  if (loading && !hasLoadedOnceRef.current) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-center">

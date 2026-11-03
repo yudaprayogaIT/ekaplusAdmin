@@ -323,6 +323,8 @@ export default function ItemList() {
   );
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const routedDetailRequestRef = useRef<number | null>(null);
+  const hasLoadedOnceRef = useRef(false);
+  const latestListRequestRef = useRef(0);
 
   // Products and categories for BulkProductCreationModal
   const [products, setProducts] = useState<Product[]>([]);
@@ -564,7 +566,7 @@ export default function ItemList() {
       sortField,
       sortDirection,
       page: 1,
-      searchQuery,
+      searchQuery: debouncedSearch,
       showOnlyUnmapped,
     });
     if (routeDetailId !== null) {
@@ -577,7 +579,7 @@ export default function ItemList() {
     filters,
     sortField,
     sortDirection,
-    searchQuery,
+    debouncedSearch,
     showOnlyUnmapped,
     routeDetailId,
     router,
@@ -590,6 +592,10 @@ export default function ItemList() {
 
   const loadItems = useCallback(
     async (page: number, replace = false) => {
+      const requestId = replace
+        ? ++latestListRequestRef.current
+        : latestListRequestRef.current;
+
       if (replace) {
         setLoading(true);
         setError(null);
@@ -611,6 +617,10 @@ export default function ItemList() {
           page,
           debouncedSearch,
         );
+
+        // A slower response from an older search must not overwrite the
+        // results for the latest query.
+        if (requestId !== latestListRequestRef.current) return;
 
         setItems((current) => {
           const next = replace
@@ -635,6 +645,7 @@ export default function ItemList() {
             : result.items.length >= itemsPerPage,
         );
       } catch (err: unknown) {
+        if (requestId !== latestListRequestRef.current) return;
         if (replace) setItems([]);
         setHasMore(false);
         const errorMessage = err instanceof Error ? err.message : String(err);
@@ -650,8 +661,14 @@ export default function ItemList() {
           setError(errorMessage);
         }
       } finally {
-        if (replace) setLoading(false);
-        else setLoadingMore(false);
+        if (requestId === latestListRequestRef.current) {
+          if (replace) {
+            hasLoadedOnceRef.current = true;
+            setLoading(false);
+          } else {
+            setLoadingMore(false);
+          }
+        }
       }
     },
     // loadAllData is scoped to this component and uses the latest auth token.
@@ -1005,7 +1022,7 @@ export default function ItemList() {
     );
   }
 
-  if (loading && items.length === 0) {
+  if (loading && !hasLoadedOnceRef.current) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-center">

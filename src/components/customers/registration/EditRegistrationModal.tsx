@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaEdit, FaSave, FaTrash } from "react-icons/fa";
 import { HiXMark } from "react-icons/hi2";
@@ -238,6 +239,278 @@ const readOnlyFieldClass =
 const checkboxClass =
   "h-4 w-4 rounded border-slate-300 text-orange-500 focus:ring-orange-400";
 
+interface AttachmentEditorProps {
+  label: string;
+  currentAttachment?: string | null;
+  file: File | null;
+  removed: boolean;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  disabled: boolean;
+  token?: string | null;
+  onFileChange: (file: File | null) => void;
+  onRemovedChange: (removed: boolean) => void;
+  onError: (message: string | null) => void;
+}
+
+function AttachmentEditor({
+  label,
+  currentAttachment,
+  file,
+  removed,
+  inputRef,
+  disabled,
+  token,
+  onFileChange,
+  onRemovedChange,
+  onError,
+}: AttachmentEditorProps) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    async function loadPreview() {
+      setPreviewOpen(false);
+      setPreviewError(null);
+
+      if (removed) {
+        setPreviewUrl(null);
+        setPreviewLoading(false);
+        return;
+      }
+
+      if (file) {
+        objectUrl = URL.createObjectURL(file);
+        setPreviewUrl(objectUrl);
+        setPreviewLoading(false);
+        return;
+      }
+
+      const attachmentUrl = getFileUrl(currentAttachment);
+      if (!attachmentUrl) {
+        setPreviewUrl(null);
+        setPreviewLoading(false);
+        return;
+      }
+
+      if (!token) {
+        setPreviewUrl(attachmentUrl);
+        setPreviewLoading(false);
+        return;
+      }
+
+      setPreviewLoading(true);
+      try {
+        const response = await apiFetch(
+          attachmentUrl,
+          { method: "GET", cache: "no-store" },
+          token,
+        );
+        if (!response.ok) {
+          throw new Error(`Gagal memuat attachment (${response.status})`);
+        }
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+        if (!cancelled) setPreviewUrl(objectUrl);
+      } catch (loadError) {
+        if (!cancelled) {
+          setPreviewUrl(null);
+          setPreviewError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Gagal memuat preview attachment",
+          );
+        }
+      } finally {
+        if (!cancelled) setPreviewLoading(false);
+      }
+    }
+
+    void loadPreview();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [currentAttachment, file, removed, token]);
+
+  return (
+    <div className="rounded-xl border border-slate-200 p-4">
+      <h4 className="mb-3 text-sm font-bold text-slate-800">{label}</h4>
+
+      {!removed && (file || currentAttachment) && (
+        <div className="mb-3">
+          {previewLoading ? (
+            <div className="flex h-72 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-500">
+              Memuat preview attachment...
+            </div>
+          ) : previewError ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              {previewError}
+            </div>
+          ) : previewUrl ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setPreviewOpen(true)}
+                className="block w-full overflow-hidden rounded-xl border border-slate-200 bg-white transition hover:border-orange-300"
+              >
+                <div className="relative h-72 w-full">
+                  <Image
+                    src={previewUrl}
+                    alt={label}
+                    fill
+                    unoptimized
+                    className="object-contain"
+                    onError={() =>
+                      setPreviewError("Gagal menampilkan gambar attachment")
+                    }
+                  />
+                </div>
+              </button>
+              <p className="mt-2 text-xs text-slate-500">
+                Klik gambar untuk melihat ukuran lebih besar.
+              </p>
+            </>
+          ) : null}
+        </div>
+      )}
+
+      {file ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-orange-200 bg-orange-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-orange-700">
+              File baru
+            </p>
+            <p className="truncate text-sm font-medium text-slate-900">
+              {file.name}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              onFileChange(null);
+              if (inputRef.current) inputRef.current.value = "";
+            }}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            Batalkan pilihan
+          </button>
+        </div>
+      ) : removed ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm font-medium text-red-700">
+            Attachment akan dihapus saat perubahan disimpan.
+          </p>
+          <button
+            type="button"
+            onClick={() => onRemovedChange(false)}
+            className="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50"
+          >
+            Batalkan hapus
+          </button>
+        </div>
+      ) : currentAttachment ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <a
+            href={getFileUrl(currentAttachment)}
+            target="_blank"
+            rel="noreferrer"
+            className="min-w-0 text-sm font-medium text-orange-600 hover:text-orange-700 hover:underline"
+          >
+            Lihat attachment saat ini
+          </a>
+          <button
+            type="button"
+            onClick={() => onRemovedChange(true)}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50"
+          >
+            <FaTrash className="h-3.5 w-3.5" />
+            Hapus
+          </button>
+        </div>
+      ) : (
+        <p className="mb-3 text-sm text-slate-500">Belum ada attachment.</p>
+      )}
+
+      {!removed && (
+        <label className="mt-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-600 transition hover:border-orange-400 hover:bg-orange-50">
+          <span className="truncate">
+            {file
+              ? file.name
+              : currentAttachment
+                ? "Pilih file pengganti"
+                : "Pilih attachment"}
+          </span>
+          <span className="rounded-lg bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700">
+            Upload
+          </span>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            disabled={disabled}
+            className="hidden"
+            onChange={(event) => {
+              const selectedFile = event.target.files?.[0] || null;
+              const isAccepted =
+                !selectedFile || selectedFile.type.startsWith("image/");
+              if (!isAccepted) {
+                onError("Attachment harus berupa file gambar");
+                event.target.value = "";
+                return;
+              }
+              onError(null);
+              onRemovedChange(false);
+              onFileChange(selectedFile);
+            }}
+          />
+        </label>
+      )}
+
+      <AnimatePresence>
+        {previewOpen && previewUrl && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) setPreviewOpen(false);
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              className="relative h-[85vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+            >
+              <button
+                type="button"
+                onClick={() => setPreviewOpen(false)}
+                className="absolute right-4 top-4 z-10 rounded-xl bg-white/90 p-2 text-slate-700 shadow-sm transition hover:bg-white"
+                aria-label="Tutup preview"
+              >
+                <HiXMark className="h-6 w-6" />
+              </button>
+              <Image
+                src={previewUrl}
+                alt={label}
+                fill
+                unoptimized
+                className="object-contain"
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 function getBranchLabel(
   branches: BranchOption[],
   branchId: number | null | undefined,
@@ -300,8 +573,7 @@ export function EditRegistrationModal({
   demoMode = false,
   onDemoSave,
 }: EditRegistrationModalProps) {
-  const { token, isAuthenticated, hasRole } = useAuth();
-  const canManageAttachment = hasRole("administrator");
+  const { token, isAuthenticated } = useAuth();
   const [form, setForm] = useState<FormState | null>(null);
   const [snapshot, setSnapshot] = useState("");
   const [branches, setBranches] = useState<BranchOption[]>([]);
@@ -324,16 +596,24 @@ export function EditRegistrationModal({
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
-  const [attachmentRemoved, setAttachmentRemoved] = useState(false);
-  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const [identityAttachmentFile, setIdentityAttachmentFile] =
+    useState<File | null>(null);
+  const [identityAttachmentRemoved, setIdentityAttachmentRemoved] =
+    useState(false);
+  const identityAttachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const [npwpAttachmentFile, setNpwpAttachmentFile] = useState<File | null>(null);
+  const [npwpAttachmentRemoved, setNpwpAttachmentRemoved] = useState(false);
+  const npwpAttachmentInputRef = useRef<HTMLInputElement | null>(null);
 
   const hasFormChanges = useMemo(() => {
     if (!form || !snapshot) return false;
     return JSON.stringify(form) !== snapshot;
   }, [form, snapshot]);
   const hasAttachmentChanges =
-    canManageAttachment && (Boolean(attachmentFile) || attachmentRemoved);
+    Boolean(identityAttachmentFile) ||
+    identityAttachmentRemoved ||
+    Boolean(npwpAttachmentFile) ||
+    npwpAttachmentRemoved;
   const hasChanges = hasFormChanges || hasAttachmentChanges;
   const isWilayahApiAvailable = provinces.length > 0;
   const shippingAddressesLength = form?.shipping_addresses.length ?? 0;
@@ -399,9 +679,16 @@ export function EditRegistrationModal({
       setIsLoading(true);
       setIsLoadingWilayah(true);
       setError(null);
-      setAttachmentFile(null);
-      setAttachmentRemoved(false);
-      if (attachmentInputRef.current) attachmentInputRef.current.value = "";
+      setIdentityAttachmentFile(null);
+      setIdentityAttachmentRemoved(false);
+      setNpwpAttachmentFile(null);
+      setNpwpAttachmentRemoved(false);
+      if (identityAttachmentInputRef.current) {
+        identityAttachmentInputRef.current.value = "";
+      }
+      if (npwpAttachmentInputRef.current) {
+        npwpAttachmentInputRef.current.value = "";
+      }
       try {
         if (demoMode) {
           const shipping = (registration.shipping_addresses || []).map((x) => ({
@@ -1287,11 +1574,16 @@ export function EditRegistrationModal({
               "",
           },
           shipping_addresses: form.shipping_addresses,
-          identity_attachment: attachmentRemoved
+          identity_attachment: identityAttachmentRemoved
             ? undefined
-            : attachmentFile
-              ? attachmentFile.name
+            : identityAttachmentFile
+              ? identityAttachmentFile.name
               : registration.identity_attachment,
+          npwp_attachment: npwpAttachmentRemoved
+            ? undefined
+            : npwpAttachmentFile
+              ? npwpAttachmentFile.name
+              : registration.npwp_attachment,
           updated_at: new Date().toISOString(),
         };
         onDemoSave?.(nextRegistration);
@@ -1340,9 +1632,10 @@ export function EditRegistrationModal({
         company_village: form.company_village.trim(),
         same_as_company_address: 0,
         customer_shipping_address: form.shipping_addresses.map(payloadShipping),
-        ...(canManageAttachment && attachmentRemoved
+        ...(identityAttachmentRemoved
           ? { identity_attachment: null }
           : {}),
+        ...(npwpAttachmentRemoved ? { npwp_attachment: null } : {}),
       };
 
       const res = await apiFetch(
@@ -1362,9 +1655,17 @@ export function EditRegistrationModal({
         throw new Error(msg);
       }
 
-      if (canManageAttachment && attachmentFile) {
+      if (identityAttachmentFile || npwpAttachmentFile) {
         const attachmentFormData = new FormData();
-        attachmentFormData.append("identity_attachment", attachmentFile);
+        if (identityAttachmentFile) {
+          attachmentFormData.append(
+            "identity_attachment",
+            identityAttachmentFile,
+          );
+        }
+        if (npwpAttachmentFile) {
+          attachmentFormData.append("npwp_attachment", npwpAttachmentFile);
+        }
         const attachmentRes = await apiFetch(
           getResourceUrl(
             API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER,
@@ -1386,7 +1687,7 @@ export function EditRegistrationModal({
               "message" in json &&
               typeof json.message === "string" &&
               json.message) ||
-            `Gagal mengunggah foto attachment (${attachmentRes.status})`;
+            `Gagal mengunggah attachment (${attachmentRes.status})`;
           throw new Error(message);
         }
       }
@@ -1731,111 +2032,44 @@ export function EditRegistrationModal({
                 </div>
               </div>
 
-              {canManageAttachment && (
-                <div className={sectionCardClass}>
-                  <h3 className="mb-1 text-lg font-bold text-slate-900">
-                    Foto Attachment
-                  </h3>
-                  <p className="mb-4 text-sm text-slate-500">
-                    Khusus administrator. Pilih foto baru untuk mengganti
-                    attachment yang tersimpan.
-                  </p>
+              <div className={sectionCardClass}>
+                <h3 className="mb-1 text-lg font-bold text-slate-900">
+                  Attachment
+                </h3>
+                <p className="mb-4 text-sm text-slate-500">
+                  Tambahkan file baru, ganti file yang tersimpan, atau tandai
+                  file untuk dihapus saat perubahan disimpan.
+                </p>
+                <div className="space-y-4">
+                  <AttachmentEditor
+                    label="Identity Attachment"
+                    currentAttachment={registration.identity_attachment}
+                    file={identityAttachmentFile}
+                    removed={identityAttachmentRemoved}
+                    inputRef={identityAttachmentInputRef}
+                    disabled={isSaving}
+                    token={token}
+                    onFileChange={setIdentityAttachmentFile}
+                    onRemovedChange={setIdentityAttachmentRemoved}
+                    onError={setError}
+                  />
 
-                  {attachmentFile ? (
-                    <div className="flex flex-col gap-3 rounded-xl border border-orange-200 bg-orange-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-orange-700">
-                          Foto baru
-                        </p>
-                        <p className="truncate text-sm font-medium text-slate-900">
-                          {attachmentFile.name}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAttachmentFile(null);
-                          if (attachmentInputRef.current) {
-                            attachmentInputRef.current.value = "";
-                          }
-                        }}
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                      >
-                        Batalkan pilihan
-                      </button>
-                    </div>
-                  ) : attachmentRemoved ? (
-                    <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="text-sm font-medium text-red-700">
-                        Foto attachment akan dihapus saat perubahan disimpan.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setAttachmentRemoved(false)}
-                        className="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50"
-                      >
-                        Batalkan hapus
-                      </button>
-                    </div>
-                  ) : registration.identity_attachment ? (
-                    <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-                      <a
-                        href={getFileUrl(registration.identity_attachment)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="min-w-0 text-sm font-medium text-orange-600 hover:text-orange-700 hover:underline"
-                      >
-                        Lihat foto attachment saat ini
-                      </a>
-                      <button
-                        type="button"
-                        onClick={() => setAttachmentRemoved(true)}
-                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50"
-                      >
-                        <FaTrash className="h-3.5 w-3.5" />
-                        Hapus foto
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="mb-3 text-sm text-slate-500">
-                      Belum ada foto attachment.
-                    </p>
-                  )}
-
-                  {!attachmentRemoved && (
-                    <label className="mt-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-600 transition hover:border-orange-400 hover:bg-orange-50">
-                      <span className="truncate">
-                        {attachmentFile
-                          ? attachmentFile.name
-                          : registration.identity_attachment
-                            ? "Pilih foto pengganti"
-                            : "Pilih foto attachment"}
-                      </span>
-                      <span className="rounded-lg bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700">
-                        Upload
-                      </span>
-                      <input
-                        ref={attachmentInputRef}
-                        type="file"
-                        accept="image/*"
-                        disabled={isSaving}
-                        className="hidden"
-                        onChange={(event) => {
-                          const file = event.target.files?.[0] || null;
-                          if (file && !file.type.startsWith("image/")) {
-                            setError("Attachment harus berupa file gambar");
-                            event.target.value = "";
-                            return;
-                          }
-                          setError(null);
-                          setAttachmentRemoved(false);
-                          setAttachmentFile(file);
-                        }}
-                      />
-                    </label>
+                  {Number(registration.company.tax_status || 0) === 1 && (
+                    <AttachmentEditor
+                      label="NPWP Attachment"
+                      currentAttachment={registration.npwp_attachment}
+                      file={npwpAttachmentFile}
+                      removed={npwpAttachmentRemoved}
+                      inputRef={npwpAttachmentInputRef}
+                      disabled={isSaving}
+                      token={token}
+                      onFileChange={setNpwpAttachmentFile}
+                      onRemovedChange={setNpwpAttachmentRemoved}
+                      onError={setError}
+                    />
                   )}
                 </div>
-              )}
+              </div>
 
               <div className={sectionCardClass}>
                 <h3 className="mb-4 text-lg font-bold text-slate-900">

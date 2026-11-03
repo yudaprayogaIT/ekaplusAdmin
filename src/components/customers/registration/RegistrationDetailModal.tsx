@@ -151,10 +151,12 @@ function blobToDataUrl(blob: Blob, mediaType: string): Promise<string> {
   });
 }
 
-function ContactIdentityAttachment({
+function RegistrationAttachmentPreview({
+  label,
   attachment,
   token,
 }: {
+  label: string;
   attachment?: string | null;
   token?: string | null;
 }) {
@@ -263,7 +265,7 @@ function ContactIdentityAttachment({
   return (
     <div>
       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-        Identity Attachment
+        {label}
       </label>
       {!attachment ? <p className="text-sm text-gray-900">-</p> : null}
       {loading ? (
@@ -281,14 +283,14 @@ function ContactIdentityAttachment({
             {thumbnailMediaType?.includes("pdf") ? (
               <iframe
                 src={thumbnailBlobUrl}
-                title="Identity Attachment PDF"
+                title={`${label} PDF`}
                 className="pointer-events-none h-full w-full"
               />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={thumbnailBlobUrl}
-                alt="Identity Attachment"
+                alt={label}
                 className="h-full w-full object-contain"
               />
             )}
@@ -332,14 +334,14 @@ function ContactIdentityAttachment({
                 {previewMediaType?.includes("pdf") ? (
                   <iframe
                     src={previewBlobUrl}
-                    title="Preview Identity Attachment PDF"
+                    title={`Preview ${label} PDF`}
                     className="h-full w-full"
                   />
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={previewBlobUrl}
-                    alt="Preview Identity Attachment"
+                    alt={`Preview ${label}`}
                     className="h-full w-full object-contain"
                   />
                 )}
@@ -1281,11 +1283,23 @@ export function RegistrationDetailModal({
                     Attachment
                   </h3>
                 </div>
-                <div className="rounded-xl border border-gray-200 bg-white p-5">
-                  <ContactIdentityAttachment
-                    attachment={registration.identity_attachment}
-                    token={token}
-                  />
+                <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+                  <div className="rounded-xl border border-gray-200 bg-white p-5">
+                    <RegistrationAttachmentPreview
+                      label="Identity Attachment"
+                      attachment={registration.identity_attachment}
+                      token={token}
+                    />
+                  </div>
+                  {Number(registration.company.tax_status || 0) === 1 && (
+                    <div className="rounded-xl border border-gray-200 bg-white p-5">
+                      <RegistrationAttachmentPreview
+                        label="NPWP Attachment"
+                        attachment={registration.npwp_attachment}
+                        token={token}
+                      />
+                    </div>
+                  )}
                 </div>
               </section>
 
