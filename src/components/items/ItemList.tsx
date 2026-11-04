@@ -26,6 +26,8 @@ import {
   FaTimes,
   FaCheckSquare,
   FaExclamationTriangle,
+  FaFileExcel,
+  FaSpinner,
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -48,6 +50,10 @@ import type {
   GobackOperator,
 } from "@/types/filter";
 import { buildSearchParams, parseSearchParams } from "@/utils/urlSync";
+import {
+  exportItemWorkbook,
+  type ItemExportProgress,
+} from "@/utils/exportItemWorkbook";
 
 export type Item = {
   id: number;
@@ -273,7 +279,8 @@ export default function ItemList() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { token, isAuthenticated } = useAuth();
+  const { token, isAuthenticated, hasRole } = useAuth();
+  const canExportItems = hasRole("administrator");
 
   // Parse initial state from URL
   const urlState = parseSearchParams(searchParams);
@@ -322,6 +329,13 @@ export default function ItemList() {
     new Set(),
   );
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] =
+    useState<ItemExportProgress | null>(null);
+  const [exportNotice, setExportNotice] = useState<{
+    type: "success" | "warning" | "error";
+    message: string;
+  } | null>(null);
   const routedDetailRequestRef = useRef<number | null>(null);
   const hasLoadedOnceRef = useRef(false);
   const latestListRequestRef = useRef(0);
@@ -339,6 +353,12 @@ export default function ItemList() {
   useEffect(() => {
     setRouteDetailId(searchRouteDetailId);
   }, [searchRouteDetailId]);
+
+  useEffect(() => {
+    if (!exportNotice) return;
+    const timeout = window.setTimeout(() => setExportNotice(null), 6000);
+    return () => window.clearTimeout(timeout);
+  }, [exportNotice]);
 
   useEffect(() => {
     const timeout = window.setTimeout(
@@ -736,6 +756,43 @@ export default function ItemList() {
   //   setModalOpen(true);
   // }
 
+  async function handleExportExcel() {
+    if (!token || !canExportItems || isExporting) return;
+
+    setIsExporting(true);
+    setExportNotice(null);
+    setExportProgress({ completed: 0, total: 9, label: "Menyiapkan export" });
+    try {
+      const result = await exportItemWorkbook({
+        token,
+        onProgress: setExportProgress,
+      });
+      setExportNotice(
+        result.missingBranchRelations > 0
+          ? {
+              type: "warning",
+              message: `Export selesai, tetapi ditemukan ${result.missingBranchRelations} relasi cabang yang tidak memiliki master branch.`,
+            }
+          : {
+              type: "success",
+              message: "Export item berhasil. File Excel telah diunduh.",
+            },
+      );
+    } catch (exportError) {
+      console.error("[ItemList] Gagal export item:", exportError);
+      setExportNotice({
+        type: "error",
+        message:
+          exportError instanceof Error
+            ? exportError.message
+            : "Gagal membuat export item",
+      });
+    } finally {
+      setIsExporting(false);
+      setExportProgress(null);
+    }
+  }
+
   async function openDetail(item: Item, updateRoute = true) {
     if (updateRoute) {
       setRouteDetailId(item.id);
@@ -1066,7 +1123,25 @@ export default function ItemList() {
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {canExportItems ? (
+            <motion.button
+              type="button"
+              whileHover={isExporting ? undefined : { scale: 1.02 }}
+              whileTap={isExporting ? undefined : { scale: 0.98 }}
+              onClick={() => void handleExportExcel()}
+              disabled={isExporting || !token}
+              className="flex items-center justify-center gap-2 rounded-lg border-2 border-emerald-200 bg-white px-4 py-2.5 text-sm font-medium text-emerald-700 shadow-md transition-all hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isExporting ? (
+                <FaSpinner className="h-4 w-4 animate-spin" />
+              ) : (
+                <FaFileExcel className="h-4 w-4" />
+              )}
+              <span>{isExporting ? "Exporting..." : "Export Excel"}</span>
+            </motion.button>
+          ) : null}
+
           {/* Selection Mode Toggle */}
           <motion.button
             whileHover={{ scale: 1.02 }}
@@ -1099,6 +1174,55 @@ export default function ItemList() {
           </motion.button> */}
         </div>
       </div>
+
+      <AnimatePresence>
+        {exportNotice ? (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            role={exportNotice.type === "error" ? "alert" : "status"}
+            className={`mb-3 flex items-start justify-between gap-3 rounded-xl border px-4 py-3 text-sm shadow-sm ${
+              exportNotice.type === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : exportNotice.type === "warning"
+                  ? "border-amber-200 bg-amber-50 text-amber-800"
+                  : "border-red-200 bg-red-50 text-red-700"
+            }`}
+          >
+            <span>{exportNotice.message}</span>
+            <button
+              type="button"
+              onClick={() => setExportNotice(null)}
+              className="shrink-0 opacity-70 transition-opacity hover:opacity-100"
+              aria-label="Tutup notifikasi export"
+            >
+              <FaTimes className="h-4 w-4" />
+            </button>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      {isExporting && exportProgress ? (
+        <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+          <div className="flex items-center justify-between gap-3">
+            <span>{exportProgress.label}</span>
+            <span className="shrink-0">
+              {exportProgress.completed}/{exportProgress.total}
+            </span>
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-emerald-100">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-[width] duration-300"
+              style={{
+                width: `${Math.round(
+                  (exportProgress.completed / exportProgress.total) * 100,
+                )}%`,
+              }}
+            />
+          </div>
+        </div>
+      ) : null}
 
       {/* Search & Filter Bar */}
       <div className="mb-3 rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
