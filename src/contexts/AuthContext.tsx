@@ -189,7 +189,7 @@ const AUTH_KEY = "ekaplus_current_user";
 const TOKEN_KEY = "ekaplus_auth_token";
 const USER_DATA_KEY = "ekaplus_user_data";
 const AUTHZ_DATA_KEY = "ekaplus_authz_data";
-const API_BASE_URL = "https://api-ekaplus.ekatunggal.com";
+const API_BASE_URL = "https://api-ekaplusdev.ekatunggal.com";
 
 function mapApiUserToUser(apiUser: ApiUser): User {
   const roleId = apiUser.RoleID ?? apiUser.role_id ?? "";
@@ -225,7 +225,9 @@ function mapApiUserToUser(apiUser: ApiUser): User {
     role_id: String(roleId),
     role: apiUser.Role || apiUser.role || "",
     branch_id:
-      apiUser.BranchID !== undefined && apiUser.BranchID !== null && apiUser.BranchID !== ""
+      apiUser.BranchID !== undefined &&
+      apiUser.BranchID !== null &&
+      apiUser.BranchID !== ""
         ? String(apiUser.BranchID)
         : apiUser.branch_id !== undefined &&
             apiUser.branch_id !== null &&
@@ -269,9 +271,11 @@ async function isForbiddenAuth(response: Response): Promise<boolean> {
     let message = "";
 
     if (contentType.includes("application/json")) {
-      const data = (await cloned.json().catch(() => null)) as
-        | { message?: string; error?: string; detail?: string }
-        | null;
+      const data = (await cloned.json().catch(() => null)) as {
+        message?: string;
+        error?: string;
+        detail?: string;
+      } | null;
       message =
         `${data?.message || ""} ${data?.error || ""} ${data?.detail || ""}`.toLowerCase();
     } else {
@@ -291,7 +295,10 @@ async function isForbiddenAuth(response: Response): Promise<boolean> {
 }
 
 function normalizeRoleName(value: string): string {
-  return value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
 }
 
 function resolveRoleColor(roleName: string, isSystem: boolean): string {
@@ -377,7 +384,8 @@ function safeParseAuthzSnapshot(rawValue: string | null): AuthzSnapshot | null {
         : [],
       permissions: Array.isArray(parsed.permissions)
         ? parsed.permissions.filter(
-            (permission): permission is string => typeof permission === "string",
+            (permission): permission is string =>
+              typeof permission === "string",
           )
         : [],
       permissionRules: Array.isArray(parsed.permissionRules)
@@ -397,7 +405,9 @@ function safeParseAuthzSnapshot(rawValue: string | null): AuthzSnapshot | null {
   }
 }
 
-async function fetchLatestUserPayload(token: string): Promise<Record<string, unknown> | null> {
+async function fetchLatestUserPayload(
+  token: string,
+): Promise<Record<string, unknown> | null> {
   try {
     const response = await apiFetch(
       getApiUrl(API_CONFIG.ENDPOINTS.USER_ME),
@@ -407,14 +417,19 @@ async function fetchLatestUserPayload(token: string): Promise<Record<string, unk
 
     if (!response.ok) return null;
 
-    const data = (await response.json().catch(() => null)) as ApiUserMeResponse | null;
+    const data = (await response
+      .json()
+      .catch(() => null)) as ApiUserMeResponse | null;
     return data?.data && typeof data.data === "object" ? data.data : null;
   } catch {
     return null;
   }
 }
 
-async function fetchAssignedRoles(token: string, userId: string): Promise<Role[]> {
+async function fetchAssignedRoles(
+  token: string,
+  userId: string,
+): Promise<Role[]> {
   if (!userId) return [];
 
   const numericUserId = Number(userId);
@@ -591,7 +606,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!savedUserData) return false;
 
         const savedUser = JSON.parse(savedUserData) as User;
-        const savedAuthz = safeParseAuthzSnapshot(localStorage.getItem(AUTHZ_DATA_KEY));
+        const savedAuthz = safeParseAuthzSnapshot(
+          localStorage.getItem(AUTHZ_DATA_KEY),
+        );
 
         setCurrentUser(savedUser);
         setCurrentRole(savedAuthz?.roles[0] || null);

@@ -35,6 +35,7 @@ import {
   FaEdit,
   FaUsers,
   FaStar,
+  FaGift,
 } from "react-icons/fa";
 import { BiSolidPurchaseTag, BiSolidUserDetail } from "react-icons/bi";
 import { AiFillProduct } from "react-icons/ai";
@@ -290,31 +291,18 @@ const CUSTOMER_SUBMENU: MenuItem[] = [
     category: "Customer",
     requireAuth: true,
   },
-  // {
-  //   label: "Loyalty Point",
-  //   href: "/customer/loyalty-point",
-  //   icon: <FaStar className="w-4 h-4" />,
-  //   category: "Customer",
-  //   permission: "loyalty.read",
-  //   requireAuth: true,
-  // },
-
-  // {
-  //   label: "Members",
-  //   href: "/members",
-  //   icon: <MdMapsHomeWork className="w-4 h-4" />,
-  //   category: "Customer",
-  //   requireAuth: true,
-  // },
-
-  // {
-  //   label: "Tiers",
-  //   href: "/member-tiers",
-  //   icon: <FaStar className="w-4 h-4" />,
-  //   category: "Customer",
-  //   requireAuth: true,
-  // },
 ];
+
+// const LOYALTY_SUBMENU: MenuItem[] = [
+//   { label: "Dashboard", href: "/loyalty", icon: <FaStar className="w-4 h-4" />, category: "Loyalty", requireAuth: true },
+//   { label: "Periode Loyalty", href: "/loyalty/periods", icon: <FaCircle className="w-3 h-3" />, category: "Loyalty", requireAuth: true },
+//   { label: "Aturan Poin", href: "/loyalty/rules", icon: <FaCog className="w-4 h-4" />, category: "Loyalty", requireAuth: true },
+//   { label: "Kalkulasi Poin", href: "/loyalty/calculations", icon: <FaDatabase className="w-4 h-4" />, category: "Loyalty", requireAuth: true },
+//   { label: "Saldo Poin", href: "/loyalty/balances", icon: <FaCreditCard className="w-4 h-4" />, category: "Loyalty", requireAuth: true },
+//   { label: "Katalog Reward", href: "/loyalty/rewards", icon: <FaShoppingBag className="w-4 h-4" />, category: "Loyalty", requireAuth: true },
+//   { label: "Master Reward", href: "/loyalty/masters", icon: <FaTags className="w-4 h-4" />, category: "Loyalty", requireAuth: true },
+//   { label: "Penukaran Reward", href: "/loyalty/redemptions", icon: <FaGift className="w-4 h-4" />, category: "Loyalty", requireAuth: true },
+// ];
 
 // Export function to get all menu items for search functionality
 export function getAllMenuItems(): MenuItem[] {
@@ -324,6 +312,7 @@ export function getAllMenuItems(): MenuItem[] {
     ...MASTER_MENU,
     ...CATALOG_SUBMENU,
     ...CUSTOMER_SUBMENU,
+    // ...LOYALTY_SUBMENU,
     ...SECONDARY_MENU,
     ...ADMIN_MENU,
   ];
@@ -363,7 +352,13 @@ interface SidebarProps {
 }
 
 // Submenu names for accordion
-type SubmenuName = "master" | "catalog" | "customer" | "admin" | null;
+type SubmenuName =
+  | "master"
+  | "catalog"
+  | "customer"
+  | "loyalty"
+  | "admin"
+  | null;
 
 export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
   const pathname = usePathname() || "/";
@@ -424,6 +419,8 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
       pathname.startsWith("/member-of")
     ) {
       setOpenSubmenu("master");
+    } else if (pathname.startsWith("/loyalty")) {
+      setOpenSubmenu("loyalty");
     } else if (
       pathname.startsWith("/products") ||
       pathname.startsWith("/categories") ||
@@ -435,8 +432,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
       pathname.startsWith("/customers") ||
       pathname.startsWith("/customer/loyalty-point") ||
       pathname.startsWith("/members") ||
-      pathname.startsWith("/memberGroups") ||
-      pathname.startsWith("/member-tiers")
+      pathname.startsWith("/memberGroups")
     ) {
       setOpenSubmenu("customer");
     } else if (
@@ -472,7 +468,8 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
 
   const renderMenuItem = (m: MenuItem, isSubmenu = false) => {
     if (!canSeeMenu(m)) return null;
-    const active = isMenuActive(m.href);
+    const active =
+      m.href === "/loyalty" ? pathname === m.href : isMenuActive(m.href);
 
     return (
       <li key={m.href}>
@@ -754,6 +751,15 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                   "customer",
                   CUSTOMER_SUBMENU,
                 )}
+
+                {/* <div className="my-3 border-t border-gray-100 mx-1" />
+
+                {renderSubmenuParent(
+                  "Loyalty",
+                  <FaStar className="w-5 h-5" />,
+                  "loyalty",
+                  LOYALTY_SUBMENU,
+                )} */}
 
                 <div className="my-3 border-t border-gray-100 mx-1" />
 

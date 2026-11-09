@@ -77,6 +77,7 @@ interface CustomerRegistrationApiResponse {
     | number
     | {
         id?: number;
+        name?: string;
         branch_name?: string;
         city?: string;
       }
@@ -428,6 +429,10 @@ export function CustomerRegistrationList() {
         tax_status: Number(apiData.tax_status || 0),
         tax_status_label: getTaxStatusLabel(apiData.tax_status),
         branch_id: resolveBranchId(apiData.branch_id, apiData.branch_id_id),
+        branch_code:
+          apiData.branch_id && typeof apiData.branch_id === "object"
+            ? apiData.branch_id.name
+            : undefined,
         branch_name:
           (apiData.branch_id && typeof apiData.branch_id === "object"
             ? apiData.branch_id.branch_name
@@ -700,6 +705,7 @@ export function CustomerRegistrationList() {
         } = {
           fields: [
             "*",
+            "branch_id.name",
             "branch_id.branch_name",
             "branch_id.city",
             "created_by.full_name",
@@ -923,6 +929,7 @@ export function CustomerRegistrationList() {
         getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER, {
           fields: [
             "*",
+            "branch_id.name",
             "branch_id.branch_name",
             "branch_id.city",
             "created_by.full_name",

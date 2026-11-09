@@ -37,7 +37,7 @@ export interface LoyaltyBalance {
   buckets: LoyaltyRow[];
 }
 
-export interface LoyaltyActionResult {
-  data: LoyaltyRow;
+export interface LoyaltyActionResult<T = LoyaltyRow> {
+  data: T;
   message: string;
 }

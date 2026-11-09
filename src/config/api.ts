@@ -71,13 +71,22 @@ export const API_CONFIG = {
     LOYALTY_PERIOD: "/api/resource/loyalty_period",
     LOYALTY_RULE: "/api/resource/loyalty_rule",
     LOYALTY_RULE_DETAIL: "/api/resource/loyalty_rule_detail",
+    LOYALTY_REWARD_TYPE: "/api/resource/loyalty_reward_type",
+    LOYALTY_REWARD_CATEGORY: "/api/resource/loyalty_reward_category",
+    LOYALTY_REWARD_PARTNER: "/api/resource/loyalty_reward_partner",
     LOYALTY_REWARD: "/api/resource/loyalty_reward",
+    LOYALTY_REWARD_IMAGE: "/api/resource/loyalty_reward_image",
+    LOYALTY_REWARD_STOCK: "/api/resource/loyalty_reward_stock",
     LOYALTY_POINT_LEDGER: "/api/resource/loyalty_point_ledger",
     LOYALTY_CALCULATION: "/api/resource/loyalty_calculation",
     LOYALTY_CALCULATION_DETAIL: "/api/resource/loyalty_calculation_detail",
+    LOYALTY_CALCULATION_SOURCE: "/api/resource/loyalty_calculation_source",
     LOYALTY_CALCULATION_ERROR: "/api/resource/loyalty_calculation_error",
     LOYALTY_CALCULATION_BATCH: "/api/resource/loyalty_calculation_batch",
     LOYALTY_REDEMPTION: "/api/resource/loyalty_redemption",
+    LOYALTY_REDEMPTION_DETAIL: "/api/resource/loyalty_redemption_detail",
+    LOYALTY_REDEMPTION_STATUS_HISTORY:
+      "/api/resource/loyalty_redemption_status_history",
 
     // Customer Management - GP/GC/BC
     GLOBAL_PARTY: "/api/resource/ekatalog_global_party",

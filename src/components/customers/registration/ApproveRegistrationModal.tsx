@@ -1,25 +1,34 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
-  FaCheckCircle,
-  FaExclamationTriangle,
-  FaArrowLeft,
   FaBuilding,
+  FaCheck,
+  FaCheckCircle,
+  FaChevronDown,
+  FaChevronUp,
+  FaExclamationTriangle,
   FaMapMarkerAlt,
-  FaListUl,
+  FaPlus,
   FaSearch,
-  FaPlusCircle,
-  FaUser,
+  FaTimes,
 } from "react-icons/fa";
+import { API_CONFIG, apiFetch, getApiUrl, getQueryUrl } from "@/config/api";
+import { useAuth } from "@/contexts/AuthContext";
 import type {
+  ApprovalCheckpoint,
+  ApprovalCommitStage,
   ApprovalOperationLog,
   ApprovalResult,
   CustomerRegistration,
 } from "@/types/customerRegistration";
-import { useAuth } from "@/contexts/AuthContext";
-import { API_CONFIG, apiFetch, getApiUrl, getQueryUrl } from "@/config/api";
 import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
 
 interface ApproveRegistrationModalProps {
@@ -28,6 +37,26 @@ interface ApproveRegistrationModalProps {
   registration: CustomerRegistration | null;
   onSuccess: (message: string) => void;
   demoMode?: boolean;
+}
+
+interface NationalBrandRow {
+  id: number;
+  name?: string | null;
+  nb_name?: string | null;
+}
+
+interface GroupParentRow {
+  id: number;
+  name?: string | null;
+  gp_name?: string | null;
+  nbid?: number | null;
+}
+
+interface GroupCustomerRow {
+  id: number;
+  name?: string | null;
+  gc_name?: string | null;
+  gpid?: number | null;
 }
 
 interface CustomerRegisterAddressApiResponse {
@@ -45,109 +74,44 @@ interface CustomerRegisterAddressApiResponse {
   is_default?: number | boolean | null;
 }
 
-interface GroupParentRow {
-  id: number;
-  name?: string | null;
-  gp_name?: string | null;
-  nbid?: number | null;
+type RequiredMasterDraft =
+  | { mode: "existing"; id: number; name: string; code?: string }
+  | { mode: "create"; name: string };
+type NationalBrandDraft = RequiredMasterDraft | { mode: "none" };
+type ApprovalDraft = {
+  nb: NationalBrandDraft;
+  gp: RequiredMasterDraft | null;
+  gc: RequiredMasterDraft | null;
+  bc: { mode: "saga_resolve"; branchId: number };
+};
+type EntityKey = "nb" | "gp" | "gc";
+
+const CHECKPOINT_TTL = 24 * 60 * 60 * 1000;
+const MAROON = "#7f1d1d";
+
+function normalizeEntityName(value?: string | null): string {
+  return (value || "").trim().replace(/\s+/g, " ").toUpperCase();
 }
 
-interface NationalBrandRow {
-  id: number;
-  name?: string | null;
-  nb_name?: string | null;
-}
-
-interface GroupCustomerRow {
-  id: number;
-  name?: string | null;
-  gc_name?: string | null;
-  gpid?: number | null;
-}
-
-interface BranchCustomerRow {
-  id: number;
-  name?: string | null;
-  bcid_name?: string | null;
-  gcid?: number | null;
-  branch?: number | { id?: number; branch_name?: string; city?: string } | null;
-  "branch.branch_name"?: string | null;
-  branch_owner?: string | null;
-  branch_owner_phone?: string | null;
-}
-
-const referenceCache = new Map<
-  string,
-  {
-    nationalBrands?: NationalBrandRow[];
-    groupParents?: GroupParentRow[];
-    groupCustomersByGpid: Map<number, GroupCustomerRow[]>;
-    branchCustomersByGcid: Map<number, BranchCustomerRow[]>;
-  }
->();
-
-type Step = 1 | 2 | 3 | 4 | 5;
-
-// "idle"   = nothing shown yet (initial state)
-// "search" = user is searching (show results only when query exists)
-// "create" = user wants to create new (show create form)
-type PanelMode = "idle" | "search" | "create";
-
-function normalizePhone(value?: string): string | undefined {
-  if (!value) return undefined;
-  const digits = value.replace(/\D/g, "");
+function normalizePhone(value?: string | null): string | undefined {
+  const digits = (value || "").replace(/\D/g, "");
   return digits || undefined;
 }
 
-function normalizeDate(value?: string): string | undefined {
+function normalizeDate(value?: string | null): string | undefined {
   if (!value || value === "-") return undefined;
-  const d = new Date(value);
-  if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
-  return value.split("T")[0];
-}
-
-function normalizeEntityName(value?: string): string {
-  if (!value) return "";
-  return value.trim().replace(/\s+/g, " ").toUpperCase();
-}
-
-function toUpperInput(value?: string): string {
-  return (value || "").toUpperCase();
-}
-
-function getInitialNbName(registration: CustomerRegistration): string {
-  return normalizeEntityName(
-    registration.master_links?.nb_manual ||
-      registration.user.full_name ||
-      registration.company.name ||
-      "",
-  );
-}
-
-function getInitialGpName(registration: CustomerRegistration): string {
-  return normalizeEntityName(
-    registration.master_links?.gp_manual ||
-      `${registration.user.full_name || registration.company.name} GP`,
-  );
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value.split("T")[0]
+    : date.toISOString().slice(0, 10);
 }
 
 function extractIdFromResourceResponse(json: unknown): number | undefined {
-  if (
-    json &&
-    typeof json === "object" &&
-    "data" in json &&
-    json.data &&
-    typeof json.data === "object" &&
-    "id" in json.data
-  ) {
-    const raw = (json.data as { id?: unknown }).id;
-    if (typeof raw === "number") return raw;
-    if (typeof raw === "string") {
-      const parsed = Number.parseInt(raw, 10);
-      if (Number.isFinite(parsed)) return parsed;
-    }
-  }
-  return undefined;
+  if (!json || typeof json !== "object" || !("data" in json)) return undefined;
+  const data = json.data;
+  if (!data || typeof data !== "object" || !("id" in data)) return undefined;
+  const id = Number(data.id);
+  return Number.isFinite(id) && id > 0 ? id : undefined;
 }
 
 function buildCreditPolicyPayload(source?: {
@@ -161,24 +125,78 @@ function buildCreditPolicyPayload(source?: {
   return {
     credit_limit_active: Number(source?.credit_limit_active || 0),
     credit_limit:
-      source?.credit_limit === null || source?.credit_limit === undefined
-        ? null
-        : Number(source.credit_limit),
+      source?.credit_limit == null ? null : Number(source.credit_limit),
     payment_term_active: Number(source?.payment_term_active || 0),
     payment_term:
-      source?.payment_term === null || source?.payment_term === undefined
-        ? null
-        : Number(source.payment_term),
+      source?.payment_term == null ? null : Number(source.payment_term),
     limit_customer_overdue_active: Number(
       source?.limit_customer_overdue_active || 0,
     ),
     limit_customer_overdue:
-      source?.limit_customer_overdue === null ||
-      source?.limit_customer_overdue === undefined
+      source?.limit_customer_overdue == null
         ? null
         : Number(source.limit_customer_overdue),
   };
 }
+
+function hashFingerprint(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function draftFingerprint(
+  registrationId: string,
+  draft: ApprovalDraft,
+): string {
+  return hashFingerprint(
+    JSON.stringify({
+      registrationId,
+      nb:
+        draft.nb.mode === "existing"
+          ? ["existing", draft.nb.id]
+          : [draft.nb.mode, draft.nb.mode === "create" ? draft.nb.name : ""],
+      gp:
+        draft.gp?.mode === "existing"
+          ? ["existing", draft.gp.id]
+          : [draft.gp?.mode, draft.gp?.mode === "create" ? draft.gp.name : ""],
+      gc:
+        draft.gc?.mode === "existing"
+          ? ["existing", draft.gc.id]
+          : [draft.gc?.mode, draft.gc?.mode === "create" ? draft.gc.name : ""],
+      bc: ["saga_resolve", draft.bc.branchId],
+    }),
+  );
+}
+
+function checkpointKey(registrationId: string): string {
+  return `customer-register-approval:v1:${registrationId}`;
+}
+
+class RequestError extends Error {
+  status?: number;
+  outcomeUnknown: boolean;
+
+  constructor(message: string, status?: number, outcomeUnknown = false) {
+    super(message);
+    this.name = "RequestError";
+    this.status = status;
+    this.outcomeUnknown = outcomeUnknown;
+  }
+}
+
+const statusLabel: Record<ApprovalOperationLog["status"], string> = {
+  pending: "Pending",
+  checking: "Checking",
+  started: "Berjalan",
+  success: "Created / Resolved",
+  failed: "Failed",
+  unknown: "Unknown",
+  submitted: "Submitted",
+};
 
 export function ApproveRegistrationModal({
   isOpen,
@@ -188,759 +206,926 @@ export function ApproveRegistrationModal({
   demoMode = false,
 }: ApproveRegistrationModalProps) {
   const { token } = useAuth();
-
-  const [step, setStep] = useState<Step>(1);
-  const [createNationalBrand, setCreateNationalBrand] = useState(false);
-  const [nbName, setNbName] = useState("");
-  const [gpName, setGpName] = useState("");
-  const [gcName, setGcName] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isPreparing, setIsPreparing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [operationLogs, setOperationLogs] = useState<ApprovalOperationLog[]>(
-    [],
-  );
+  const inFlightRef = useRef(false);
+  const initializedRegistrationRef = useRef<string | null>(null);
+  const [draft, setDraft] = useState<ApprovalDraft | null>(null);
+  const [queries, setQueries] = useState<Record<EntityKey, string>>({
+    nb: "",
+    gp: "",
+    gc: "",
+  });
+  const [createEditor, setCreateEditor] = useState<EntityKey | null>(null);
+  const [expandedSections, setExpandedSections] = useState<
+    Record<EntityKey, boolean>
+  >({
+    nb: false,
+    gp: false,
+    gc: false,
+  });
+  const [createName, setCreateName] = useState("");
+  const [nationalBrands, setNationalBrands] = useState<NationalBrandRow[]>([]);
+  const [groupParents, setGroupParents] = useState<GroupParentRow[]>([]);
+  const [groupCustomers, setGroupCustomers] = useState<GroupCustomerRow[]>([]);
+  const [branchCode, setBranchCode] = useState("");
   const [shippingAddresses, setShippingAddresses] = useState<
     CustomerRegisterAddressApiResponse[]
   >([]);
-  const [nationalBrands, setNationalBrands] = useState<NationalBrandRow[]>([]);
-  const [createdNb, setCreatedNb] = useState<NationalBrandRow | null>(null);
-  const [existingGp, setExistingGp] = useState<GroupParentRow | null>(null);
-  const [createdGp, setCreatedGp] = useState<GroupParentRow | null>(null);
-  const [groupParents, setGroupParents] = useState<GroupParentRow[]>([]);
-  const [groupCustomers, setGroupCustomers] = useState<GroupCustomerRow[]>([]);
-  const [createdGc, setCreatedGc] = useState<GroupCustomerRow | null>(null);
-  const [branchCustomers, setBranchCustomers] = useState<BranchCustomerRow[]>(
-    [],
-  );
-  const [createdBc, setCreatedBc] = useState<BranchCustomerRow | null>(null);
-
-  // --- GP state ---
-  const [gpMode, setGpMode] = useState<PanelMode>("idle");
-  const [gpSearch, setGpSearch] = useState("");
-  const [selectedGpid, setSelectedGpid] = useState<number | null>(null);
-
-  // --- GC state ---
-  const [gcMode, setGcMode] = useState<PanelMode>("idle");
-  const [gcSearch, setGcSearch] = useState("");
-  const [selectedGcid, setSelectedGcid] = useState<number | null>(null);
-
-  // --- BC state ---
-  const [bcMode, setBcMode] = useState<PanelMode>("idle");
-  const [bcSearch, setBcSearch] = useState("");
-  const [selectedBcid, setSelectedBcid] = useState<number | null>(null);
-  const [nbSearch, setNbSearch] = useState("");
-  const [selectedNbid, setSelectedNbid] = useState<number | null>(null);
-  const [createdNbid, setCreatedNbid] = useState<number | null>(null);
-  const [createdGpid, setCreatedGpid] = useState<number | null>(null);
-  const [createdGcid, setCreatedGcid] = useState<number | null>(null);
-  const [createdBcid, setCreatedBcid] = useState<number | null>(null);
-  const [gpCreatedViaCreateFlow, setGpCreatedViaCreateFlow] = useState(false);
-  const [nbCreatedViaCreateFlow, setNbCreatedViaCreateFlow] = useState(false);
+  const [shippingLoaded, setShippingLoaded] = useState(false);
+  const [loading, setLoading] = useState<Record<EntityKey, boolean>>({
+    nb: false,
+    gp: false,
+    gc: false,
+  });
+  const [loadErrors, setLoadErrors] = useState<
+    Partial<Record<EntityKey, string>>
+  >({});
+  const [isPreparing, setIsPreparing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
-  const [isGpLoading, setIsGpLoading] = useState(false);
-  const [isGcLoading, setIsGcLoading] = useState(false);
-  const [isBcLoading, setIsBcLoading] = useState(false);
-  const demoNationalBrands = useMemo<NationalBrandRow[]>(
-    () => [
-      { id: 9101, name: "NB9101", nb_name: "EKA TOUR" },
-      { id: 9102, name: "NB9102", nb_name: "EKA DISTRIBUTOR" },
-    ],
+  const [commitStage, setCommitStage] = useState<ApprovalCommitStage>("idle");
+  const [operationLogs, setOperationLogs] = useState<ApprovalOperationLog[]>(
     [],
   );
-  const demoGroupParents = useMemo<GroupParentRow[]>(
-    () => [
-      {
-        id: 9201,
-        name: "GP9201",
-        gp_name: "DEMO SEJAHTERA GROUP",
-        nbid: 9101,
-      },
-      {
-        id: 9202,
-        name: "GP9202",
-        gp_name: "SURABAYA RETAIL NETWORK",
-        nbid: 9102,
-      },
-    ],
-    [],
-  );
-  const demoGroupCustomers = useMemo<GroupCustomerRow[]>(
-    () => [
-      {
-        id: 9301,
-        name: "GC9301",
-        gc_name: "PT DEMO SEJAHTERA ABADI",
-        gpid: 9201,
-      },
-    ],
-    [],
-  );
-  const demoBranchCustomers = useMemo<BranchCustomerRow[]>(
-    () => [
-      {
-        id: 9401,
-        name: "BC9401",
-        bcid_name: "PT DEMO SEJAHTERA ABADI - SURABAYA",
-        gcid: 9301,
-        branch: { id: 77, branch_name: "Cabang Surabaya", city: "Surabaya" },
-        branch_owner: "Rina Wulandari",
-        branch_owner_phone: "081298765432",
-      },
-    ],
-    [],
+  const [checkpoint, setCheckpoint] = useState<ApprovalCheckpoint | null>(null);
+
+  const creditSource = registration as
+    | (CustomerRegistration & Parameters<typeof buildCreditPolicyPayload>[0])
+    | null;
+
+  const persistCheckpoint = useCallback(
+    (next: ApprovalCheckpoint | null) => {
+      setCheckpoint(next);
+      if (typeof window === "undefined" || !registration) return;
+      const key = checkpointKey(registration.id);
+      if (next) sessionStorage.setItem(key, JSON.stringify(next));
+      else sessionStorage.removeItem(key);
+    },
+    [registration],
   );
 
-  const existingGpid = registration?.gp_id;
-  const existingGcid = registration?.gc_id;
-  const existingBcid = registration?.bc_id;
-  const existingNbid = registration?.master_links?.nb_id;
-  // Existing values become the initial selection, but the approver's latest
-  // selection remains authoritative during final validation.
-  const effectiveNbid = selectedNbid || undefined;
-  const effectiveGpid = selectedGpid || undefined;
-  const effectiveGcid = selectedGcid || undefined;
-  const effectiveBcid = existingBcid || selectedBcid || undefined;
-  const isCreatingNewGpFlow = Boolean(
-    gpCreatedViaCreateFlow ||
-    (!selectedGpid && gpMode === "create"),
+  const updateCheckpoint = useCallback(
+    (current: ApprovalCheckpoint, patch: Partial<ApprovalCheckpoint>) => {
+      const next = { ...current, ...patch, updatedAt: Date.now() };
+      persistCheckpoint(next);
+      return next;
+    },
+    [persistCheckpoint],
   );
-  const canSearchExistingGc = Boolean(
-    !isCreatingNewGpFlow && selectedGpid,
-  );
-  const canSearchExistingBc = Boolean(false);
 
-  // ---- Filtered lists (only meaningful when mode === "search" and query is non-empty) ----
-  const filteredGroupParents = useMemo(() => {
-    const q = gpSearch.trim().toLowerCase();
-    if (!q) return groupParents.slice(0, 20);
-    return groupParents.filter((row) => {
-      const label = `${row.gp_name || ""} ${row.name || ""}`.toLowerCase();
-      return label.includes(q);
-    });
-  }, [gpSearch, groupParents]);
-
-  const filteredNationalBrands = useMemo(() => {
-    const q = nbSearch.trim().toLowerCase();
-    if (!q) return nationalBrands.slice(0, 20);
-    return nationalBrands.filter((row) => {
-      const label = `${row.nb_name || ""} ${row.name || ""}`.toLowerCase();
-      return label.includes(q);
-    });
-  }, [nbSearch, nationalBrands]);
-
-  const filteredGroupCustomers = useMemo(() => {
-    const qGc = gcSearch.trim().toLowerCase();
-    const effectiveGpidForFilter = canSearchExistingGc ? effectiveGpid : 0;
-    const base = effectiveGpidForFilter
-      ? groupCustomers.filter(
-          (row) => Number(row.gpid || 0) === Number(effectiveGpidForFilter),
-        )
-      : groupCustomers;
-    if (!qGc) return base.slice(0, 20);
-    return base.filter((row) => {
-      const label = `${row.gc_name || ""} ${row.name || ""}`.toLowerCase();
-      return label.includes(qGc);
-    });
-  }, [gcSearch, groupCustomers, effectiveGpid, canSearchExistingGc]);
-
-  const filteredBranchCustomers = useMemo(() => {
-    const q = bcSearch.trim().toLowerCase();
-    const effectiveGcidForFilter = canSearchExistingBc ? effectiveGcid : 0;
-    const base = effectiveGcidForFilter
-      ? branchCustomers.filter(
-          (row) => Number(row.gcid || 0) === Number(effectiveGcidForFilter),
-        )
-      : branchCustomers;
-    if (!q) return base.slice(0, 20);
-    return base.filter((row) => {
-      const label = `${row.bcid_name || ""} ${row.name || ""}`.toLowerCase();
-      return label.includes(q);
-    });
-  }, [bcSearch, branchCustomers, effectiveGcid, canSearchExistingBc]);
-
-  const effectiveShippingAddresses = useMemo(() => {
-    if (!registration) return [] as CustomerRegisterAddressApiResponse[];
-    if (registration.same_as_company_address) {
-      if (shippingAddresses.length > 0) {
-        return shippingAddresses;
-      }
-      return [
-        {
-          id: -1,
-          parent_id: Number(registration.id),
-          label: "Alamat Perusahaan",
-          address: registration.address.full_address,
-          city: registration.address.city_name,
-          province: registration.address.province_name,
-          district: registration.address.district_name,
-          village: registration.address.village_name,
-          pic_name:
-            registration.branch_owner?.full_name || registration.user.full_name,
-          pic_phone:
-            registration.branch_owner?.phone || registration.user.phone,
-          is_default: 1,
-        },
-      ];
-    }
-    return shippingAddresses;
-  }, [registration, shippingAddresses]);
-
-  const pushLog = useCallback((log: ApprovalOperationLog) => {
-    setOperationLogs((prev) => [...prev, log]);
-  }, []);
-
-  const apiJsonRequest = useCallback(
+  const requestJson = useCallback(
     async (
       stage: string,
       url: string,
       method: "GET" | "POST" | "PUT",
       body?: unknown,
     ) => {
-      if (demoMode) {
-        pushLog({
-          stage,
-          status: "started",
-          message: `[Tour] ${method} ${url}`,
-          payload: body,
-        });
-
-        const lowerStage = stage.toLowerCase();
-        let demoResponse: unknown = { data: {} };
-
-        if (lowerStage.includes("national brand")) {
-          demoResponse = {
-            data: { id: 9101, name: "NB9101", nb_name: "EKA TOUR" },
-          };
-        } else if (lowerStage.includes("group parent")) {
-          demoResponse = {
-            data: {
-              id: 9201,
-              name: "GP9201",
-              gp_name: "DEMO SEJAHTERA GROUP",
-              nbid: 9101,
-            },
-          };
-        } else if (lowerStage.includes("group customer")) {
-          demoResponse = {
-            data: {
-              id: 9301,
-              name: "GC9301",
-              gc_name: "PT DEMO SEJAHTERA ABADI",
-              gpid: 9201,
-            },
-          };
+      if (demoMode) return { data: {} };
+      try {
+        const response = await apiFetch(
+          url,
+          {
+            method,
+            cache: "no-store",
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          },
+          token,
+        );
+        const json = await response.json().catch(() => null);
+        if (!response.ok) {
+          const serverMessage =
+            json &&
+            typeof json === "object" &&
+            "message" in json &&
+            typeof json.message === "string"
+              ? json.message
+              : "";
+          throw new RequestError(
+            `${stage} gagal (HTTP ${response.status})${serverMessage ? `: ${serverMessage}` : ""}`,
+            response.status,
+          );
         }
-
-        pushLog({
-          stage,
-          status: "success",
-          message: `${stage} success (tour demo)`,
-          response: demoResponse,
-          http_status: 200,
-        });
-
-        return demoResponse;
+        return json;
+      } catch (caught) {
+        if (caught instanceof RequestError) throw caught;
+        throw new RequestError(
+          `${stage} tidak dapat dipastikan karena koneksi terputus`,
+          undefined,
+          method === "POST" || method === "PUT",
+        );
       }
+    },
+    [demoMode, token],
+  );
 
-      pushLog({
-        stage,
-        status: "started",
-        message: `${method} ${url}`,
-        payload: body,
-      });
+  const loadRows = useCallback(
+    async <T,>(
+      key: EntityKey,
+      endpoint: string,
+      fields: string[],
+      filters?: Array<[string, string, unknown]>,
+    ): Promise<T[]> => {
+      if (demoMode) return [];
+      if (!token) throw new Error("Sesi tidak tersedia");
+      setLoading((previous) => ({ ...previous, [key]: true }));
+      setLoadErrors((previous) => ({ ...previous, [key]: undefined }));
+      try {
+        return await fetchAllQueryRows<T>({
+          endpoint,
+          spec: { fields, ...(filters ? { filters } : {}) },
+          token,
+          errorMessage: `Pencarian ${key.toUpperCase()} gagal`,
+        });
+      } catch (caught) {
+        const message =
+          caught instanceof Error ? caught.message : "Pencarian gagal";
+        setLoadErrors((previous) => ({ ...previous, [key]: message }));
+        throw caught;
+      } finally {
+        setLoading((previous) => ({ ...previous, [key]: false }));
+      }
+    },
+    [demoMode, token],
+  );
 
-      const res = await apiFetch(
-        url,
-        {
-          method,
-          cache: "no-store",
-          ...(body ? { body: JSON.stringify(body) } : {}),
-        },
-        token,
+  const loadNationalBrands = useCallback(async () => {
+    try {
+      const rows = await loadRows<NationalBrandRow>(
+        "nb",
+        API_CONFIG.ENDPOINTS.NATIONAL_BRAND,
+        ["id", "name", "nb_name"],
       );
+      setNationalBrands(rows);
+      return rows;
+    } catch {
+      return null;
+    }
+  }, [loadRows]);
 
-      let json: unknown = null;
+  const loadGroupParents = useCallback(async () => {
+    try {
+      const rows = await loadRows<GroupParentRow>(
+        "gp",
+        API_CONFIG.ENDPOINTS.GROUP_PARENT,
+        ["id", "name", "gp_name", "nbid"],
+      );
+      setGroupParents(rows);
+      return rows;
+    } catch {
+      return null;
+    }
+  }, [loadRows]);
+
+  const loadGroupCustomers = useCallback(
+    async (gpid: number) => {
       try {
-        json = await res.json();
-      } catch {
-        json = null;
-      }
-
-      if (!res.ok) {
-        const serverMessage =
-          json &&
-          typeof json === "object" &&
-          "message" in json &&
-          typeof json.message === "string"
-            ? json.message
-            : "";
-        const message = `Failed ${stage} (HTTP ${res.status})${
-          serverMessage ? `: ${serverMessage}` : ""
-        }`;
-        pushLog({
-          stage,
-          status: "failed",
-          message,
-          response: json,
-          http_status: res.status,
-        });
-        throw new Error(message);
-      }
-
-      pushLog({
-        stage,
-        status: "success",
-        message: `${stage} success`,
-        response: json,
-        http_status: res.status,
-      });
-      return json;
-    },
-    [demoMode, pushLog, token],
-  );
-
-  const getReferenceCache = useCallback(() => {
-    if (!token) return null;
-    const cached = referenceCache.get(token);
-    if (cached) return cached;
-
-    const next = {
-      nationalBrands: undefined,
-      groupParents: undefined,
-      groupCustomersByGpid: new Map<number, GroupCustomerRow[]>(),
-      branchCustomersByGcid: new Map<number, BranchCustomerRow[]>(),
-    };
-    referenceCache.set(token, next);
-    return next;
-  }, [token]);
-
-  const ensureNationalBrands = useCallback(async () => {
-    if (demoMode) {
-      setNationalBrands(demoNationalBrands);
-      return;
-    }
-    if (!token) return;
-
-    const cache = getReferenceCache();
-    if (!cache) return;
-
-    if (!cache.nationalBrands) {
-      cache.nationalBrands = await fetchAllQueryRows<NationalBrandRow>({
-        endpoint: API_CONFIG.ENDPOINTS.NATIONAL_BRAND,
-        spec: { fields: ["id", "name", "nb_name"] },
-        token,
-        errorMessage: "Failed to fetch NB reference list",
-      });
-    }
-
-    setNationalBrands(cache.nationalBrands || []);
-  }, [demoMode, demoNationalBrands, getReferenceCache, token]);
-
-  const ensureGroupParents = useCallback(async () => {
-    if (demoMode) {
-      setGroupParents(demoGroupParents);
-      return;
-    }
-    if (!token) return;
-
-    const cache = getReferenceCache();
-    if (!cache) return;
-
-    if (!cache.groupParents) {
-      setIsGpLoading(true);
-      try {
-        cache.groupParents = await fetchAllQueryRows<GroupParentRow>({
-          endpoint: API_CONFIG.ENDPOINTS.GROUP_PARENT,
-          spec: { fields: ["id", "name", "gp_name", "nbid"] },
-          token,
-          errorMessage: "Failed to fetch GP reference list",
-        });
-      } finally {
-        setIsGpLoading(false);
-      }
-    }
-
-    setGroupParents(cache.groupParents || []);
-  }, [demoGroupParents, demoMode, getReferenceCache, token]);
-
-  const ensureGroupCustomers = useCallback(
-    async (gpid?: number) => {
-      if (demoMode) {
-        setGroupCustomers(
-          demoGroupCustomers.filter(
-            (row) => !gpid || Number(row.gpid || 0) === Number(gpid),
-          ),
+        const rows = await loadRows<GroupCustomerRow>(
+          "gc",
+          API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
+          ["id", "name", "gc_name", "gpid"],
+          [["gpid", "=", gpid]],
         );
-        return;
-      }
-      if (!token || !gpid) {
-        setGroupCustomers([]);
-        return;
-      }
-
-      const cache = getReferenceCache();
-      if (!cache) return;
-
-      const cachedRows = cache.groupCustomersByGpid.get(gpid);
-      if (cachedRows) {
-        setGroupCustomers(cachedRows);
-        return;
-      }
-
-      setIsGcLoading(true);
-      try {
-        const rows = await fetchAllQueryRows<GroupCustomerRow>({
-          endpoint: API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
-          spec: {
-            fields: ["id", "name", "gc_name", "gpid"],
-            filters: [["gpid", "=", gpid]],
-          },
-          token,
-          errorMessage: "Failed to fetch GC reference list",
-        });
-        cache.groupCustomersByGpid.set(gpid, rows);
         setGroupCustomers(rows);
-      } finally {
-        setIsGcLoading(false);
+        return rows;
+      } catch {
+        return null;
       }
     },
-    [demoGroupCustomers, demoMode, getReferenceCache, token],
-  );
-
-  const ensureBranchCustomers = useCallback(
-    async (gcid?: number) => {
-      if (demoMode) {
-        setBranchCustomers(
-          demoBranchCustomers.filter(
-            (row) => !gcid || Number(row.gcid || 0) === Number(gcid),
-          ),
-        );
-        return;
-      }
-      if (!token || !gcid) {
-        setBranchCustomers([]);
-        return;
-      }
-
-      const cache = getReferenceCache();
-      if (!cache) return;
-
-      const cachedRows = cache.branchCustomersByGcid.get(gcid);
-      if (cachedRows) {
-        setBranchCustomers(cachedRows);
-        return;
-      }
-
-      setIsBcLoading(true);
-      try {
-        const rows = await fetchAllQueryRows<BranchCustomerRow>({
-          endpoint: API_CONFIG.ENDPOINTS.BRANCH_CUSTOMER_V2,
-          spec: {
-            fields: ["*", "created_by.full_name", "updated_by.full_name"],
-            filters: [["gcid", "=", gcid]],
-          },
-          token,
-          errorMessage: "Failed to fetch BC reference list",
-        });
-        cache.branchCustomersByGcid.set(gcid, rows);
-        setBranchCustomers(rows);
-      } finally {
-        setIsBcLoading(false);
-      }
-    },
-    [demoBranchCustomers, demoMode, getReferenceCache, token],
+    [loadRows],
   );
 
   useEffect(() => {
+    if (!isOpen) {
+      initializedRegistrationRef.current = null;
+      return;
+    }
+    if (!registration) return;
+    if (!demoMode && !token) return;
+    const initializationKey = `${registration.id}:${demoMode ? "demo" : "auth"}`;
+    if (initializedRegistrationRef.current === initializationKey) return;
+    initializedRegistrationRef.current = initializationKey;
     let cancelled = false;
+    const initialDraft: ApprovalDraft = {
+      nb: registration.master_links?.nb_id
+        ? {
+            mode: "existing",
+            id: registration.master_links.nb_id,
+            name:
+              registration.master_links.nb_name ||
+              `NB${registration.master_links.nb_id}`,
+          }
+        : { mode: "none" },
+      gp: registration.gp_id
+        ? {
+            mode: "existing",
+            id: registration.gp_id,
+            name: registration.gp_name || `GP${registration.gp_id}`,
+          }
+        : registration.master_links?.gp_manual
+          ? {
+              mode: "create",
+              name: normalizeEntityName(registration.master_links.gp_manual),
+            }
+          : null,
+      gc: registration.gc_id
+        ? {
+            mode: "existing",
+            id: registration.gc_id,
+            name: registration.gc_name || `GC${registration.gc_id}`,
+          }
+        : null,
+      bc: {
+        mode: "saga_resolve",
+        branchId: Number(registration.company.branch_id),
+      },
+    };
+    setDraft(initialDraft);
+    setQueries({ nb: "", gp: "", gc: "" });
+    setCreateEditor(null);
+    setExpandedSections({ nb: false, gp: false, gc: false });
+    setError(null);
+    setWarning(null);
+    setShowConfirm(false);
+    setShowCloseConfirm(false);
+    setCommitStage("idle");
+    setOperationLogs([]);
+    setNationalBrands([]);
+    setGroupParents([]);
+    setGroupCustomers([]);
+    setBranchCode(normalizeEntityName(registration.company.branch_code));
+    setShippingAddresses(
+      (registration.shipping_addresses || []).map((address, index) => ({
+        id: address.id || index + 1,
+        parent_id: address.parent_id || Number(registration.id),
+        label: address.label,
+        address: address.address,
+        city: address.city,
+        province: address.province,
+        district: address.district,
+        village: address.village,
+        postal_code: address.postal_code,
+        pic_name: address.pic_name,
+        pic_phone: address.pic_phone,
+        is_default: address.is_default,
+      })),
+    );
+    setShippingLoaded(
+      Boolean(
+        registration.same_as_company_address ||
+        registration.shipping_addresses?.length,
+      ),
+    );
+    setLoadErrors({});
+    // Draft UI is already usable. Reference/address requests continue in the
+    // background and expose their own loading/error states per section.
+    setIsPreparing(false);
 
-    async function loadPreparationData() {
-      if (!isOpen || !registration) return;
-
-      setStep(1);
-      const initialNbName = getInitialNbName(registration);
-      const initialGpName = getInitialGpName(registration);
-      const shouldCreateNationalBrand = Boolean(
-        !existingNbid && registration.master_links?.nb_manual,
-      );
-      const shouldCreateGroupParent = Boolean(
-        !registration.gp_id && registration.master_links?.gp_manual,
-      );
-
-      setCreateNationalBrand(shouldCreateNationalBrand);
-      setNbName(initialNbName);
-      setGpName(initialGpName);
-      setGcName(normalizeEntityName(registration.company.name || ""));
-      setIsSubmitting(false);
-      setError(null);
-      setOperationLogs([]);
-      setNationalBrands([]);
-      setExistingGp(null);
-      setCreatedGp(null);
-      setCreatedNb(null);
-      setCreatedGc(null);
-      setCreatedBc(null);
-      setGroupParents([]);
-      setGroupCustomers([]);
-      setBranchCustomers([]);
-      setNbSearch("");
-      setSelectedNbid(existingNbid || null);
-      setCreatedNbid(null);
-      setCreatedGpid(null);
-      setCreatedGcid(null);
-      setCreatedBcid(null);
-      setCreatedNb(null);
-      setCreatedGc(null);
-      setCreatedBc(null);
-      setGpCreatedViaCreateFlow(false);
-      setNbCreatedViaCreateFlow(false);
-      setIsGpLoading(false);
-      setIsGcLoading(false);
-      setIsBcLoading(false);
-
-      // Reset all modes & searches
-      setGpMode(shouldCreateGroupParent ? "create" : "search");
-      setGpSearch("");
-      setSelectedGpid(existingGpid || null);
-      setGcMode("idle");
-      setGcSearch("");
-      setSelectedGcid(existingGcid || null);
-      setBcMode("idle");
-      setBcSearch("");
-      setSelectedBcid(null);
-
-      setIsPreparing(true);
-
-      try {
-        if (demoMode) {
-          setShippingAddresses(
-            (registration.shipping_addresses || []).map((item, index) => ({
-              id: item.id || index + 1,
-              parent_id: Number(registration.id) || index + 1,
-              label: item.label,
-              address: item.address,
-              city: item.city,
-              province: item.province,
-              district: item.district || null,
-              village: item.village || null,
-              postal_code: item.postal_code || null,
-              pic_name: item.pic_name || null,
-              pic_phone: item.pic_phone || null,
-              is_default: item.is_default || null,
-            })),
-          );
-          setNationalBrands(demoNationalBrands);
-          setGroupParents(demoGroupParents);
-          setExistingGp(null);
-          setSelectedNbid(null);
-          setSelectedGpid(null);
-          setSelectedGcid(null);
-          setSelectedBcid(null);
-          setCreateNationalBrand(false);
-          setGpMode("search");
-          setGcMode("idle");
-          setBcMode("idle");
-          return;
-        }
-        if (!token) return;
-
-        const regId = Number(registration.id);
-        const shippingSpec = {
-          fields: ["*"],
-          filters: [
-            ["parent_id", "=", regId],
-            ["parent_type", "=", "customer_register"],
-          ],
-        };
-        const shippingPromise = apiFetch(
-          getQueryUrl(
-            API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER_ADDRESS,
-            shippingSpec,
-          ),
-          { method: "GET", cache: "no-store" },
-          token,
-        ).then((res) => res.json().catch(() => null));
-
-        const existingGpPromise = registration.gp_id
-          ? apiFetch(
-              getQueryUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT, {
-                fields: ["*"],
-                filters: [["id", "=", registration.gp_id]],
-                limit: 1,
-              }),
-              { method: "GET", cache: "no-store" },
-              token,
-            ).then((res) => res.json().catch(() => null))
-          : Promise.resolve(null);
-
-        const [shippingJson, gpJson] = await Promise.all([
-          shippingPromise,
-          existingGpPromise,
-          ensureNationalBrands(),
+    async function prepare() {
+      if (!registration) return;
+      if (demoMode) {
+        setNationalBrands([
+          { id: 9101, name: "NB9101", nb_name: "EKA TOUR" },
+          { id: 9102, name: "NB9102", nb_name: "EKA DISTRIBUTOR" },
         ]);
-
+        setGroupParents([
+          {
+            id: 9201,
+            name: "GP9201",
+            gp_name: "DEMO SEJAHTERA GROUP",
+            nbid: 9101,
+          },
+        ]);
+        setShippingAddresses([]);
+        setBranchCode("DEMO");
+        setShippingLoaded(true);
+        setIsPreparing(false);
+        return;
+      }
+      try {
+        const shippingPromise = requestJson(
+          "Memuat alamat pengiriman",
+          getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER_ADDRESS, {
+            fields: ["*"],
+            filters: [
+              ["parent_id", "=", Number(registration.id)],
+              ["parent_type", "=", "customer_register"],
+            ],
+          }),
+          "GET",
+        );
+        const branchCodePromise = registration.company.branch_code
+          ? Promise.resolve([{ name: registration.company.branch_code }])
+          : fetchAllQueryRows<{ name?: string | null }>({
+              endpoint: API_CONFIG.ENDPOINTS.BRANCH,
+              spec: {
+                fields: ["id", "name"],
+                filters: [["id", "=", registration.company.branch_id]],
+                limit: 1,
+              },
+              token: token || "",
+              errorMessage: "Kode branch gagal dimuat",
+            });
+        const [shippingResult, , , branchCodeResult] = await Promise.allSettled(
+          [
+            shippingPromise,
+            loadNationalBrands(),
+            loadGroupParents(),
+            branchCodePromise,
+          ],
+        );
         if (!cancelled) {
-          setShippingAddresses(
-            Array.isArray(shippingJson?.data) ? shippingJson.data : [],
-          );
+          if (shippingResult.status === "fulfilled") {
+            const shipping = shippingResult.value;
+            const data =
+              shipping && typeof shipping === "object" && "data" in shipping
+                ? shipping.data
+                : [];
+            setShippingAddresses(Array.isArray(data) ? data : []);
+            setShippingLoaded(true);
+          } else {
+            setShippingLoaded(Boolean(registration.same_as_company_address));
+            setWarning(
+              "Alamat pengiriman belum berhasil dimuat. Data referensi master tetap dapat disiapkan; muat ulang modal sebelum Commit.",
+            );
+          }
+          if (branchCodeResult.status === "fulfilled") {
+            setBranchCode(normalizeEntityName(branchCodeResult.value[0]?.name));
+          }
         }
-
-        if (registration.gp_id) {
-          const gpRow = Array.isArray(gpJson?.data) ? gpJson.data[0] : null;
-          if (!cancelled && gpRow) setExistingGp(gpRow);
-        } else if (!cancelled) {
-          setExistingGp(null);
-        }
-      } catch (err) {
-        if (!cancelled) {
+      } catch (caught) {
+        if (!cancelled)
           setError(
-            err instanceof Error
-              ? err.message
-              : "Gagal mempersiapkan data approval",
+            caught instanceof Error
+              ? caught.message
+              : "Gagal menyiapkan approval",
           );
-        }
       } finally {
         if (!cancelled) setIsPreparing(false);
       }
     }
 
-    loadPreparationData();
+    void prepare();
+    const raw = sessionStorage.getItem(checkpointKey(registration.id));
+    if (raw) {
+      try {
+        const saved = JSON.parse(raw) as ApprovalCheckpoint;
+        const fingerprint = draftFingerprint(registration.id, initialDraft);
+        if (
+          saved.version === 1 &&
+          Date.now() - saved.updatedAt <= CHECKPOINT_TTL &&
+          saved.status !== "submitted"
+        ) {
+          setCheckpoint(saved);
+          setCommitStage(saved.status === "unknown" ? "unknown" : "failed");
+          setWarning(
+            saved.fingerprint === fingerprint
+              ? "Checkpoint approval ditemukan. Coba Lanjutkan akan melewati operasi yang sudah berhasil."
+              : "Checkpoint berasal dari hierarki draft berbeda. Approval diblokir sampai hasil master direkonsiliasi secara manual.",
+          );
+        } else {
+          sessionStorage.removeItem(checkpointKey(registration.id));
+          setCheckpoint(null);
+        }
+      } catch {
+        sessionStorage.removeItem(checkpointKey(registration.id));
+        setCheckpoint(null);
+      }
+    } else {
+      setCheckpoint(null);
+    }
     return () => {
       cancelled = true;
     };
   }, [
-    demoGroupParents,
     demoMode,
-    demoNationalBrands,
-    ensureNationalBrands,
-    existingGcid,
-    existingGpid,
-    existingNbid,
     isOpen,
+    loadGroupParents,
+    loadNationalBrands,
     registration,
+    requestJson,
     token,
   ]);
 
-  useEffect(() => {
-    if (!isOpen || isPreparing || step !== 2) return;
-    void ensureGroupParents();
-  }, [ensureGroupParents, isOpen, isPreparing, step]);
+  const selectedExistingGpid =
+    draft?.gp?.mode === "existing" ? draft.gp.id : undefined;
 
   useEffect(() => {
-    if (!isOpen || isPreparing) return;
-    if (step !== 3 || !canSearchExistingGc || !effectiveGpid) {
-      if (step !== 3) setGroupCustomers([]);
+    if (!isOpen || !selectedExistingGpid) {
+      setGroupCustomers([]);
       return;
     }
-    void ensureGroupCustomers(effectiveGpid);
-  }, [
-    canSearchExistingGc,
-    effectiveGpid,
-    ensureGroupCustomers,
-    isOpen,
-    isPreparing,
-    step,
-  ]);
+    void loadGroupCustomers(selectedExistingGpid);
+  }, [isOpen, loadGroupCustomers, selectedExistingGpid]);
 
   useEffect(() => {
-    if (!isOpen || isPreparing) return;
-    if (step !== 4 || !canSearchExistingBc || !effectiveGcid) {
-      if (step !== 4) setBranchCustomers([]);
+    setDraft((current) => {
+      if (!current) return current;
+      const nbRow =
+        current.nb.mode === "existing"
+          ? nationalBrands.find(
+              (row) =>
+                Number(row.id) ===
+                Number(current.nb.mode === "existing" ? current.nb.id : 0),
+            )
+          : undefined;
+      const gpRow =
+        current.gp?.mode === "existing"
+          ? groupParents.find(
+              (row) =>
+                Number(row.id) ===
+                Number(current.gp?.mode === "existing" ? current.gp.id : 0),
+            )
+          : undefined;
+      const gcRow =
+        current.gc?.mode === "existing"
+          ? groupCustomers.find(
+              (row) =>
+                Number(row.id) ===
+                Number(current.gc?.mode === "existing" ? current.gc.id : 0),
+            )
+          : undefined;
+      const nb =
+        current.nb.mode === "existing" &&
+        nbRow?.name &&
+        current.nb.code !== nbRow.name
+          ? { ...current.nb, code: nbRow.name }
+          : current.nb;
+      const gp =
+        current.gp?.mode === "existing" &&
+        gpRow?.name &&
+        current.gp.code !== gpRow.name
+          ? { ...current.gp, code: gpRow.name }
+          : current.gp;
+      const gc =
+        current.gc?.mode === "existing" &&
+        gcRow?.name &&
+        current.gc.code !== gcRow.name
+          ? { ...current.gc, code: gcRow.name }
+          : current.gc;
+      if (nb === current.nb && gp === current.gp && gc === current.gc)
+        return current;
+      return { ...current, nb, gp, gc };
+    });
+  }, [groupCustomers, groupParents, nationalBrands]);
+
+  const effectiveShippingAddresses = useMemo(() => {
+    if (!registration) return [];
+    if (!registration.same_as_company_address) return shippingAddresses;
+    if (shippingAddresses.length) return shippingAddresses;
+    return [
+      {
+        id: -1,
+        parent_id: Number(registration.id),
+        label: "Alamat Perusahaan",
+        address: registration.address.full_address,
+        city: registration.address.city_name,
+        province: registration.address.province_name,
+        district: registration.address.district_name,
+        village: registration.address.village_name,
+        postal_code: registration.address.postal_code,
+        pic_name:
+          registration.branch_owner?.full_name || registration.user.full_name,
+        pic_phone: registration.branch_owner?.phone || registration.user.phone,
+        is_default: 1,
+      },
+    ];
+  }, [registration, shippingAddresses]);
+
+  const filterRows = useCallback(
+    <T,>(rows: T[], query: string, getText: (row: T) => string) => {
+      const normalized = query.trim().toLocaleLowerCase("id-ID");
+      return rows
+        .filter(
+          (row) =>
+            !normalized ||
+            getText(row).toLocaleLowerCase("id-ID").includes(normalized),
+        )
+        .slice(0, 20);
+    },
+    [],
+  );
+
+  const filteredNb = useMemo(
+    () =>
+      filterRows(
+        nationalBrands,
+        queries.nb,
+        (row) => `${row.nb_name || ""} ${row.name || ""}`,
+      ),
+    [filterRows, nationalBrands, queries.nb],
+  );
+  const filteredGp = useMemo(() => {
+    if (!draft) return [];
+    const targetNbid = draft.nb.mode === "existing" ? draft.nb.id : null;
+    return filterRows(
+      groupParents.filter(
+        (row) => Number(row.nbid || 0) === Number(targetNbid || 0),
+      ),
+      queries.gp,
+      (row) => `${row.gp_name || ""} ${row.name || ""}`,
+    );
+  }, [draft, filterRows, groupParents, queries.gp]);
+  const filteredGc = useMemo(
+    () =>
+      filterRows(
+        groupCustomers,
+        queries.gc,
+        (row) => `${row.gc_name || ""} ${row.name || ""}`,
+      ),
+    [filterRows, groupCustomers, queries.gc],
+  );
+  const exactDuplicate = useMemo(() => {
+    const name = normalizeEntityName(createName);
+    if (!name || !createEditor) return false;
+    if (createEditor === "nb")
+      return nationalBrands.some(
+        (row) => normalizeEntityName(row.nb_name) === name,
+      );
+    if (createEditor === "gp")
+      return filteredGp.some(
+        (row) => normalizeEntityName(row.gp_name) === name,
+      );
+    return groupCustomers.some(
+      (row) => normalizeEntityName(row.gc_name) === name,
+    );
+  }, [createEditor, createName, filteredGp, groupCustomers, nationalBrands]);
+
+  const isDraftLocked = Boolean(checkpoint?.completedStages.length);
+
+  const replaceDraft = useCallback(
+    (updater: (current: ApprovalDraft) => ApprovalDraft) => {
+      if (isDraftLocked) {
+        setWarning(
+          "Draft dikunci karena sebagian operasi sudah berhasil. Lanjutkan checkpoint ini atau tutup dan periksa master secara manual.",
+        );
+        return;
+      }
+      setDraft((current) => (current ? updater(current) : current));
+      setError(null);
+      setShowConfirm(false);
+    },
+    [isDraftLocked],
+  );
+
+  const selectNationalBrand = (selection: NationalBrandDraft) => {
+    replaceDraft((current) => {
+      const newNbid = selection.mode === "existing" ? selection.id : null;
+      const existingGp =
+        current.gp?.mode === "existing"
+          ? groupParents.find(
+              (row) =>
+                Number(row.id) ===
+                Number(current.gp?.mode === "existing" ? current.gp.id : 0),
+            )
+          : null;
+      const compatible =
+        existingGp && Number(existingGp.nbid || 0) === Number(newNbid || 0);
+      return {
+        ...current,
+        nb: selection,
+        gp: compatible ? current.gp : null,
+        gc: compatible ? current.gc : null,
+        bc: compatible
+          ? current.bc
+          : {
+              mode: "saga_resolve",
+              branchId: Number(registration?.company.branch_id || 0),
+            },
+      };
+    });
+    setExpandedSections((current) => ({ ...current, nb: false }));
+  };
+
+  const selectGroupParent = (selection: RequiredMasterDraft) => {
+    replaceDraft((current) => ({
+      ...current,
+      gp: selection,
+      gc:
+        current.gp?.mode === "existing" &&
+        selection.mode === "existing" &&
+        current.gp.id === selection.id
+          ? current.gc
+          : null,
+      bc: {
+        mode: "saga_resolve",
+        branchId: Number(registration?.company.branch_id || 0),
+      },
+    }));
+    setExpandedSections((current) => ({ ...current, gp: false }));
+  };
+
+  const selectGroupCustomer = (selection: RequiredMasterDraft) => {
+    replaceDraft((current) => ({
+      ...current,
+      gc: selection,
+      bc:
+        current.gc?.mode === "existing" &&
+        selection.mode === "existing" &&
+        current.gc.id === selection.id
+          ? current.bc
+          : {
+              mode: "saga_resolve",
+              branchId: Number(registration?.company.branch_id || 0),
+            },
+    }));
+    setExpandedSections((current) => ({ ...current, gc: false }));
+  };
+
+  const toggleSection = (entity: EntityKey) => {
+    setExpandedSections((current) => ({
+      ...current,
+      [entity]: !current[entity],
+    }));
+  };
+
+  const openCreate = (entity: EntityKey) => {
+    if (loadErrors[entity]) {
+      setError(
+        "Pencarian referensi gagal. Muat ulang data sebelum membuat master baru.",
+      );
       return;
     }
-    void ensureBranchCustomers(effectiveGcid);
-  }, [
-    canSearchExistingBc,
-    effectiveGcid,
-    ensureBranchCustomers,
-    isOpen,
-    isPreparing,
-    step,
-  ]);
-  useEffect(() => {
-    if (isOpen) return;
-    setShowCloseConfirm(false);
-  }, [isOpen]);
+    setCreateEditor(entity);
+    const fallback =
+      entity === "nb"
+        ? registration?.master_links?.nb_manual || queries.nb
+        : entity === "gp"
+          ? registration?.master_links?.gp_manual ||
+            queries.gp ||
+            `${registration?.user.full_name || registration?.company.name} GP`
+          : queries.gc || registration?.company.name || "";
+    setCreateName(normalizeEntityName(fallback));
+  };
 
-  useEffect(() => {
-    if (!selectedGpid) return;
-    const selectedGc = groupCustomers.find(
-      (row) => Number(row.id) === Number(selectedGcid),
-    );
-    if (selectedGc && Number(selectedGc.gpid || 0) !== Number(selectedGpid)) {
-      setSelectedGcid(null);
-    }
-  }, [selectedGpid, selectedGcid, groupCustomers]);
+  const useCreateName = () => {
+    const name = normalizeEntityName(createName);
+    if (!createEditor || !name || exactDuplicate) return;
+    if (createEditor === "nb") selectNationalBrand({ mode: "create", name });
+    if (createEditor === "gp") selectGroupParent({ mode: "create", name });
+    if (createEditor === "gc") selectGroupCustomer({ mode: "create", name });
+    setCreateEditor(null);
+    setCreateName("");
+  };
 
-  useEffect(() => {
-    if (!selectedBcid) return;
-    const effectiveGcid = selectedGcid;
-    const selectedBc = branchCustomers.find(
-      (row) => Number(row.id) === Number(selectedBcid),
-    );
+  const validationError = useMemo(() => {
+    if (!registration || !draft) return "Data registrasi belum siap";
+    const status = registration.status.toLowerCase();
+    if (!demoMode && registration.docstatus === 1)
+      return "Registrasi sudah Submitted";
+    if (!demoMode && status !== "draft" && status !== "request")
+      return "Status registrasi tidak eligible untuk approval";
+    if (!draft.gp) return "Group Parent wajib dipilih atau dibuat";
+    if (!draft.gc) return "Group Customer wajib dipilih atau dibuat";
+    if (!branchCode) return "Kode/prefix Branch belum berhasil dimuat";
+    if (draft.gp.mode === "create" && !normalizeEntityName(draft.gp.name))
+      return "Nama Group Parent wajib diisi";
+    if (draft.gc.mode === "create" && !normalizeEntityName(draft.gc.name))
+      return "Nama Group Customer wajib diisi";
+    if (draft.nb.mode === "create" && !normalizeEntityName(draft.nb.name))
+      return "Nama National Brand wajib diisi";
     if (
-      selectedBc &&
-      effectiveGcid &&
-      Number(selectedBc.gcid || 0) !== Number(effectiveGcid)
+      loadErrors.nb ||
+      loadErrors.gp ||
+      (draft.gp.mode === "existing" && loadErrors.gc)
     ) {
-      setSelectedBcid(null);
+      return "Data referensi belum berhasil dimuat";
     }
-  }, [selectedBcid, selectedGcid, branchCustomers]);
-
-  useEffect(() => {
-    if (step !== 3 || selectedGcid) return;
-    if (!selectedGcid && canSearchExistingGc) {
-      setGcMode("search");
-      return;
+    if (!registration.same_as_company_address && !shippingLoaded) {
+      return "Alamat pengiriman belum selesai dimuat";
     }
-    if (!canSearchExistingGc) {
-      setGcMode("create");
-      setSelectedGcid(null);
+    if (
+      checkpoint &&
+      checkpoint.fingerprint !== draftFingerprint(registration.id, draft)
+    ) {
+      return "Checkpoint tidak cocok dengan draft saat ini; rekonsiliasi master diperlukan";
     }
-  }, [step, canSearchExistingGc, selectedGcid]);
-
-  useEffect(() => {
-    if (step !== 4 || existingBcid) return;
-    if (!canSearchExistingBc) {
-      setBcMode("create");
-      setSelectedBcid(null);
-      setBcSearch("");
-    }
-  }, [step, existingBcid, canSearchExistingBc]);
-
-  useEffect(() => {
-    if (!isCreatingNewGpFlow) return;
-    if (step >= 3 && !selectedGcid) {
-      setGcMode("create");
-    }
-    if (step >= 4 && !existingBcid && !selectedBcid) {
-      setBcMode("create");
-    }
+    return null;
   }, [
-    isCreatingNewGpFlow,
-    step,
-    selectedGcid,
-    existingBcid,
-    selectedBcid,
+    branchCode,
+    checkpoint,
+    demoMode,
+    draft,
+    loadErrors,
+    registration,
+    shippingLoaded,
+  ]);
+
+  const addLog = useCallback((log: ApprovalOperationLog) => {
+    setOperationLogs((previous) => {
+      const index = previous.findIndex((item) => item.stage === log.stage);
+      if (index < 0) return [...previous, log];
+      return previous.map((item, itemIndex) =>
+        itemIndex === index ? log : item,
+      );
+    });
+  }, []);
+
+  const fetchFreshRows = useCallback(
+    async <T,>(
+      endpoint: string,
+      fields: string[],
+      filters?: Array<[string, string, unknown]>,
+    ): Promise<T[]> => {
+      if (demoMode) return [];
+      if (!token) throw new Error("Sesi tidak tersedia");
+      return fetchAllQueryRows<T>({
+        endpoint,
+        spec: { fields, ...(filters ? { filters } : {}) },
+        token,
+        errorMessage: "Validasi referensi gagal",
+      });
+    },
+    [demoMode, token],
+  );
+
+  const verifyCreated = useCallback(
+    async (
+      entity: EntityKey,
+      name: string,
+      parentId?: number,
+    ): Promise<number | undefined> => {
+      const config =
+        entity === "nb"
+          ? {
+              endpoint: API_CONFIG.ENDPOINTS.NATIONAL_BRAND,
+              field: "nb_name",
+              fields: ["id", "nb_name"],
+            }
+          : entity === "gp"
+            ? {
+                endpoint: API_CONFIG.ENDPOINTS.GROUP_PARENT,
+                field: "gp_name",
+                fields: ["id", "gp_name", "nbid"],
+              }
+            : {
+                endpoint: API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
+                field: "gc_name",
+                fields: ["id", "gc_name", "gpid"],
+              };
+      const rows = await fetchFreshRows<Record<string, unknown>>(
+        config.endpoint,
+        config.fields,
+        [[config.field, "=", normalizeEntityName(name)]],
+      );
+      const matches = rows.filter((row) => {
+        const sameName =
+          normalizeEntityName(String(row[config.field] || "")) ===
+          normalizeEntityName(name);
+        if (!sameName || entity === "nb") return sameName;
+        const parentField = entity === "gp" ? "nbid" : "gpid";
+        return Number(row[parentField] || 0) === Number(parentId || 0);
+      });
+      return matches.length === 1 ? Number(matches[0].id) : undefined;
+    },
+    [fetchFreshRows],
+  );
+
+  const preflight = useCallback(async () => {
+    if (!registration || !draft || !draft.gp || !draft.gc)
+      throw new Error("Draft approval belum lengkap");
+    const nbDraft = draft.nb;
+    const gpDraft = draft.gp;
+    const gcDraft = draft.gc;
+    addLog({
+      stage: "checking",
+      status: "checking",
+      message: "Memvalidasi status, duplikasi, dan relasi master",
+    });
+    if (!demoMode) {
+      const currentJson = await requestJson(
+        "Memeriksa status registrasi",
+        getQueryUrl(
+          `${API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER}/${registration.id}`,
+          { fields: ["*"] },
+        ),
+        "GET",
+      );
+      const current =
+        currentJson && typeof currentJson === "object" && "data" in currentJson
+          ? currentJson.data
+          : null;
+      if (current && typeof current === "object") {
+        const currentStatus = String(
+          "status" in current ? current.status : "",
+        ).toLowerCase();
+        const currentDocstatus = Number(
+          "docstatus" in current ? current.docstatus : 0,
+        );
+        if (
+          currentDocstatus === 1 ||
+          (currentStatus !== "draft" && currentStatus !== "request")
+        ) {
+          throw new Error(
+            "Status registrasi berubah dan tidak lagi eligible untuk approval",
+          );
+        }
+      }
+    }
+
+    const freshNb = await fetchFreshRows<NationalBrandRow>(
+      API_CONFIG.ENDPOINTS.NATIONAL_BRAND,
+      ["id", "name", "nb_name"],
+    );
+    const freshGp = await fetchFreshRows<GroupParentRow>(
+      API_CONFIG.ENDPOINTS.GROUP_PARENT,
+      ["id", "name", "gp_name", "nbid"],
+    );
+    const expectedNbid =
+      nbDraft.mode === "existing" ? nbDraft.id : checkpoint?.nbid;
+    if (
+      nbDraft.mode === "existing" &&
+      !freshNb.some((row) => Number(row.id) === nbDraft.id)
+    )
+      throw new Error("National Brand yang dipilih sudah tidak tersedia");
+    if (
+      nbDraft.mode === "create" &&
+      freshNb.some(
+        (row) =>
+          normalizeEntityName(row.nb_name) ===
+            normalizeEntityName(nbDraft.name) &&
+          Number(row.id) !== Number(checkpoint?.nbid || 0),
+      )
+    )
+      throw new Error(
+        "National Brand dengan nama identik sudah ada. Pilih data existing.",
+      );
+    if (gpDraft.mode === "existing") {
+      const row = freshGp.find((item) => Number(item.id) === gpDraft.id);
+      if (!row)
+        throw new Error("Group Parent yang dipilih sudah tidak tersedia");
+      if (Number(row.nbid || 0) !== Number(expectedNbid || 0))
+        throw new Error(
+          "Relasi National Brand dan Group Parent tidak konsisten",
+        );
+    } else {
+      const duplicate = freshGp.some(
+        (row) =>
+          normalizeEntityName(row.gp_name) ===
+            normalizeEntityName(gpDraft.name) &&
+          Number(row.nbid || 0) === Number(expectedNbid || 0) &&
+          Number(row.id) !== Number(checkpoint?.gpid || 0),
+      );
+      if (duplicate)
+        throw new Error(
+          "Group Parent dengan nama dan parent identik sudah ada. Pilih data existing.",
+        );
+    }
+    const resolvedPreflightGpid =
+      gpDraft.mode === "existing" ? gpDraft.id : checkpoint?.gpid;
+    if (resolvedPreflightGpid) {
+      const freshGc = await fetchFreshRows<GroupCustomerRow>(
+        API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
+        ["id", "name", "gc_name", "gpid"],
+        [["gpid", "=", resolvedPreflightGpid]],
+      );
+      if (
+        gcDraft.mode === "existing" &&
+        !freshGc.some((row) => Number(row.id) === gcDraft.id)
+      )
+        throw new Error(
+          "Group Customer tidak tersedia di bawah Group Parent terpilih",
+        );
+      if (
+        gcDraft.mode === "create" &&
+        freshGc.some(
+          (row) =>
+            normalizeEntityName(row.gc_name) ===
+              normalizeEntityName(gcDraft.name) &&
+            Number(row.id) !== Number(checkpoint?.gcid || 0),
+        )
+      )
+        throw new Error(
+          "Group Customer dengan nama identik sudah ada. Pilih data existing.",
+        );
+    } else if (gcDraft.mode === "existing") {
+      throw new Error(
+        "Group Customer existing tidak dapat dipilih di bawah Group Parent baru",
+      );
+    }
+    addLog({
+      stage: "checking",
+      status: "success",
+      message: "Preflight valid",
+    });
+  }, [
+    addLog,
+    checkpoint,
+    demoMode,
+    draft,
+    fetchFreshRows,
+    registration,
+    requestJson,
   ]);
 
   const buildGroupCustomerPayload = useCallback(
-    (gpid: number) => {
-      if (!registration) return null;
+    (gpid: number, name: string) => {
+      if (!registration) throw new Error("Data registrasi tidak tersedia");
       return {
-        gc_name: normalizeEntityName(gcName),
+        gc_name: normalizeEntityName(name),
         gpid,
-        ...buildCreditPolicyPayload(
-          registration as typeof registration & {
-            credit_limit_active?: unknown;
-            credit_limit?: unknown;
-            payment_term_active?: unknown;
-            payment_term?: unknown;
-            limit_customer_overdue_active?: unknown;
-            limit_customer_overdue?: unknown;
-          },
-        ),
+        ...buildCreditPolicyPayload(creditSource || undefined),
         owner_full_name: registration.user.full_name,
         owner_phone: normalizePhone(registration.user.phone),
         owner_email: registration.user.email,
@@ -951,1819 +1136,1401 @@ export function ApproveRegistrationModal({
         company_name: registration.company.name,
       };
     },
-    [gcName, registration],
+    [creditSource, registration],
   );
 
   const buildCustomerRegisterApprovePayload = useCallback(
-    (ids: ApprovalResult, gpManualName?: string, nbManualName?: string) => {
-      const rawApplicantOwnerId = registration?.ekaplus_user?.id;
-      const applicantOwnerId =
-        typeof rawApplicantOwnerId === "number"
-          ? rawApplicantOwnerId
-          : Number.parseInt(String(rawApplicantOwnerId || ""), 10);
-      const fallbackOwnerId = Number(registration?.created_by_id || 0);
-
-      const shippingPayload = effectiveShippingAddresses.map((addr) => ({
-        label: addr.label || "Warehouse",
-        pic_name: addr.pic_name || undefined,
-        pic_phone: normalizePhone(addr.pic_phone || undefined),
-        address: addr.address || "",
-        city: addr.city || "",
-        district: addr.district || "",
-        village: addr.village || "",
-        // postal_code: addr.postal_code || "",
-        province: addr.province || "",
-        is_default: addr.is_default ? 1 : undefined,
-      }));
-
+    (ids: ApprovalResult) => {
+      if (!registration) throw new Error("Data registrasi tidak tersedia");
+      const applicantOwnerId = Number(registration.ekaplus_user?.id || 0);
+      const fallbackOwnerId = Number(registration.created_by_id || 0);
       return {
         status: "Syncing",
         docstatus: 1,
         owner:
-          Number.isFinite(applicantOwnerId) && applicantOwnerId > 0
+          applicantOwnerId > 0
             ? applicantOwnerId
             : fallbackOwnerId > 0
               ? fallbackOwnerId
               : undefined,
-        same_as_company_address: registration?.same_as_company_address ? 1 : 0,
+        same_as_company_address: registration.same_as_company_address ? 1 : 0,
         gpid: ids.gpid,
         gcid: ids.gcid,
         bcid: ids.bcid ?? null,
         nbid: ids.nbid ?? null,
-        ...(gpManualName ? { gp_manual: gpManualName } : {}),
-        ...(nbManualName ? { nb_manual: nbManualName } : {}),
-        payment_method: registration?.support_data?.payment_method || undefined,
-        payment_account:
-          registration?.support_data?.payment_account || undefined,
-        tax_status: registration?.company.tax_status ?? 0,
+        ...(draft?.gp?.mode === "create"
+          ? { gp_manual: normalizeEntityName(draft.gp.name) }
+          : {}),
+        ...(draft?.nb.mode === "create"
+          ? { nb_manual: normalizeEntityName(draft.nb.name) }
+          : {}),
+        payment_method: registration.support_data.payment_method || undefined,
+        payment_account: registration.support_data.payment_account || undefined,
+        tax_status: registration.company.tax_status ?? 0,
         npwp:
-          registration?.company.tax_status === 1
-            ? registration?.company.npwp || undefined
+          registration.company.tax_status === 1
+            ? registration.company.npwp || undefined
             : undefined,
         erp_customer_group:
-          registration?.support_data?.erp_customer_group || undefined,
-        notes: registration?.support_data?.more_information || undefined,
-        sales_team: registration?.support_data?.sales_team || undefined,
-        customer_shipping_address: shippingPayload,
+          registration.support_data.erp_customer_group || undefined,
+        notes: registration.support_data.more_information || undefined,
+        sales_team: registration.support_data.sales_team || undefined,
+        customer_shipping_address: effectiveShippingAddresses.map(
+          (address) => ({
+            label: address.label || "Warehouse",
+            pic_name: address.pic_name || undefined,
+            pic_phone: normalizePhone(address.pic_phone),
+            address: address.address || "",
+            city: address.city || "",
+            district: address.district || "",
+            village: address.village || "",
+            province: address.province || "",
+            is_default: address.is_default ? 1 : undefined,
+          }),
+        ),
       };
     },
-    [
-      effectiveShippingAddresses,
-      registration?.same_as_company_address,
-      registration?.ekaplus_user?.id,
-      registration?.created_by_id,
-      registration?.support_data?.payment_method,
-      registration?.support_data?.payment_account,
-      registration?.company.tax_status,
-      registration?.company.npwp,
-      registration?.support_data?.erp_customer_group,
-      registration?.support_data?.more_information,
-      registration?.support_data?.sales_team,
-    ],
+    [draft, effectiveShippingAddresses, registration],
   );
 
-  const validateCurrentStep = (): string | null => {
-    // Step 1: National Brand (optional)
-    if (step === 1) {
-      if (createNationalBrand && !normalizeEntityName(nbName)) {
-        return "Nama National Brand wajib diisi";
-      }
-    }
-
-    // Step 2: Group Parent
-    if (step === 2) {
-      if (selectedGpid) return null;
-      if (gpMode === "create") {
-        if (!normalizeEntityName(gpName))
-          return "Nama Group Parent wajib diisi";
-      } else if (gpMode === "idle" || gpMode === "search") {
-        return "Pilih Group Parent yang ada atau klik 'Create New' untuk membuat baru";
-      }
-    }
-
-    // Step 3: Group Customer
-    if (step === 3) {
-      if (canSearchExistingGc && selectedGcid) return null;
-      if (gcMode === "create" || !canSearchExistingGc) {
-        if (!normalizeEntityName(gcName)) return "GC Name wajib diisi";
-      } else if (gcMode === "idle" || gcMode === "search") {
-        return "Pilih Group Customer yang ada atau klik 'Create New' untuk membuat baru";
-      }
-    }
-
-    // Step 4: Branch Customer
-    if (step === 4 && !existingBcid) {
-      return null;
-    }
-
-    return null;
-  };
-
-  const handleNextStep = async () => {
-    if (demoMode) {
-      setError(null);
-
-      if (step === 1 && !effectiveNbid) {
-        setSelectedNbid(demoNationalBrands[0]?.id || null);
-      }
-
-      if (step === 2 && !effectiveGpid) {
-        const demoGp = demoGroupParents[0];
-        if (demoGp) {
-          setSelectedGpid(demoGp.id);
-          setCreatedGpid(null);
-          setGpMode("search");
+  const resolveCreatedResource = useCallback(
+    async (
+      entity: EntityKey,
+      name: string,
+      url: string,
+      payload: unknown,
+      parentId?: number,
+    ) => {
+      try {
+        const response = await requestJson(
+          `Membuat ${entity.toUpperCase()}`,
+          url,
+          "POST",
+          payload,
+        );
+        const id = extractIdFromResourceResponse(response);
+        if (!id)
+          throw new RequestError(
+            `${entity.toUpperCase()} berhasil direspons tetapi ID tidak tersedia`,
+            undefined,
+            true,
+          );
+        return id;
+      } catch (caught) {
+        const requestError =
+          caught instanceof RequestError
+            ? caught
+            : new RequestError("Operasi gagal");
+        if (
+          requestError.outcomeUnknown ||
+          requestError.status === 409 ||
+          requestError.status === 422
+        ) {
+          const verifiedId = await verifyCreated(entity, name, parentId).catch(
+            () => undefined,
+          );
+          if (verifiedId) return verifiedId;
+          if (requestError.outcomeUnknown) throw requestError;
         }
+        throw requestError;
       }
+    },
+    [requestJson, verifyCreated],
+  );
 
-      if (step === 3 && !effectiveGcid) {
-        const demoGc = demoGroupCustomers[0];
-        if (demoGc) {
-          setSelectedGcid(demoGc.id);
-          setCreatedGcid(null);
-          setGcMode("search");
-        }
-      }
-
-      if (step === 4 && !effectiveBcid) {
-        const demoBc = demoBranchCustomers[0];
-        if (demoBc) {
-          setSelectedBcid(demoBc.id);
-          setCreatedBc(demoBc);
-          setCreatedBcid(demoBc.id);
-          setBcMode("create");
-        }
-      }
-
-      setStep((prev) => Math.min(5, prev + 1) as Step);
-      return;
-    }
-
-    const validationError = validateCurrentStep();
+  const submitApproval = async () => {
+    if (inFlightRef.current || !registration || !draft) return;
     if (validationError) {
       setError(validationError);
       return;
     }
-
-    if (!registration || !token) {
-      setError("Data tidak lengkap");
-      return;
-    }
-
+    inFlightRef.current = true;
     setIsSubmitting(true);
+    setShowConfirm(false);
     setError(null);
-
-    try {
-      if (step === 1) {
-        if (createNationalBrand && !effectiveNbid) {
-          const nbJson = await apiJsonRequest(
-            "creating National Brand",
-            getApiUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND),
-            "POST",
-            {
-              nb_name: normalizeEntityName(nbName),
-              ...buildCreditPolicyPayload(
-                registration as typeof registration & {
-                  credit_limit_active?: unknown;
-                  credit_limit?: unknown;
-                  payment_term_active?: unknown;
-                  payment_term?: unknown;
-                  limit_customer_overdue_active?: unknown;
-                  limit_customer_overdue?: unknown;
-                },
-              ),
-            },
-          );
-          const newNbid = extractIdFromResourceResponse(nbJson);
-          if (!newNbid)
-            throw new Error("Failed creating National Brand (missing id)");
-          setCreatedNbid(newNbid);
-          setSelectedNbid(newNbid);
-          setNbCreatedViaCreateFlow(true);
-          if (
-            nbJson &&
-            typeof nbJson === "object" &&
-            "data" in nbJson &&
-            nbJson.data &&
-            typeof nbJson.data === "object"
-          ) {
-            const row = nbJson.data as NationalBrandRow;
-            setCreatedNb({
-              id: newNbid,
-              name: row.name,
-              nb_name: row.nb_name,
-            });
-          }
-          setCreateNationalBrand(false);
-        }
-      } else if (step === 2) {
-        if (!effectiveGpid) {
-          const gpPayload = {
-            gp_name: normalizeEntityName(gpName),
-            ...(effectiveNbid ? { nbid: effectiveNbid } : {}),
-            ...buildCreditPolicyPayload(
-              registration as typeof registration & {
-                credit_limit_active?: unknown;
-                credit_limit?: unknown;
-                payment_term_active?: unknown;
-                payment_term?: unknown;
-                limit_customer_overdue_active?: unknown;
-                limit_customer_overdue?: unknown;
-              },
-            ),
-          };
-          const gpJson = await apiJsonRequest(
-            "creating Group Parent",
-            getApiUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT),
-            "POST",
-            gpPayload,
-          );
-          const newGpid = extractIdFromResourceResponse(gpJson);
-          if (!newGpid)
-            throw new Error("Failed creating Group Parent (missing id)");
-
-          setCreatedGpid(newGpid);
-          setSelectedGpid(newGpid);
-          setGpCreatedViaCreateFlow(true);
-
-          if (
-            gpJson &&
-            typeof gpJson === "object" &&
-            "data" in gpJson &&
-            gpJson.data &&
-            typeof gpJson.data === "object"
-          ) {
-            const row = gpJson.data as GroupParentRow;
-            setCreatedGp({
-              id: newGpid,
-              name: row.name,
-              gp_name: row.gp_name,
-              nbid: row.nbid,
-            });
-          }
-        }
-      } else if (step === 3) {
-        if (!effectiveGcid) {
-          if (!effectiveGpid) {
-            throw new Error(
-              "GP belum tersedia. Selesaikan step Group Parent terlebih dahulu.",
-            );
-          }
-          const gcPayload = buildGroupCustomerPayload(effectiveGpid);
-          if (!gcPayload) throw new Error("Payload Group Customer tidak valid");
-
-          const gcJson = await apiJsonRequest(
-            "creating Group Customer",
-            getApiUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER),
-            "POST",
-            gcPayload,
-          );
-          const newGcid = extractIdFromResourceResponse(gcJson);
-          if (!newGcid)
-            throw new Error("Failed creating Group Customer (missing id)");
-          setCreatedGcid(newGcid);
-          setSelectedGcid(newGcid);
-          if (
-            gcJson &&
-            typeof gcJson === "object" &&
-            "data" in gcJson &&
-            gcJson.data &&
-            typeof gcJson.data === "object"
-          ) {
-            const row = gcJson.data as GroupCustomerRow;
-            setCreatedGc({
-              id: newGcid,
-              name: row.name,
-              gc_name: row.gc_name,
-              gpid: row.gpid,
-            });
-          }
-        }
-      } else if (step === 4) {
-        if (!effectiveGcid) {
-          throw new Error(
-            "GC belum tersedia. Selesaikan step Group Customer terlebih dahulu.",
-          );
-        }
-        // BC will be created/resolved on final commit (Step 5).
-      }
-
-      setStep((prev) => Math.min(5, prev + 1) as Step);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal memproses step");
-    } finally {
+    setWarning(null);
+    setOperationLogs([]);
+    const gpDraft = draft.gp;
+    const gcDraft = draft.gc;
+    if (!gpDraft || !gcDraft) {
+      setError("Relasi GP/GC belum lengkap");
+      inFlightRef.current = false;
       setIsSubmitting(false);
-    }
-  };
-
-  const handleSubmitApproval = async () => {
-    if (demoMode && registration) {
-      setIsSubmitting(true);
-      setError(null);
-      window.setTimeout(() => {
-        setIsSubmitting(false);
-        onSuccess(
-          `Registrasi "${registration.company.name}" berhasil diproses ke Syncing.\n\nGROUP PARENT: GP9201\nGROUP CUSTOMER: GC9301\nBRANCH CUSTOMER: BC9401\nNATIONAL BRAND: NB9101`,
-        );
-      }, 450);
       return;
     }
-
-    if (!registration || !token) {
-      setError("Data tidak lengkap");
-      return;
-    }
-
-    setIsSubmitting(true);
-    setError(null);
-
+    let activeStage: ApprovalCommitStage = "checking";
+    const fingerprint = draftFingerprint(registration.id, draft);
+    let current =
+      checkpoint?.fingerprint === fingerprint
+        ? checkpoint
+        : {
+            version: 1 as const,
+            registrationId: registration.id,
+            fingerprint,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            completedStages: [],
+            status: "in_progress" as const,
+          };
+    persistCheckpoint(current);
     try {
-      const nbid = effectiveNbid;
-      const gpid = effectiveGpid;
-      const gcid = effectiveGcid;
-      const bcid = effectiveBcid;
-
-      if (!gpid || !gcid) {
-        throw new Error(
-          "Relasi GP/GC belum lengkap. Pastikan step sebelumnya sudah selesai.",
+      if (demoMode) {
+        setCommitStage("checking");
+        await new Promise((resolve) => window.setTimeout(resolve, 250));
+        addLog({
+          stage: "checking",
+          status: "success",
+          message: "Preflight demo valid",
+        });
+        addLog({
+          stage: "register",
+          status: "submitted",
+          message: "Demo Submitted / Syncing (tanpa request aktual)",
+        });
+        setCommitStage("completed");
+        persistCheckpoint(null);
+        onSuccess(
+          `Registrasi "${registration.company.name}" berhasil disimulasikan ke Submitted / Syncing. Tidak ada POST/PUT aktual pada mode demo.`,
         );
+        return;
       }
 
-      const finalResult: ApprovalResult = { nbid, gpid, gcid, bcid };
-      const updatePayload = buildCustomerRegisterApprovePayload(
-        finalResult,
-        gpCreatedViaCreateFlow ? normalizeEntityName(gpName) : undefined,
-        nbCreatedViaCreateFlow ? normalizeEntityName(nbName) : undefined,
-      );
-      await apiJsonRequest(
-        "updating customer_register approved",
-        getQueryUrl(
-          `${API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER}/${registration.id}`,
-          { fields: ["*"] },
-        ),
-        "PUT",
-        updatePayload,
-      );
+      activeStage = "checking";
+      setCommitStage(activeStage);
+      await preflight();
 
+      let nbid = draft.nb.mode === "existing" ? draft.nb.id : current.nbid;
+      if (draft.nb.mode === "create" && !nbid) {
+        activeStage = "nb";
+        setCommitStage(activeStage);
+        addLog({
+          stage: "nb",
+          status: "started",
+          message: "Membuat National Brand",
+        });
+        nbid = await resolveCreatedResource(
+          "nb",
+          draft.nb.name,
+          getApiUrl(API_CONFIG.ENDPOINTS.NATIONAL_BRAND),
+          {
+            nb_name: normalizeEntityName(draft.nb.name),
+            ...buildCreditPolicyPayload(creditSource || undefined),
+          },
+        );
+        current = updateCheckpoint(current, {
+          nbid,
+          completedStages: [
+            ...new Set([...current.completedStages, "nb" as const]),
+          ],
+        });
+        addLog({
+          stage: "nb",
+          status: "success",
+          message: `National Brand resolved (ID ${nbid})`,
+        });
+      } else {
+        addLog({
+          stage: "nb",
+          status: "success",
+          message:
+            draft.nb.mode === "none"
+              ? "Tanpa National Brand"
+              : `National Brand existing (ID ${nbid})`,
+        });
+      }
+
+      let gpid = gpDraft.mode === "existing" ? gpDraft.id : current.gpid;
+      if (gpDraft.mode === "create" && !gpid) {
+        activeStage = "gp";
+        setCommitStage(activeStage);
+        addLog({
+          stage: "gp",
+          status: "started",
+          message: "Membuat Group Parent",
+        });
+        gpid = await resolveCreatedResource(
+          "gp",
+          gpDraft.name,
+          getApiUrl(API_CONFIG.ENDPOINTS.GROUP_PARENT),
+          {
+            gp_name: normalizeEntityName(gpDraft.name),
+            ...(nbid ? { nbid } : {}),
+            ...buildCreditPolicyPayload(creditSource || undefined),
+          },
+          nbid,
+        );
+        current = updateCheckpoint(current, {
+          gpid,
+          completedStages: [
+            ...new Set([...current.completedStages, "gp" as const]),
+          ],
+        });
+        addLog({
+          stage: "gp",
+          status: "success",
+          message: `Group Parent resolved (ID ${gpid})`,
+        });
+      } else {
+        addLog({
+          stage: "gp",
+          status: "success",
+          message: `Group Parent existing/checkpoint (ID ${gpid})`,
+        });
+      }
+      if (!gpid) throw new Error("ID Group Parent tidak valid");
+
+      let gcid = gcDraft.mode === "existing" ? gcDraft.id : current.gcid;
+      if (gcDraft.mode === "create" && !gcid) {
+        activeStage = "gc";
+        setCommitStage(activeStage);
+        addLog({
+          stage: "gc",
+          status: "started",
+          message: "Membuat Group Customer",
+        });
+        gcid = await resolveCreatedResource(
+          "gc",
+          gcDraft.name,
+          getApiUrl(API_CONFIG.ENDPOINTS.GROUP_CUSTOMER),
+          buildGroupCustomerPayload(gpid, gcDraft.name),
+          gpid,
+        );
+        current = updateCheckpoint(current, {
+          gcid,
+          completedStages: [
+            ...new Set([...current.completedStages, "gc" as const]),
+          ],
+        });
+        addLog({
+          stage: "gc",
+          status: "success",
+          message: `Group Customer resolved (ID ${gcid})`,
+        });
+      } else {
+        addLog({
+          stage: "gc",
+          status: "success",
+          message: `Group Customer existing/checkpoint (ID ${gcid})`,
+        });
+      }
+      if (!gcid) throw new Error("ID Group Customer tidak valid");
+
+      activeStage = "bc";
+      setCommitStage(activeStage);
+      const bcid = undefined;
+      const resolvedBcName = `${normalizeEntityName(gcDraft.name)} - ${branchCode}`;
+      current = updateCheckpoint(current, {
+        completedStages: [
+          ...new Set([...current.completedStages, "bc" as const]),
+        ],
+      });
+      addLog({
+        stage: "bc",
+        status: "success",
+        message: `Branch Customer “${resolvedBcName}” akan dibuat/di-resolve oleh Saga`,
+      });
+
+      activeStage = "register";
+      setCommitStage(activeStage);
+      if (!current.completedStages.includes("register")) {
+        addLog({
+          stage: "register",
+          status: "started",
+          message: "Mengirim approval Customer Register",
+        });
+        try {
+          await requestJson(
+            "Submit Customer Register",
+            getQueryUrl(
+              `${API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER}/${registration.id}`,
+              { fields: ["*"] },
+            ),
+            "PUT",
+            buildCustomerRegisterApprovePayload({ nbid, gpid, gcid, bcid }),
+          );
+        } catch (caught) {
+          const requestError = caught instanceof RequestError ? caught : null;
+          if (!requestError?.outcomeUnknown) throw caught;
+          const verify = await requestJson(
+            "Memeriksa hasil submit",
+            getQueryUrl(
+              `${API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER}/${registration.id}`,
+              { fields: ["id", "status", "docstatus"] },
+            ),
+            "GET",
+          ).catch(() => null);
+          const row =
+            verify && typeof verify === "object" && "data" in verify
+              ? verify.data
+              : null;
+          const submitted =
+            row &&
+            typeof row === "object" &&
+            Number("docstatus" in row ? row.docstatus : 0) === 1;
+          if (!submitted) throw requestError;
+        }
+        current = updateCheckpoint(current, {
+          completedStages: [
+            ...new Set([...current.completedStages, "register" as const]),
+          ],
+          status: "submitted",
+        });
+      }
+      addLog({
+        stage: "register",
+        status: "submitted",
+        message: "Customer Register Submitted; sinkronisasi Saga berjalan",
+      });
+      setCommitStage("completed");
+      persistCheckpoint(null);
       window.dispatchEvent(new Event("ekatalog:customer_registrations_update"));
       window.dispatchEvent(new Event("ekatalog:gp_update"));
       window.dispatchEvent(new Event("ekatalog:gc_update"));
       window.dispatchEvent(new Event("ekatalog:bc_update"));
-
-      const gpCode =
-        createdGp?.name ||
-        groupParents.find((row) => Number(row.id) === Number(gpid))?.name ||
-        `GP${gpid}`;
-      const gcCode =
-        createdGc?.name ||
-        groupCustomers.find((row) => Number(row.id) === Number(gcid))?.name ||
-        `GC${gcid}`;
-      const bcCode =
-        createdBc?.name ||
-        branchCustomers.find((row) => Number(row.id) === Number(bcid))?.name ||
-        previewBcName;
-      const nbCode =
-        (nbid
-          ? createdNb?.name ||
-            nationalBrands.find((row) => Number(row.id) === Number(nbid))?.name
-          : null) || undefined;
-
       onSuccess(
-        `Registrasi "${registration.company.name}" berhasil diproses ke Syncing.\n\nGROUP PARENT: ${gpCode}\nGROUP CUSTOMER: ${gcCode}\nBRANCH CUSTOMER: ${bcCode}${
-          nbCode ? `\nNATIONAL BRAND: ${nbCode}` : ""
-        }`,
+        `Approval registrasi "${registration.company.name}" berhasil dikirim — sinkronisasi berjalan.`,
       );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal approve registrasi");
+    } catch (caught) {
+      const requestError = caught instanceof RequestError ? caught : null;
+      const unknown = Boolean(requestError?.outcomeUnknown);
+      const stage = activeStage;
+      if (!unknown && current.completedStages.length === 0) {
+        persistCheckpoint(null);
+      } else {
+        current = updateCheckpoint(current, {
+          status: unknown ? "unknown" : "failed",
+          ...(unknown &&
+          (stage === "nb" ||
+            stage === "gp" ||
+            stage === "gc" ||
+            stage === "register")
+            ? { unknownStage: stage }
+            : {}),
+        });
+      }
+      setCommitStage(unknown ? "unknown" : "failed");
+      addLog({
+        stage,
+        status: unknown ? "unknown" : "failed",
+        message: caught instanceof Error ? caught.message : "Approval gagal",
+      });
+      setError(
+        unknown
+          ? `${caught instanceof Error ? caught.message : "Hasil request tidak diketahui"}. Periksa status; retry otomatis diblokir sampai outcome dapat diverifikasi.`
+          : caught instanceof Error
+            ? caught.message
+            : "Approval gagal",
+      );
     } finally {
+      inFlightRef.current = false;
       setIsSubmitting(false);
     }
   };
 
-  if (!registration) return null;
-
-  const gpDisplay = createdGp || existingGp;
-  const selectedNbRow = nationalBrands.find(
-    (nb) => Number(nb.id) === Number(selectedNbid),
-  );
-  const nbDisplayRow = selectedNbRow || createdNb;
-  const selectedGpRow = groupParents.find(
-    (gp) => Number(gp.id) === Number(selectedGpid),
-  );
-  const gpResolvedRow = selectedGpRow || gpDisplay;
-  const selectedGcRow = groupCustomers.find(
-    (gc) => Number(gc.id) === Number(selectedGcid),
-  );
-  const gcDisplayRow = selectedGcRow || createdGc;
-  const selectedBcRow = branchCustomers.find(
-    (bc) => Number(bc.id) === Number(selectedBcid),
-  );
-  const bcDisplayRow = selectedBcRow || createdBc;
-  const previewGcName = (
-    selectedGcRow?.gc_name ||
-    registration.gc_name ||
-    gcName ||
-    registration.company.name ||
-    "-"
-  ).trim();
-  const previewBcCity =
-    registration.company.branch_city || registration.address.city_name || "-";
-  const previewBcName = `${normalizeEntityName(previewGcName)} - ${previewBcCity}`;
-  const historyNbName =
-    nbDisplayRow?.nb_name ||
-    registration.master_links?.nb_name ||
-    registration.master_links?.nb_manual ||
-    (nbCreatedViaCreateFlow ? normalizeEntityName(nbName) : "") ||
-    "-";
-  const historyNbCode =
-    nbDisplayRow?.name || (effectiveNbid ? `NB${effectiveNbid}` : "-");
-  const historyGpName =
-    gpResolvedRow?.gp_name ||
-    registration.gp_name ||
-    registration.master_links?.gp_manual ||
-    (gpCreatedViaCreateFlow ? normalizeEntityName(gpName) : "") ||
-    "-";
-  const historyGpCode =
-    gpResolvedRow?.name || (effectiveGpid ? `GP${effectiveGpid}` : "-");
-  const historyGcName =
-    gcDisplayRow?.gc_name ||
-    registration.gc_name ||
-    (effectiveGcid ? normalizeEntityName(gcName) : "") ||
-    "-";
-  const historyGcCode =
-    gcDisplayRow?.name || (effectiveGcid ? `GC${effectiveGcid}` : "-");
-  const historyBcName =
-    bcDisplayRow?.bcid_name || registration.bc_name || previewBcName || "-";
-  const historyBcCode =
-    bcDisplayRow?.name || (effectiveBcid ? `BC${effectiveBcid}` : "AUTO");
-
-  const renderProcessHistory = ({
-    showNb,
-    showGp,
-    showGc,
-    showBc,
-  }: {
-    showNb: boolean;
-    showGp: boolean;
-    showGc: boolean;
-    showBc: boolean;
-  }) => (
-    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
-      <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">
-        Histori Proses
-      </p>
-      {showNb && (
-        <div className="rounded-lg bg-white border border-gray-200 px-3 py-2">
-          <div className="text-xs font-semibold text-gray-500">NB Name</div>
-          <div className="text-sm font-medium text-gray-900">
-            {historyNbName}
-          </div>
-          <div className="text-xs text-gray-500 mt-0.5">
-            NBID: {historyNbCode}
-          </div>
-        </div>
-      )}
-      {showGp && (
-        <div className="rounded-lg bg-white border border-gray-200 px-3 py-2">
-          <div className="text-xs font-semibold text-gray-500">GP Name</div>
-          <div className="text-sm font-medium text-gray-900">
-            {historyGpName}
-          </div>
-          <div className="text-xs text-gray-500 mt-0.5">
-            GPID: {historyGpCode}
-          </div>
-        </div>
-      )}
-      {showGc && (
-        <div className="rounded-lg bg-white border border-gray-200 px-3 py-2">
-          <div className="text-xs font-semibold text-gray-500">GC Name</div>
-          <div className="text-sm font-medium text-gray-900">
-            {historyGcName}
-          </div>
-          <div className="text-xs text-gray-500 mt-0.5">
-            GCID: {historyGcCode}
-          </div>
-        </div>
-      )}
-      {showBc && (
-        <div className="rounded-lg bg-white border border-gray-200 px-3 py-2">
-          <div className="text-xs font-semibold text-gray-500">BC Name</div>
-          <div className="text-sm font-medium text-gray-900">
-            {historyBcName}
-          </div>
-          <div className="text-xs text-gray-500 mt-0.5">
-            BCID: {historyBcCode}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-
-  const getBranchNameFromBc = (row?: BranchCustomerRow | null): string => {
-    if (!row) return "-";
+  const checkUnknownOutcome = async () => {
     if (
-      row.branch &&
-      typeof row.branch === "object" &&
-      "branch_name" in row.branch &&
-      typeof row.branch.branch_name === "string"
-    ) {
-      return row.branch.branch_name;
+      !registration ||
+      !draft ||
+      !checkpoint?.unknownStage ||
+      inFlightRef.current
+    )
+      return;
+    inFlightRef.current = true;
+    setIsSubmitting(true);
+    setError(null);
+    const stage = checkpoint.unknownStage;
+    try {
+      if (stage === "register") {
+        const response = await requestJson(
+          "Memeriksa status submit",
+          getQueryUrl(
+            `${API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER}/${registration.id}`,
+            {
+              fields: ["id", "status", "docstatus"],
+            },
+          ),
+          "GET",
+        );
+        const row =
+          response && typeof response === "object" && "data" in response
+            ? response.data
+            : null;
+        const submitted =
+          row &&
+          typeof row === "object" &&
+          Number("docstatus" in row ? row.docstatus : 0) === 1;
+        if (!submitted) {
+          throw new Error(
+            "Server belum menunjukkan status Submitted. Jangan mengulang PUT sebelum status dipastikan manual.",
+          );
+        }
+        addLog({
+          stage: "register",
+          status: "submitted",
+          message:
+            "Submit terverifikasi dari status server; sinkronisasi berjalan",
+        });
+        setCommitStage("completed");
+        persistCheckpoint(null);
+        window.dispatchEvent(
+          new Event("ekatalog:customer_registrations_update"),
+        );
+        onSuccess(
+          `Approval registrasi "${registration.company.name}" terverifikasi Submitted — sinkronisasi berjalan.`,
+        );
+        return;
+      }
+
+      const entityDraft =
+        stage === "nb" ? draft.nb : stage === "gp" ? draft.gp : draft.gc;
+      if (!entityDraft || entityDraft.mode !== "create")
+        throw new Error(
+          "Draft master tidak lagi cocok dengan operasi yang hasilnya unknown",
+        );
+      const parentId =
+        stage === "gp"
+          ? draft.nb.mode === "existing"
+            ? draft.nb.id
+            : checkpoint.nbid
+          : stage === "gc"
+            ? draft.gp?.mode === "existing"
+              ? draft.gp.id
+              : checkpoint.gpid
+            : undefined;
+      const verifiedId = await verifyCreated(stage, entityDraft.name, parentId);
+      if (!verifiedId)
+        throw new Error(
+          "Master belum dapat diverifikasi secara unik. Periksa master secara manual sebelum melanjutkan.",
+        );
+      const idPatch =
+        stage === "nb"
+          ? { nbid: verifiedId }
+          : stage === "gp"
+            ? { gpid: verifiedId }
+            : { gcid: verifiedId };
+      updateCheckpoint(checkpoint, {
+        ...idPatch,
+        completedStages: [...new Set([...checkpoint.completedStages, stage])],
+        status: "failed",
+        unknownStage: undefined,
+      });
+      addLog({
+        stage,
+        status: "success",
+        message: `${stage.toUpperCase()} terverifikasi (ID ${verifiedId}); proses aman untuk dilanjutkan`,
+      });
+      setCommitStage("failed");
+      setWarning(
+        "Outcome sudah terverifikasi. Klik Coba Lanjutkan untuk meneruskan dari tahap berikutnya.",
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Status belum dapat diverifikasi",
+      );
+    } finally {
+      inFlightRef.current = false;
+      setIsSubmitting(false);
     }
-    return row["branch.branch_name"] || "-";
   };
 
-  const getBcPreviewLabel = (row?: BranchCustomerRow | null): string => {
-    if (!row) return "-";
-    return `${row.bcid_name || row.name || `BC${row.id}`} - ${getBranchNameFromBc(row)}`;
-  };
+  if (!registration || !draft) return null;
 
-  // ---- Helpers for rendering selected state badge ----
-  const renderSelectedGpBadge = () => {
-    if (!selectedGpid) return null;
+  const automaticBcName =
+    draft.gc?.name && branchCode
+      ? `${normalizeEntityName(draft.gc.name)} - ${branchCode}`
+      : "Menunggu Group Customer dan kode Branch";
+
+  const summaryItems = [
+    {
+      label: "National Brand",
+      value: draft.nb.mode === "none" ? "Tanpa National Brand" : draft.nb.name,
+      badge:
+        draft.nb.mode === "none"
+          ? "Tanpa NB"
+          : draft.nb.mode === "create"
+            ? "Akan Dibuat"
+            : "Existing",
+    },
+    {
+      label: "Group Parent",
+      value: draft.gp?.name || "Belum dipilih",
+      badge:
+        draft.gp?.mode === "create"
+          ? "Akan Dibuat"
+          : draft.gp
+            ? "Existing"
+            : "Wajib",
+    },
+    {
+      label: "Group Customer",
+      value: draft.gc?.name || "Belum dipilih",
+      badge:
+        draft.gc?.mode === "create"
+          ? "Akan Dibuat"
+          : draft.gc
+            ? "Existing"
+            : "Wajib",
+    },
+    { label: "Branch Customer", value: automaticBcName, badge: "Otomatis" },
+  ];
+  const newMasterCount = [draft.nb, draft.gp, draft.gc].filter(
+    (item) => item?.mode === "create",
+  ).length;
+
+  const selectedCard = (
+    label: string,
+    selection: NationalBrandDraft | RequiredMasterDraft | null,
+    onChange: () => void,
+  ) => {
+    if (!selection) return null;
+    const none = selection.mode === "none";
     return (
-      <div
-        data-tour="approve-registration-gp-selected-badge"
-        className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 text-sm"
-      >
-        <span className="text-blue-800 font-medium">
-          {selectedGpRow?.gp_name ||
-            gpDisplay?.gp_name ||
-            registration.gp_name ||
-            "-"}{" "}
-          <span className="text-blue-500">
-            ({selectedGpRow?.name || gpDisplay?.name || `GP${selectedGpid}`})
-          </span>
-        </span>
-        <button
-          data-tour="approve-registration-gp-change-button"
-          type="button"
-          className="text-xs text-red-500 hover:underline ml-2"
-          onClick={() => {
-            setSelectedGpid(null);
-            setCreatedGpid(null);
-            setGpCreatedViaCreateFlow(false);
-            setSelectedGcid(null);
-            setCreatedGcid(null);
-            setSelectedBcid(null);
-            setCreatedBcid(null);
-            setGcMode("idle");
-            setBcMode("idle");
-            setGpMode("search");
-            setGpSearch("");
-          }}
-        >
-          Ganti
-        </button>
-      </div>
-    );
-  };
-
-  const renderSelectedGcBadge = () => {
-    if (!selectedGcid) return null;
-    return (
-      <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 text-sm">
-        <span className="text-blue-800 font-medium">
-          {selectedGcRow?.gc_name || registration.gc_name || "-"}{" "}
-          <span className="text-blue-500">
-            ({selectedGcRow?.name || `GC${selectedGcid}`})
-          </span>
-        </span>
-        <button
-          type="button"
-          className="text-xs text-red-500 hover:underline ml-2"
-          onClick={() => {
-            setSelectedGcid(null);
-            setCreatedGcid(null);
-            setSelectedBcid(null);
-            setCreatedBcid(null);
-            setBcMode("idle");
-            setGcMode("idle");
-            setGcSearch("");
-          }}
-        >
-          Ganti
-        </button>
-      </div>
-    );
-  };
-
-  const renderSelectedBcBadge = () => {
-    if (!selectedBcid) return null;
-    return (
-      <div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-3 text-sm space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-blue-800 font-medium">
-            {getBcPreviewLabel(selectedBcRow)}
-          </span>
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate text-sm font-semibold text-gray-900">
+              {none ? "Tanpa National Brand" : selection.name}
+            </p>
+            <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-rose-800 ring-1 ring-rose-200">
+              {none
+                ? "Tanpa NB"
+                : selection.mode === "create"
+                  ? "Akan Dibuat"
+                  : "Existing"}
+            </span>
+          </div>
+          {!none && selection.mode === "existing" && (
+            <p className="mt-0.5 text-xs text-gray-500">
+              Kode {label}: {selection.code || `ID ${selection.id}`}
+            </p>
+          )}
+        </div>
+        {!none && (
           <button
             type="button"
-            className="text-xs text-red-500 hover:underline ml-2"
-            onClick={() => {
-              setSelectedBcid(null);
-              setCreatedBcid(null);
-              setBcMode("idle");
-              setBcSearch("");
-            }}
+            disabled={isDraftLocked || isSubmitting}
+            onClick={onChange}
+            className="shrink-0 text-xs font-semibold text-rose-800 hover:underline disabled:opacity-50"
           >
-            Ganti
+            Reset
           </button>
-        </div>
-        <div className="text-xs text-blue-700">
-          PIC Branch: {selectedBcRow?.branch_owner || "-"} (
-          {selectedBcRow?.branch_owner_phone || "-"})
-        </div>
+        )}
       </div>
     );
   };
 
-  const handleModalKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== "Enter" || e.shiftKey) return;
-    if (isSubmitting || isPreparing) return;
+  const createPanel = (entity: EntityKey, label: string) =>
+    createEditor === entity && (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <label
+          htmlFor={`create-${entity}`}
+          className="mb-2 block text-sm font-semibold text-gray-800"
+        >
+          Nama {label}
+        </label>
+        <input
+          id={`create-${entity}`}
+          autoFocus
+          value={createName}
+          onChange={(event) => setCreateName(event.target.value.toUpperCase())}
+          onBlur={() => setCreateName((value) => normalizeEntityName(value))}
+          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-rose-700 focus:ring-2 focus:ring-rose-200"
+        />
+        {exactDuplicate && (
+          <p role="alert" className="mt-2 text-xs font-semibold text-red-700">
+            Nama identik ditemukan. Pilih master existing untuk mencegah
+            duplikasi.
+          </p>
+        )}
+        <div className="mt-3 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setCreateEditor(null)}
+            className="rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-white"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            disabled={!normalizeEntityName(createName) || exactDuplicate}
+            onClick={useCreateName}
+            className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            Gunakan Nama Ini
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-amber-800">
+          Disimpan sebagai draft lokal. Belum ada POST.
+        </p>
+      </div>
+    );
 
-    const target = e.target as HTMLElement | null;
-    const tag = target?.tagName?.toLowerCase() || "";
-    if (tag === "textarea" || tag === "button") return;
-
-    e.preventDefault();
-    e.stopPropagation();
-    if (step < 5) {
-      void handleNextStep();
-      return;
-    }
-    void handleSubmitApproval();
-  };
-
-  const requestCloseModal = () => {
-    if (isSubmitting) return;
-    setShowCloseConfirm(true);
-  };
-
-  const handleConfirmClose = () => {
-    setShowCloseConfirm(false);
-    onClose();
+  const searchState = (
+    key: EntityKey,
+    rowsLength: number,
+    retry: () => void,
+  ) => {
+    if (loading[key])
+      return <p className="px-3 py-4 text-sm text-gray-500">Mencari...</p>;
+    if (loadErrors[key])
+      return (
+        <div className="px-3 py-4 text-sm text-red-700">
+          <p>Pencarian gagal. Hasil kosong tidak dapat diasumsikan.</p>
+          <button
+            type="button"
+            onClick={retry}
+            className="mt-2 font-semibold underline"
+          >
+            Coba lagi
+          </button>
+        </div>
+      );
+    if (!rowsLength)
+      return (
+        <p className="px-3 py-4 text-sm text-gray-500">Tidak ditemukan.</p>
+      );
+    return null;
   };
 
   return (
     <AnimatePresence>
       {isOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onMouseDown={(e) => {
-            if (e.target !== e.currentTarget) return;
-            requestCloseModal();
-          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-0 sm:p-4"
+          onMouseDown={(event) =>
+            event.target === event.currentTarget &&
+            !isSubmitting &&
+            setShowCloseConfirm(true)
+          }
         >
           <motion.div
-            data-tour={demoMode ? "approve-registration-modal" : undefined}
-            initial={{ opacity: 0, scale: 0.95 }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="approve-registration-title"
+            initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            onKeyDown={handleModalKeyDown}
-            tabIndex={-1}
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden max-h-[90vh] flex flex-col"
+            exit={{ opacity: 0, scale: 0.98 }}
+            className="flex h-full max-h-[100dvh] w-full max-w-6xl flex-col overflow-hidden bg-gray-50 shadow-2xl sm:h-auto sm:max-h-[94vh] sm:rounded-2xl"
           >
-            <div className="bg-gradient-to-r from-green-500 to-green-600 px-6 py-5 flex items-center gap-3">
-              <FaCheckCircle className="w-7 h-7 text-white" />
-              <div className="flex-1">
-                <h2 className="text-xl font-bold text-white">
-                  Approve Registrasi Customer
+            <header
+              className="flex items-start gap-3 px-5 py-4 text-white sm:px-6"
+              style={{
+                background: `linear-gradient(135deg, ${MAROON}, #991b1b)`,
+              }}
+            >
+              <FaCheckCircle className="mt-1 h-6 w-6 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <h2
+                  id="approve-registration-title"
+                  className="text-lg font-bold sm:text-xl"
+                >
+                  Approve Customer
                 </h2>
-                <p className="text-sm text-green-100 mt-0.5">
-                  Step {step}: {step === 1 && "National Brand"}
-                  {step === 2 && "Group Parent"}
-                  {step === 3 && "Group Customer"}
-                  {step === 4 && "Branch Customer"}
-                  {step === 5 && "Finalize Approve"}
+                <p className="truncate text-sm text-rose-100">
+                  {registration.company.name} •{" "}
+                  {registration.company.branch_name}
                 </p>
               </div>
-            </div>
+              <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold capitalize">
+                {registration.status}
+              </span>
+              <button
+                type="button"
+                aria-label="Tutup"
+                disabled={isSubmitting}
+                onClick={() => setShowCloseConfirm(true)}
+                className="rounded-lg p-2 hover:bg-white/10 disabled:opacity-40"
+              >
+                <FaTimes />
+              </button>
+            </header>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {demoMode && (
-                <div
-                  data-tour="approve-registration-demo-banner"
-                  className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
-                >
-                  Mode tour aktif. Semua data di dialog ini adalah dummy dan
-                  tidak akan mengubah data customer asli.
-                </div>
-              )}
-              <div className="bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl p-4">
-                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1">
-                  Registrasi Customer
-                </p>
-                <p className="text-lg font-bold text-blue-900">
-                  {registration.company.name}
-                </p>
-                <div className="flex items-center gap-4 mt-2 text-sm text-blue-700">
-                  <div className="flex items-center gap-1">
-                    <FaBuilding className="w-3.5 h-3.5" />
-                    <span>{registration.company.business_type}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <FaMapMarkerAlt className="w-3.5 h-3.5" />
-                    <span>{registration.company.branch_name}</span>
-                  </div>
-                </div>
-              </div>
-
-              {isPreparing && (
-                <div className="text-sm text-gray-600">
-                  Menyiapkan data approval...
-                </div>
-              )}
-
-              {/* ===================== STEP 1: NATIONAL BRAND ===================== */}
-              {!isPreparing && step === 1 && (
-                <section
-                  data-tour="approve-registration-step-1"
-                  className="grid grid-cols-1 md:grid-cols-12 gap-4"
-                >
-                  <aside className="md:col-span-4 rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
-                    <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">
-                      Registration Details
-                    </p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {registration.company.name}
-                    </p>
-                    <div className="text-sm text-gray-700 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <FaBuilding className="text-gray-700" />
-                        <div className="flex flex-col items-start">
-                          <div className="text-xs font-semibold text-gray-500">
-                            Business Type
-                          </div>
-                          <div className="font-medium text-black">
-                            {registration.company.business_type}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <FaMapMarkerAlt className="text-gray-700" />
-                        <div className="flex flex-col items-start">
-                          <div className="text-xs font-semibold text-gray-500">
-                            Location
-                          </div>
-                          <div className="font-medium text-black">
-                            {registration.company.branch_name}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <FaUser className="text-gray-700" />
-                        <div className="flex flex-col items-start">
-                          <div className="text-xs font-semibold text-gray-500">
-                            Contact Person
-                          </div>
-                          <div className="flex flex-col font-medium text-black">
-                            {registration.user.full_name}
-                            <span className="text-blue-600">
-                              {registration.user.phone}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+            <div className="flex-1 overflow-y-auto">
+              <div className="grid gap-5 p-4 pb-28 lg:grid-cols-[minmax(0,1fr)_320px] lg:p-6 lg:pb-8">
+                <main className="space-y-3">
+                  {demoMode && (
+                    <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                      Mode demo aktif—tidak ada request POST/PUT aktual.
                     </div>
-                    {renderProcessHistory({
-                      showNb: true,
-                      showGp: false,
-                      showGc: false,
-                      showBc: false,
-                    })}
-                  </aside>
-                  <div className="md:col-span-8 rounded-xl border border-gray-200 bg-white p-4 space-y-4">
-                    <h3 className="text-base font-bold text-gray-900">
-                      National Brand (Optional)
-                    </h3>
-                    <p className="text-sm text-gray-600">
-                      Step ini opsional. Anda bisa lanjut tanpa membuat National
-                      Brand.
-                    </p>
+                  )}
+                  <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+                    <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-700">
+                      <span className="flex items-center gap-2">
+                        <FaBuilding className="text-rose-800" />
+                        {registration.company.business_type}
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <FaMapMarkerAlt className="text-rose-800" />
+                        {registration.address.city_name}
+                      </span>
+                      <span className="font-mono text-xs text-gray-500">
+                        {registration.registration_number ||
+                          `ID ${registration.id}`}
+                      </span>
+                    </div>
+                  </div>
+
+                  {isPreparing ? (
+                    <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+                      Menyiapkan data approval...
+                    </div>
+                  ) : (
                     <>
-                        <div className="space-y-3">
-                          <div className="relative">
-                            <FaSearch className="absolute left-3 top-3.5 text-gray-400 text-sm" />
-                            <input
-                              value={nbSearch}
-                              onChange={(e) => setNbSearch(e.target.value)}
-                              className="w-full pl-9 pr-3 py-2.5 border border-gray-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-                              placeholder="Cari National Brand (nama / kode)..."
-                            />
-                          </div>
-                          <div className="rounded-xl border border-gray-200 overflow-hidden">
-                            <div className="px-3 py-2 text-xs font-bold text-gray-500 bg-gray-50 border-b">
-                              {nbSearch.trim()
-                                ? "HASIL PENCARIAN NATIONAL BRAND"
-                                : "DAFTAR NATIONAL BRAND"}
-                            </div>
-                            {filteredNationalBrands.length > 0 ? (
-                              <div className="max-h-56 overflow-y-auto divide-y divide-gray-100">
-                                {filteredNationalBrands.map((nb) => (
-                                  <label
-                                    key={nb.id}
-                                    className="flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 cursor-pointer"
-                                  >
-                                    <span className="text-sm text-gray-800">
-                                      {nb.nb_name || "-"}{" "}
-                                      <span className="text-gray-500">
-                                        (NBID: {nb.name || `NB${nb.id}`})
-                                      </span>
-                                    </span>
-                                    <input
-                                      type="radio"
-                                      name="select-nb"
-                                      checked={
-                                        Number(selectedNbid) === Number(nb.id)
-                                      }
-                                      onClick={(e) => {
-                                        if (
-                                          Number(selectedNbid) === Number(nb.id)
-                                        ) {
-                                          e.preventDefault();
-                                          setSelectedNbid(null);
-                                        }
-                                      }}
-                                      onChange={() => {
-                                        setSelectedNbid(nb.id);
-                                        setCreatedNbid(null);
-                                        setCreatedNb(null);
-                                        setNbCreatedViaCreateFlow(false);
-                                        setCreateNationalBrand(false);
-                                      }}
-                                    />
-                                  </label>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="px-3 py-3 text-xs text-gray-500">
-                                National Brand tidak ditemukan.
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={createNationalBrand}
-                              onChange={(e) => {
-                                setCreateNationalBrand(e.target.checked);
-                                if (e.target.checked) {
-                                  setSelectedNbid(null);
-                                  setCreatedNbid(null);
-                                  setCreatedNb(null);
-                                  setNbCreatedViaCreateFlow(false);
-                                  if (!nbName.trim() && nbSearch.trim()) {
-                                    setNbName(normalizeEntityName(nbSearch));
-                                  }
-                                } else {
-                                  setNbCreatedViaCreateFlow(false);
-                                }
-                              }}
-                            />
-                            <span className="text-sm">
-                              Buat National Brand baru
-                            </span>
-                          </label>
-                          {!createNationalBrand && selectedNbid && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedNbid(null);
-                                setCreatedNbid(null);
-                                setCreatedNb(null);
-                                setNbCreatedViaCreateFlow(false);
-                              }}
-                              className="text-xs font-medium text-gray-600 hover:text-red-600 hover:underline"
-                            >
-                              Hapus pilihan NB
-                            </button>
-                          )}
-                        </div>
-                        {createNationalBrand && (
+                      <section
+                        className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm"
+                        aria-labelledby="section-nb"
+                      >
+                        <button
+                          type="button"
+                          aria-expanded={expandedSections.nb}
+                          onClick={() => toggleSection("nb")}
+                          className="flex w-full items-center justify-between gap-4 text-left"
+                        >
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">
-                              National Brand Name{" "}
-                              <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              value={nbName}
-                              onChange={(e) =>
-                                setNbName(toUpperInput(e.target.value))
-                              }
-                              onBlur={() =>
-                                setNbName((prev) => normalizeEntityName(prev))
-                              }
-                              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl"
-                              placeholder="Contoh: EKATUNGGAL"
-                            />
+                            <h3
+                              id="section-nb"
+                              className="font-bold text-gray-900"
+                            >
+                              National Brand{" "}
+                              <span className="font-normal text-gray-500">
+                                (opsional)
+                              </span>
+                            </h3>
+                            <p className="mt-0.5 text-xs text-gray-500">
+                              {draft.nb.mode === "none"
+                                ? "Tanpa National Brand"
+                                : draft.nb.name}
+                            </p>
                           </div>
-                        )}
-                        {!createNationalBrand && (
-                          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
-                            Anda bisa pilih NB existing dari list, atau klik{" "}
-                            <span className="font-semibold">Next</span> untuk
-                            lanjut tanpa NB.
-                          </div>
-                        )}
-                    </>
-                  </div>
-                </section>
-              )}
-
-              {/* ===================== STEP 2: GROUP PARENT ===================== */}
-              {!isPreparing && step === 2 && (
-                <section
-                  data-tour="approve-registration-step-2"
-                  className="grid grid-cols-1 md:grid-cols-12 gap-4"
-                >
-                  <aside className="md:col-span-4 rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
-                    <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">
-                      Registration Details
-                    </p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {registration.company.name}
-                    </p>
-                    <div className="text-sm text-gray-700 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <FaBuilding className="text-gray-700" />
-                        <div className="flex flex-col items-start">
-                          <div className="text-xs font-semibold text-gray-500">
-                            Business Type
-                          </div>
-                          <div className="font-medium text-black">
-                            {registration.company.business_type}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <FaMapMarkerAlt className="text-gray-700" />
-                        <div className="flex flex-col items-start">
-                          <div className="text-xs font-semibold text-gray-500">
-                            Location
-                          </div>
-                          <div className="font-medium text-black">
-                            {registration.company.branch_name}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <FaUser className="text-gray-700" />
-                        <div className="flex flex-col items-start">
-                          <div className="text-xs font-semibold text-gray-500">
-                            Contact Person
-                          </div>
-                          <div className="flex flex-col font-medium text-black">
-                            {registration.user.full_name}
-                            <span className="text-blue-600">
-                              {registration.user.phone}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </aside>
-
-                  <div className="md:col-span-8 rounded-xl border border-gray-200 bg-white p-4 space-y-4">
-                    <h3 className="text-base font-bold text-gray-900">
-                      Select Group Parent
-                    </h3>
-
-                    {selectedGpid ? (
-                      // GP already selected — show badge only
-                      renderSelectedGpBadge()
-                    ) : (
-                      <>
-                        {/* Idle: single search button */}
-
-                        {/* SEARCH mode — create option appears inline when no results */}
-                        {gpMode !== "create" && (
-                          <div className="space-y-3">
-                            {isGpLoading && (
-                              <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                                Memuat referensi Group Parent...
-                              </div>
-                            )}
-                            <div className="flex gap-2">
-                              <div className="relative flex-1">
-                                <FaSearch className="absolute left-3 top-3.5 text-gray-400 text-sm" />
+                          {expandedSections.nb ? (
+                            <FaChevronUp className="shrink-0 text-gray-400" />
+                          ) : (
+                            <FaChevronDown className="shrink-0 text-gray-400" />
+                          )}
+                        </button>
+                        {expandedSections.nb && (
+                          <>
+                            <div className="mt-2">
+                              {selectedCard("NB", draft.nb, () => {
+                                replaceDraft((current) => ({
+                                  ...current,
+                                  nb: { mode: "none" },
+                                  gp: null,
+                                  gc: null,
+                                  bc: {
+                                    mode: "saga_resolve",
+                                    branchId: registration.company.branch_id,
+                                  },
+                                }));
+                                setQueries((current) => ({
+                                  ...current,
+                                  nb: "",
+                                }));
+                              })}
+                            </div>
+                            <div className="mt-3 space-y-3">
+                              <div className="relative">
+                                <FaSearch className="absolute left-3 top-3.5 text-gray-400" />
+                                <label htmlFor="search-nb" className="sr-only">
+                                  Cari National Brand
+                                </label>
                                 <input
-                                  data-tour="approve-registration-gp-search-input"
-                                  autoFocus
-                                  value={gpSearch}
-                                  onChange={(e) => setGpSearch(e.target.value)}
-                                  className="w-full pl-9 pr-3 py-2.5 border border-gray-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-                                  placeholder="Ketik nama GP atau kode..."
+                                  id="search-nb"
+                                  value={queries.nb}
+                                  onChange={(event) =>
+                                    setQueries((current) => ({
+                                      ...current,
+                                      nb: event.target.value,
+                                    }))
+                                  }
+                                  placeholder="Cari nama atau kode National Brand..."
+                                  className="w-full rounded-xl border border-gray-300 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-rose-700 focus:ring-2 focus:ring-rose-200"
                                 />
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setGpMode("search");
-                                  setGpSearch("");
-                                }}
-                                className="px-4 py-2.5 rounded-xl border border-gray-300 text-gray-600 text-sm hover:bg-gray-100 transition-all"
-                              >
-                                Batal
-                              </button>
-                            </div>
-
-                            <div className="rounded-xl border border-gray-200 overflow-hidden">
-                              <div className="px-3 py-2 text-xs font-bold text-gray-500 bg-gray-50 border-b">
-                                {gpSearch.trim()
-                                  ? "HASIL PENCARIAN"
-                                  : "DAFTAR GROUP PARENT"}
-                              </div>
-                              {filteredGroupParents.length > 0 ? (
-                                <div className="max-h-56 overflow-y-auto divide-y divide-gray-100">
-                                  {filteredGroupParents.map((gp) => (
+                              <div className="max-h-40 overflow-y-auto rounded-xl border border-gray-200">
+                                {searchState(
+                                  "nb",
+                                  filteredNb.length,
+                                  () => void loadNationalBrands(),
+                                ) ||
+                                  filteredNb.map((row) => (
                                     <button
-                                      data-tour={`approve-registration-gp-result-${gp.id}`}
-                                      key={gp.id}
+                                      key={row.id}
                                       type="button"
-                                      className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 text-left transition-colors"
-                                      onClick={() => {
-                                        setSelectedGpid(gp.id);
-                                        setCreatedGpid(null);
-                                        setGpCreatedViaCreateFlow(false);
-                                        setSelectedGcid(null);
-                                        setCreatedGcid(null);
-                                        setCreatedGc(null);
-                                        setSelectedBcid(null);
-                                        setCreatedBcid(null);
-                                        setCreatedBc(null);
-                                        setGcMode("idle");
-                                        setBcMode("idle");
-                                        setGpMode("search");
-                                        setGpSearch("");
-                                      }}
+                                      onClick={() =>
+                                        selectNationalBrand({
+                                          mode: "existing",
+                                          id: row.id,
+                                          name:
+                                            row.nb_name ||
+                                            row.name ||
+                                            `NB${row.id}`,
+                                          code: row.name || undefined,
+                                        })
+                                      }
+                                      className="flex w-full items-center justify-between border-b border-gray-100 px-3 py-2 text-left last:border-0 hover:bg-rose-50"
                                     >
-                                      <span className="text-sm text-gray-800">
-                                        {gp.gp_name || "-"}{" "}
-                                        <span className="text-gray-500">
-                                          (GPID: {gp.name || `GP${gp.id}`})
-                                        </span>
-                                      </span>
-                                      <span className="text-xs text-blue-600 font-medium">
-                                        Pilih
-                                      </span>
-                                    </button>
-                                  ))}
-                                </div>
-                              ) : gpSearch.trim() ? (
-                                <div className="px-3 py-3 space-y-2.5">
-                                  <p className="text-xs text-gray-500">
-                                    GP tidak ditemukan untuk &quot;
-                                    <span className="font-medium">
-                                      {gpSearch}
-                                    </span>
-                                    &quot;
-                                  </p>
-                                  <button
-                                    data-tour="approve-registration-gp-create-trigger"
-                                    type="button"
-                                    onClick={() => {
-                                      setGpName(normalizeEntityName(gpSearch));
-                                      setSelectedGpid(null);
-                                      setCreatedGpid(null);
-                                      setGpCreatedViaCreateFlow(false);
-                                      setSelectedGcid(null);
-                                      setCreatedGcid(null);
-                                      setCreatedGc(null);
-                                      setSelectedBcid(null);
-                                      setCreatedBcid(null);
-                                      setCreatedBc(null);
-                                      setGcMode("idle");
-                                      setBcMode("idle");
-                                      setGpMode("create");
-                                    }}
-                                    className="w-full py-2 rounded-xl border-2 border-green-300 text-green-700 text-sm font-medium hover:border-green-500 hover:bg-green-50 transition-all flex items-center justify-center gap-2"
-                                  >
-                                    <FaPlusCircle className="w-4 h-4" />
-                                    Buat GP Baru
-                                  </button>
-                                </div>
-                              ) : (
-                                <p className="px-3 py-3 text-xs text-gray-400">
-                                  Menampilkan 20 data GP terbaru.
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* CREATE mode */}
-                        {gpMode === "create" && (
-                          <div
-                            data-tour="approve-registration-gp-create-panel"
-                            className="space-y-3 border-2 border-green-200 rounded-xl p-4 bg-green-50"
-                          >
-                            <div className="flex items-center justify-between mb-1">
-                              <p className="text-sm font-bold text-green-800">
-                                Buat Group Parent Baru
-                              </p>
-                              <button
-                                data-tour="approve-registration-gp-create-cancel"
-                                type="button"
-                                onClick={() => setGpMode("search")}
-                                className="text-xs text-gray-500 hover:underline"
-                              >
-                                Batal
-                              </button>
-                            </div>
-                            <div>
-                              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                Group Parent Name{" "}
-                                <span className="text-red-500">*</span>
-                              </label>
-                              <input
-                                data-tour="approve-registration-gp-create-input"
-                                value={gpName}
-                                onChange={(e) =>
-                                  setGpName(toUpperInput(e.target.value))
-                                }
-                                onBlur={() =>
-                                  setGpName((prev) => normalizeEntityName(prev))
-                                }
-                                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl bg-white"
-                                placeholder="Contoh: EKATUNGGAL GP"
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </section>
-              )}
-
-              {/* ===================== STEP 3: GROUP CUSTOMER ===================== */}
-              {!isPreparing && step === 3 && (
-                <section
-                  data-tour="approve-registration-step-3"
-                  className="grid grid-cols-1 md:grid-cols-12 gap-4"
-                >
-                  <aside className="md:col-span-4 space-y-3">
-                    {renderProcessHistory({
-                      showNb: true,
-                      showGp: true,
-                      showGc: false,
-                      showBc: false,
-                    })}
-                  </aside>
-
-                  <div className="md:col-span-8 rounded-xl border border-gray-200 bg-white p-4 space-y-4">
-                    <h3 className="text-base font-bold text-gray-900">
-                      Select Group Customer
-                    </h3>
-
-                    {selectedGcid ? (
-                      <>
-                        {renderSelectedGcBadge()}
-                        <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 text-sm space-y-1">
-                          <p>
-                            <span className="font-semibold">Owner:</span>{" "}
-                            {registration.user.full_name}
-                          </p>
-                          <p>
-                            <span className="font-semibold">Phone:</span>{" "}
-                            {registration.user.phone}
-                          </p>
-                          <p>
-                            <span className="font-semibold">Email:</span>{" "}
-                            {registration.user.email}
-                          </p>
-                          <p>
-                            <span className="font-semibold">Company:</span>{" "}
-                            {registration.company.name}
-                          </p>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        {!canSearchExistingGc && (
-                          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                            Karena Group Parent akan dibuat baru, Group Customer
-                            harus dibuat baru (tidak bisa pilih existing).
-                          </div>
-                        )}
-
-                        {/* Idle: single search button */}
-                        {gcMode === "idle" && canSearchExistingGc && (
-                          <button
-                            type="button"
-                            onClick={() => setGcMode("search")}
-                            className="w-full py-2.5 rounded-xl border-2 border-gray-300 text-gray-700 text-sm font-medium hover:border-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-2"
-                          >
-                            <FaSearch className="w-4 h-4" />
-                            Cari Group Customer yang Ada
-                          </button>
-                        )}
-
-                        {gcMode === "idle" && !canSearchExistingGc && (
-                          <button
-                            type="button"
-                            onClick={() => setGcMode("create")}
-                            className="w-full py-2.5 rounded-xl border-2 border-green-300 text-green-700 text-sm font-medium hover:border-green-500 hover:bg-green-50 transition-all flex items-center justify-center gap-2"
-                          >
-                            <FaPlusCircle className="w-4 h-4" />
-                            Buat Group Customer Baru
-                          </button>
-                        )}
-
-                        {/* SEARCH mode */}
-                        {gcMode === "search" && canSearchExistingGc && (
-                          <div className="space-y-3">
-                            {isGcLoading && (
-                              <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                                Memuat referensi Group Customer...
-                              </div>
-                            )}
-                            <div className="flex gap-2">
-                              <div className="relative flex-1">
-                                <FaSearch className="absolute left-3 top-3.5 text-gray-400 text-sm" />
-                                <input
-                                  autoFocus
-                                  value={gcSearch}
-                                  onChange={(e) => setGcSearch(e.target.value)}
-                                  className="w-full pl-9 pr-3 py-2.5 border border-gray-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-                                  placeholder="Ketik nama GC atau kode..."
-                                />
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setGcMode("idle");
-                                  setGcSearch("");
-                                }}
-                                className="px-4 py-2.5 rounded-xl border border-gray-300 text-gray-600 text-sm hover:bg-gray-100 transition-all"
-                              >
-                                Batal
-                              </button>
-                            </div>
-
-                            {!gcSearch.trim() && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setGcName(
-                                    normalizeEntityName(
-                                      registration.company.name || "",
-                                    ),
-                                  );
-                                  setSelectedGcid(null);
-                                  setCreatedGcid(null);
-                                  setSelectedBcid(null);
-                                  setCreatedBcid(null);
-                                  setBcMode("idle");
-                                  setGcMode("create");
-                                }}
-                                className="w-full py-2.5 rounded-xl border-2 border-green-300 text-green-700 text-sm font-medium hover:border-green-500 hover:bg-green-50 transition-all flex items-center justify-center gap-2"
-                              >
-                                <FaPlusCircle className="w-4 h-4" />
-                                Buat GC Baru
-                              </button>
-                            )}
-
-                            <div className="rounded-xl border border-gray-200 overflow-hidden">
-                              <div className="px-3 py-2 text-xs font-bold text-gray-500 bg-gray-50 border-b">
-                                {gcSearch.trim()
-                                  ? "HASIL PENCARIAN"
-                                  : "DAFTAR GROUP CUSTOMER"}
-                              </div>
-                              {filteredGroupCustomers.length > 0 ? (
-                                <div className="max-h-56 overflow-y-auto divide-y divide-gray-100">
-                                  {filteredGroupCustomers.map((gc) => (
-                                    <button
-                                      key={gc.id}
-                                      type="button"
-                                      className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 text-left transition-colors"
-                                      onClick={() => {
-                                        setSelectedGcid(gc.id);
-                                        setCreatedGcid(null);
-                                        setSelectedBcid(null);
-                                        setCreatedBcid(null);
-                                        setCreatedBc(null);
-                                        setBcMode("idle");
-                                        setGcMode("idle");
-                                        setGcSearch("");
-                                      }}
-                                    >
-                                      <span className="text-sm text-gray-800">
-                                        {gc.gc_name || "-"}{" "}
-                                        <span className="text-gray-500">
-                                          (GCID: {gc.name || `GC${gc.id}`})
-                                        </span>
-                                      </span>
-                                      <span className="text-xs text-blue-600 font-medium">
-                                        Pilih
-                                      </span>
-                                    </button>
-                                  ))}
-                                </div>
-                              ) : gcSearch.trim() ? (
-                                <div className="px-3 py-3 space-y-2.5">
-                                  <p className="text-xs text-gray-500">
-                                    GC tidak ditemukan untuk &quot;
-                                    <span className="font-medium">
-                                      {gcSearch}
-                                    </span>
-                                    &quot;
-                                  </p>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setGcName(
-                                        normalizeEntityName(
-                                          registration.company.name || "",
-                                        ),
-                                      );
-                                      setSelectedGcid(null);
-                                      setCreatedGcid(null);
-                                      setSelectedBcid(null);
-                                      setCreatedBcid(null);
-                                      setBcMode("idle");
-                                      setGcMode("create");
-                                    }}
-                                    className="w-full py-2 rounded-xl border-2 border-green-300 text-green-700 text-sm font-medium hover:border-green-500 hover:bg-green-50 transition-all flex items-center justify-center gap-2"
-                                  >
-                                    <FaPlusCircle className="w-4 h-4" />
-                                    Buat GC Baru
-                                  </button>
-                                </div>
-                              ) : (
-                                <p className="px-3 py-3 text-xs text-gray-400">
-                                  Menampilkan 20 data GC terbaru.
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* CREATE mode */}
-                        {gcMode === "create" && (
-                          <div className="space-y-3 border-2 border-green-200 rounded-xl p-4 bg-green-50">
-                            <div className="flex items-center justify-between mb-1">
-                              <p className="text-sm font-bold text-green-800">
-                                Buat Group Customer Baru
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => setGcMode("idle")}
-                                className="text-xs text-gray-500 hover:underline"
-                              >
-                                Batal
-                              </button>
-                            </div>
-                            <div>
-                              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                GC Name (otomatis dari company){" "}
-                                <span className="text-red-500">*</span>
-                              </label>
-                              <input
-                                value={gcName}
-                                readOnly
-                                onBlur={() =>
-                                  setGcName((prev) => normalizeEntityName(prev))
-                                }
-                                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl bg-gray-100 text-gray-800"
-                              />
-                            </div>
-                            <div className="bg-white rounded-xl border border-gray-200 p-3 text-sm space-y-1">
-                              <p>
-                                <span className="font-semibold">Owner:</span>{" "}
-                                {registration.user.full_name}
-                              </p>
-                              <p>
-                                <span className="font-semibold">Phone:</span>{" "}
-                                {registration.user.phone}
-                              </p>
-                              <p>
-                                <span className="font-semibold">Email:</span>{" "}
-                                {registration.user.email}
-                              </p>
-                              <p>
-                                <span className="font-semibold">Company:</span>{" "}
-                                {registration.company.name}
-                              </p>
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </section>
-              )}
-
-              {/* ===================== STEP 4: BRANCH CUSTOMER ===================== */}
-              {!isPreparing && step === 4 && (
-                <section
-                  data-tour="approve-registration-step-4"
-                  className="grid grid-cols-1 md:grid-cols-12 gap-4"
-                >
-                  <aside className="md:col-span-4 space-y-3">
-                    {renderProcessHistory({
-                      showNb: true,
-                      showGp: true,
-                      showGc: true,
-                      showBc: false,
-                    })}
-                  </aside>
-
-                  <div className="md:col-span-8 rounded-xl border border-gray-200 bg-white p-4 space-y-4">
-                    <h3 className="text-base font-bold text-gray-900">
-                      Select Branch Customer
-                    </h3>
-
-                    {existingBcid ? (
-                      <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 text-sm text-green-900">
-                        <p className="font-semibold">
-                          Branch Customer sudah ada.
-                        </p>
-                        <p className="mt-1">BC ID: {existingBcid}</p>
-                      </div>
-                    ) : selectedBcid ? (
-                      renderSelectedBcBadge()
-                    ) : (
-                      <>
-                        {!canSearchExistingBc && (
-                          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                            Karena Group Customer akan dibuat baru, Branch
-                            Customer harus dibuat baru (tidak bisa pilih
-                            existing).
-                          </div>
-                        )}
-                        {/* Idle: single search button */}
-                        {bcMode === "idle" && canSearchExistingBc && (
-                          <button
-                            type="button"
-                            onClick={() => setBcMode("search")}
-                            className="w-full py-2.5 rounded-xl border-2 border-gray-300 text-gray-700 text-sm font-medium hover:border-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-2"
-                          >
-                            <FaSearch className="w-4 h-4" />
-                            Cari Branch Customer yang Ada
-                          </button>
-                        )}
-
-                        {bcMode === "idle" && !canSearchExistingBc && (
-                          <button
-                            type="button"
-                            onClick={() => setBcMode("create")}
-                            className="w-full py-2.5 rounded-xl border-2 border-green-300 text-green-700 text-sm font-medium hover:border-green-500 hover:bg-green-50 transition-all flex items-center justify-center gap-2"
-                          >
-                            <FaPlusCircle className="w-4 h-4" />
-                            Buat Branch Customer Baru
-                          </button>
-                        )}
-
-                        {/* SEARCH mode */}
-                        {bcMode === "search" && canSearchExistingBc && (
-                          <div className="space-y-3">
-                            {isBcLoading && (
-                              <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                                Memuat referensi Branch Customer...
-                              </div>
-                            )}
-                            <div className="flex gap-2">
-                              <div className="relative flex-1">
-                                <FaSearch className="absolute left-3 top-3.5 text-gray-400 text-sm" />
-                                <input
-                                  autoFocus
-                                  value={bcSearch}
-                                  onChange={(e) => setBcSearch(e.target.value)}
-                                  className="w-full pl-9 pr-3 py-2.5 border border-gray-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-                                  placeholder="Ketik nama BC atau kode..."
-                                />
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setBcMode("idle");
-                                  setBcSearch("");
-                                }}
-                                className="px-4 py-2.5 rounded-xl border border-gray-300 text-gray-600 text-sm hover:bg-gray-100 transition-all"
-                              >
-                                Batal
-                              </button>
-                            </div>
-
-                            <div className="rounded-xl border border-gray-200 overflow-hidden">
-                              <div className="px-3 py-2 text-xs font-bold text-gray-500 bg-gray-50 border-b">
-                                {bcSearch.trim()
-                                  ? "HASIL PENCARIAN"
-                                  : "DAFTAR BRANCH CUSTOMER"}
-                              </div>
-                              {filteredBranchCustomers.length > 0 ? (
-                                <div className="max-h-56 overflow-y-auto divide-y divide-gray-100">
-                                  {filteredBranchCustomers.map((bc) => (
-                                    <button
-                                      key={bc.id}
-                                      type="button"
-                                      className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 text-left transition-colors"
-                                      onClick={() => {
-                                        setSelectedBcid(bc.id);
-                                        setCreatedBcid(null);
-                                        setBcMode("idle");
-                                        setBcSearch("");
-                                      }}
-                                    >
-                                      <span className="flex flex-col">
-                                        <span className="text-sm text-gray-800">
-                                          {getBcPreviewLabel(bc)}
+                                      <span>
+                                        <span className="block text-sm font-medium text-gray-900">
+                                          {row.nb_name || "-"}
                                         </span>
                                         <span className="text-xs text-gray-500">
-                                          PIC: {bc.branch_owner || "-"} (
-                                          {bc.branch_owner_phone || "-"})
+                                          {row.name || `ID ${row.id}`}
                                         </span>
                                       </span>
-                                      <span className="text-xs text-blue-600 font-medium">
-                                        Pilih
-                                      </span>
+                                      <FaCheck
+                                        className={
+                                          draft.nb.mode === "existing" &&
+                                          draft.nb.id === row.id
+                                            ? "text-rose-800"
+                                            : "text-transparent"
+                                        }
+                                      />
                                     </button>
                                   ))}
-                                </div>
-                              ) : bcSearch.trim() ? (
-                                <div className="px-3 py-3 space-y-2.5">
-                                  <p className="text-xs text-gray-500">
-                                    BC tidak ditemukan untuk &quot;
-                                    <span className="font-medium">
-                                      {bcSearch}
-                                    </span>
-                                    &quot;
-                                  </p>
-                                  <button
-                                    type="button"
-                                    onClick={() => setBcMode("create")}
-                                    className="w-full py-2 rounded-xl border-2 border-green-300 text-green-700 text-sm font-medium hover:border-green-500 hover:bg-green-50 transition-all flex items-center justify-center gap-2"
-                                  >
-                                    <FaPlusCircle className="w-4 h-4" />
-                                    Buat BC Baru
-                                  </button>
-                                </div>
-                              ) : (
-                                <p className="px-3 py-3 text-xs text-gray-400">
-                                  Menampilkan 20 data BC terbaru.
-                                </p>
-                              )}
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  disabled={
+                                    Boolean(loadErrors.nb) || isDraftLocked
+                                  }
+                                  onClick={() => openCreate("nb")}
+                                  className="rounded-lg border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-800 hover:bg-rose-50 disabled:opacity-50"
+                                >
+                                  <FaPlus className="mr-2 inline" />
+                                  Buat National Brand Baru
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isDraftLocked}
+                                  onClick={() =>
+                                    selectNationalBrand({ mode: "none" })
+                                  }
+                                  className="rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+                                >
+                                  Tanpa National Brand
+                                </button>
+                              </div>
+                              {createPanel("nb", "National Brand")}
                             </div>
-                          </div>
+                          </>
                         )}
+                      </section>
 
-                        {/* CREATE mode */}
-                        {bcMode === "create" && (
-                          <div className="space-y-3 border-2 border-green-200 rounded-xl p-4 bg-green-50">
-                            <div className="flex items-center justify-between mb-1">
-                              <p className="text-sm font-bold text-green-800">
-                                Buat Branch Customer Baru
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => setBcMode("idle")}
-                                className="text-xs text-gray-500 hover:underline"
-                              >
-                                Batal
-                              </button>
-                            </div>
-                            <div className="bg-white rounded-xl border border-gray-200 p-3 text-sm space-y-1">
-                              <p className="font-semibold text-gray-700 mb-1">
-                                Data yang akan dibuat:
-                              </p>
-                              <p>
-                                <span className="font-semibold">Preview:</span>{" "}
-                                {previewBcName}
-                              </p>
-                              <p>
-                                <span className="font-semibold">Branch:</span>{" "}
-                                {registration.company.branch_id}
-                              </p>
-                              <p>
-                                <span className="font-semibold">
-                                  Product Need:
-                                </span>{" "}
-                                {registration.company.product_need || "-"}
-                              </p>
-                              <p>
-                                <span className="font-semibold">
-                                  Branch Owner:
-                                </span>{" "}
-                                {registration.branch_owner?.full_name ||
-                                  registration.user.full_name}
-                              </p>
-                              <p>
-                                <span className="font-semibold">
-                                  No. Branch Owner:
-                                </span>{" "}
-                                {registration.branch_owner?.phone ||
-                                  registration.user.phone}
-                              </p>
-                              <p>
-                                <span className="font-semibold">
-                                  Shipping Rows:
-                                </span>{" "}
-                                {effectiveShippingAddresses.length}
-                              </p>
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </section>
-              )}
-
-              {!isPreparing && step === 5 && (
-                <section
-                  data-tour="approve-registration-step-5"
-                  className="space-y-4"
-                >
-                  <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-                    <p className="text-sm font-semibold text-green-800">
-                      Semua resource sudah diproses.
-                    </p>
-                    <p className="text-xs text-green-700 mt-1">
-                      Klik <span className="font-semibold">Commit Approve</span>{" "}
-                      untuk update status customer register menjadi Syncing.
-                    </p>
-                  </div>
-                  {renderProcessHistory({
-                    showNb: true,
-                    showGp: true,
-                    showGc: true,
-                    showBc: true,
-                  })}
-                  <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 text-sm space-y-1">
-                    {nbCreatedViaCreateFlow && (
-                      <p>
-                        <span className="font-semibold">NB Manual:</span>{" "}
-                        {normalizeEntityName(nbName)}
-                      </p>
-                    )}
-                    {gpCreatedViaCreateFlow && (
-                      <p>
-                        <span className="font-semibold">GP Manual:</span>{" "}
-                        {normalizeEntityName(gpName)}
-                      </p>
-                    )}
-                    {createdGcid && (
-                      <p>
-                        <span className="font-semibold">GC Manual:</span>{" "}
-                        {normalizeEntityName(gcName)}
-                      </p>
-                    )}
-                    {(createdNbid || createdGpid || createdBcid) && (
-                      <p className="text-xs text-gray-500 pt-1">
-                        Ref IDs:
-                        {createdNbid ? ` NB:${createdNbid}` : ""}
-                        {createdGpid ? ` GP:${createdGpid}` : ""}
-                        {createdBcid ? ` BC:${createdBcid}` : ""}
-                      </p>
-                    )}
-                  </div>
-                </section>
-              )}
-
-              {error && (
-                <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2">
-                  <FaExclamationTriangle className="w-4 h-4 text-red-600 flex-shrink-0" />
-                  <p className="text-sm text-red-700 font-medium">{error}</p>
-                </div>
-              )}
-
-              {operationLogs.length > 0 && (
-                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                  <p className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                    <FaListUl className="w-4 h-4" />
-                    Operation Log
-                  </p>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {operationLogs.map((log, idx) => (
-                      <div key={`${log.stage}-${idx}`} className="text-xs">
-                        <span
-                          className={`font-semibold ${
-                            log.status === "failed"
-                              ? "text-red-600"
-                              : log.status === "success"
-                                ? "text-green-600"
-                                : "text-blue-600"
-                          }`}
+                      <section
+                        className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm"
+                        aria-labelledby="section-gp"
+                      >
+                        <button
+                          type="button"
+                          aria-expanded={expandedSections.gp}
+                          onClick={() => toggleSection("gp")}
+                          className="flex w-full items-center justify-between gap-4 text-left"
                         >
-                          [{log.status.toUpperCase()}]
-                        </span>{" "}
-                        <span className="text-gray-700">{log.stage}</span>{" "}
-                        <span className="text-gray-500">{log.message}</span>
+                          <div>
+                            <h3
+                              id="section-gp"
+                              className="font-bold text-gray-900"
+                            >
+                              Group Parent{" "}
+                              <span className="text-red-600">*</span>
+                            </h3>
+                            <p className="mt-0.5 text-xs text-gray-500">
+                              {draft.gp?.name ||
+                                "Belum dipilih — klik untuk memilih"}
+                            </p>
+                          </div>
+                          {expandedSections.gp ? (
+                            <FaChevronUp className="shrink-0 text-gray-400" />
+                          ) : (
+                            <FaChevronDown className="shrink-0 text-gray-400" />
+                          )}
+                        </button>
+                        {expandedSections.gp && (
+                          <>
+                            <div className="mt-2">
+                              {selectedCard("GP", draft.gp, () => {
+                                replaceDraft((current) => ({
+                                  ...current,
+                                  gp: null,
+                                  gc: null,
+                                  bc: {
+                                    mode: "saga_resolve",
+                                    branchId: registration.company.branch_id,
+                                  },
+                                }));
+                                setQueries((current) => ({
+                                  ...current,
+                                  gp: "",
+                                }));
+                              })}
+                            </div>
+                            {draft.nb.mode === "create" ? (
+                              <div className="mt-3 rounded-xl bg-gray-100 p-3 text-sm text-gray-600">
+                                NB masih berupa draft baru, sehingga GP existing
+                                tidak dapat memiliki relasi ke NB ini. Buat GP
+                                baru.
+                              </div>
+                            ) : (
+                              <div className="mt-3 space-y-3">
+                                <div className="relative">
+                                  <FaSearch className="absolute left-3 top-3.5 text-gray-400" />
+                                  <label
+                                    htmlFor="search-gp"
+                                    className="sr-only"
+                                  >
+                                    Cari Group Parent
+                                  </label>
+                                  <input
+                                    id="search-gp"
+                                    value={queries.gp}
+                                    onChange={(event) =>
+                                      setQueries((current) => ({
+                                        ...current,
+                                        gp: event.target.value,
+                                      }))
+                                    }
+                                    placeholder="Cari nama atau kode Group Parent..."
+                                    className="w-full rounded-xl border border-gray-300 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-rose-700 focus:ring-2 focus:ring-rose-200"
+                                  />
+                                </div>
+                                <div className="max-h-40 overflow-y-auto rounded-xl border border-gray-200">
+                                  {searchState(
+                                    "gp",
+                                    filteredGp.length,
+                                    () => void loadGroupParents(),
+                                  ) ||
+                                    filteredGp.map((row) => (
+                                      <button
+                                        key={row.id}
+                                        type="button"
+                                        onClick={() =>
+                                          selectGroupParent({
+                                            mode: "existing",
+                                            id: row.id,
+                                            name:
+                                              row.gp_name ||
+                                              row.name ||
+                                              `GP${row.id}`,
+                                            code: row.name || undefined,
+                                          })
+                                        }
+                                        className="flex w-full items-center justify-between border-b border-gray-100 px-3 py-2 text-left last:border-0 hover:bg-rose-50"
+                                      >
+                                        <span>
+                                          <span className="block text-sm font-medium text-gray-900">
+                                            {row.gp_name || "-"}
+                                          </span>
+                                          <span className="text-xs text-gray-500">
+                                            {row.name || `ID ${row.id}`} • NB ID{" "}
+                                            {row.nbid || "-"}
+                                          </span>
+                                        </span>
+                                      </button>
+                                    ))}
+                                </div>
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              disabled={Boolean(loadErrors.gp) || isDraftLocked}
+                              onClick={() => openCreate("gp")}
+                              className="mt-3 rounded-lg border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-800 hover:bg-rose-50 disabled:opacity-50"
+                            >
+                              <FaPlus className="mr-2 inline" />
+                              Buat Group Parent Baru
+                            </button>
+                            <div className="mt-3">
+                              {createPanel("gp", "Group Parent")}
+                            </div>
+                          </>
+                        )}
+                      </section>
+
+                      <section
+                        className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm"
+                        aria-labelledby="section-gc"
+                      >
+                        <button
+                          type="button"
+                          aria-expanded={expandedSections.gc}
+                          onClick={() => toggleSection("gc")}
+                          className="flex w-full items-center justify-between gap-4 text-left"
+                        >
+                          <div>
+                            <h3
+                              id="section-gc"
+                              className="font-bold text-gray-900"
+                            >
+                              Group Customer{" "}
+                              <span className="text-red-600">*</span>
+                            </h3>
+                            <p className="mt-0.5 text-xs text-gray-500">
+                              {draft.gc?.name ||
+                                "Belum dipilih — klik untuk memilih"}
+                            </p>
+                          </div>
+                          {expandedSections.gc ? (
+                            <FaChevronUp className="shrink-0 text-gray-400" />
+                          ) : (
+                            <FaChevronDown className="shrink-0 text-gray-400" />
+                          )}
+                        </button>
+                        {expandedSections.gc && (
+                          <>
+                            <div className="mt-2">
+                              {selectedCard("GC", draft.gc, () => {
+                                replaceDraft((current) => ({
+                                  ...current,
+                                  gc: null,
+                                  bc: {
+                                    mode: "saga_resolve",
+                                    branchId: registration.company.branch_id,
+                                  },
+                                }));
+                                setQueries((current) => ({
+                                  ...current,
+                                  gc: "",
+                                }));
+                              })}
+                            </div>
+                            {!draft.gp ? (
+                              <div className="mt-3 rounded-xl bg-gray-100 p-3 text-sm text-gray-600">
+                                Pilih atau buat Group Parent terlebih dahulu.
+                              </div>
+                            ) : draft.gp.mode === "create" ? (
+                              <div className="mt-3 rounded-xl bg-gray-100 p-3 text-sm text-gray-600">
+                                GP masih berupa draft baru. Group Customer harus
+                                dibuat baru.
+                              </div>
+                            ) : (
+                              <div className="mt-3 space-y-3">
+                                <div className="relative">
+                                  <FaSearch className="absolute left-3 top-3.5 text-gray-400" />
+                                  <label
+                                    htmlFor="search-gc"
+                                    className="sr-only"
+                                  >
+                                    Cari Group Customer
+                                  </label>
+                                  <input
+                                    id="search-gc"
+                                    value={queries.gc}
+                                    onChange={(event) =>
+                                      setQueries((current) => ({
+                                        ...current,
+                                        gc: event.target.value,
+                                      }))
+                                    }
+                                    placeholder="Cari nama atau kode Group Customer..."
+                                    className="w-full rounded-xl border border-gray-300 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-rose-700 focus:ring-2 focus:ring-rose-200"
+                                  />
+                                </div>
+                                <div className="max-h-40 overflow-y-auto rounded-xl border border-gray-200">
+                                  {searchState(
+                                    "gc",
+                                    filteredGc.length,
+                                    () =>
+                                      draft.gp?.mode === "existing" &&
+                                      void loadGroupCustomers(draft.gp.id),
+                                  ) ||
+                                    filteredGc.map((row) => (
+                                      <button
+                                        key={row.id}
+                                        type="button"
+                                        onClick={() =>
+                                          selectGroupCustomer({
+                                            mode: "existing",
+                                            id: row.id,
+                                            name:
+                                              row.gc_name ||
+                                              row.name ||
+                                              `GC${row.id}`,
+                                            code: row.name || undefined,
+                                          })
+                                        }
+                                        className="flex w-full items-center justify-between border-b border-gray-100 px-3 py-2 text-left last:border-0 hover:bg-rose-50"
+                                      >
+                                        <span>
+                                          <span className="block text-sm font-medium text-gray-900">
+                                            {row.gc_name || "-"}
+                                          </span>
+                                          <span className="text-xs text-gray-500">
+                                            {row.name || `ID ${row.id}`} • GP ID{" "}
+                                            {row.gpid}
+                                          </span>
+                                        </span>
+                                      </button>
+                                    ))}
+                                </div>
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              disabled={
+                                !draft.gp ||
+                                Boolean(loadErrors.gc) ||
+                                isDraftLocked
+                              }
+                              onClick={() => openCreate("gc")}
+                              className="mt-3 rounded-lg border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-800 hover:bg-rose-50 disabled:opacity-50"
+                            >
+                              <FaPlus className="mr-2 inline" />
+                              Buat Group Customer Baru
+                            </button>
+                            <div className="mt-3">
+                              {createPanel("gc", "Group Customer")}
+                            </div>
+                          </>
+                        )}
+                      </section>
+
+                      <section
+                        className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm"
+                        aria-labelledby="section-bc"
+                      >
+                        <div className="mb-3">
+                          <h3
+                            id="section-bc"
+                            className="font-bold text-gray-900"
+                          >
+                            Branch Customer
+                          </h3>
+                          <p className="text-xs text-gray-500">
+                            Nama dibentuk otomatis dari nama Group Customer dan
+                            kode Branch. Tidak ada pencarian atau pembuatan BC
+                            dari modal.
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wide text-violet-700">
+                            Nama Branch Customer otomatis
+                          </p>
+                          <p className="mt-1 text-base font-semibold text-violet-950">
+                            {automaticBcName}
+                          </p>
+                          <div className="mt-3 grid gap-2 text-xs text-violet-800 sm:grid-cols-2">
+                            <p>
+                              GC:{" "}
+                              <span className="font-semibold">
+                                {draft.gc?.name || "Belum dipilih"}
+                              </span>
+                            </p>
+                            <p>
+                              Prefix Branch:{" "}
+                              <span className="font-semibold">
+                                {branchCode || "Belum tersedia"}
+                              </span>
+                            </p>
+                          </div>
+                        </div>
+                        <p className="mt-3 text-xs text-gray-500">
+                          BC akan dibuat atau di-resolve oleh proses
+                          sinkronisasi/Saga setelah approval dikirim.
+                        </p>
+                      </section>
+                    </>
+                  )}
+
+                  {(error || warning) && (
+                    <div
+                      role="alert"
+                      className={`rounded-xl border p-4 text-sm ${error ? "border-red-300 bg-red-50 text-red-800" : "border-amber-300 bg-amber-50 text-amber-900"}`}
+                    >
+                      <div className="flex gap-2">
+                        <FaExclamationTriangle className="mt-0.5 shrink-0" />
+                        <p>{error || warning}</p>
+                      </div>
+                    </div>
+                  )}
+                  {operationLogs.length > 0 && (
+                    <section className="rounded-xl border border-gray-200 bg-white p-4">
+                      <h3 className="mb-3 font-bold text-gray-900">
+                        Progres Commit
+                      </h3>
+                      <div className="space-y-2">
+                        {operationLogs.map((log) => (
+                          <div
+                            key={log.stage}
+                            className="flex items-start justify-between gap-3 rounded-lg bg-gray-50 px-3 py-2"
+                          >
+                            <div>
+                              <p className="text-sm font-semibold uppercase text-gray-800">
+                                {log.stage}
+                              </p>
+                              <p className="text-xs text-gray-600">
+                                {log.message}
+                              </p>
+                            </div>
+                            <span
+                              className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${log.status === "failed" || log.status === "unknown" ? "bg-red-100 text-red-800" : log.status === "submitted" ? "bg-green-100 text-green-800" : "bg-gray-200 text-gray-700"}`}
+                            >
+                              {statusLabel[log.status]}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                </main>
+
+                <aside className="h-fit rounded-xl border border-gray-200 bg-white p-4 shadow-sm lg:sticky lg:top-0">
+                  <h3 className="font-bold text-gray-900">
+                    Ringkasan Approval
+                  </h3>
+                  <div className="mt-4 space-y-3">
+                    {summaryItems.map((item) => (
+                      <div
+                        key={item.label}
+                        className="border-b border-gray-100 pb-3 last:border-0"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            {item.label}
+                          </p>
+                          <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-800">
+                            {item.badge}
+                          </span>
+                        </div>
+                        <p className="mt-1 break-words text-sm font-medium text-gray-900">
+                          {item.value}
+                        </p>
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
-            </div>
-
-            <div className="bg-gray-50 px-6 py-4 flex justify-between gap-3 border-t border-gray-200">
-              {step > 1 ? (
-                <button
-                  data-tour="approve-registration-prev-button"
-                  onClick={() =>
-                    setStep((prev) => Math.max(1, prev - 1) as Step)
-                  }
-                  disabled={isSubmitting}
-                  className="px-5 py-2.5 bg-white border-2 border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  <FaArrowLeft className="w-4 h-4" />
-                  <span>Kembali</span>
-                </button>
-              ) : (
-                <button
-                  onClick={requestCloseModal}
-                  disabled={isSubmitting}
-                  className="px-5 py-2.5 bg-white border-2 border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Batal
-                </button>
-              )}
-
-              {step < 5 ? (
-                <motion.button
-                  data-tour="approve-registration-next-button"
-                  whileHover={!isSubmitting ? { scale: 1.02 } : {}}
-                  whileTap={!isSubmitting ? { scale: 0.98 } : {}}
-                  onClick={() => void handleNextStep()}
-                  disabled={isSubmitting || isPreparing}
-                  className="px-6 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white font-medium rounded-xl hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next
-                </motion.button>
-              ) : (
-                <motion.button
-                  data-tour="approve-registration-commit-button"
-                  whileHover={!isSubmitting ? { scale: 1.02 } : {}}
-                  whileTap={!isSubmitting ? { scale: 0.98 } : {}}
-                  onClick={handleSubmitApproval}
-                  disabled={isSubmitting || isPreparing}
-                  className="px-6 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white font-medium rounded-xl hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Memproses...</span>
-                    </>
-                  ) : (
-                    <>
-                      <FaCheckCircle className="w-4 h-4" />
-                      <span>Commit Approve</span>
-                    </>
-                  )}
-                </motion.button>
-              )}
-            </div>
-          </motion.div>
-
-          <AnimatePresence>
-            {showCloseConfirm && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="absolute inset-0 z-10 flex items-center justify-center bg-black/30 p-4"
-              >
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.96, y: 8 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
-                  className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl"
-                >
-                  <div className="flex items-start gap-3">
-                    <FaExclamationTriangle className="mt-0.5 h-6 w-6 text-amber-500" />
-                    <div className="space-y-2">
-                      <h3 className="text-lg font-bold text-gray-900">
-                        Tutup dialog approval?
-                      </h3>
-                      <p className="text-sm text-gray-600">
-                        Progress yang belum disubmit akan ditutup. Yakin ingin
-                        keluar dari dialog ini?
-                      </p>
-                    </div>
+                  <div className="mt-4 rounded-lg bg-gray-50 p-3 text-sm text-gray-700">
+                    {newMasterCount > 0 ? (
+                      <>
+                        <strong>{newMasterCount}</strong> master NB/GP/GC akan
+                        dibuat saat Commit
+                      </>
+                    ) : (
+                      "Tidak ada master NB/GP/GC baru yang akan dibuat"
+                    )}
                   </div>
+                  <p className="mt-3 text-xs text-gray-500">
+                    Submit menghasilkan docstatus=1 dan status=Syncing. Sukses
+                    Saga dipantau terpisah.
+                  </p>
+                </aside>
+              </div>
+            </div>
 
-                  <div className="mt-6 flex justify-end gap-3">
+            <footer className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-gray-200 bg-white px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.05)] sm:px-6">
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={() => setShowCloseConfirm(true)}
+                className="rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+              >
+                Batal
+              </button>
+              <div className="text-right">
+                {commitStage === "unknown" ? (
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => void checkUnknownOutcome()}
+                    className="rounded-xl bg-amber-700 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-amber-800 disabled:opacity-40"
+                  >
+                    {isSubmitting ? "Memeriksa..." : "Periksa Status"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={
+                      Boolean(validationError) || isPreparing || isSubmitting
+                    }
+                    onClick={() => setShowConfirm(true)}
+                    className="rounded-xl bg-rose-900 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-rose-950 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {isSubmitting
+                      ? "Memproses..."
+                      : checkpoint?.completedStages.length
+                        ? "Coba Lanjutkan"
+                        : "Commit Approve"}
+                  </button>
+                )}
+                {validationError && (
+                  <p className="mt-1 hidden text-xs text-red-600 sm:block">
+                    {validationError}
+                  </p>
+                )}
+              </div>
+            </footer>
+
+            {showConfirm && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/45 p-4">
+                <div
+                  role="alertdialog"
+                  aria-modal="true"
+                  className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"
+                >
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Konfirmasi Commit Approval
+                  </h3>
+                  <p className="mt-2 text-sm text-gray-600">
+                    Master baru: {newMasterCount}. Setelah dimulai, draft
+                    dikunci dan pembuatan berjalan berurutan NB → GP → GC →
+                    Customer Register.
+                  </p>
+                  <div className="mt-5 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirm(false)}
+                      className="rounded-lg px-4 py-2 text-sm text-gray-600 hover:bg-gray-100"
+                    >
+                      Kembali Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void submitApproval()}
+                      className="rounded-lg bg-rose-900 px-4 py-2 text-sm font-bold text-white"
+                    >
+                      Ya, Commit Approve
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {showCloseConfirm && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/45 p-4">
+                <div
+                  role="alertdialog"
+                  aria-modal="true"
+                  className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl"
+                >
+                  <h3 className="font-bold text-gray-900">Tutup approval?</h3>
+                  <p className="mt-2 text-sm text-gray-600">
+                    Draft yang belum di-commit tidak membuat master. Checkpoint
+                    operasi yang sudah berhasil tetap disimpan untuk retry aman.
+                  </p>
+                  <div className="mt-5 flex justify-end gap-2">
                     <button
                       type="button"
                       onClick={() => setShowCloseConfirm(false)}
-                      className="px-4 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-all"
+                      className="rounded-lg px-4 py-2 text-sm text-gray-600 hover:bg-gray-100"
                     >
-                      Tidak
+                      Kembali
                     </button>
                     <button
                       type="button"
-                      onClick={handleConfirmClose}
-                      className="px-4 py-2.5 rounded-xl bg-red-500 text-white font-medium hover:bg-red-600 transition-all"
+                      onClick={() => {
+                        setShowCloseConfirm(false);
+                        onClose();
+                      }}
+                      className="rounded-lg bg-rose-900 px-4 py-2 text-sm font-bold text-white"
                     >
-                      Ya, Tutup
+                      Tutup
                     </button>
                   </div>
-                </motion.div>
-              </motion.div>
+                </div>
+              </div>
             )}
-          </AnimatePresence>
+          </motion.div>
         </div>
       )}
     </AnimatePresence>

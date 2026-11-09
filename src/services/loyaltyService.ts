@@ -119,12 +119,12 @@ export async function saveLoyaltyResource(
   };
 }
 
-export async function callLoyaltyMethod(
+export async function callLoyaltyMethod<T = LoyaltyRow>(
   resource: string,
   method: string,
   token: string,
   payload: LoyaltyRow = {},
-): Promise<LoyaltyActionResult> {
+): Promise<LoyaltyActionResult<T>> {
   const response = await apiFetch(
     getApiUrl(`/api/resource/${resource}/method/${method}`),
     { method: "POST", body: JSON.stringify(payload) },
@@ -132,20 +132,20 @@ export async function callLoyaltyMethod(
   );
   const body = await readJson(response);
   return {
-    data: record(body.data ?? body),
+    data: (body.data ?? body) as T,
     message: String(body.message ?? record(body.data).message ?? "Action berhasil"),
   };
 }
 
 export async function getLoyaltyBalance(
-  gpid: string | number,
+  customer: { gpid: string | number } | { bcid: string | number },
   token: string,
 ): Promise<LoyaltyBalance> {
-  const result = await callLoyaltyMethod(
+  const result = await callLoyaltyMethod<LoyaltyRow>(
     "loyalty_redemption",
     "get_balance",
     token,
-    { gpid },
+    customer,
   );
   const data = result.data;
   return {

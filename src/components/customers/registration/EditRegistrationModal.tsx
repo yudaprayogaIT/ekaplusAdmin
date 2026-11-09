@@ -84,6 +84,8 @@ interface FormState {
   company_name_base: string;
   company_name_suffix: string;
   company_name: string;
+  tax_status: number;
+  npwp: string;
   product_need: string;
   branch_id: number | null;
   company_address: string;
@@ -92,6 +94,59 @@ interface FormState {
   company_district: string;
   company_village: string;
   shipping_addresses: CustomerRegistrationShippingAddress[];
+}
+
+const UPPERCASE_FORM_FIELDS = new Set<keyof FormState>([
+  "owner_full_name",
+  "owner_email",
+  "owner_place_of_birth",
+  "branch_owner",
+  "branch_owner_email",
+  "branch_owner_place_of_birth",
+  "company_name_base",
+  "company_name_suffix",
+  "company_name",
+  "npwp",
+  "company_address",
+  "company_province",
+  "company_city",
+  "company_district",
+  "company_village",
+]);
+
+function uppercaseText(value?: string | null) {
+  return (value || "").toLocaleUpperCase("id-ID");
+}
+
+function normalizeShippingUppercase(
+  address: CustomerRegistrationShippingAddress,
+): CustomerRegistrationShippingAddress {
+  return {
+    ...address,
+    label: uppercaseText(address.label),
+    email: uppercaseText(address.email),
+    address: uppercaseText(address.address),
+    city: uppercaseText(address.city),
+    province: uppercaseText(address.province),
+    district: uppercaseText(address.district),
+    village: uppercaseText(address.village),
+    country: uppercaseText(address.country),
+    pic_name: uppercaseText(address.pic_name),
+  };
+}
+
+function normalizeFormUppercase(form: FormState): FormState {
+  const normalized = { ...form };
+  UPPERCASE_FORM_FIELDS.forEach((key) => {
+    const value = normalized[key];
+    if (typeof value === "string") {
+      Object.assign(normalized, { [key]: uppercaseText(value) });
+    }
+  });
+  normalized.shipping_addresses = form.shipping_addresses.map(
+    normalizeShippingUppercase,
+  );
+  return normalized;
 }
 
 const COMPANY_TYPE_OPTIONS = ["Company", "Individual"];
@@ -338,13 +393,13 @@ function AttachmentEditor({
   }, [currentAttachment, file, removed, token]);
 
   return (
-    <div className="rounded-xl border border-slate-200 p-4">
-      <h4 className="mb-3 text-sm font-bold text-slate-800">{label}</h4>
+    <div className="min-w-0 rounded-xl border border-slate-200 p-3">
+      <h4 className="mb-2 text-sm font-bold text-slate-800">{label}</h4>
 
       {!removed && (file || currentAttachment) && (
         <div className="mb-3">
           {previewLoading ? (
-            <div className="flex h-72 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-500">
+            <div className="flex h-40 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-500">
               Memuat preview attachment...
             </div>
           ) : previewError ? (
@@ -358,7 +413,7 @@ function AttachmentEditor({
                 onClick={() => setPreviewOpen(true)}
                 className="block w-full overflow-hidden rounded-xl border border-slate-200 bg-white transition hover:border-orange-300"
               >
-                <div className="relative h-72 w-full">
+                <div className="relative h-40 w-full">
                   <Image
                     src={previewUrl}
                     alt={label}
@@ -437,7 +492,7 @@ function AttachmentEditor({
       )}
 
       {!removed && (
-        <label className="mt-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-600 transition hover:border-orange-400 hover:bg-orange-50">
+        <label className="mt-3 flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-sm text-slate-600 transition hover:border-orange-400 hover:bg-orange-50">
           <span className="truncate">
             {file
               ? file.name
@@ -708,7 +763,7 @@ export function EditRegistrationModal({
             is_default: x.is_default ? 1 : 0,
           }));
 
-          const initial: FormState = {
+          const initial: FormState = normalizeFormUppercase({
             owner_full_name: cleanInputValue(registration.user.full_name),
             owner_phone: cleanInputValue(registration.user.phone),
             owner_email: cleanInputValue(registration.user.email),
@@ -729,6 +784,8 @@ export function EditRegistrationModal({
               cleanInputValue(registration.company.name),
               cleanInputValue(registration.company.company_title),
             ),
+            tax_status: Number(registration.company.tax_status || 0),
+            npwp: cleanInputValue(registration.company.npwp),
             product_need: cleanInputValue(registration.company.product_need),
             branch_id: registration.company.branch_id || null,
             company_address: cleanInputValue(registration.address.full_address),
@@ -737,7 +794,7 @@ export function EditRegistrationModal({
             company_district: cleanInputValue(registration.address.district_name),
             company_village: cleanInputValue(registration.address.village_name),
             shipping_addresses: shipping,
-          };
+          });
 
           if (!cancelled) {
             setBranches([
@@ -844,7 +901,7 @@ export function EditRegistrationModal({
             is_default: x.is_default ? 1 : 0,
           }));
 
-        const initial: FormState = {
+        const initial: FormState = normalizeFormUppercase({
           owner_full_name: cleanInputValue(registration.user.full_name),
           owner_phone: cleanInputValue(registration.user.phone),
           owner_email: cleanInputValue(registration.user.email),
@@ -865,6 +922,8 @@ export function EditRegistrationModal({
             cleanInputValue(registration.company.name),
             cleanInputValue(registration.company.company_title),
           ),
+          tax_status: Number(registration.company.tax_status || 0),
+          npwp: cleanInputValue(registration.company.npwp),
           product_need: cleanInputValue(registration.company.product_need),
           branch_id: registration.company.branch_id || null,
           company_address: cleanInputValue(registration.address.full_address),
@@ -873,7 +932,7 @@ export function EditRegistrationModal({
           company_district: cleanInputValue(registration.address.district_name),
           company_village: cleanInputValue(registration.address.village_name),
           shipping_addresses: shipping,
-        };
+        });
 
         const companyProvince = matchByName(
           provinceRows,
@@ -1141,8 +1200,13 @@ export function EditRegistrationModal({
 
   if (!registration || !form) return null;
 
-  const setField = <K extends keyof FormState>(key: K, value: FormState[K]) =>
-    setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
+  const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
+    const nextValue =
+      typeof value === "string" && UPPERCASE_FORM_FIELDS.has(key)
+        ? uppercaseText(value)
+        : value;
+    setForm((prev) => (prev ? { ...prev, [key]: nextValue } : prev));
+  };
   const updateShip = (
     idx: number,
     patch: Partial<CustomerRegistrationShippingAddress>,
@@ -1150,7 +1214,7 @@ export function EditRegistrationModal({
     setForm((prev) => {
       if (!prev) return prev;
       const next = [...prev.shipping_addresses];
-      next[idx] = { ...next[idx], ...patch };
+      next[idx] = normalizeShippingUppercase({ ...next[idx], ...patch });
       return { ...prev, shipping_addresses: next };
     });
   const removeShip = (idx: number) => {
@@ -1463,25 +1527,47 @@ export function EditRegistrationModal({
   };
 
   const setCompanyNameBase = (base: string) => {
+    const normalizedBase = uppercaseText(base);
     setForm((prev) => {
       if (!prev) return prev;
       return {
         ...prev,
-        company_name_base: base,
-        company_name: buildCompanyName(base, prev.company_name_suffix),
+        company_name_base: normalizedBase,
+        company_name: buildCompanyName(
+          normalizedBase,
+          prev.company_name_suffix,
+        ),
       };
     });
   };
 
   const setCompanyNameSuffix = (suffix: string) => {
+    const normalizedSuffix = uppercaseText(suffix);
     setForm((prev) => {
       if (!prev) return prev;
       return {
         ...prev,
-        company_name_suffix: suffix,
-        company_name: buildCompanyName(prev.company_name_base, suffix),
+        company_name_suffix: normalizedSuffix,
+        company_name: buildCompanyName(
+          prev.company_name_base,
+          normalizedSuffix,
+        ),
       };
     });
+  };
+
+  const setTaxStatus = (taxStatus: number) => {
+    setField("tax_status", taxStatus);
+    setError(null);
+    if (taxStatus === 1) {
+      setNpwpAttachmentRemoved(false);
+      return;
+    }
+    setNpwpAttachmentFile(null);
+    setNpwpAttachmentRemoved(Boolean(registration?.npwp_attachment));
+    if (npwpAttachmentInputRef.current) {
+      npwpAttachmentInputRef.current.value = "";
+    }
   };
 
   const validate = () => {
@@ -1494,6 +1580,15 @@ export function EditRegistrationModal({
     if (!form.company_name_base.trim()) return "Nama perusahaan wajib diisi";
     if (!form.company_name_suffix.trim())
       return "Sebutan perusahaan wajib diisi";
+    if (form.tax_status === 1) {
+      if (!form.npwp.trim()) return "NPWP wajib diisi untuk customer PKP";
+      const hasNpwpAttachment =
+        Boolean(npwpAttachmentFile) ||
+        (Boolean(registration.npwp_attachment) && !npwpAttachmentRemoved);
+      if (!hasNpwpAttachment) {
+        return "NPWP Attachment wajib tersedia untuk customer PKP";
+      }
+    }
     if (!form.product_need.trim()) return "Kebutuhan produk wajib diisi";
     if (!form.branch_id) return "Cabang wajib dipilih";
     if (!form.company_address.trim()) return "Alamat perusahaan wajib diisi";
@@ -1550,6 +1645,9 @@ export function EditRegistrationModal({
             company_title: form.company_title.trim(),
             business_type: `${form.company_type.trim()} - ${form.company_title.trim()}`,
             name: nextCompanyName,
+            tax_status: form.tax_status,
+            tax_status_label: form.tax_status === 1 ? "PKP" : "Non-PKP",
+            npwp: form.tax_status === 1 ? form.npwp.trim() : undefined,
             product_need: form.product_need.trim(),
             branch_id: form.branch_id || registration.company.branch_id,
             branch_name: selectedBranch?.branch_name || registration.company.branch_name,
@@ -1579,7 +1677,7 @@ export function EditRegistrationModal({
             : identityAttachmentFile
               ? identityAttachmentFile.name
               : registration.identity_attachment,
-          npwp_attachment: npwpAttachmentRemoved
+          npwp_attachment: form.tax_status !== 1 || npwpAttachmentRemoved
             ? undefined
             : npwpAttachmentFile
               ? npwpAttachmentFile.name
@@ -1623,6 +1721,8 @@ export function EditRegistrationModal({
         company_type: form.company_type.trim(),
         company_title: form.company_title.trim(),
         company_name: nextCompanyName,
+        tax_status: form.tax_status,
+        npwp: form.tax_status === 1 ? form.npwp.trim() : null,
         product_need: form.product_need.trim(),
         branch_id: form.branch_id,
         company_address: form.company_address.trim(),
@@ -1635,7 +1735,9 @@ export function EditRegistrationModal({
         ...(identityAttachmentRemoved
           ? { identity_attachment: null }
           : {}),
-        ...(npwpAttachmentRemoved ? { npwp_attachment: null } : {}),
+        ...(form.tax_status !== 1 || npwpAttachmentRemoved
+          ? { npwp_attachment: null }
+          : {}),
       };
 
       const res = await apiFetch(
@@ -1655,7 +1757,10 @@ export function EditRegistrationModal({
         throw new Error(msg);
       }
 
-      if (identityAttachmentFile || npwpAttachmentFile) {
+      if (
+        identityAttachmentFile ||
+        (form.tax_status === 1 && npwpAttachmentFile)
+      ) {
         const attachmentFormData = new FormData();
         if (identityAttachmentFile) {
           attachmentFormData.append(
@@ -1663,7 +1768,7 @@ export function EditRegistrationModal({
             identityAttachmentFile,
           );
         }
-        if (npwpAttachmentFile) {
+        if (form.tax_status === 1 && npwpAttachmentFile) {
           attachmentFormData.append("npwp_attachment", npwpAttachmentFile);
         }
         const attachmentRes = await apiFetch(
@@ -2006,6 +2111,33 @@ export function EditRegistrationModal({
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Status Pajak <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={form.tax_status}
+                      onChange={(e) => setTaxStatus(Number(e.target.value))}
+                      className={fieldClass}
+                    >
+                      <option value={0}>Non-PKP</option>
+                      <option value={1}>PKP</option>
+                    </select>
+                  </div>
+                  {form.tax_status === 1 && (
+                    <div>
+                      <label className="mb-1 block text-sm font-semibold text-slate-700">
+                        NPWP <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        value={form.npwp}
+                        onChange={(e) => setField("npwp", e.target.value)}
+                        className={fieldClass}
+                        placeholder="Masukkan nomor NPWP"
+                        required
+                      />
+                    </div>
+                  )}
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
                       Kebutuhan Produk <span className="text-red-500">*</span>
                     </label>
                     <select
@@ -2040,7 +2172,7 @@ export function EditRegistrationModal({
                   Tambahkan file baru, ganti file yang tersimpan, atau tandai
                   file untuk dihapus saat perubahan disimpan.
                 </p>
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
                   <AttachmentEditor
                     label="Identity Attachment"
                     currentAttachment={registration.identity_attachment}
@@ -2054,9 +2186,9 @@ export function EditRegistrationModal({
                     onError={setError}
                   />
 
-                  {Number(registration.company.tax_status || 0) === 1 && (
+                  {form.tax_status === 1 && (
                     <AttachmentEditor
-                      label="NPWP Attachment"
+                      label="NPWP Attachment *"
                       currentAttachment={registration.npwp_attachment}
                       file={npwpAttachmentFile}
                       removed={npwpAttachmentRemoved}

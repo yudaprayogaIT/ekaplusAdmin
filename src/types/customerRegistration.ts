@@ -29,6 +29,7 @@ export interface CustomerRegistration {
     tax_status?: number;
     tax_status_label?: string;
     branch_id: number;
+    branch_code?: string;
     branch_name: string;
     branch_city: string;
     product_need?: string;
@@ -181,11 +182,45 @@ export interface ApprovalResult {
 
 export interface ApprovalOperationLog {
   stage: string;
-  status: "started" | "success" | "failed";
+  status:
+    | "pending"
+    | "checking"
+    | "started"
+    | "success"
+    | "failed"
+    | "unknown"
+    | "submitted";
   message: string;
   payload?: unknown;
   response?: unknown;
   http_status?: number;
+}
+
+export type ApprovalCommitStage =
+  | "idle"
+  | "checking"
+  | "nb"
+  | "gp"
+  | "gc"
+  | "bc"
+  | "register"
+  | "completed"
+  | "failed"
+  | "unknown";
+
+export interface ApprovalCheckpoint {
+  version: 1;
+  registrationId: string;
+  fingerprint: string;
+  createdAt: number;
+  updatedAt: number;
+  nbid?: number;
+  gpid?: number;
+  gcid?: number;
+  bcid?: number;
+  completedStages: Array<"nb" | "gp" | "gc" | "bc" | "register">;
+  status: "in_progress" | "failed" | "unknown" | "submitted";
+  unknownStage?: "nb" | "gp" | "gc" | "register";
 }
 
 // For filters
