@@ -281,6 +281,7 @@ export default function ItemList() {
   const searchParams = useSearchParams();
   const { token, isAuthenticated, hasRole } = useAuth();
   const canExportItems = hasRole("administrator");
+  const canEditItems = hasRole("administrator");
 
   // Parse initial state from URL
   const urlState = parseSearchParams(searchParams);
@@ -319,6 +320,7 @@ export default function ItemList() {
   const itemsPerPage = 20;
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<Item | null>(null);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<Item | null>(null);
@@ -871,6 +873,17 @@ export default function ItemList() {
     router.replace(query ? `${pathname}?${query}` : pathname, {
       scroll: false,
     });
+  }
+
+  function editItem(item: Item) {
+    if (!canEditItems) return;
+    setEditingItem(item);
+    setModalOpen(true);
+  }
+
+  async function refreshEditedItem() {
+    if (!editingItem) return;
+    await openDetail(editingItem, false);
   }
 
   useEffect(() => {
@@ -1543,13 +1556,18 @@ export default function ItemList() {
       {/* Modals */}
       <AddItemModal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        initial={null}
+        onClose={() => {
+          setModalOpen(false);
+          setEditingItem(null);
+        }}
+        initial={editingItem}
+        onSaved={refreshEditedItem}
       />
 
       <ItemDetailModal
         open={detailOpen}
         onClose={closeDetail}
+        onEdit={canEditItems ? editItem : undefined}
         item={detailItem}
       />
 

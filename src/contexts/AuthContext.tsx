@@ -189,7 +189,7 @@ const AUTH_KEY = "ekaplus_current_user";
 const TOKEN_KEY = "ekaplus_auth_token";
 const USER_DATA_KEY = "ekaplus_user_data";
 const AUTHZ_DATA_KEY = "ekaplus_authz_data";
-const API_BASE_URL = "https://api-ekaplusdev.ekatunggal.com";
+const API_BASE_URL = "https://api-ekaplus.ekatunggal.com";
 
 function mapApiUserToUser(apiUser: ApiUser): User {
   const roleId = apiUser.RoleID ?? apiUser.role_id ?? "";

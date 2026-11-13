@@ -6,6 +6,7 @@ import {
   FaBox,
   FaCheckCircle,
   FaClock,
+  FaEdit,
   FaImage,
   FaMapMarkerAlt,
   FaRulerCombined,
@@ -35,6 +36,7 @@ type Variant = {
 type ItemDetailModalProps = {
   open: boolean;
   onClose: () => void;
+  onEdit?: (item: Item) => void;
   item?: Item | null;
 };
 
@@ -327,9 +329,11 @@ function ItemImagePreview({
 export default function ItemDetailModal({
   open,
   onClose,
+  onEdit,
   item,
 }: ItemDetailModalProps) {
-  const { token } = useAuth();
+  const { token, hasRole } = useAuth();
+  const canEditItem = hasRole("administrator");
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [variants, setVariants] = useState<Variant[]>([]);
@@ -526,7 +530,7 @@ export default function ItemDetailModal({
                     }`}
                   >
                     <span className="h-1.5 w-1.5 rounded-full bg-white" />
-                    {item.status}
+                    {item.disabled === 0 ? "Aktif" : "Nonaktif"}
                   </span>
                 </div>
                 <h2
@@ -804,6 +808,16 @@ export default function ItemDetailModal({
               >
                 Tutup
               </button>
+              {canEditItem && onEdit && (
+                <button
+                  type="button"
+                  onClick={() => onEdit(item)}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-rose-600 to-red-700 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:from-rose-700 hover:to-red-800 sm:flex-none sm:text-sm"
+                >
+                  <FaEdit className="h-3.5 w-3.5" />
+                  Edit Item
+                </button>
+              )}
             </footer>
           </motion.div>
         </motion.div>

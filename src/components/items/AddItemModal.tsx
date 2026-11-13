@@ -65,12 +65,15 @@ export default function AddItemModal({
   open,
   onClose,
   initial,
+  onSaved,
 }: {
   open: boolean;
   onClose: () => void;
   initial?: Item | null;
+  onSaved?: () => void | Promise<void>;
 }) {
-  const { token } = useAuth();
+  const { token, hasRole } = useAuth();
+  const canEditItem = hasRole("administrator");
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loadingBranches, setLoadingBranches] = useState(true);
   const [code, setCode] = useState("");
@@ -428,6 +431,10 @@ export default function AddItemModal({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (initial && !canEditItem) {
+      alert("Hanya administrator yang dapat mengedit item.");
+      return;
+    }
     if (!token) {
       alert("Not authenticated");
       return;
@@ -506,6 +513,7 @@ export default function AddItemModal({
 
       // Trigger reload
       window.dispatchEvent(new Event("ekatalog:items_update"));
+      await onSaved?.();
       setSaving(false);
       onClose();
     } catch (error) {
@@ -517,6 +525,8 @@ export default function AddItemModal({
     }
   }
 
+  if (initial && !canEditItem) return null;
+
   return (
     <AnimatePresence>
       {open && (
@@ -524,7 +534,7 @@ export default function AddItemModal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
         >
           <div
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"

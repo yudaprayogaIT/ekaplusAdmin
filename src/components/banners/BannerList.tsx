@@ -269,7 +269,6 @@ export default function BannerList() {
 
       // Prepare FormData for update
       const formData = new FormData();
-      formData.append("name", banner.name);
       formData.append("banner_name", banner.banner_name);
       formData.append("type", banner.type);
       formData.append("type_value", banner.type_value || "");
@@ -506,12 +505,12 @@ export default function BannerList() {
   return (
     <div>
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">
+      <div className="mb-4 flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
+        <div className="min-w-0 lg:flex lg:items-baseline lg:gap-3">
+          <h1 className="mb-1 text-2xl font-bold text-gray-800 lg:mb-0">
             Banners
           </h1>
-          <p className="text-sm md:text-base text-gray-600">
+          <p className="text-sm text-gray-600">
             Kelola banner promosi untuk Aplikasi Eka+
           </p>
         </div>
@@ -520,160 +519,129 @@ export default function BannerList() {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={handleAdd}
-          className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl shadow-lg shadow-red-200 hover:shadow-xl transition-all font-medium"
+          className="flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-red-500 to-red-600 px-4 py-2.5 text-sm font-medium text-white shadow-md shadow-red-200 transition-all hover:shadow-lg"
         >
           <FaPlus className="w-4 h-4" />
           <span>Tambah Banner</span>
         </motion.button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border-2 border-blue-200">
-          <div className="text-sm text-blue-700 font-medium mb-1">
-            Total Banners
-          </div>
-          <div className="text-3xl font-bold text-blue-900">{totalBanners}</div>
-        </div>
-
-        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-5 border-2 border-green-200">
-          <div className="text-sm text-green-700 font-medium mb-1">Enabled</div>
-          <div className="text-3xl font-bold text-green-900">
-            {enabledCount}
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-5 border-2 border-red-200">
-          <div className="text-sm text-red-700 font-medium mb-1">Disabled</div>
-          <div className="text-3xl font-bold text-red-900">{disabledCount}</div>
-        </div>
-
-        <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-5 border-2 border-emerald-200">
-          <div className="text-sm text-emerald-700 font-medium mb-1">
-            Active
-          </div>
-          <div className="text-3xl font-bold text-emerald-900">
-            {activeCount}
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-sky-50 to-sky-100 rounded-xl p-5 border-2 border-sky-200">
-          <div className="text-sm text-sky-700 font-medium mb-1">Scheduled</div>
-          <div className="text-3xl font-bold text-sky-900">
-            {scheduledCount}
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-5 border-2 border-gray-200">
-          <div className="text-sm text-gray-700 font-medium mb-1">Expired</div>
-          <div className="text-3xl font-bold text-gray-900">{expiredCount}</div>
-        </div>
-      </div>
-
       {/* Search & Filter */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 mb-6">
-        <div className="flex flex-col gap-4">
+      <div className="mb-3 rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
+        <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
           {/* Search, Sort & View Toggle */}
-          <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex min-w-0 flex-1 gap-2">
             <div className="flex-1 relative">
-              <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <FaSearch className="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari banner..."
-                className="w-full pl-11 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                className="w-full rounded-lg border border-gray-200 py-2.5 pl-9 pr-3 text-sm transition-all focus:border-transparent focus:ring-2 focus:ring-red-500"
               />
-            </div>
-
-            {/* Sort Dropdown */}
-            <div className="relative">
-              <FaSortAmountDown className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortOption)}
-                className="pl-11 pr-10 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all font-medium text-gray-700 bg-white appearance-none cursor-pointer min-w-[200px]"
-              >
-                <option value="display_order-asc">Order: Terkecil</option>
-                <option value="display_order-desc">Order: Terbesar</option>
-                <option value="id-asc">ID: Terlama</option>
-                <option value="id-desc">ID: Terbaru</option>
-                <option value="name-asc">Nama: A-Z</option>
-                <option value="name-desc">Nama: Z-A</option>
-              </select>
             </div>
 
             {/* View Toggle */}
             <div className="flex gap-2">
               <button
+                type="button"
                 onClick={() => setViewMode("grid")}
-                className={`px-4 py-3 rounded-xl font-medium transition-all ${
+                className={`rounded-lg px-3 py-2.5 transition-all ${
                   viewMode === "grid"
-                    ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-md shadow-red-200"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
+                title="Tampilan card"
+                aria-label="Tampilan card"
               >
-                <FaTh className="w-5 h-5" />
+                <FaTh className="h-4 w-4" />
               </button>
               <button
+                type="button"
                 onClick={() => setViewMode("list")}
-                className={`px-4 py-3 rounded-xl font-medium transition-all ${
+                className={`rounded-lg px-3 py-2.5 transition-all ${
                   viewMode === "list"
-                    ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-md shadow-red-200"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
+                title="Tampilan list"
+                aria-label="Tampilan list"
               >
-                <FaList className="w-5 h-5" />
+                <FaList className="h-4 w-4" />
               </button>
             </div>
           </div>
 
           {/* Filters */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-2">
-            <FaFilter className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          <div className="flex flex-wrap items-center gap-2 xl:flex-none">
+            <FaFilter className="h-4 w-4 shrink-0 text-gray-400" />
 
             {/* Schedule Filter */}
             <button
               onClick={() => setFilterSchedule("all")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+              className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-all ${
                 filterSchedule === "all"
-                  ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
+                  ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-md shadow-red-200"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
-              Semua Schedule
+              Semua ({totalBanners})
             </button>
             <button
               onClick={() => setFilterSchedule("active")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+              className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-all ${
                 filterSchedule === "active"
-                  ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
+                  ? "bg-emerald-500 text-white shadow-md"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
-              Active
+              Aktif ({activeCount})
             </button>
             <button
               onClick={() => setFilterSchedule("scheduled")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+              className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-all ${
                 filterSchedule === "scheduled"
-                  ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
+                  ? "bg-sky-500 text-white shadow-md"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
-              Scheduled
+              Terjadwal ({scheduledCount})
             </button>
             <button
               onClick={() => setFilterSchedule("expired")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+              className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-all ${
                 filterSchedule === "expired"
-                  ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-200"
+                  ? "bg-gray-600 text-white shadow-md"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
-              Expired
+              Berakhir ({expiredCount})
             </button>
+
+            <div className="relative">
+              <FaSortAmountDown className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortOption)}
+                className="cursor-pointer appearance-none rounded-lg bg-gray-100 py-2 pl-9 pr-8 text-sm font-medium text-gray-700 transition-all hover:bg-gray-200 focus:ring-2 focus:ring-red-500"
+                aria-label="Urutkan banner"
+              >
+                <option value="display_order-asc">Urutan terkecil</option>
+                <option value="display_order-desc">Urutan terbesar</option>
+                <option value="id-asc">Paling lama</option>
+                <option value="id-desc">Paling baru</option>
+                <option value="name-asc">Nama A-Z</option>
+                <option value="name-desc">Nama Z-A</option>
+              </select>
+            </div>
           </div>
+        </div>
+
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-gray-100 pt-2 text-xs text-gray-500">
+          <span>{sortedBanners.length} banner ditampilkan</span>
+          <span className="text-emerald-600">{enabledCount} enabled</span>
+          <span className="text-red-500">{disabledCount} disabled</span>
         </div>
       </div>
 
@@ -693,26 +661,48 @@ export default function BannerList() {
           </p>
         </div>
       ) : (
-        <div
-          className={
-            viewMode === "grid"
-              ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-              : "space-y-4"
-          }
-        >
-          {sortedBanners.map((banner) => (
-            <BannerCard
-              key={banner.id}
-              banner={banner}
-              viewMode={viewMode}
-              onEdit={() => handleEdit(banner)}
-              onDelete={() => promptDeleteBanner(banner)}
-              onView={() => openDetail(banner)}
-              onToggle={() => toggleBannerStatus(banner)}
-              scheduleStatus={getScheduleStatus(banner)}
-            />
-          ))}
-        </div>
+        viewMode === "list" ? (
+          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="overflow-x-auto">
+              <div className="grid min-w-[900px] grid-cols-[minmax(280px,2fr)_110px_140px_130px_minmax(180px,1fr)] items-center gap-4 bg-gray-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <span>Banner</span>
+                <span>Status</span>
+                <span>Tipe</span>
+                <span>Jadwal</span>
+                <span>Urutan & Aksi</span>
+              </div>
+              <div>
+                {sortedBanners.map((banner) => (
+                  <BannerCard
+                    key={banner.id}
+                    banner={banner}
+                    viewMode="list"
+                    onEdit={() => handleEdit(banner)}
+                    onDelete={() => promptDeleteBanner(banner)}
+                    onView={() => openDetail(banner)}
+                    onToggle={() => toggleBannerStatus(banner)}
+                    scheduleStatus={getScheduleStatus(banner)}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+            {sortedBanners.map((banner) => (
+              <BannerCard
+                key={banner.id}
+                banner={banner}
+                viewMode="grid"
+                onEdit={() => handleEdit(banner)}
+                onDelete={() => promptDeleteBanner(banner)}
+                onView={() => openDetail(banner)}
+                onToggle={() => toggleBannerStatus(banner)}
+                scheduleStatus={getScheduleStatus(banner)}
+              />
+            ))}
+          </div>
+        )
       )}
 
       {/* Modals */}

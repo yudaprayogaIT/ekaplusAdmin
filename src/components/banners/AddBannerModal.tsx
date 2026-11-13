@@ -323,7 +323,6 @@ export default function AddBannerModal({
 
       // Prepare FormData
       const formData = new FormData();
-      formData.append("name", bannerName.trim());
       formData.append("banner_name", bannerName.trim());
       formData.append("type", type);
       formData.append("type_value", type === "none" ? "" : typeValue.trim());

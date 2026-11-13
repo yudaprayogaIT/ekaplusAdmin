@@ -113,118 +113,139 @@ export default function BannerCard({
     return (
       <motion.div
         layout
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -20 }}
-        className={`bg-white rounded-xl shadow-sm hover:shadow-lg transition-all border-2 ${
-          banner.disabled === 1
-            ? "border-red-200 opacity-60"
-            : "border-gray-100 hover:border-red-200"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className={`grid min-w-[900px] grid-cols-[minmax(280px,2fr)_110px_140px_130px_minmax(180px,1fr)] items-center gap-4 border-t border-gray-100 px-4 py-3 transition-colors first:border-t-0 hover:bg-gray-50 ${
+          banner.disabled === 1 ? "bg-gray-50/60" : "bg-white"
         }`}
       >
-        <div className="p-4 flex items-center gap-4">
-          {/* Image Preview */}
-          <div className="relative w-32 h-20 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+        <div className="flex min-w-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={onView}
+            className="relative h-14 w-24 shrink-0 overflow-hidden rounded-lg bg-gray-100"
+            aria-label={`Lihat detail ${banner.banner_name}`}
+          >
             {banner.image ? (
               <Image
                 src={banner.image}
                 alt={banner.banner_name}
                 fill
-                className="object-cover"
+                className="object-cover transition-transform hover:scale-105"
                 unoptimized
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-gray-400">
-                <FaEyeSlash className="w-6 h-6" />
+              <div className="flex h-full w-full items-center justify-center text-gray-400">
+                <FaEyeSlash className="h-5 w-5" />
               </div>
             )}
             {banner.disabled === 1 && (
-              <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                <span className="text-white text-xs font-bold">DISABLED</span>
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                <FaEyeSlash className="h-4 w-4 text-white" />
               </div>
             )}
-          </div>
-
-          {/* Info */}
-          <div className="flex-1 min-w-0">
-            <h3 className="text-base font-bold text-gray-800 mb-1 truncate">
-              {banner.banner_name}
-            </h3>
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Type Badge */}
-              <div
-                className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${typeBadge.bg} ${typeBadge.text}`}
-              >
-                <TypeIcon className="w-3 h-3" />
-                <span>{typeBadge.label}</span>
-              </div>
-
-              {/* Schedule Badge */}
-              {scheduleBadge && (
-                <div
-                  className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${scheduleBadge.bg} ${scheduleBadge.text}`}
-                >
-                  <scheduleBadge.icon className="w-3 h-3" />
-                  <span>{scheduleBadge.label}</span>
-                </div>
-              )}
-
-              {/* Display Order */}
-              <span className="text-xs text-gray-500">
-                Order: #{banner.display_order}
-              </span>
-
-              {/* Click Count */}
-              {banner.click_count !== undefined && (
-                <span className="text-xs text-gray-500">
-                  {banner.click_count} clicks
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Enable/Disable Toggle */}
+          </button>
+          <div className="min-w-0">
             <button
+              type="button"
+              onClick={onView}
+              className="block max-w-full truncate text-left text-sm font-semibold text-gray-800 transition-colors hover:text-red-600"
+              title={banner.banner_name}
+            >
+              {banner.banner_name}
+            </button>
+            <p className="mt-1 truncate text-xs text-gray-400">{banner.name}</p>
+          </div>
+        </div>
+
+        <div>
+          <span
+            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+              banner.disabled === 0
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-gray-100 text-gray-600"
+            }`}
+          >
+            {banner.disabled === 0 ? "Enabled" : "Disabled"}
+          </span>
+        </div>
+
+        <div>
+          <span
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${typeBadge.bg} ${typeBadge.text}`}
+          >
+            <TypeIcon className="h-3 w-3" />
+            {typeBadge.label}
+          </span>
+        </div>
+
+        <div>
+          {scheduleBadge ? (
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${scheduleBadge.bg} ${scheduleBadge.text}`}
+            >
+              <scheduleBadge.icon className="h-3 w-3" />
+              {scheduleBadge.label}
+            </span>
+          ) : (
+            <span className="text-xs text-gray-400">Tanpa jadwal</span>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-sm font-medium text-gray-600">
+            #{banner.display_order}
+            {banner.click_count !== undefined && (
+              <span className="ml-2 text-xs font-normal text-gray-400">
+                {banner.click_count.toLocaleString()} klik
+              </span>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
               onClick={onToggle}
-              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 ${
+              className={`relative mr-1 inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 ${
                 banner.disabled === 0 ? "bg-green-500" : "bg-gray-300"
               }`}
               title={banner.disabled === 0 ? "Enabled" : "Disabled"}
+              aria-label={
+                banner.disabled === 0 ? "Nonaktifkan banner" : "Aktifkan banner"
+              }
             >
               <span
-                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${
                   banner.disabled === 0 ? "translate-x-5" : "translate-x-0"
                 }`}
               />
             </button>
-
-            {/* View Button */}
             <button
+              type="button"
               onClick={onView}
-              className="p-2 hover:bg-blue-50 rounded-lg transition-colors text-blue-600"
-              title="View Details"
+              className="rounded-lg p-2 text-blue-600 transition-colors hover:bg-blue-50"
+              title="Lihat detail"
+              aria-label="Lihat detail"
             >
-              <FaEye className="w-4 h-4" />
+              <FaEye className="h-4 w-4" />
             </button>
-
-            {/* Edit Button */}
             <button
+              type="button"
               onClick={onEdit}
-              className="p-2 hover:bg-green-50 rounded-lg transition-colors text-green-600"
-              title="Edit"
+              className="rounded-lg p-2 text-green-600 transition-colors hover:bg-green-50"
+              title="Edit banner"
+              aria-label="Edit banner"
             >
-              <FaEdit className="w-4 h-4" />
+              <FaEdit className="h-4 w-4" />
             </button>
-
-            {/* Delete Button */}
             <button
+              type="button"
               onClick={onDelete}
-              className="p-2 hover:bg-red-50 rounded-lg transition-colors text-red-600"
-              title="Delete"
+              className="rounded-lg p-2 text-red-600 transition-colors hover:bg-red-50"
+              title="Hapus banner"
+              aria-label="Hapus banner"
             >
-              <FaTrash className="w-4 h-4" />
+              <FaTrash className="h-4 w-4" />
             </button>
           </div>
         </div>
