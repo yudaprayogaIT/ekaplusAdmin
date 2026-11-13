@@ -42,6 +42,31 @@ type Category = {
   category_name: string;
 };
 
+const BANNER_WIDTH = 1368;
+const BANNER_HEIGHT = 600;
+const BANNER_ASPECT_RATIO = BANNER_WIDTH / BANNER_HEIGHT;
+const BANNER_ASPECT_TOLERANCE = 0.01;
+
+function getImageDimensions(file: File): Promise<{
+  width: number;
+  height: number;
+}> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new window.Image();
+
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve({ width: image.naturalWidth, height: image.naturalHeight });
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("File gambar tidak dapat dibaca"));
+    };
+    image.src = objectUrl;
+  });
+}
+
 export default function AddBannerModal({
   open,
   onClose,
@@ -637,23 +662,51 @@ export default function AddBannerModal({
                         Upload Gambar Banner
                       </span>
                       <p className="text-xs text-gray-500 mt-1">
-                        PNG, JPG, WebP (Max 5MB) - Rekomendasi: 1920x640px (3:1)
+                        PNG, JPG, WebP (Maks. 5MB) — Rekomendasi: 1368 × 600 px (2,28:1)
                       </p>
                     </div>
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/png,image/jpeg,image/webp"
                       className="hidden"
                       disabled={saving}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
+                      onChange={async (e) => {
+                        const input = e.currentTarget;
+                        const file = input.files?.[0];
                         if (file) {
                           if (file.size > 5 * 1024 * 1024) {
                             setError(
-                              "Ukuran gambar terlalu besar. Maksimal 5MB"
+                              "Ukuran gambar terlalu besar. Maksimal 5MB",
                             );
+                            input.value = "";
                             return;
                           }
+
+                          try {
+                            const { width, height } =
+                              await getImageDimensions(file);
+                            const ratio = width / height;
+
+                            if (
+                              Math.abs(ratio - BANNER_ASPECT_RATIO) >
+                              BANNER_ASPECT_TOLERANCE
+                            ) {
+                              setError(
+                                `Rasio gambar harus 2,28:1. Gunakan ukuran ${BANNER_WIDTH} × ${BANNER_HEIGHT} px atau ukuran lain dengan rasio yang sama.`,
+                              );
+                              input.value = "";
+                              return;
+                            }
+                          } catch (imageError) {
+                            setError(
+                              imageError instanceof Error
+                                ? imageError.message
+                                : "File gambar tidak dapat dibaca",
+                            );
+                            input.value = "";
+                            return;
+                          }
+
                           setImageFile(file);
                           setError(null);
                         }
@@ -664,7 +717,7 @@ export default function AddBannerModal({
                   {imagePreview && (
                     <div
                       className="relative w-full bg-gray-50 rounded-xl overflow-hidden border-2 border-gray-200"
-                      style={{ aspectRatio: "3/1" }}
+                      style={{ aspectRatio: `${BANNER_WIDTH} / ${BANNER_HEIGHT}` }}
                     >
                       <div className="absolute top-2 right-2 z-10">
                         <div className="bg-green-500 text-white p-2 rounded-full shadow-lg">

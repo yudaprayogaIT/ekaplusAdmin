@@ -225,7 +225,7 @@ export default function BannerDetailModal({
                 </h4>
                 <div
                   className="relative w-full bg-gray-100 rounded-xl overflow-hidden"
-                  style={{ aspectRatio: "3/1" }}
+                  style={{ aspectRatio: "1368 / 600" }}
                 >
                   {banner.image ? (
                     <Image

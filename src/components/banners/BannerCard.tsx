@@ -124,7 +124,7 @@ export default function BannerCard({
           <button
             type="button"
             onClick={onView}
-            className="relative h-14 w-24 shrink-0 overflow-hidden rounded-lg bg-gray-100"
+            className="relative h-[50px] w-[114px] shrink-0 overflow-hidden rounded-lg bg-gray-100"
             aria-label={`Lihat detail ${banner.banner_name}`}
           >
             {banner.image ? (
@@ -270,7 +270,7 @@ export default function BannerCard({
       {/* Banner Image Preview */}
       <div
         className="relative w-full bg-gray-100 cursor-pointer"
-        style={{ aspectRatio: "3/1" }}
+        style={{ aspectRatio: "1368 / 600" }}
         onClick={onView}
       >
         {banner.image ? (

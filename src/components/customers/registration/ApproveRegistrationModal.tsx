@@ -207,6 +207,11 @@ export function ApproveRegistrationModal({
 }: ApproveRegistrationModalProps) {
   const { token } = useAuth();
   const inFlightRef = useRef(false);
+  const lookupRequestRef = useRef<Record<EntityKey, number>>({
+    nb: 0,
+    gp: 0,
+    gc: 0,
+  });
   const initializedRegistrationRef = useRef<string | null>(null);
   const [draft, setDraft] = useState<ApprovalDraft | null>(null);
   const [queries, setQueries] = useState<Record<EntityKey, string>>({
@@ -326,68 +331,96 @@ export function ApproveRegistrationModal({
       endpoint: string,
       fields: string[],
       filters?: Array<[string, string, unknown]>,
-    ): Promise<T[]> => {
+      search?: string,
+    ): Promise<T[] | null> => {
       if (demoMode) return [];
       if (!token) throw new Error("Sesi tidak tersedia");
+      const requestId = lookupRequestRef.current[key] + 1;
+      lookupRequestRef.current[key] = requestId;
       setLoading((previous) => ({ ...previous, [key]: true }));
       setLoadErrors((previous) => ({ ...previous, [key]: undefined }));
       try {
-        return await fetchAllQueryRows<T>({
-          endpoint,
-          spec: { fields, ...(filters ? { filters } : {}) },
+        const response = await apiFetch(
+          getQueryUrl(endpoint, {
+            fields,
+            ...(filters ? { filters } : {}),
+            ...(search?.trim() ? { search: search.trim() } : {}),
+            limit: 20,
+            page: 1,
+          }),
+          { method: "GET", cache: "no-store" },
           token,
-          errorMessage: `Pencarian ${key.toUpperCase()} gagal`,
-        });
+        );
+        if (!response.ok) {
+          throw new Error(
+            `Pencarian ${key.toUpperCase()} gagal (${response.status})`,
+          );
+        }
+        const json = await response.json();
+        if (lookupRequestRef.current[key] !== requestId) return null;
+        return Array.isArray(json?.data) ? (json.data as T[]) : [];
       } catch (caught) {
         const message =
           caught instanceof Error ? caught.message : "Pencarian gagal";
-        setLoadErrors((previous) => ({ ...previous, [key]: message }));
+        if (lookupRequestRef.current[key] === requestId) {
+          setLoadErrors((previous) => ({ ...previous, [key]: message }));
+        }
         throw caught;
       } finally {
-        setLoading((previous) => ({ ...previous, [key]: false }));
+        if (lookupRequestRef.current[key] === requestId) {
+          setLoading((previous) => ({ ...previous, [key]: false }));
+        }
       }
     },
     [demoMode, token],
   );
 
-  const loadNationalBrands = useCallback(async () => {
+  const loadNationalBrands = useCallback(async (search = "") => {
     try {
       const rows = await loadRows<NationalBrandRow>(
         "nb",
         API_CONFIG.ENDPOINTS.NATIONAL_BRAND,
         ["id", "name", "nb_name"],
+        undefined,
+        search,
       );
-      setNationalBrands(rows);
+      if (rows) setNationalBrands(rows);
       return rows;
     } catch {
       return null;
     }
   }, [loadRows]);
 
-  const loadGroupParents = useCallback(async () => {
-    try {
-      const rows = await loadRows<GroupParentRow>(
-        "gp",
-        API_CONFIG.ENDPOINTS.GROUP_PARENT,
-        ["id", "name", "gp_name", "nbid"],
-      );
-      setGroupParents(rows);
-      return rows;
-    } catch {
-      return null;
-    }
-  }, [loadRows]);
+  const loadGroupParents = useCallback(
+    async (nbid: number | null, search = "") => {
+      try {
+        const rows = await loadRows<GroupParentRow>(
+          "gp",
+          API_CONFIG.ENDPOINTS.GROUP_PARENT,
+          ["id", "name", "gp_name", "nbid"],
+          [["nbid", "=", nbid]],
+          search,
+        );
+        if (rows) setGroupParents(rows);
+        return rows;
+      } catch {
+        return null;
+      }
+    },
+    [loadRows],
+  );
 
   const loadGroupCustomers = useCallback(
-    async (gpid: number) => {
+    async (gpid: number, search = "") => {
       try {
         const rows = await loadRows<GroupCustomerRow>(
           "gc",
           API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
           ["id", "name", "gc_name", "gpid"],
           [["gpid", "=", gpid]],
+          search,
         );
-        setGroupCustomers(rows);
+        if (rows) setGroupCustomers(rows);
         return rows;
       } catch {
         return null;
@@ -407,6 +440,8 @@ export function ApproveRegistrationModal({
     if (initializedRegistrationRef.current === initializationKey) return;
     initializedRegistrationRef.current = initializationKey;
     let cancelled = false;
+    const initialGpId = registration.master_links?.gp_id ?? registration.gp_id;
+    const initialGcId = registration.master_links?.gc_id ?? registration.gc_id;
     const initialDraft: ApprovalDraft = {
       nb: registration.master_links?.nb_id
         ? {
@@ -417,11 +452,14 @@ export function ApproveRegistrationModal({
               `NB${registration.master_links.nb_id}`,
           }
         : { mode: "none" },
-      gp: registration.gp_id
+      gp: initialGpId
         ? {
             mode: "existing",
-            id: registration.gp_id,
-            name: registration.gp_name || `GP${registration.gp_id}`,
+            id: initialGpId,
+            name:
+              registration.master_links?.gp_name ||
+              registration.gp_name ||
+              `GP${initialGpId}`,
           }
         : registration.master_links?.gp_manual
           ? {
@@ -429,11 +467,14 @@ export function ApproveRegistrationModal({
               name: normalizeEntityName(registration.master_links.gp_manual),
             }
           : null,
-      gc: registration.gc_id
+      gc: initialGcId
         ? {
             mode: "existing",
-            id: registration.gc_id,
-            name: registration.gc_name || `GC${registration.gc_id}`,
+            id: initialGcId,
+            name:
+              registration.master_links?.gc_name ||
+              registration.gc_name ||
+              `GC${initialGcId}`,
           }
         : null,
       bc: {
@@ -454,6 +495,12 @@ export function ApproveRegistrationModal({
     setNationalBrands([]);
     setGroupParents([]);
     setGroupCustomers([]);
+    lookupRequestRef.current = {
+      nb: lookupRequestRef.current.nb + 1,
+      gp: lookupRequestRef.current.gp + 1,
+      gc: lookupRequestRef.current.gc + 1,
+    };
+    setLoading({ nb: false, gp: false, gc: false });
     setBranchCode(normalizeEntityName(registration.company.branch_code));
     setShippingAddresses(
       (registration.shipping_addresses || []).map((address, index) => ({
@@ -503,67 +550,70 @@ export function ApproveRegistrationModal({
         setIsPreparing(false);
         return;
       }
-      try {
-        const shippingPromise = requestJson(
-          "Memuat alamat pengiriman",
-          getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER_ADDRESS, {
-            fields: ["*"],
-            filters: [
-              ["parent_id", "=", Number(registration.id)],
-              ["parent_type", "=", "customer_register"],
-            ],
-          }),
-          "GET",
-        );
-        const branchCodePromise = registration.company.branch_code
-          ? Promise.resolve([{ name: registration.company.branch_code }])
-          : fetchAllQueryRows<{ name?: string | null }>({
-              endpoint: API_CONFIG.ENDPOINTS.BRANCH,
-              spec: {
-                fields: ["id", "name"],
-                filters: [["id", "=", registration.company.branch_id]],
-                limit: 1,
-              },
-              token: token || "",
-              errorMessage: "Kode branch gagal dimuat",
-            });
-        const [shippingResult, , , branchCodeResult] = await Promise.allSettled(
-          [
-            shippingPromise,
-            loadNationalBrands(),
-            loadGroupParents(),
-            branchCodePromise,
+      const shippingPromise = requestJson(
+        "Memuat alamat pengiriman",
+        getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER_ADDRESS, {
+          fields: [
+            "id",
+            "parent_id",
+            "label",
+            "address",
+            "city",
+            "province",
+            "district",
+            "village",
+            "postal_code",
+            "pic_name",
+            "pic_phone",
+            "is_default",
           ],
-        );
-        if (!cancelled) {
-          if (shippingResult.status === "fulfilled") {
-            const shipping = shippingResult.value;
-            const data =
-              shipping && typeof shipping === "object" && "data" in shipping
-                ? shipping.data
-                : [];
-            setShippingAddresses(Array.isArray(data) ? data : []);
-            setShippingLoaded(true);
-          } else {
-            setShippingLoaded(Boolean(registration.same_as_company_address));
-            setWarning(
-              "Alamat pengiriman belum berhasil dimuat. Data referensi master tetap dapat disiapkan; muat ulang modal sebelum Commit.",
-            );
-          }
-          if (branchCodeResult.status === "fulfilled") {
-            setBranchCode(normalizeEntityName(branchCodeResult.value[0]?.name));
-          }
-        }
-      } catch (caught) {
-        if (!cancelled)
-          setError(
-            caught instanceof Error
-              ? caught.message
-              : "Gagal menyiapkan approval",
+          filters: [
+            ["parent_id", "=", Number(registration.id)],
+            ["parent_type", "=", "customer_register"],
+          ],
+        }),
+        "GET",
+      )
+        .then((shipping) => {
+          if (cancelled) return;
+          const data =
+            shipping && typeof shipping === "object" && "data" in shipping
+              ? shipping.data
+              : [];
+          setShippingAddresses(Array.isArray(data) ? data : []);
+          setShippingLoaded(true);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setShippingLoaded(Boolean(registration.same_as_company_address));
+          setWarning(
+            "Alamat pengiriman belum berhasil dimuat. Muat ulang modal sebelum Commit.",
           );
-      } finally {
-        if (!cancelled) setIsPreparing(false);
-      }
+        });
+      const branchCodePromise = (registration.company.branch_code
+        ? Promise.resolve([{ name: registration.company.branch_code }])
+        : fetchAllQueryRows<{ name?: string | null }>({
+            endpoint: API_CONFIG.ENDPOINTS.BRANCH,
+            spec: {
+              fields: ["id", "name"],
+              filters: [["id", "=", registration.company.branch_id]],
+              limit: 1,
+            },
+            token: token || "",
+            errorMessage: "Kode branch gagal dimuat",
+          }))
+        .then((rows) => {
+          if (!cancelled) {
+            setBranchCode(normalizeEntityName(rows[0]?.name));
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setError("Kode/prefix Branch belum berhasil dimuat");
+          }
+        });
+      await Promise.allSettled([shippingPromise, branchCodePromise]);
+      if (!cancelled) setIsPreparing(false);
     }
 
     void prepare();
@@ -601,8 +651,6 @@ export function ApproveRegistrationModal({
   }, [
     demoMode,
     isOpen,
-    loadGroupParents,
-    loadNationalBrands,
     registration,
     requestJson,
     token,
@@ -610,14 +658,74 @@ export function ApproveRegistrationModal({
 
   const selectedExistingGpid =
     draft?.gp?.mode === "existing" ? draft.gp.id : undefined;
+  const selectedExistingNbid =
+    draft?.nb.mode === "existing" ? draft.nb.id : null;
 
   useEffect(() => {
     if (!isOpen || !selectedExistingGpid) {
       setGroupCustomers([]);
-      return;
     }
-    void loadGroupCustomers(selectedExistingGpid);
-  }, [isOpen, loadGroupCustomers, selectedExistingGpid]);
+  }, [isOpen, selectedExistingGpid]);
+
+  useEffect(() => {
+    if (!isOpen || demoMode || !expandedSections.nb) return;
+    const timeoutId = window.setTimeout(
+      () => void loadNationalBrands(queries.nb),
+      queries.nb.trim() ? 300 : 0,
+    );
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    demoMode,
+    expandedSections.nb,
+    isOpen,
+    loadNationalBrands,
+    queries.nb,
+  ]);
+
+  useEffect(() => {
+    if (
+      !isOpen ||
+      demoMode ||
+      !expandedSections.gp ||
+      draft?.nb.mode === "create"
+    )
+      return;
+    const timeoutId = window.setTimeout(
+      () => void loadGroupParents(selectedExistingNbid, queries.gp),
+      queries.gp.trim() ? 300 : 0,
+    );
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    demoMode,
+    draft?.nb.mode,
+    expandedSections.gp,
+    isOpen,
+    loadGroupParents,
+    queries.gp,
+    selectedExistingNbid,
+  ]);
+
+  useEffect(() => {
+    if (
+      !isOpen ||
+      demoMode ||
+      !expandedSections.gc ||
+      !selectedExistingGpid
+    )
+      return;
+    const timeoutId = window.setTimeout(
+      () => void loadGroupCustomers(selectedExistingGpid, queries.gc),
+      queries.gc.trim() ? 300 : 0,
+    );
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    demoMode,
+    expandedSections.gc,
+    isOpen,
+    loadGroupCustomers,
+    queries.gc,
+    selectedExistingGpid,
+  ]);
 
   useEffect(() => {
     setDraft((current) => {
@@ -647,22 +755,28 @@ export function ApproveRegistrationModal({
             )
           : undefined;
       const nb =
-        current.nb.mode === "existing" &&
-        nbRow?.name &&
-        current.nb.code !== nbRow.name
-          ? { ...current.nb, code: nbRow.name }
+        current.nb.mode === "existing" && nbRow
+          ? {
+              ...current.nb,
+              name: nbRow.nb_name || current.nb.name,
+              code: nbRow.name || current.nb.code,
+            }
           : current.nb;
       const gp =
-        current.gp?.mode === "existing" &&
-        gpRow?.name &&
-        current.gp.code !== gpRow.name
-          ? { ...current.gp, code: gpRow.name }
+        current.gp?.mode === "existing" && gpRow
+          ? {
+              ...current.gp,
+              name: gpRow.gp_name || current.gp.name,
+              code: gpRow.name || current.gp.code,
+            }
           : current.gp;
       const gc =
-        current.gc?.mode === "existing" &&
-        gcRow?.name &&
-        current.gc.code !== gcRow.name
-          ? { ...current.gc, code: gcRow.name }
+        current.gc?.mode === "existing" && gcRow
+          ? {
+              ...current.gc,
+              name: gcRow.gc_name || current.gc.name,
+              code: gcRow.name || current.gc.code,
+            }
           : current.gc;
       if (nb === current.nb && gp === current.gp && gc === current.gc)
         return current;
@@ -1024,16 +1138,32 @@ export function ApproveRegistrationModal({
       }
     }
 
-    const freshNb = await fetchFreshRows<NationalBrandRow>(
-      API_CONFIG.ENDPOINTS.NATIONAL_BRAND,
-      ["id", "name", "nb_name"],
-    );
+    const freshNb =
+      nbDraft.mode === "none"
+        ? []
+        : await fetchFreshRows<NationalBrandRow>(
+            API_CONFIG.ENDPOINTS.NATIONAL_BRAND,
+            ["id", "name", "nb_name"],
+            nbDraft.mode === "existing"
+              ? [["id", "=", nbDraft.id]]
+              : [["nb_name", "=", normalizeEntityName(nbDraft.name)]],
+          );
+    const expectedNbid =
+      nbDraft.mode === "existing" ? nbDraft.id : checkpoint?.nbid;
     const freshGp = await fetchFreshRows<GroupParentRow>(
       API_CONFIG.ENDPOINTS.GROUP_PARENT,
       ["id", "name", "gp_name", "nbid"],
+      gpDraft.mode === "existing"
+        ? [["id", "=", gpDraft.id]]
+        : [
+            ["gp_name", "=", normalizeEntityName(gpDraft.name)],
+            ...(expectedNbid
+              ? ([
+                  ["nbid", "=", expectedNbid],
+                ] as Array<[string, string, unknown]>)
+              : []),
+          ],
     );
-    const expectedNbid =
-      nbDraft.mode === "existing" ? nbDraft.id : checkpoint?.nbid;
     if (
       nbDraft.mode === "existing" &&
       !freshNb.some((row) => Number(row.id) === nbDraft.id)
@@ -1078,7 +1208,15 @@ export function ApproveRegistrationModal({
       const freshGc = await fetchFreshRows<GroupCustomerRow>(
         API_CONFIG.ENDPOINTS.GROUP_CUSTOMER,
         ["id", "name", "gc_name", "gpid"],
-        [["gpid", "=", resolvedPreflightGpid]],
+        gcDraft.mode === "existing"
+          ? [
+              ["id", "=", gcDraft.id],
+              ["gpid", "=", resolvedPreflightGpid],
+            ]
+          : [
+              ["gc_name", "=", normalizeEntityName(gcDraft.name)],
+              ["gpid", "=", resolvedPreflightGpid],
+            ],
       );
       if (
         gcDraft.mode === "existing" &&
@@ -1680,7 +1818,6 @@ export function ApproveRegistrationModal({
   ).length;
 
   const selectedCard = (
-    label: string,
     selection: NationalBrandDraft | RequiredMasterDraft | null,
     onChange: () => void,
   ) => {
@@ -1701,11 +1838,6 @@ export function ApproveRegistrationModal({
                   : "Existing"}
             </span>
           </div>
-          {!none && selection.mode === "existing" && (
-            <p className="mt-0.5 text-xs text-gray-500">
-              Kode {label}: {selection.code || `ID ${selection.id}`}
-            </p>
-          )}
         </div>
         {!none && (
           <button
@@ -1913,7 +2045,7 @@ export function ApproveRegistrationModal({
                         {expandedSections.nb && (
                           <>
                             <div className="mt-2">
-                              {selectedCard("NB", draft.nb, () => {
+                              {selectedCard(draft.nb, () => {
                                 replaceDraft((current) => ({
                                   ...current,
                                   nb: { mode: "none" },
@@ -1953,7 +2085,7 @@ export function ApproveRegistrationModal({
                                 {searchState(
                                   "nb",
                                   filteredNb.length,
-                                  () => void loadNationalBrands(),
+                                  () => void loadNationalBrands(queries.nb),
                                 ) ||
                                   filteredNb.map((row) => (
                                     <button
@@ -2052,7 +2184,7 @@ export function ApproveRegistrationModal({
                         {expandedSections.gp && (
                           <>
                             <div className="mt-2">
-                              {selectedCard("GP", draft.gp, () => {
+                              {selectedCard(draft.gp, () => {
                                 replaceDraft((current) => ({
                                   ...current,
                                   gp: null,
@@ -2101,7 +2233,11 @@ export function ApproveRegistrationModal({
                                   {searchState(
                                     "gp",
                                     filteredGp.length,
-                                    () => void loadGroupParents(),
+                                    () =>
+                                      void loadGroupParents(
+                                        selectedExistingNbid,
+                                        queries.gp,
+                                      ),
                                   ) ||
                                     filteredGp.map((row) => (
                                       <button
@@ -2182,7 +2318,7 @@ export function ApproveRegistrationModal({
                         {expandedSections.gc && (
                           <>
                             <div className="mt-2">
-                              {selectedCard("GC", draft.gc, () => {
+                              {selectedCard(draft.gc, () => {
                                 replaceDraft((current) => ({
                                   ...current,
                                   gc: null,
@@ -2235,7 +2371,10 @@ export function ApproveRegistrationModal({
                                     filteredGc.length,
                                     () =>
                                       draft.gp?.mode === "existing" &&
-                                      void loadGroupCustomers(draft.gp.id),
+                                      void loadGroupCustomers(
+                                        draft.gp.id,
+                                        queries.gc,
+                                      ),
                                   ) ||
                                     filteredGc.map((row) => (
                                       <button
