@@ -1,19 +1,9 @@
 // src/components/banners/AddBannerModal.tsx
 "use client";
 
-import React, {
-  useEffect,
-  useState,
-} from "react";
-import {
-  motion,
-  AnimatePresence,
-} from "framer-motion";
-import {
-  FaTimes,
-  FaImage,
-  FaCheckCircle,
-} from "react-icons/fa";
+import React, { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { FaCheckCircle, FaCropAlt, FaImage, FaTimes } from "react-icons/fa";
 import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -23,12 +13,10 @@ import {
   API_CONFIG,
   apiFetch,
 } from "@/config/api";
-import type {
-  Banner,
-  BannerType,
-} from "@/types/banner";
+import type { Banner, BannerType } from "@/types/banner";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import UnsavedChangesDialog from "@/components/ui/UnsavedChangesDialog";
+import BannerImageEditor from "./BannerImageEditor";
 
 type Product = {
   id: number;
@@ -44,28 +32,6 @@ type Category = {
 
 const BANNER_WIDTH = 1368;
 const BANNER_HEIGHT = 600;
-const BANNER_ASPECT_RATIO = BANNER_WIDTH / BANNER_HEIGHT;
-const BANNER_ASPECT_TOLERANCE = 0.01;
-
-function getImageDimensions(file: File): Promise<{
-  width: number;
-  height: number;
-}> {
-  return new Promise((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(file);
-    const image = new window.Image();
-
-    image.onload = () => {
-      URL.revokeObjectURL(objectUrl);
-      resolve({ width: image.naturalWidth, height: image.naturalHeight });
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      reject(new Error("File gambar tidak dapat dibaca"));
-    };
-    image.src = objectUrl;
-  });
-}
 
 export default function AddBannerModal({
   open,
@@ -86,6 +52,8 @@ export default function AddBannerModal({
   const [endDate, setEndDate] = useState("");
   const [imageUuid, setImageUuid] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageSourceFile, setImageSourceFile] = useState<File | null>(null);
+  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -141,6 +109,8 @@ export default function AddBannerModal({
       setImageUuid(imageUuidExtracted);
       setImagePreview(initial.image || null);
       setImageFile(null);
+      setImageSourceFile(null);
+      setPendingImageFile(null);
 
       // Set initial state for dirty checking
       setInitialState({
@@ -164,6 +134,8 @@ export default function AddBannerModal({
       setImageUuid("");
       setImagePreview(null);
       setImageFile(null);
+      setImageSourceFile(null);
+      setPendingImageFile(null);
 
       // Set initial state for dirty checking
       setInitialState({
@@ -197,8 +169,8 @@ export default function AddBannerModal({
                   id: p.id,
                   name: p.name,
                   product_name: p.product_name,
-                })
-              )
+                }),
+              ),
             );
           }
         } catch (err) {
@@ -223,7 +195,7 @@ export default function AddBannerModal({
           const res = await apiFetch(
             categoriesUrl,
             { method: "GET" },
-            authToken
+            authToken,
           );
           if (res.ok) {
             const data = await res.json();
@@ -233,8 +205,8 @@ export default function AddBannerModal({
                   id: c.id,
                   name: c.name,
                   category_name: c.category_name,
-                })
-              )
+                }),
+              ),
             );
           }
         } catch (err) {
@@ -259,7 +231,7 @@ export default function AddBannerModal({
 
   // Keyboard shortcuts
   useEffect(() => {
-    if (!open) return;
+    if (!open || pendingImageFile) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ctrl+S or Cmd+S to save
@@ -283,7 +255,7 @@ export default function AddBannerModal({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, saving, handleClose]);
+  }, [open, pendingImageFile, saving, handleClose]);
 
   // Validate type value based on type
   function validateTypeValue(): string | null {
@@ -376,7 +348,7 @@ export default function AddBannerModal({
             method: "PUT",
             headers,
             body: formData,
-          }
+          },
         );
       } else {
         // CREATE new banner
@@ -390,7 +362,7 @@ export default function AddBannerModal({
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
-          errorData.message || `Failed to save banner (${response.status})`
+          errorData.message || `Failed to save banner (${response.status})`,
         );
       }
 
@@ -405,7 +377,7 @@ export default function AddBannerModal({
     } catch (err: unknown) {
       // console.error("Failed to save banner:", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
-     setError(errorMessage);
+      setError(errorMessage);
       setSaving(false);
     }
   }
@@ -446,13 +418,14 @@ export default function AddBannerModal({
               required
             >
               <option value="">Pilih route...</option>
-              <option value="/home">Home</option>
+              {/* <option value="/home">Home</option> */}
               <option value="/products">Products</option>
-              <option value="/categories">Categories</option>
-              <option value="/profile">Profile</option>
+              <option value="/category">Category</option>
+              <option value="/account">Account</option>
+              <option value="/about">About</option>
               <option value="/wishlist">Wishlist</option>
-              <option value="/orders">Orders</option>
-              <option value="/cart">Cart</option>
+              <option value="/customer">Customer</option>
+              <option value="/branches">Branch</option>
             </select>
             <p className="text-xs text-gray-500 mt-1">
               Halaman internal yang akan dibuka di customer app
@@ -537,8 +510,9 @@ export default function AddBannerModal({
   }
 
   return (
-    <AnimatePresence>
-      {open && (
+    <>
+      <AnimatePresence>
+        {open && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -659,10 +633,14 @@ export default function AddBannerModal({
                     </div>
                     <div className="text-center">
                       <span className="text-sm font-medium text-gray-700 group-hover:text-red-600 transition-colors">
-                        Upload Gambar Banner
+                        Pilih Gambar Banner
                       </span>
                       <p className="text-xs text-gray-500 mt-1">
-                        PNG, JPG, WebP (Maks. 5MB) — Rekomendasi: 1368 × 600 px (2,28:1)
+                        PNG, JPG, WebP (Maks. 5MB) — Rekomendasi: 1368 × 600 px
+                        (2,28:1)
+                      </p>
+                      <p className="mt-1 text-xs font-medium text-red-500">
+                        Crop, geser, zoom, dan putar gambar sebelum digunakan
                       </p>
                     </div>
                     <input
@@ -670,10 +648,23 @@ export default function AddBannerModal({
                       accept="image/png,image/jpeg,image/webp"
                       className="hidden"
                       disabled={saving}
-                      onChange={async (e) => {
+                      onChange={(e) => {
                         const input = e.currentTarget;
                         const file = input.files?.[0];
                         if (file) {
+                          if (
+                            ![
+                              "image/png",
+                              "image/jpeg",
+                              "image/webp",
+                            ].includes(file.type)
+                          ) {
+                            setError(
+                              "Format gambar tidak didukung. Gunakan PNG, JPG, atau WebP.",
+                            );
+                            input.value = "";
+                            return;
+                          }
                           if (file.size > 5 * 1024 * 1024) {
                             setError(
                               "Ukuran gambar terlalu besar. Maksimal 5MB",
@@ -682,33 +673,9 @@ export default function AddBannerModal({
                             return;
                           }
 
-                          try {
-                            const { width, height } =
-                              await getImageDimensions(file);
-                            const ratio = width / height;
-
-                            if (
-                              Math.abs(ratio - BANNER_ASPECT_RATIO) >
-                              BANNER_ASPECT_TOLERANCE
-                            ) {
-                              setError(
-                                `Rasio gambar harus 2,28:1. Gunakan ukuran ${BANNER_WIDTH} × ${BANNER_HEIGHT} px atau ukuran lain dengan rasio yang sama.`,
-                              );
-                              input.value = "";
-                              return;
-                            }
-                          } catch (imageError) {
-                            setError(
-                              imageError instanceof Error
-                                ? imageError.message
-                                : "File gambar tidak dapat dibaca",
-                            );
-                            input.value = "";
-                            return;
-                          }
-
-                          setImageFile(file);
+                          setPendingImageFile(file);
                           setError(null);
+                          input.value = "";
                         }
                       }}
                     />
@@ -717,7 +684,9 @@ export default function AddBannerModal({
                   {imagePreview && (
                     <div
                       className="relative w-full bg-gray-50 rounded-xl overflow-hidden border-2 border-gray-200"
-                      style={{ aspectRatio: `${BANNER_WIDTH} / ${BANNER_HEIGHT}` }}
+                      style={{
+                        aspectRatio: `${BANNER_WIDTH} / ${BANNER_HEIGHT}`,
+                      }}
                     >
                       <div className="absolute top-2 right-2 z-10">
                         <div className="bg-green-500 text-white p-2 rounded-full shadow-lg">
@@ -732,8 +701,20 @@ export default function AddBannerModal({
                         unoptimized
                       />
                       {imageFile && (
-                        <div className="absolute bottom-2 left-2 right-2 bg-black/70 backdrop-blur-sm text-white px-3 py-2 rounded-lg text-xs truncate">
-                          {imageFile.name}
+                        <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2 rounded-lg bg-black/70 px-3 py-2 text-xs text-white backdrop-blur-sm">
+                          <span className="min-w-0 truncate">
+                            {imageFile.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPendingImageFile(imageSourceFile || imageFile)
+                            }
+                            className="inline-flex shrink-0 items-center gap-1 rounded-md bg-white/15 px-2 py-1 font-medium transition hover:bg-white/25"
+                          >
+                            <FaCropAlt className="h-3 w-3" />
+                            Sesuaikan ulang
+                          </button>
                         </div>
                       )}
                     </div>
@@ -749,7 +730,7 @@ export default function AddBannerModal({
                   </label>
                   <input
                     type="number"
-                    min="1"
+                    // min="1"
                     value={displayOrder}
                     onChange={(e) =>
                       setDisplayOrder(parseInt(e.target.value) || 1)
@@ -852,7 +833,21 @@ export default function AddBannerModal({
             onCancel={handleCancelClose}
           />
         </motion.div>
+        )}
+      </AnimatePresence>
+      {pendingImageFile && (
+        <BannerImageEditor
+          file={pendingImageFile}
+          onCancel={() => setPendingImageFile(null)}
+          onConfirm={(editedFile) => {
+            setImageFile(editedFile);
+            setImageSourceFile(pendingImageFile);
+            setImageUuid("");
+            setPendingImageFile(null);
+            setError(null);
+          }}
+        />
       )}
-    </AnimatePresence>
+    </>
   );
 }
