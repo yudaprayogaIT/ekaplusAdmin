@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaEdit, FaSave, FaTrash } from "react-icons/fa";
+import { FaCropAlt, FaEdit, FaSave, FaTrash } from "react-icons/fa";
 import { HiXMark } from "react-icons/hi2";
 import type {
   CustomerRegistration,
@@ -19,6 +19,7 @@ import {
   getResourceUrl,
 } from "@/config/api";
 import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
+import DocumentImageEditor from "./DocumentImageEditor";
 
 interface EditRegistrationModalProps {
   isOpen: boolean;
@@ -296,6 +297,8 @@ const checkboxClass =
 
 interface AttachmentEditorProps {
   label: string;
+  editorTitle: string;
+  fileSuffix: string;
   currentAttachment?: string | null;
   file: File | null;
   removed: boolean;
@@ -309,6 +312,8 @@ interface AttachmentEditorProps {
 
 function AttachmentEditor({
   label,
+  editorTitle,
+  fileSuffix,
   currentAttachment,
   file,
   removed,
@@ -323,6 +328,17 @@ function AttachmentEditor({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [storedAttachmentFile, setStoredAttachmentFile] =
+    useState<File | null>(null);
+
+  useEffect(() => {
+    if (!file) {
+      setSourceFile(null);
+      setPendingFile(null);
+    }
+  }, [file]);
 
   useEffect(() => {
     let cancelled = false;
@@ -331,6 +347,7 @@ function AttachmentEditor({
     async function loadPreview() {
       setPreviewOpen(false);
       setPreviewError(null);
+      setStoredAttachmentFile(null);
 
       if (removed) {
         setPreviewUrl(null);
@@ -369,8 +386,18 @@ function AttachmentEditor({
           throw new Error(`Gagal memuat attachment (${response.status})`);
         }
         const blob = await response.blob();
+        const attachmentName =
+          currentAttachment?.split("/").pop()?.split("?")[0] ||
+          `${fileSuffix}-attachment.jpg`;
+        const attachmentFile = new File([blob], attachmentName, {
+          type: blob.type.startsWith("image/") ? blob.type : "image/jpeg",
+          lastModified: Date.now(),
+        });
         objectUrl = URL.createObjectURL(blob);
-        if (!cancelled) setPreviewUrl(objectUrl);
+        if (!cancelled) {
+          setPreviewUrl(objectUrl);
+          setStoredAttachmentFile(attachmentFile);
+        }
       } catch (loadError) {
         if (!cancelled) {
           setPreviewUrl(null);
@@ -390,7 +417,7 @@ function AttachmentEditor({
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [currentAttachment, file, removed, token]);
+  }, [currentAttachment, file, fileSuffix, removed, token]);
 
   return (
     <div className="min-w-0 rounded-xl border border-slate-200 p-3">
@@ -444,16 +471,26 @@ function AttachmentEditor({
               {file.name}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              onFileChange(null);
-              if (inputRef.current) inputRef.current.value = "";
-            }}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            Batalkan pilihan
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setPendingFile(sourceFile || file)}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-200 bg-white px-3 py-2 text-sm font-semibold text-orange-700 transition hover:bg-orange-50"
+            >
+              <FaCropAlt className="h-3.5 w-3.5" />
+              Sesuaikan ulang
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onFileChange(null);
+                if (inputRef.current) inputRef.current.value = "";
+              }}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Batalkan pilihan
+            </button>
+          </div>
         </div>
       ) : removed ? (
         <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -478,14 +515,26 @@ function AttachmentEditor({
           >
             Lihat attachment saat ini
           </a>
-          <button
-            type="button"
-            onClick={() => onRemovedChange(true)}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50"
-          >
-            <FaTrash className="h-3.5 w-3.5" />
-            Hapus
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {storedAttachmentFile && (
+              <button
+                type="button"
+                onClick={() => setPendingFile(storedAttachmentFile)}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-200 bg-white px-3 py-2 text-sm font-semibold text-orange-700 transition hover:bg-orange-50"
+              >
+                <FaCropAlt className="h-3.5 w-3.5" />
+                Sesuaikan
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => onRemovedChange(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50"
+            >
+              <FaTrash className="h-3.5 w-3.5" />
+              Hapus
+            </button>
+          </div>
         </div>
       ) : (
         <p className="mb-3 text-sm text-slate-500">Belum ada attachment.</p>
@@ -512,15 +561,23 @@ function AttachmentEditor({
             onChange={(event) => {
               const selectedFile = event.target.files?.[0] || null;
               const isAccepted =
-                !selectedFile || selectedFile.type.startsWith("image/");
+                !selectedFile ||
+                ["image/png", "image/jpeg", "image/webp"].includes(
+                  selectedFile.type,
+                );
               if (!isAccepted) {
-                onError("Attachment harus berupa file gambar");
+                onError("Gunakan gambar berformat PNG, JPG, atau WebP");
+                event.target.value = "";
+                return;
+              }
+              if (selectedFile && selectedFile.size > 5 * 1024 * 1024) {
+                onError("Ukuran gambar maksimal 5MB");
                 event.target.value = "";
                 return;
               }
               onError(null);
-              onRemovedChange(false);
-              onFileChange(selectedFile);
+              setPendingFile(selectedFile);
+              event.target.value = "";
             }}
           />
         </label>
@@ -562,6 +619,23 @@ function AttachmentEditor({
           </motion.div>
         )}
       </AnimatePresence>
+      {pendingFile && (
+        <DocumentImageEditor
+          file={pendingFile}
+          outputWidth={1200}
+          outputHeight={756}
+          title={editorTitle}
+          fileSuffix={fileSuffix}
+          onCancel={() => setPendingFile(null)}
+          onConfirm={(editedFile) => {
+            setSourceFile(pendingFile);
+            onFileChange(editedFile);
+            onRemovedChange(false);
+            onError(null);
+            setPendingFile(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -2174,7 +2248,9 @@ export function EditRegistrationModal({
                 </p>
                 <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
                   <AttachmentEditor
-                    label="Identity Attachment"
+                    label="Foto KTP / Identity Attachment"
+                    editorTitle="Sesuaikan Foto KTP"
+                    fileSuffix="ktp"
                     currentAttachment={registration.identity_attachment}
                     file={identityAttachmentFile}
                     removed={identityAttachmentRemoved}
@@ -2188,7 +2264,9 @@ export function EditRegistrationModal({
 
                   {form.tax_status === 1 && (
                     <AttachmentEditor
-                      label="NPWP Attachment *"
+                      label="Foto NPWP *"
+                      editorTitle="Sesuaikan Foto NPWP"
+                      fileSuffix="npwp"
                       currentAttachment={registration.npwp_attachment}
                       file={npwpAttachmentFile}
                       removed={npwpAttachmentRemoved}
