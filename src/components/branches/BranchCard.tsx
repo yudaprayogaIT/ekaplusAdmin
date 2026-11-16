@@ -43,11 +43,12 @@ export default function BranchCard({
           {/* Map Preview Icon - Hidden on mobile for space */}
           <div className="hidden md:flex w-20 h-20 lg:w-24 lg:h-24 bg-gradient-to-br from-red-50 to-red-100 rounded-xl flex-shrink-0 items-center justify-center">
             <Image
-              src="/images/maps.jpg"
-              alt="map"
+              src={branch.image || "/images/maps.jpg"}
+              alt={branch.image ? branch.branch_name : "map"}
               width={250}
               height={250}
-              className="w-25 h-25 object-cover rounded-xl"
+              unoptimized={Boolean(branch.image)}
+              className="h-full w-full rounded-xl object-cover"
             />
           </div>
 
@@ -154,11 +155,11 @@ export default function BranchCard({
           <FaMapMarkerAlt className="w-20 h-20" />
         </div> */}
         <Image
-          src="/images/maps.jpg"
-          alt="map"
-          width={200}
-          height={200}
-          className="w-full object-fill"
+          src={branch.image || "/images/maps.jpg"}
+          alt={branch.image ? branch.branch_name : "map"}
+          fill
+          unoptimized={Boolean(branch.image)}
+          className="object-cover"
         />
 
         {/* Badges */}

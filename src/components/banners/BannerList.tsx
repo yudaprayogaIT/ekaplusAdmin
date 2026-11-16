@@ -2,17 +2,34 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import {
+  closestCenter,
+  DndContext,
+  DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  rectSortingStrategy,
+  sortableKeyboardCoordinates,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import BannerCard from "./BannerCard";
 import AddBannerModal from "./AddBannerModal";
 import BannerDetailModal from "./BannerDetailModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import {
   FaPlus,
-  FaFilter,
   FaSearch,
   FaList,
   FaTh,
-  FaSortAmountDown,
+  FaGripVertical,
   FaLock,
   FaImage,
 } from "react-icons/fa";
@@ -25,30 +42,54 @@ import {
   API_CONFIG,
   apiFetch,
 } from "@/config/api";
-import type { Banner, BannerAPIResponse, ScheduleStatus } from "@/types/banner";
+import type { Banner, BannerAPIResponse } from "@/types/banner";
 import { useDetailRoute } from "@/hooks/useDetailRoute";
-
-type SortOption =
-  | "display_order-asc"
-  | "display_order-desc"
-  | "name-asc"
-  | "name-desc"
-  | "id-asc"
-  | "id-desc";
 
 const SNAP_KEY = "ekatalog_banners_snapshot";
 
-// Helper function to determine schedule status
-function getScheduleStatus(banner: Banner): ScheduleStatus {
-  if (!banner.start_date || !banner.end_date) return "none";
+function SortableBannerItem({
+  id,
+  disabled,
+  children,
+}: {
+  id: number;
+  disabled: boolean;
+  children: React.ReactNode;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id, disabled });
 
-  const now = new Date();
-  const start = new Date(banner.start_date);
-  const end = new Date(banner.end_date);
-
-  if (now < start) return "scheduled";
-  if (now > end) return "expired";
-  return "active";
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.55 : 1,
+        zIndex: isDragging ? 20 : undefined,
+      }}
+      className="relative"
+    >
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        disabled={disabled}
+        className="absolute left-2 top-2 z-30 flex h-8 w-8 cursor-grab items-center justify-center rounded-lg border border-gray-200 bg-white/95 text-gray-500 shadow-sm backdrop-blur transition hover:border-red-200 hover:text-red-600 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
+        aria-label="Geser untuk mengubah urutan banner"
+        title={disabled ? "Hapus pencarian untuk mengatur urutan" : "Geser banner"}
+      >
+        <FaGripVertical className="h-4 w-4" />
+      </button>
+      {children}
+    </div>
+  );
 }
 
 export default function BannerList() {
@@ -59,9 +100,12 @@ export default function BannerList() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [sortBy, setSortBy] = useState<SortOption>("display_order-asc");
-  const [filterSchedule, setFilterSchedule] = useState<ScheduleStatus | "all">(
-    "all",
+  const [reordering, setReordering] = useState(false);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -134,11 +178,9 @@ export default function BannerList() {
                 type: item.type as Banner["type"],
                 type_value: item.type_value,
                 disabled: item.disabled as 0 | 1,
-                display_order: item.display_order ?? 0,
-                start_date: item.start_date,
-                end_date: item.end_date,
-                click_count: item.click_count,
-                docstatus: item.docstatus,
+                order: typeof item.order === "number" ? item.order : null,
+                show_button: item.show_button === 1 ? 1 : 0,
+                button_display: item.button_display,
                 created_at: item.created_at,
                 updated_at: item.updated_at,
                 created_by:
@@ -219,11 +261,9 @@ export default function BannerList() {
             type: item.type as Banner["type"],
             type_value: item.type_value,
             disabled: item.disabled as 0 | 1,
-            display_order: item.display_order ?? 0,
-            start_date: item.start_date,
-            end_date: item.end_date,
-            click_count: item.click_count,
-            docstatus: item.docstatus,
+            order: typeof item.order === "number" ? item.order : null,
+            show_button: item.show_button === 1 ? 1 : 0,
+            button_display: item.button_display,
             created_at: item.created_at,
             updated_at: item.updated_at,
             created_by:
@@ -243,7 +283,7 @@ export default function BannerList() {
           setBanners(mappedBanners);
           localStorage.setItem(SNAP_KEY, JSON.stringify(mappedBanners));
         }
-      } catch (error) {
+      } catch {
         // console.error("Failed to reload banners:", error);
       }
     }
@@ -259,6 +299,111 @@ export default function BannerList() {
     window.dispatchEvent(new Event("ekatalog:banners_update"));
   }
 
+  function createBannerFormData(
+    banner: Banner,
+    overrides: Partial<Pick<Banner, "disabled" | "order">> = {},
+  ) {
+    const nextBanner = { ...banner, ...overrides };
+    const formData = new FormData();
+    formData.append("banner_name", nextBanner.banner_name);
+    formData.append("type", nextBanner.type);
+    formData.append("type_value", nextBanner.type_value || "");
+    formData.append("disabled", nextBanner.disabled.toString());
+    formData.append("show_button", nextBanner.show_button.toString());
+    formData.append("button_display", nextBanner.button_display || "");
+    if (nextBanner.order !== null) {
+      formData.append("order", nextBanner.order.toString());
+    }
+    if (nextBanner.image) {
+      const imageUuidMatch = nextBanner.image.match(/\/files\/(.+)$/);
+      formData.append(
+        "image",
+        imageUuidMatch ? imageUuidMatch[1] : nextBanner.image,
+      );
+    }
+    return formData;
+  }
+
+  async function updateBanner(banner: Banner, order?: number) {
+    if (!token) throw new Error("Not authenticated");
+    const response = await apiFetch(
+      getResourceUrl(API_CONFIG.ENDPOINTS.BANNER, banner.id),
+      {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+        body: createBannerFormData(
+          banner,
+          order === undefined ? {} : { order },
+        ),
+      },
+    );
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.message || `Gagal memperbarui banner (${response.status})`,
+      );
+    }
+  }
+
+  async function persistOrder(rows: Banner[]) {
+    const maxOrder = Math.max(
+      rows.length,
+      ...rows.map((banner) => banner.order || 0),
+    );
+    const temporaryBase = maxOrder + rows.length + 1000;
+    await Promise.all(
+      rows.map((banner, index) =>
+        updateBanner(banner, temporaryBase + index + 1),
+      ),
+    );
+    await Promise.all(
+      rows.map((banner, index) => updateBanner(banner, index + 1)),
+    );
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id || searchQuery.trim() || reordering) {
+      return;
+    }
+
+    const previous = [...banners].sort((a, b) => {
+      const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
+      const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
+      return orderA - orderB || a.id - b.id;
+    });
+    const oldIndex = previous.findIndex((banner) => banner.id === active.id);
+    const newIndex = previous.findIndex((banner) => banner.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const reordered = arrayMove(previous, oldIndex, newIndex).map(
+      (banner, index) => ({ ...banner, order: index + 1 }),
+    );
+    setBanners(reordered);
+    setReordering(true);
+    setError(null);
+    try {
+      await persistOrder(reordered);
+      localStorage.setItem(SNAP_KEY, JSON.stringify(reordered));
+    } catch (reorderError) {
+      const restored = previous.map((banner, index) => ({
+        ...banner,
+        order: index + 1,
+      }));
+      setBanners(restored);
+      try {
+        await persistOrder(restored);
+      } catch {}
+      setError(
+        reorderError instanceof Error
+          ? reorderError.message
+          : "Gagal menyimpan urutan banner",
+      );
+    } finally {
+      setReordering(false);
+    }
+  }
+
   async function toggleBannerStatus(banner: Banner) {
     try {
       if (!token) {
@@ -266,24 +411,6 @@ export default function BannerList() {
       }
 
       const newDisabled = banner.disabled === 1 ? 0 : 1;
-
-      // Prepare FormData for update
-      const formData = new FormData();
-      formData.append("banner_name", banner.banner_name);
-      formData.append("type", banner.type);
-      formData.append("type_value", banner.type_value || "");
-      formData.append("disabled", newDisabled.toString());
-      formData.append("display_order", banner.display_order.toString());
-      formData.append("start_date", banner.start_date || "");
-      formData.append("end_date", banner.end_date || "");
-      formData.append("docstatus", banner.docstatus.toString());
-
-      // Include existing image UUID if available
-      if (banner.image) {
-        const imageUuidMatch = banner.image.match(/\/files\/(.+)$/);
-        const imageUuid = imageUuidMatch ? imageUuidMatch[1] : banner.image;
-        formData.append("image", imageUuid);
-      }
 
       const headers = {
         Authorization: `Bearer ${token}`,
@@ -294,7 +421,7 @@ export default function BannerList() {
         {
           method: "PUT",
           headers,
-          body: formData,
+          body: createBannerFormData(banner, { disabled: newDisabled }),
         },
       );
 
@@ -453,7 +580,7 @@ export default function BannerList() {
     );
   }
 
-  // Filter banners by search and schedule
+  // Filter banners by search
   let filteredBanners = banners;
 
   if (searchQuery.trim()) {
@@ -462,45 +589,18 @@ export default function BannerList() {
     );
   }
 
-  if (filterSchedule !== "all") {
-    filteredBanners = filteredBanners.filter(
-      (b) => getScheduleStatus(b) === filterSchedule,
-    );
-  }
-
-  // Sort banners
+  // The persisted order is the only display order; name/date sorting would
+  // make drag-and-drop ambiguous.
   const sortedBanners = [...filteredBanners].sort((a, b) => {
-    switch (sortBy) {
-      case "display_order-asc":
-        return a.display_order - b.display_order;
-      case "display_order-desc":
-        return b.display_order - a.display_order;
-      case "name-asc":
-        return a.banner_name.localeCompare(b.banner_name);
-      case "name-desc":
-        return b.banner_name.localeCompare(a.banner_name);
-      case "id-asc":
-        return a.id - b.id;
-      case "id-desc":
-        return b.id - a.id;
-      default:
-        return 0;
-    }
+    const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
+    const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
+    return orderA - orderB || a.id - b.id;
   });
 
   // Calculate stats
   const totalBanners = banners.length;
   const enabledCount = banners.filter((b) => b.disabled === 0).length;
   const disabledCount = banners.filter((b) => b.disabled === 1).length;
-  const activeCount = banners.filter(
-    (b) => getScheduleStatus(b) === "active",
-  ).length;
-  const scheduledCount = banners.filter(
-    (b) => getScheduleStatus(b) === "scheduled",
-  ).length;
-  const expiredCount = banners.filter(
-    (b) => getScheduleStatus(b) === "expired",
-  ).length;
 
   return (
     <div>
@@ -573,73 +673,21 @@ export default function BannerList() {
             </div>
           </div>
 
-          {/* Filters */}
-          <div className="flex flex-wrap items-center gap-2 xl:flex-none">
-            <FaFilter className="h-4 w-4 shrink-0 text-gray-400" />
-
-            {/* Schedule Filter */}
-            <button
-              onClick={() => setFilterSchedule("all")}
-              className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-all ${
-                filterSchedule === "all"
-                  ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-md shadow-red-200"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Semua ({totalBanners})
-            </button>
-            <button
-              onClick={() => setFilterSchedule("active")}
-              className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-all ${
-                filterSchedule === "active"
-                  ? "bg-emerald-500 text-white shadow-md"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Aktif ({activeCount})
-            </button>
-            <button
-              onClick={() => setFilterSchedule("scheduled")}
-              className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-all ${
-                filterSchedule === "scheduled"
-                  ? "bg-sky-500 text-white shadow-md"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Terjadwal ({scheduledCount})
-            </button>
-            <button
-              onClick={() => setFilterSchedule("expired")}
-              className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-all ${
-                filterSchedule === "expired"
-                  ? "bg-gray-600 text-white shadow-md"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Berakhir ({expiredCount})
-            </button>
-
-            <div className="relative">
-              <FaSortAmountDown className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortOption)}
-                className="cursor-pointer appearance-none rounded-lg bg-gray-100 py-2 pl-9 pr-8 text-sm font-medium text-gray-700 transition-all hover:bg-gray-200 focus:ring-2 focus:ring-red-500"
-                aria-label="Urutkan banner"
-              >
-                <option value="display_order-asc">Urutan terkecil</option>
-                <option value="display_order-desc">Urutan terbesar</option>
-                <option value="id-asc">Paling lama</option>
-                <option value="id-desc">Paling baru</option>
-                <option value="name-asc">Nama A-Z</option>
-                <option value="name-desc">Nama Z-A</option>
-              </select>
-            </div>
+          <div className="flex items-center gap-2 text-sm text-gray-500 xl:flex-none">
+            <FaGripVertical className="h-4 w-4" />
+            <span>
+              {reordering
+                ? "Menyimpan urutan..."
+                : searchQuery.trim()
+                  ? "Hapus pencarian untuk mengatur urutan"
+                  : "Tarik handle untuk mengatur urutan"}
+            </span>
           </div>
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-gray-100 pt-2 text-xs text-gray-500">
           <span>{sortedBanners.length} banner ditampilkan</span>
+          <span>{totalBanners} total</span>
           <span className="text-emerald-600">{enabledCount} enabled</span>
           <span className="text-red-500">{disabledCount} disabled</span>
         </div>
@@ -661,48 +709,71 @@ export default function BannerList() {
           </p>
         </div>
       ) : (
-        viewMode === "list" ? (
-          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <div className="grid min-w-[900px] grid-cols-[minmax(280px,2fr)_110px_140px_130px_minmax(180px,1fr)] items-center gap-4 bg-gray-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                <span>Banner</span>
-                <span>Status</span>
-                <span>Tipe</span>
-                <span>Jadwal</span>
-                <span>Urutan & Aksi</span>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={(event) => void handleDragEnd(event)}
+        >
+          <SortableContext
+            items={sortedBanners.map((banner) => banner.id)}
+            strategy={
+              viewMode === "list"
+                ? verticalListSortingStrategy
+                : rectSortingStrategy
+            }
+          >
+            {viewMode === "list" ? (
+              <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                <div className="overflow-x-auto">
+                  <div className="grid min-w-[900px] grid-cols-[minmax(280px,2fr)_110px_140px_130px_minmax(180px,1fr)] items-center gap-4 bg-gray-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    <span>Banner</span>
+                    <span>Status</span>
+                    <span>Tipe</span>
+                    <span>Tombol</span>
+                    <span>Urutan & Aksi</span>
+                  </div>
+                  <div>
+                    {sortedBanners.map((banner) => (
+                      <SortableBannerItem
+                        key={banner.id}
+                        id={banner.id}
+                        disabled={Boolean(searchQuery.trim()) || reordering}
+                      >
+                        <BannerCard
+                          banner={banner}
+                          viewMode="list"
+                          onEdit={() => handleEdit(banner)}
+                          onDelete={() => promptDeleteBanner(banner)}
+                          onView={() => openDetail(banner)}
+                          onToggle={() => toggleBannerStatus(banner)}
+                        />
+                      </SortableBannerItem>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                 {sortedBanners.map((banner) => (
-                  <BannerCard
+                  <SortableBannerItem
                     key={banner.id}
-                    banner={banner}
-                    viewMode="list"
-                    onEdit={() => handleEdit(banner)}
-                    onDelete={() => promptDeleteBanner(banner)}
-                    onView={() => openDetail(banner)}
-                    onToggle={() => toggleBannerStatus(banner)}
-                    scheduleStatus={getScheduleStatus(banner)}
-                  />
+                    id={banner.id}
+                    disabled={Boolean(searchQuery.trim()) || reordering}
+                  >
+                    <BannerCard
+                      banner={banner}
+                      viewMode="grid"
+                      onEdit={() => handleEdit(banner)}
+                      onDelete={() => promptDeleteBanner(banner)}
+                      onView={() => openDetail(banner)}
+                      onToggle={() => toggleBannerStatus(banner)}
+                    />
+                  </SortableBannerItem>
                 ))}
               </div>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-            {sortedBanners.map((banner) => (
-              <BannerCard
-                key={banner.id}
-                banner={banner}
-                viewMode="grid"
-                onEdit={() => handleEdit(banner)}
-                onDelete={() => promptDeleteBanner(banner)}
-                onView={() => openDetail(banner)}
-                onToggle={() => toggleBannerStatus(banner)}
-                scheduleStatus={getScheduleStatus(banner)}
-              />
-            ))}
-          </div>
-        )
+            )}
+          </SortableContext>
+        </DndContext>
       )}
 
       {/* Modals */}
@@ -718,7 +789,6 @@ export default function BannerList() {
         banner={detailItem}
         onEdit={onDetailEdit}
         onDelete={onDetailDelete}
-        scheduleStatus={detailItem ? getScheduleStatus(detailItem) : "none"}
       />
 
       <ConfirmDialog

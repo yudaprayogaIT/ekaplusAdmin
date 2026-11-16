@@ -12,16 +12,12 @@ import {
   FaBox,
   FaTags,
   FaBan,
-  FaCheckCircle,
   FaClock,
-  FaTimesCircle,
-  FaEye,
-  FaCalendar,
   FaUser,
   FaHistory,
 } from "react-icons/fa";
 import Image from "next/image";
-import type { Banner, ScheduleStatus } from "@/types/banner";
+import type { Banner } from "@/types/banner";
 
 type Props = {
   open: boolean;
@@ -29,7 +25,6 @@ type Props = {
   banner: Banner | null;
   onEdit: (banner: Banner) => void;
   onDelete: (banner: Banner) => void;
-  scheduleStatus: ScheduleStatus;
 };
 
 export default function BannerDetailModal({
@@ -38,7 +33,6 @@ export default function BannerDetailModal({
   banner,
   onEdit,
   onDelete,
-  scheduleStatus,
 }: Props) {
   if (!banner) return null;
 
@@ -80,33 +74,6 @@ export default function BannerDetailModal({
     return configs[banner.type];
   };
 
-  // Schedule badge configuration
-  const getScheduleBadge = () => {
-    const configs = {
-      active: {
-        icon: FaCheckCircle,
-        bg: "bg-emerald-100",
-        text: "text-emerald-700",
-        label: "Active",
-      },
-      scheduled: {
-        icon: FaClock,
-        bg: "bg-sky-100",
-        text: "text-sky-700",
-        label: "Scheduled",
-      },
-      expired: {
-        icon: FaTimesCircle,
-        bg: "bg-gray-100",
-        text: "text-gray-700",
-        label: "Expired",
-      },
-      none: null,
-    };
-
-    return configs[scheduleStatus];
-  };
-
   // Format type value for display
   function formatTypeValue(): string {
     if (!banner) return "-";
@@ -141,7 +108,6 @@ export default function BannerDetailModal({
   }
 
   const typeBadge = getTypeBadge();
-  const scheduleBadge = getScheduleBadge();
   const TypeIcon = typeBadge.icon;
 
   return (
@@ -183,16 +149,6 @@ export default function BannerDetailModal({
                       <TypeIcon className="w-3 h-3" />
                       <span>{typeBadge.label}</span>
                     </div>
-
-                    {/* Schedule Badge */}
-                    {scheduleBadge && (
-                      <div
-                        className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-white/20`}
-                      >
-                        <scheduleBadge.icon className="w-3 h-3" />
-                        <span>{scheduleBadge.label}</span>
-                      </div>
-                    )}
 
                     {/* Enabled/Disabled Badge */}
                     <div
@@ -288,54 +244,23 @@ export default function BannerDetailModal({
                   </label>
                   <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200">
                     <span className="text-gray-700 font-bold">
-                      #{banner.display_order}
+                      {banner.order ? `#${banner.order}` : "Belum diurutkan"}
                     </span>
                   </div>
                 </div>
 
-                {/* Schedule */}
-                {(banner.start_date || banner.end_date) && (
-                  <>
-                    <div>
-                      <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1">
-                        <FaCalendar className="w-3 h-3" />
-                        Tanggal Mulai
-                      </label>
-                      <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200">
-                        <span className="text-gray-700 font-medium">
-                          {formatDate(banner.start_date)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className=" text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1">
-                        <FaCalendar className="w-3 h-3" />
-                        Tanggal Selesai
-                      </label>
-                      <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200">
-                        <span className="text-gray-700 font-medium">
-                          {formatDate(banner.end_date)}
-                        </span>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Click Count */}
-                {banner.click_count !== undefined && (
-                  <div>
-                    <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1">
-                      <FaEye className="w-3 h-3" />
-                      Total Clicks
-                    </label>
-                    <div className="px-4 py-3 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl border-2 border-blue-200">
-                      <span className="text-blue-900 font-bold text-lg">
-                        {banner.click_count.toLocaleString()}
-                      </span>
-                    </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Tombol Banner
+                  </label>
+                  <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200">
+                    <span className="text-gray-700 font-medium">
+                      {banner.show_button === 1
+                        ? banner.button_display || "Ditampilkan"
+                        : "Tidak ditampilkan"}
+                    </span>
                   </div>
-                )}
+                </div>
               </div>
 
               {/* Catatan Aktivitas */}

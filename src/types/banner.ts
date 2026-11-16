@@ -12,11 +12,9 @@ export type Banner = {
   type: BannerType;
   type_value: string | null;
   disabled: 0 | 1;
-  display_order: number;
-  start_date: string | null; // ISO date string
-  end_date: string | null; // ISO date string
-  click_count?: number; // From analytics join
-  docstatus: number;
+  order: number | null;
+  show_button: 0 | 1;
+  button_display: string | null;
   created_at: string;
   updated_at: string;
   created_by?: number | { id?: number; name?: string };
@@ -37,11 +35,9 @@ export type BannerAPIResponse = {
     type: string;
     type_value: string | null;
     disabled: number;
-    display_order: number;
-    start_date: string | null;
-    end_date: string | null;
-    click_count?: number;
-    docstatus: number;
+    order: number | null;
+    show_button: number;
+    button_display: string | null;
     created_at: string;
     updated_at: string;
     created_by: number | { id?: number; full_name?: string };
@@ -50,6 +46,3 @@ export type BannerAPIResponse = {
   }>;
   meta: Record<string, unknown>;
 };
-
-// Schedule status helper type
-export type ScheduleStatus = "scheduled" | "active" | "expired" | "none";

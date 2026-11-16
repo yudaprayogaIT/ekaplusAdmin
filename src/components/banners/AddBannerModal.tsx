@@ -46,10 +46,9 @@ export default function AddBannerModal({
   const [bannerName, setBannerName] = useState("");
   const [type, setType] = useState<BannerType>("url");
   const [typeValue, setTypeValue] = useState("");
-  const [disabled, setDisabled] = useState<0 | 1>(0);
-  const [displayOrder, setDisplayOrder] = useState(1);
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [disabled, setDisabled] = useState<0 | 1>(1);
+  const [showButton, setShowButton] = useState<0 | 1>(0);
+  const [buttonDisplay, setButtonDisplay] = useState("");
   const [imageUuid, setImageUuid] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageSourceFile, setImageSourceFile] = useState<File | null>(null);
@@ -69,10 +68,9 @@ export default function AddBannerModal({
     bannerName: "",
     type: "url" as BannerType,
     typeValue: "",
-    disabled: 0 as 0 | 1,
-    displayOrder: 1,
-    startDate: "",
-    endDate: "",
+    disabled: 1 as 0 | 1,
+    showButton: 0 as 0 | 1,
+    buttonDisplay: "",
     imageUuid: "",
   });
 
@@ -82,9 +80,8 @@ export default function AddBannerModal({
     type !== initialState.type ||
     typeValue !== initialState.typeValue ||
     disabled !== initialState.disabled ||
-    displayOrder !== initialState.displayOrder ||
-    startDate !== initialState.startDate ||
-    endDate !== initialState.endDate ||
+    showButton !== initialState.showButton ||
+    buttonDisplay !== initialState.buttonDisplay ||
     imageUuid !== initialState.imageUuid ||
     imageFile !== null;
 
@@ -103,9 +100,8 @@ export default function AddBannerModal({
       setType(initial.type);
       setTypeValue(initial.type_value ?? "");
       setDisabled(initial.disabled);
-      setDisplayOrder(initial.display_order ?? 1);
-      setStartDate(initial.start_date ? initial.start_date.slice(0, 16) : "");
-      setEndDate(initial.end_date ? initial.end_date.slice(0, 16) : "");
+      setShowButton(initial.show_button ?? 0);
+      setButtonDisplay(initial.button_display ?? "");
       setImageUuid(imageUuidExtracted);
       setImagePreview(initial.image || null);
       setImageFile(null);
@@ -118,19 +114,17 @@ export default function AddBannerModal({
         type: initial.type,
         typeValue: initial.type_value ?? "",
         disabled: initial.disabled,
-        displayOrder: initial.display_order ?? 1,
-        startDate: initial.start_date ? initial.start_date.slice(0, 16) : "",
-        endDate: initial.end_date ? initial.end_date.slice(0, 16) : "",
+        showButton: initial.show_button ?? 0,
+        buttonDisplay: initial.button_display ?? "",
         imageUuid: imageUuidExtracted,
       });
     } else {
       setBannerName("");
       setType("url");
       setTypeValue("");
-      setDisabled(0);
-      setDisplayOrder(1);
-      setStartDate("");
-      setEndDate("");
+      setDisabled(1);
+      setShowButton(0);
+      setButtonDisplay("");
       setImageUuid("");
       setImagePreview(null);
       setImageFile(null);
@@ -142,10 +136,9 @@ export default function AddBannerModal({
         bannerName: "",
         type: "url",
         typeValue: "",
-        disabled: 0,
-        displayOrder: 1,
-        startDate: "",
-        endDate: "",
+        disabled: 1,
+        showButton: 0,
+        buttonDisplay: "",
         imageUuid: "",
       });
     }
@@ -173,7 +166,7 @@ export default function AddBannerModal({
               ),
             );
           }
-        } catch (err) {
+        } catch {
           // console.error("Failed to load products:", err);
         } finally {
           setLoadingProducts(false);
@@ -209,7 +202,7 @@ export default function AddBannerModal({
               ),
             );
           }
-        } catch (err) {
+        } catch {
           // console.error("Failed to load categories:", err);
         } finally {
           setLoadingCategories(false);
@@ -308,9 +301,12 @@ export default function AddBannerModal({
         throw new Error(typeValueError);
       }
 
-      // Validate date range
-      if (startDate && endDate && new Date(endDate) < new Date(startDate)) {
-        throw new Error("Tanggal selesai harus setelah tanggal mulai");
+      if (!bannerName.trim()) {
+        throw new Error("Nama banner wajib diisi");
+      }
+
+      if (showButton === 1 && !buttonDisplay.trim()) {
+        throw new Error("Teks tombol wajib diisi saat tombol ditampilkan");
       }
 
       // Validate image
@@ -324,10 +320,15 @@ export default function AddBannerModal({
       formData.append("type", type);
       formData.append("type_value", type === "none" ? "" : typeValue.trim());
       formData.append("disabled", disabled.toString());
-      formData.append("display_order", displayOrder.toString());
-      formData.append("start_date", startDate || "");
-      formData.append("end_date", endDate || "");
-      formData.append("docstatus", "0");
+      formData.append("show_button", showButton.toString());
+      formData.append(
+        "button_display",
+        showButton === 1 ? buttonDisplay.trim() : "",
+      );
+      // Order is managed from Banner List; preserve it silently on edit.
+      if (initial?.order !== null && initial?.order !== undefined) {
+        formData.append("order", initial.order.toString());
+      }
 
       // Handle image upload
       if (imageFile) {
@@ -366,7 +367,7 @@ export default function AddBannerModal({
         );
       }
 
-      const result = await response.json();
+      await response.json();
       // console.log("Banner saved successfully:", result);
 
       // Trigger reload in BannerList
@@ -722,26 +723,8 @@ export default function AddBannerModal({
                 </div>
               </div>
 
-              {/* Display Order & Enabled Row */}
+              {/* Status & Button Visibility */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Display Order
-                  </label>
-                  <input
-                    type="number"
-                    // min="1"
-                    value={displayOrder}
-                    onChange={(e) =>
-                      setDisplayOrder(parseInt(e.target.value) || 1)
-                    }
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Urutan tampil banner
-                  </p>
-                </div>
-
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Status
@@ -760,41 +743,45 @@ export default function AddBannerModal({
                     Banner enabled atau disabled
                   </p>
                 </div>
-              </div>
-
-              {/* Schedule: Start Date & End Date */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Tanggal Mulai
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Kosongkan jika langsung aktif
-                  </p>
-                </div>
 
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Tanggal Selesai
+                    Tampilkan Tombol
                   </label>
-                  <input
-                    type="datetime-local"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    min={startDate || undefined}
+                  <select
+                    value={showButton}
+                    onChange={(e) =>
+                      setShowButton(parseInt(e.target.value) as 0 | 1)
+                    }
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
-                  />
+                  >
+                    <option value="0">Tidak</option>
+                    <option value="1">Ya</option>
+                  </select>
                   <p className="text-xs text-gray-500 mt-1">
-                    Kosongkan jika tidak ada batas waktu
+                    Tampilkan tombol aksi pada banner
                   </p>
                 </div>
               </div>
+
+              {showButton === 1 && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Teks Tombol <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={buttonDisplay}
+                    onChange={(e) => setButtonDisplay(e.target.value)}
+                    placeholder="Contoh: Belanja Sekarang"
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Tulisan yang tampil pada tombol banner
+                  </p>
+                </div>
+              )}
 
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-6 border-t-2 border-gray-100">

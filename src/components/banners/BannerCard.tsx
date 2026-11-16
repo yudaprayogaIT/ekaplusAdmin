@@ -13,12 +13,9 @@ import {
   FaBox,
   FaTags,
   FaBan,
-  FaCheckCircle,
-  FaClock,
-  FaTimesCircle,
   FaEyeSlash,
 } from "react-icons/fa";
-import type { Banner, ScheduleStatus } from "@/types/banner";
+import type { Banner } from "@/types/banner";
 
 type Props = {
   banner: Banner;
@@ -27,7 +24,6 @@ type Props = {
   onDelete: () => void;
   onView: () => void;
   onToggle: () => void;
-  scheduleStatus: ScheduleStatus;
 };
 
 export default function BannerCard({
@@ -37,7 +33,6 @@ export default function BannerCard({
   onDelete,
   onView,
   onToggle,
-  scheduleStatus,
 }: Props) {
   // Type badge configuration
   const getTypeBadge = () => {
@@ -77,36 +72,7 @@ export default function BannerCard({
     return configs[banner.type];
   };
 
-
-  // Schedule badge configuration
-  const getScheduleBadge = () => {
-    const configs = {
-      active: {
-        icon: FaCheckCircle,
-        bg: "bg-emerald-100",
-        text: "text-emerald-700",
-        label: "Active",
-      },
-      scheduled: {
-        icon: FaClock,
-        bg: "bg-sky-100",
-        text: "text-sky-700",
-        label: "Scheduled",
-      },
-      expired: {
-        icon: FaTimesCircle,
-        bg: "bg-gray-100",
-        text: "text-gray-700",
-        label: "Expired",
-      },
-      none: null,
-    };
-
-    return configs[scheduleStatus];
-  };
-
   const typeBadge = getTypeBadge();
-  const scheduleBadge = getScheduleBadge();
   const TypeIcon = typeBadge.icon;
 
   if (viewMode === "list") {
@@ -181,26 +147,16 @@ export default function BannerCard({
         </div>
 
         <div>
-          {scheduleBadge ? (
-            <span
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${scheduleBadge.bg} ${scheduleBadge.text}`}
-            >
-              <scheduleBadge.icon className="h-3 w-3" />
-              {scheduleBadge.label}
-            </span>
-          ) : (
-            <span className="text-xs text-gray-400">Tanpa jadwal</span>
-          )}
+          <span className="text-xs font-medium text-gray-600">
+            {banner.show_button === 1
+              ? banner.button_display || "Tampil"
+              : "Tidak tampil"}
+          </span>
         </div>
 
         <div className="flex items-center justify-between gap-3">
           <div className="text-sm font-medium text-gray-600">
-            #{banner.display_order}
-            {banner.click_count !== undefined && (
-              <span className="ml-2 text-xs font-normal text-gray-400">
-                {banner.click_count.toLocaleString()} klik
-              </span>
-            )}
+            {banner.order ? `#${banner.order}` : "-"}
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <button
@@ -314,26 +270,18 @@ export default function BannerCard({
             <span>{typeBadge.label}</span>
           </div>
 
-          {/* Schedule Badge */}
-          {scheduleBadge && (
+          {banner.show_button === 1 && (
             <div
-              className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${scheduleBadge.bg} ${scheduleBadge.text}`}
+              className="flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-1 text-xs font-semibold text-indigo-700"
             >
-              <scheduleBadge.icon className="w-3 h-3" />
-              <span>{scheduleBadge.label}</span>
+              <span>{banner.button_display || "Button"}</span>
             </div>
           )}
         </div>
 
         {/* Meta Info */}
         <div className="flex items-center justify-between text-xs text-gray-500 mb-3 pb-3 border-b border-gray-100">
-          <span>Order: #{banner.display_order}</span>
-          {banner.click_count !== undefined && (
-            <span className="flex items-center gap-1">
-              <FaEye className="w-3 h-3" />
-              {banner.click_count.toLocaleString()}
-            </span>
-          )}
+          <span>{banner.order ? `Order: #${banner.order}` : "Belum diurutkan"}</span>
         </div>
 
         {/* Actions */}
