@@ -13,7 +13,6 @@ import {
   getQueryUrl,
   getResourceUrl,
   getAuthHeaders,
-  getFileUrl,
   API_CONFIG,
   apiFetch,
 } from "@/config/api";
@@ -42,7 +41,7 @@ export type Branch = {
   url: string;
   token: string;
   disabled: number;
-  image?: string;
+  // image?: string; // TODO: aktifkan setelah backend Branch selesai dibuild.
   created_at?: string;
   updated_at?: string;
   created_by?: string | number;
@@ -68,7 +67,6 @@ type BranchAPIResponse = {
     url: string;
     token: string;
     disabled: number;
-    image: string | null;
     created_at: string;
     updated_at: string;
     created_by: number | { id?: number; full_name?: string };
@@ -96,7 +94,6 @@ function mapBranchRow(item: BranchAPIRow): Branch {
     url: item.url,
     token: item.token,
     disabled: item.disabled,
-    image: getFileUrl(item.image),
     created_at: item.created_at,
     updated_at: item.updated_at,
     created_by:

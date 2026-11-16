@@ -117,7 +117,8 @@ export interface CustomerRegistration {
   };
 
   // Status & Metadata
-  status: "pending" | "approved" | "rejected" | "request" | "draft";
+  /** Workflow state name returned by the API. */
+  status: string;
   docstatus?: number;
   submission_date: string;
   created_at: string;

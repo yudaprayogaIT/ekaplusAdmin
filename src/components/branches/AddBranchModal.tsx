@@ -4,20 +4,14 @@
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  FaCheckCircle,
   FaTimes,
-  FaImage,
   FaMapMarkerAlt,
-  FaTrash,
-  FaUpload,
   FaGlobe,
 } from "react-icons/fa";
-import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getResourceUrl,
   getAuthHeadersFormData,
-  getFileUrl,
   API_CONFIG,
   apiFetch,
 } from "@/config/api";
@@ -37,7 +31,7 @@ type Branch = {
   url: string;
   token: string;
   disabled: number;
-  image?: string | null;
+  // image?: string | null; // TODO: aktifkan setelah backend Branch selesai dibuild.
 };
 
 const ISLAND_OPTIONS = [
@@ -72,9 +66,6 @@ export default function AddBranchModal({
   const [url, setUrl] = useState("");
   const [token, setToken] = useState("");
   const [disabled, setDisabled] = useState(0);
-  const [imageUuid, setImageUuid] = useState("");
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,7 +82,6 @@ export default function AddBranchModal({
     url: "",
     token: "",
     disabled: 0,
-    imageUuid: "",
   });
 
   // Check if form is dirty
@@ -106,9 +96,7 @@ export default function AddBranchModal({
     area !== initialState.area ||
     url !== initialState.url ||
     token !== initialState.token ||
-    disabled !== initialState.disabled ||
-    imageUuid !== initialState.imageUuid ||
-    imageFile !== null;
+    disabled !== initialState.disabled;
 
   // Unsaved changes hook
   const { showConfirm, handleClose, handleConfirmClose, handleCancelClose } =
@@ -117,9 +105,6 @@ export default function AddBranchModal({
   useEffect(() => {
     setError(null);
     if (initial) {
-      const currentImageUuid = initial.image?.match(/\/files\/(.+)$/)?.[1] ||
-        initial.image ||
-        "";
       setName(initial.name ?? "");
       setBranchName(initial.branch_name ?? "");
       setCity(initial.city ?? "");
@@ -131,9 +116,6 @@ export default function AddBranchModal({
       setUrl(initial.url ?? "");
       setToken(initial.token ?? "");
       setDisabled(initial.disabled ?? 0);
-      setImageUuid(currentImageUuid);
-      setImageFile(null);
-      setImagePreview(getFileUrl(initial.image) || null);
 
       // Set initial state for dirty checking
       setInitialState({
@@ -148,7 +130,6 @@ export default function AddBranchModal({
         url: initial.url ?? "",
         token: initial.token ?? "",
         disabled: initial.disabled ?? 0,
-        imageUuid: currentImageUuid,
       });
     } else {
       setName("");
@@ -162,9 +143,6 @@ export default function AddBranchModal({
       setUrl("");
       setToken("");
       setDisabled(0);
-      setImageUuid("");
-      setImageFile(null);
-      setImagePreview(null);
 
       // Set initial state for dirty checking
       setInitialState({
@@ -179,17 +157,9 @@ export default function AddBranchModal({
         url: "",
         token: "",
         disabled: 0,
-        imageUuid: "",
       });
     }
   }, [initial, open]);
-
-  useEffect(() => {
-    if (!imageFile) return;
-    const reader = new FileReader();
-    reader.onloadend = () => setImagePreview(reader.result as string);
-    reader.readAsDataURL(imageFile);
-  }, [imageFile]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -243,13 +213,7 @@ export default function AddBranchModal({
       formData.append("url", url.trim());
       formData.append("token", token.trim());
       formData.append("disabled", disabled.toString());
-      if (imageFile) {
-        formData.append("image", imageFile);
-      } else if (imageUuid) {
-        formData.append("image", imageUuid.trim());
-      } else if (initial?.image) {
-        formData.append("image", "");
-      }
+      // TODO: append field "image" setelah backend Branch selesai dibuild.
 
       const headers = getAuthHeadersFormData(authToken);
 
@@ -527,86 +491,6 @@ export default function AddBranchModal({
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
                     placeholder="token:key"
                   />
-                </div>
-              </div>
-
-              {/* Branch Image */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-3">
-                  Gambar Branch
-                </label>
-                <div className="space-y-3">
-                  <label className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-gray-300 px-6 py-8 transition-all hover:border-red-500 hover:bg-red-50 group">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 transition-colors group-hover:bg-red-100">
-                      <FaUpload className="h-5 w-5 text-gray-400 transition-colors group-hover:text-red-500" />
-                    </div>
-                    <div className="text-center">
-                      <span className="text-sm font-medium text-gray-700 transition-colors group-hover:text-red-600">
-                        {imagePreview ? "Ganti Gambar" : "Upload Gambar"}
-                      </span>
-                      <p className="mt-1 text-xs text-gray-500">
-                        PNG, JPG, atau WEBP (maksimal 5MB)
-                      </p>
-                    </div>
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      className="hidden"
-                      disabled={saving}
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (!file) return;
-                        if (file.size > 5 * 1024 * 1024) {
-                          setError("Ukuran gambar terlalu besar. Maksimal 5MB");
-                          event.target.value = "";
-                          return;
-                        }
-                        setImageFile(file);
-                        setError(null);
-                        event.target.value = "";
-                      }}
-                    />
-                  </label>
-
-                  {imagePreview && (
-                    <div className="relative h-56 w-full overflow-hidden rounded-xl border-2 border-gray-200 bg-gray-50">
-                      <Image
-                        src={imagePreview}
-                        alt="Preview gambar branch"
-                        fill
-                        unoptimized
-                        className="object-cover"
-                      />
-                      <div className="absolute left-3 top-3 rounded-full bg-green-500 p-2 text-white shadow-lg">
-                        <FaCheckCircle className="h-4 w-4" />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setImageFile(null);
-                          setImageUuid("");
-                          setImagePreview(null);
-                        }}
-                        className="absolute right-3 top-3 rounded-full bg-white/95 p-2 text-red-600 shadow-lg transition hover:bg-red-50"
-                        aria-label="Hapus gambar branch"
-                        title="Hapus gambar"
-                      >
-                        <FaTrash className="h-4 w-4" />
-                      </button>
-                      {imageFile && (
-                        <div className="absolute bottom-3 left-3 right-3 truncate rounded-lg bg-black/65 px-3 py-2 text-xs text-white backdrop-blur-sm">
-                          {imageFile.name}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {!imagePreview && (
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <FaImage className="h-4 w-4" />
-                      <span>Gambar bersifat opsional.</span>
-                    </div>
-                  )}
                 </div>
               </div>
 

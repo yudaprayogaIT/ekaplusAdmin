@@ -561,12 +561,8 @@ export function CustomerRegistrationList() {
         npwp_photo: undefined,
       },
 
-      // Status - map to lowercase for consistency
-      status: apiData.status.toLowerCase() as
-        | "approved"
-        | "rejected"
-        | "request"
-        | "draft",
+      // Keep the workflow state label exactly as returned by the API.
+      status: apiData.status,
       docstatus:
         typeof apiData.docstatus === "number"
           ? apiData.docstatus

@@ -63,12 +63,15 @@ interface CustomerRegisterAddressApiResponse {
   id: number;
   parent_id: number;
   label?: string | null;
+  type?: string | null;
+  email?: string | null;
   address?: string | null;
   city?: string | null;
   province?: string | null;
   district?: string | null;
   village?: string | null;
   postal_code?: string | null;
+  country?: string | null;
   pic_name?: string | null;
   pic_phone?: string | null;
   is_default?: number | boolean | null;
@@ -557,12 +560,15 @@ export function ApproveRegistrationModal({
             "id",
             "parent_id",
             "label",
+            "type",
+            "email",
             "address",
             "city",
             "province",
             "district",
             "village",
             "postal_code",
+            "country",
             "pic_name",
             "pic_phone",
             "is_default",
@@ -1313,9 +1319,16 @@ export function ApproveRegistrationModal({
           registration.support_data.erp_customer_group || undefined,
         notes: registration.support_data.more_information || undefined,
         sales_team: registration.support_data.sales_team || undefined,
-        customer_shipping_address: effectiveShippingAddresses.map(
-          (address) => ({
+        customer_register_address: effectiveShippingAddresses.map(
+          (address, index) => ({
+            type:
+              address.type ||
+              (normalizeEntityName(address.label).replace(/\s/g, "") ===
+              "ALAMATPERUSAHAAN"
+                ? "Office"
+                : "Shipping"),
             label: address.label || "Warehouse",
+            email: address.email || undefined,
             pic_name: address.pic_name || undefined,
             pic_phone: normalizePhone(address.pic_phone),
             address: address.address || "",
@@ -1323,7 +1336,10 @@ export function ApproveRegistrationModal({
             district: address.district || "",
             village: address.village || "",
             province: address.province || "",
-            is_default: address.is_default ? 1 : undefined,
+            postal_code: address.postal_code || undefined,
+            country: address.country || undefined,
+            is_default: address.is_default ? 1 : 0,
+            idx_row: index,
           }),
         ),
       };

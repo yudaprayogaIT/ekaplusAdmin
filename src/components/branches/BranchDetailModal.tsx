@@ -199,23 +199,6 @@ export default function BranchDetailModal({
                 </section>
 
                 <div className="space-y-5">
-                  {branch.image && (
-                    <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white p-3 shadow-sm">
-                      <div className="relative h-64 w-full overflow-hidden rounded-2xl bg-slate-100">
-                        <Image
-                          src={branch.image}
-                          alt={branch.branch_name}
-                          fill
-                          unoptimized
-                          className="object-cover"
-                        />
-                      </div>
-                      <p className="px-3 pb-2 pt-4 text-[11px] font-bold uppercase tracking-[0.24em] text-red-500">
-                        Gambar Branch
-                      </p>
-                    </section>
-                  )}
-
                   <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
                     <div className="mb-4 flex items-center gap-3">
                       <FaMapMarkerAlt className="h-5 w-5 text-red-500" />

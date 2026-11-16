@@ -52,6 +52,7 @@ interface ShippingApiRow {
   pic_name?: string | null;
   pic_phone?: string | null;
   is_default?: number | boolean | null;
+  idx_row?: number | null;
 }
 
 interface WilayahOption {
@@ -94,6 +95,8 @@ interface FormState {
   company_city: string;
   company_district: string;
   company_village: string;
+  company_postal_code: string;
+  company_country: string;
   shipping_addresses: CustomerRegistrationShippingAddress[];
 }
 
@@ -113,6 +116,7 @@ const UPPERCASE_FORM_FIELDS = new Set<keyof FormState>([
   "company_city",
   "company_district",
   "company_village",
+  "company_country",
 ]);
 
 function uppercaseText(value?: string | null) {
@@ -197,7 +201,10 @@ function isCompanyAddressShippingRow(row?: ShippingApiRow | null) {
   return label === "alamat perusahaan" || label === "alamatperusahaan";
 }
 
-function payloadShipping(addr: CustomerRegistrationShippingAddress) {
+function payloadShipping(
+  addr: CustomerRegistrationShippingAddress,
+  idxRow: number,
+) {
   return {
     label: cleanInputValue(addr.label).trim(),
     type: cleanInputValue(addr.type) || "Shipping",
@@ -209,7 +216,29 @@ function payloadShipping(addr: CustomerRegistrationShippingAddress) {
     district: cleanInputValue(addr.district).trim(),
     village: cleanInputValue(addr.village).trim(),
     province: cleanInputValue(addr.province).trim(),
+    postal_code: toNullableText(addr.postal_code),
+    country: toNullableText(addr.country),
     is_default: addr.is_default ? 1 : 0,
+    idx_row: idxRow,
+  };
+}
+
+function payloadCompanyAddress(form: FormState) {
+  return {
+    type: "Office",
+    label: "Alamat Perusahaan",
+    address: form.company_address.trim(),
+    province: form.company_province.trim(),
+    city: form.company_city.trim(),
+    district: form.company_district.trim(),
+    village: form.company_village.trim(),
+    postal_code: toNullableText(form.company_postal_code),
+    country: toNullableText(form.company_country),
+    email: toNullableText(form.branch_owner_email || form.owner_email),
+    pic_name: toNullableText(form.branch_owner || form.owner_full_name),
+    pic_phone: toNullableText(form.branch_owner_phone || form.owner_phone),
+    is_default: 0,
+    idx_row: 0,
   };
 }
 
@@ -831,6 +860,7 @@ export function EditRegistrationModal({
             province: cleanInputValue(x.province),
             district: cleanInputValue(x.district),
             village: cleanInputValue(x.village),
+            postal_code: cleanInputValue(x.postal_code),
             country: cleanInputValue(x.country),
             pic_name: cleanInputValue(x.pic_name),
             pic_phone: cleanInputValue(x.pic_phone),
@@ -867,6 +897,10 @@ export function EditRegistrationModal({
             company_city: cleanInputValue(registration.address.city_name),
             company_district: cleanInputValue(registration.address.district_name),
             company_village: cleanInputValue(registration.address.village_name),
+            company_postal_code: cleanInputValue(
+              registration.address.postal_code,
+            ),
+            company_country: "INDONESIA",
             shipping_addresses: shipping,
           });
 
@@ -904,7 +938,11 @@ export function EditRegistrationModal({
 
         const shippingSpec = {
           fields: ["*"],
-          filters: [["parent_id", "=", Number(registration.id)]],
+          filters: [
+            ["parent_id", "=", Number(registration.id)],
+            ["parent_type", "=", "customer_register"],
+          ],
+          limit: 100,
         };
         const branchSpec = { fields: ["id", "branch_name", "city"] };
         const [shippingRes, branchRes, provinceRows] = await Promise.all([
@@ -936,6 +974,7 @@ export function EditRegistrationModal({
           const fallbackRes = await apiFetch(
             getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER_ADDRESS, {
               fields: ["*"],
+              limit: 100,
             }),
             { method: "GET", cache: "no-store" },
             token,
@@ -956,6 +995,9 @@ export function EditRegistrationModal({
           ? branchRes
           : [];
 
+        const storedCompanyAddress = shippingRows.find(
+          isCompanyAddressShippingRow,
+        );
         const shipping = shippingRows
           .filter((row) => !isCompanyAddressShippingRow(row))
           .map((x) => ({
@@ -969,6 +1011,7 @@ export function EditRegistrationModal({
             province: cleanInputValue(x.province),
             district: cleanInputValue(x.district),
             village: cleanInputValue(x.village),
+            postal_code: cleanInputValue(x.postal_code),
             country: cleanInputValue(x.country),
             pic_name: cleanInputValue(x.pic_name),
             pic_phone: cleanInputValue(x.pic_phone),
@@ -1005,6 +1048,11 @@ export function EditRegistrationModal({
           company_city: cleanInputValue(registration.address.city_name),
           company_district: cleanInputValue(registration.address.district_name),
           company_village: cleanInputValue(registration.address.village_name),
+          company_postal_code: cleanInputValue(
+            storedCompanyAddress?.postal_code || registration.address.postal_code,
+          ),
+          company_country:
+            cleanInputValue(storedCompanyAddress?.country) || "INDONESIA",
           shipping_addresses: shipping,
         });
 
@@ -1734,6 +1782,7 @@ export function EditRegistrationModal({
             city_name: form.company_city.trim(),
             district_name: form.company_district.trim(),
             village_name: form.company_village.trim(),
+            postal_code: form.company_postal_code.trim(),
           },
           branch_owner: {
             full_name: form.branch_owner.trim(),
@@ -1805,7 +1854,12 @@ export function EditRegistrationModal({
         company_district: form.company_district.trim(),
         company_village: form.company_village.trim(),
         same_as_company_address: 0,
-        customer_shipping_address: form.shipping_addresses.map(payloadShipping),
+        customer_register_address: [
+          payloadCompanyAddress(form),
+          ...form.shipping_addresses.map((address, index) =>
+            payloadShipping(address, index + 1),
+          ),
+        ],
         ...(identityAttachmentRemoved
           ? { identity_attachment: null }
           : {}),
@@ -2441,6 +2495,30 @@ export function EditRegistrationModal({
                       />
                     )}
                   </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Kode Pos
+                    </label>
+                    <input
+                      value={form.company_postal_code}
+                      onChange={(e) =>
+                        setField("company_postal_code", e.target.value)
+                      }
+                      className={fieldClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Negara
+                    </label>
+                    <input
+                      value={form.company_country}
+                      onChange={(e) =>
+                        setField("company_country", e.target.value)
+                      }
+                      className={fieldClass}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -2552,6 +2630,20 @@ export function EditRegistrationModal({
                               value={s.pic_phone || ""}
                               onChange={(e) =>
                                 updateShip(i, { pic_phone: e.target.value })
+                              }
+                              className={fieldClass}
+                              disabled={Boolean(sameAsCompanyAddressItems[i])}
+                            />
+                          </div>
+                          <div className="md:col-span-2">
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">
+                              Email
+                            </label>
+                            <input
+                              type="email"
+                              value={s.email || ""}
+                              onChange={(e) =>
+                                updateShip(i, { email: e.target.value })
                               }
                               className={fieldClass}
                               disabled={Boolean(sameAsCompanyAddressItems[i])}
@@ -2743,6 +2835,32 @@ export function EditRegistrationModal({
                                 disabled={Boolean(sameAsCompanyAddressItems[i])}
                               />
                             )}
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">
+                              Kode Pos
+                            </label>
+                            <input
+                              value={s.postal_code || ""}
+                              onChange={(e) =>
+                                updateShip(i, { postal_code: e.target.value })
+                              }
+                              className={fieldClass}
+                              disabled={Boolean(sameAsCompanyAddressItems[i])}
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">
+                              Negara
+                            </label>
+                            <input
+                              value={s.country || ""}
+                              onChange={(e) =>
+                                updateShip(i, { country: e.target.value })
+                              }
+                              className={fieldClass}
+                              disabled={Boolean(sameAsCompanyAddressItems[i])}
+                            />
                           </div>
                         </div>
                       </div>

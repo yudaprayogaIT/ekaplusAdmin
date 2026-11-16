@@ -5,7 +5,7 @@ export type Branch = {
   name: string;
   address: string;
   city: string;
-  image?: string;
+  // image?: string; // TODO: aktifkan setelah backend Branch selesai dibuild.
 };
 
 export type Category = {

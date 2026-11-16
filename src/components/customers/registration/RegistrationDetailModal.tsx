@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { CustomerRegistration } from "@/types/customerRegistration";
 import { EditRegistrationModal } from "./EditRegistrationModal";
 import { motion } from "framer-motion";
@@ -27,6 +27,12 @@ import {
   type PaymentAccountInfo,
 } from "@/utils/paymentAccount";
 import { ResourceHistory } from "@/components/customers/ResourceHistory";
+import WorkflowActionBar from "@/components/workflow-actions/WorkflowActionBar";
+import WorkflowRejectNoteModal from "@/components/workflow-actions/WorkflowRejectNoteModal";
+import {
+  executeWorkflowAction,
+  type WorkflowActionItem,
+} from "@/services/workflowActionService";
 
 interface RegistrationDetailModalProps {
   isOpen: boolean;
@@ -77,6 +83,13 @@ interface CustomerRegisterContactApiResponse {
 interface CustomerPositionApiResponse {
   id: number;
   position_name?: string | null;
+}
+
+interface CustomerRegisterDetailEnvelope {
+  data?: {
+    status?: string | null;
+  } | null;
+  action?: WorkflowActionItem[] | null;
 }
 
 function normalizeShippingLabel(value?: string | null) {
@@ -393,6 +406,151 @@ export function RegistrationDetailModal({
   const [paymentAccountError, setPaymentAccountError] = useState<string | null>(
     null,
   );
+  const [workflowActions, setWorkflowActions] = useState<WorkflowActionItem[]>(
+    [],
+  );
+  const [workflowStatus, setWorkflowStatus] = useState<string | null>(null);
+  const [workflowLoading, setWorkflowLoading] = useState(false);
+  const [executingActionId, setExecutingActionId] = useState<number | null>(
+    null,
+  );
+  const [pendingRejectAction, setPendingRejectAction] =
+    useState<WorkflowActionItem | null>(null);
+  const [workflowResult, setWorkflowResult] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+
+  const loadWorkflowDetail = useCallback(async () => {
+    if (!isOpen || !registration?.id || !token || demoMode) {
+      setWorkflowActions([]);
+      setWorkflowStatus(null);
+      setWorkflowLoading(false);
+      return;
+    }
+
+    setWorkflowLoading(true);
+    try {
+      const response = await apiFetch(
+        getQueryUrl(
+          `${API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER}/${registration.id}`,
+          { fields: ["*"] },
+        ),
+        { method: "GET", cache: "no-store" },
+        token,
+      );
+      if (!response.ok) {
+        throw new Error(`Gagal memuat action workflow (${response.status})`);
+      }
+
+      const payload = (await response.json()) as CustomerRegisterDetailEnvelope;
+      setWorkflowActions(Array.isArray(payload.action) ? payload.action : []);
+      setWorkflowStatus(payload.data?.status?.trim() || null);
+    } catch (loadError) {
+      setWorkflowActions([]);
+      setWorkflowResult({
+        type: "error",
+        message:
+          loadError instanceof Error
+            ? loadError.message
+            : "Gagal memuat action workflow.",
+      });
+    } finally {
+      setWorkflowLoading(false);
+    }
+  }, [demoMode, isOpen, registration?.id, token]);
+
+  useEffect(() => {
+    void loadWorkflowDetail();
+  }, [loadWorkflowDetail]);
+
+  useEffect(() => {
+    setPendingRejectAction(null);
+    setWorkflowResult(null);
+  }, [registration?.id]);
+
+  const executeAction = useCallback(
+    async (
+      workflowAction: WorkflowActionItem,
+      payload?: Record<string, unknown>,
+    ) => {
+      if (!registration?.id || !token) return;
+
+      setExecutingActionId(workflowAction.id);
+      setWorkflowResult(null);
+      try {
+        const normalizedAction = workflowAction.action.trim().toLowerCase();
+        if (normalizedAction.includes("reject")) {
+          const note =
+            typeof payload?.rejected_note === "string"
+              ? payload.rejected_note.trim()
+              : "";
+          if (!note) throw new Error("Alasan reject wajib diisi.");
+
+          const updateResponse = await apiFetch(
+            getQueryUrl(
+              `${API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER}/${registration.id}`,
+              { fields: ["*"] },
+            ),
+            {
+              method: "PUT",
+              cache: "no-store",
+              body: JSON.stringify({
+                reject_reason: note,
+                reject_notes: note,
+              }),
+            },
+            token,
+          );
+          if (!updateResponse.ok) {
+            throw new Error(
+              `Gagal menyimpan alasan reject (${updateResponse.status})`,
+            );
+          }
+        }
+
+        await executeWorkflowAction({
+          token,
+          resourceName: "customer_register",
+          documentId: Number(registration.id),
+          actionId: workflowAction.id,
+          payload,
+        });
+
+        setPendingRejectAction(null);
+        setWorkflowResult({
+          type: "success",
+          message: `${workflowAction.action} berhasil dijalankan.`,
+        });
+        await loadWorkflowDetail();
+        window.dispatchEvent(
+          new Event("ekatalog:customer_registrations_update"),
+        );
+      } catch (actionError) {
+        setWorkflowResult({
+          type: "error",
+          message:
+            actionError instanceof Error
+              ? actionError.message
+              : "Gagal menjalankan action workflow.",
+        });
+      } finally {
+        setExecutingActionId(null);
+      }
+    },
+    [loadWorkflowDetail, registration?.id, token],
+  );
+
+  const handleWorkflowActionClick = useCallback(
+    (workflowAction: WorkflowActionItem) => {
+      if (workflowAction.action.toLowerCase().includes("reject")) {
+        setPendingRejectAction(workflowAction);
+        return;
+      }
+      void executeAction(workflowAction);
+    },
+    [executeAction],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -669,19 +827,18 @@ export function RegistrationDetailModal({
     return "bg-yellow-100 text-yellow-700 border-yellow-200";
   };
 
-  const getStatusLabel = (status: string) => {
-    return status.charAt(0).toUpperCase() + status.slice(1);
-  };
-
-  const normalizedStatus = (registration?.status || "").toLowerCase();
+  const currentStatus = workflowStatus || registration?.status || "";
+  const normalizedStatus = currentStatus.toLowerCase();
   const sagaStatus = (registration?.sync_info?.saga_status || "").toLowerCase();
   const hasSagaStatus = Boolean(sagaStatus);
   const hasSagaId = Boolean(registration?.sync_info?.sync_saga_id);
   const canShowSyncButton =
     Boolean(onSync) && hasSagaStatus && sagaStatus !== "completed";
   const canShowRollbackButton = Boolean(onRollback) && hasSagaId;
-  const canManageRegistration =
-    normalizedStatus === "draft" || normalizedStatus === "request";
+  const canEditRegistration =
+    canManageSaga ||
+    normalizedStatus === "draft" ||
+    normalizedStatus === "request";
   const rejectReason =
     registration?.reject_reason || registration?.rejection_reason || "-";
   const rejectNotes =
@@ -859,7 +1016,7 @@ export function RegistrationDetailModal({
                       registration.docstatus,
                     )}`}
                   >
-                    {getStatusLabel(registration.status)}
+                    {currentStatus}
                   </span>
                 )}
                 {canShowSyncButton && (
@@ -1685,6 +1842,40 @@ export function RegistrationDetailModal({
                 </section>
               )}
               <div className="mb-6">
+                {!demoMode && workflowResult ? (
+                  <div
+                    className={`mb-4 rounded-xl border px-4 py-3 text-sm font-medium ${
+                      workflowResult.type === "success"
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-red-200 bg-red-50 text-red-700"
+                    }`}
+                  >
+                    {workflowResult.message}
+                  </div>
+                ) : null}
+                {!demoMode && workflowActions.length > 0 ? (
+                  <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-900">
+                          Available Actions
+                        </h3>
+                        <p className="mt-1 text-sm text-slate-500">
+                          Action tersedia sesuai workflow dan role pengguna.
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                        {workflowActions.length} action tersedia
+                      </span>
+                    </div>
+                    <WorkflowActionBar
+                      actions={workflowActions}
+                      loadingActionId={executingActionId}
+                      disabled={workflowLoading}
+                      onActionClick={handleWorkflowActionClick}
+                    />
+                  </section>
+                ) : null}
                 <ResourceHistory
                   key={`customer-register-history-${registration.id}`}
                   endpoint={API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER}
@@ -1703,7 +1894,7 @@ export function RegistrationDetailModal({
                 Close
               </button>
 
-              {canManageRegistration && (
+              {canEditRegistration && (
                 <div className="flex gap-3">
                   <motion.button
                     data-tour={
@@ -1723,30 +1914,32 @@ export function RegistrationDetailModal({
                     <span>Edit</span>
                   </motion.button>
 
-                  <motion.button
-                    type="button"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => onReject?.(registration)}
-                    className="px-5 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white font-medium rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
-                  >
-                    <FaTimesCircle className="w-4 h-4" />
-                    <span>Reject</span>
-                  </motion.button>
+                  {demoMode ? (
+                    <>
+                      <motion.button
+                        type="button"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => onReject?.(registration)}
+                        className="px-5 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white font-medium rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
+                      >
+                        <FaTimesCircle className="w-4 h-4" />
+                        <span>Reject</span>
+                      </motion.button>
 
-                  <motion.button
-                    data-tour={
-                      demoMode ? "customer-register-approve-button" : undefined
-                    }
-                    type="button"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => onApprove?.(registration)}
-                    className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white font-medium rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
-                  >
-                    <FaCheckCircle className="w-4 h-4" />
-                    <span>Approve</span>
-                  </motion.button>
+                      <motion.button
+                        data-tour="customer-register-approve-button"
+                        type="button"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => onApprove?.(registration)}
+                        className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white font-medium rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
+                      >
+                        <FaCheckCircle className="w-4 h-4" />
+                        <span>Approve</span>
+                      </motion.button>
+                    </>
+                  ) : null}
                 </div>
               )}
 
@@ -1771,6 +1964,23 @@ export function RegistrationDetailModal({
           </div>
         </div>
       </div>
+
+      <WorkflowRejectNoteModal
+        open={pendingRejectAction !== null}
+        action={pendingRejectAction}
+        loading={
+          pendingRejectAction !== null &&
+          executingActionId === pendingRejectAction.id
+        }
+        onClose={() => {
+          if (executingActionId !== null) return;
+          setPendingRejectAction(null);
+        }}
+        onSubmit={async (note) => {
+          if (!pendingRejectAction) return;
+          await executeAction(pendingRejectAction, { rejected_note: note });
+        }}
+      />
 
       <EditRegistrationModal
         isOpen={isEditModalOpen}
