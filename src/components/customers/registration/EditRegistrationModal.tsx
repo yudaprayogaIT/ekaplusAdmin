@@ -938,10 +938,7 @@ export function EditRegistrationModal({
 
         const shippingSpec = {
           fields: ["*"],
-          filters: [
-            ["parent_id", "=", Number(registration.id)],
-            ["parent_type", "=", "customer_register"],
-          ],
+          filters: [["parent_id", "=", Number(registration.id)]],
           limit: 100,
         };
         const branchSpec = { fields: ["id", "branch_name", "city"] };

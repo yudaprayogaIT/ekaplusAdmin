@@ -40,7 +40,10 @@ interface RegistrationDetailModalProps {
   registration: CustomerRegistration | null;
   demoMode?: boolean;
   onDemoRegistrationChange?: (registration: CustomerRegistration) => void;
-  onApprove?: (registration: CustomerRegistration) => void;
+  onApprove?: (
+    registration: CustomerRegistration,
+    workflowAction?: WorkflowActionItem,
+  ) => void;
   onReject?: (registration: CustomerRegistration) => void;
   onEdit?: () => void;
   onSync?: (registration: CustomerRegistration) => void;
@@ -543,13 +546,31 @@ export function RegistrationDetailModal({
 
   const handleWorkflowActionClick = useCallback(
     (workflowAction: WorkflowActionItem) => {
-      if (workflowAction.action.toLowerCase().includes("reject")) {
+      const normalizedAction = workflowAction.action.toLowerCase();
+      const activeStatus = (
+        workflowStatus ||
+        registration?.status ||
+        ""
+      ).toLowerCase();
+
+      if (normalizedAction.includes("reject")) {
         setPendingRejectAction(workflowAction);
         return;
       }
+
+      if (
+        activeStatus === "request" &&
+        normalizedAction.includes("approve") &&
+        registration &&
+        onApprove
+      ) {
+        onApprove(registration, workflowAction);
+        return;
+      }
+
       void executeAction(workflowAction);
     },
-    [executeAction],
+    [executeAction, onApprove, registration, workflowStatus],
   );
 
   useEffect(() => {
@@ -588,10 +609,8 @@ export function RegistrationDetailModal({
       try {
         const spec = {
           fields: ["*"],
-          filters: [
-            ["parent_id", "=", Number(registration.id)],
-            ["parent_type", "=", "customer_register"],
-          ],
+          filters: [["parent_id", "=", Number(registration.id)]],
+          limit: 100,
         };
 
         const res = await apiFetch(

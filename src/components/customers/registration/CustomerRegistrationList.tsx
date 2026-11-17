@@ -39,6 +39,7 @@ import {
 } from "@/lib/driverTour";
 import type { Driver } from "driver.js";
 import { useResourceStatusOptions } from "@/hooks/useResourceStatusOptions";
+import type { WorkflowActionItem } from "@/services/workflowActionService";
 
 type SortField =
   | "company_name"
@@ -327,6 +328,8 @@ export function CustomerRegistrationList() {
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [selectedForAction, setSelectedForAction] =
     useState<CustomerRegistration | null>(null);
+  const [selectedWorkflowAction, setSelectedWorkflowAction] =
+    useState<WorkflowActionItem | null>(null);
 
   const [resultModal, setResultModal] = useState<{
     isOpen: boolean;
@@ -964,8 +967,12 @@ export function CustomerRegistrationList() {
   };
 
   // Approve/Reject action handlers
-  const handleApprove = (registration: CustomerRegistration) => {
+  const handleApprove = (
+    registration: CustomerRegistration,
+    workflowAction?: WorkflowActionItem,
+  ) => {
     setSelectedForAction(registration);
+    setSelectedWorkflowAction(workflowAction || null);
     setIsDetailModalOpen(false); // Close detail modal
     replaceDetailRouteWithList();
     setIsApproveModalOpen(true);
@@ -973,6 +980,7 @@ export function CustomerRegistrationList() {
 
   const handleReject = (registration: CustomerRegistration) => {
     setSelectedForAction(registration);
+    setSelectedWorkflowAction(null);
     setIsDetailModalOpen(false); // Close detail modal
     replaceDetailRouteWithList();
     setIsRejectModalOpen(true);
@@ -1522,6 +1530,7 @@ export function CustomerRegistrationList() {
 
   const handleApproveSuccess = (message: string) => {
     const active = selectedForAction;
+    const completedWorkflowAction = selectedWorkflowAction;
     const gpLine =
       message.match(/GROUP PARENT:\s*(.+)/)?.[1]?.trim() ||
       message.match(/GP ID:\s*(.+)/)?.[1]?.trim() ||
@@ -1537,12 +1546,19 @@ export function CustomerRegistrationList() {
 
     setIsApproveModalOpen(false);
     setSelectedForAction(null);
+    setSelectedWorkflowAction(null);
     setResultModal({
       isOpen: true,
       type: "success",
-      title: "Syncing Dipicu",
-      message: `Registrasi "${active?.company.name || "-"}" berhasil masuk status Syncing`,
-      description: "Data customer sedang diproses sinkronisasi melalui Saga.",
+      title: completedWorkflowAction
+        ? `${completedWorkflowAction.action} Berhasil`
+        : "Syncing Dipicu",
+      message: completedWorkflowAction
+        ? message
+        : `Registrasi "${active?.company.name || "-"}" berhasil masuk status Syncing`,
+      description: completedWorkflowAction
+        ? "Master customer telah disiapkan dan transition workflow berhasil dijalankan."
+        : "Data customer sedang diproses sinkronisasi melalui Saga.",
       details: [
         { label: "ID Pelanggan", value: active?.registration_number || "-" },
         { label: "Group Parent", value: gpLine },
@@ -1993,8 +2009,10 @@ export function CustomerRegistrationList() {
         onClose={() => {
           setIsApproveModalOpen(false);
           setSelectedForAction(null);
+          setSelectedWorkflowAction(null);
         }}
         registration={selectedForAction}
+        workflowAction={selectedWorkflowAction}
         demoMode={
           approveTourActive && selectedForAction?.id === tourRegistration.id
         }

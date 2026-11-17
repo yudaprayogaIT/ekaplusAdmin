@@ -30,11 +30,16 @@ import type {
   CustomerRegistration,
 } from "@/types/customerRegistration";
 import { fetchAllQueryRows } from "@/utils/fetchAllQueryRows";
+import {
+  executeWorkflowAction,
+  type WorkflowActionItem,
+} from "@/services/workflowActionService";
 
 interface ApproveRegistrationModalProps {
   isOpen: boolean;
   onClose: () => void;
   registration: CustomerRegistration | null;
+  workflowAction?: WorkflowActionItem | null;
   onSuccess: (message: string) => void;
   demoMode?: boolean;
 }
@@ -154,6 +159,7 @@ function hashFingerprint(value: string): string {
 function draftFingerprint(
   registrationId: string,
   draft: ApprovalDraft,
+  workflowActionId?: number,
 ): string {
   return hashFingerprint(
     JSON.stringify({
@@ -171,6 +177,7 @@ function draftFingerprint(
           ? ["existing", draft.gc.id]
           : [draft.gc?.mode, draft.gc?.mode === "create" ? draft.gc.name : ""],
       bc: ["saga_resolve", draft.bc.branchId],
+      workflowActionId: workflowActionId || null,
     }),
   );
 }
@@ -205,6 +212,7 @@ export function ApproveRegistrationModal({
   isOpen,
   onClose,
   registration,
+  workflowAction = null,
   onSuccess,
   demoMode = false,
 }: ApproveRegistrationModalProps) {
@@ -445,6 +453,7 @@ export function ApproveRegistrationModal({
     let cancelled = false;
     const initialGpId = registration.master_links?.gp_id ?? registration.gp_id;
     const initialGcId = registration.master_links?.gc_id ?? registration.gc_id;
+    const defaultGcName = normalizeEntityName(registration.company.name);
     const initialDraft: ApprovalDraft = {
       nb: registration.master_links?.nb_id
         ? {
@@ -479,7 +488,9 @@ export function ApproveRegistrationModal({
               registration.gc_name ||
               `GC${initialGcId}`,
           }
-        : null,
+        : defaultGcName
+          ? { mode: "create", name: defaultGcName }
+          : null,
       bc: {
         mode: "saga_resolve",
         branchId: Number(registration.company.branch_id),
@@ -556,27 +567,9 @@ export function ApproveRegistrationModal({
       const shippingPromise = requestJson(
         "Memuat alamat pengiriman",
         getQueryUrl(API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER_ADDRESS, {
-          fields: [
-            "id",
-            "parent_id",
-            "label",
-            "type",
-            "email",
-            "address",
-            "city",
-            "province",
-            "district",
-            "village",
-            "postal_code",
-            "country",
-            "pic_name",
-            "pic_phone",
-            "is_default",
-          ],
-          filters: [
-            ["parent_id", "=", Number(registration.id)],
-            ["parent_type", "=", "customer_register"],
-          ],
+          fields: ["*"],
+          filters: [["parent_id", "=", Number(registration.id)]],
+          limit: 100,
         }),
         "GET",
       )
@@ -591,9 +584,11 @@ export function ApproveRegistrationModal({
         })
         .catch(() => {
           if (cancelled) return;
-          setShippingLoaded(Boolean(registration.same_as_company_address));
+          // Address enrichment must not block the workflow transition. The
+          // backend remains the source of truth and can validate required data.
+          setShippingLoaded(true);
           setWarning(
-            "Alamat pengiriman belum berhasil dimuat. Muat ulang modal sebelum Commit.",
+            "Alamat pengiriman belum berhasil dimuat. Approval tetap dapat dilanjutkan tanpa data alamat tambahan.",
           );
         });
       const branchCodePromise = (registration.company.branch_code
@@ -627,7 +622,11 @@ export function ApproveRegistrationModal({
     if (raw) {
       try {
         const saved = JSON.parse(raw) as ApprovalCheckpoint;
-        const fingerprint = draftFingerprint(registration.id, initialDraft);
+        const fingerprint = draftFingerprint(
+          registration.id,
+          initialDraft,
+          workflowAction?.id,
+        );
         if (
           saved.version === 1 &&
           Date.now() - saved.updatedAt <= CHECKPOINT_TTL &&
@@ -660,6 +659,7 @@ export function ApproveRegistrationModal({
     registration,
     requestJson,
     token,
+    workflowAction?.id,
   ]);
 
   const selectedExistingGpid =
@@ -919,20 +919,27 @@ export function ApproveRegistrationModal({
   };
 
   const selectGroupParent = (selection: RequiredMasterDraft) => {
-    replaceDraft((current) => ({
-      ...current,
-      gp: selection,
-      gc:
+    replaceDraft((current) => {
+      const isSameExistingGp =
         current.gp?.mode === "existing" &&
         selection.mode === "existing" &&
-        current.gp.id === selection.id
+        current.gp.id === selection.id;
+      const defaultGcName = normalizeEntityName(registration?.company.name);
+
+      return {
+        ...current,
+        gp: selection,
+        gc: isSameExistingGp
           ? current.gc
-          : null,
-      bc: {
-        mode: "saga_resolve",
-        branchId: Number(registration?.company.branch_id || 0),
-      },
-    }));
+          : defaultGcName
+            ? { mode: "create", name: defaultGcName }
+            : null,
+        bc: {
+          mode: "saga_resolve",
+          branchId: Number(registration?.company.branch_id || 0),
+        },
+      };
+    });
     setExpandedSections((current) => ({ ...current, gp: false }));
   };
 
@@ -1017,7 +1024,8 @@ export function ApproveRegistrationModal({
     }
     if (
       checkpoint &&
-      checkpoint.fingerprint !== draftFingerprint(registration.id, draft)
+      checkpoint.fingerprint !==
+        draftFingerprint(registration.id, draft, workflowAction?.id)
     ) {
       return "Checkpoint tidak cocok dengan draft saat ini; rekonsiliasi master diperlukan";
     }
@@ -1030,6 +1038,7 @@ export function ApproveRegistrationModal({
     loadErrors,
     registration,
     shippingLoaded,
+    workflowAction?.id,
   ]);
 
   const addLog = useCallback((log: ApprovalOperationLog) => {
@@ -1289,8 +1298,7 @@ export function ApproveRegistrationModal({
       const applicantOwnerId = Number(registration.ekaplus_user?.id || 0);
       const fallbackOwnerId = Number(registration.created_by_id || 0);
       return {
-        status: "Syncing",
-        docstatus: 1,
+        ...(workflowAction ? {} : { status: "Syncing", docstatus: 1 }),
         owner:
           applicantOwnerId > 0
             ? applicantOwnerId
@@ -1344,7 +1352,7 @@ export function ApproveRegistrationModal({
         ),
       };
     },
-    [draft, effectiveShippingAddresses, registration],
+    [draft, effectiveShippingAddresses, registration, workflowAction],
   );
 
   const resolveCreatedResource = useCallback(
@@ -1413,7 +1421,11 @@ export function ApproveRegistrationModal({
       return;
     }
     let activeStage: ApprovalCommitStage = "checking";
-    const fingerprint = draftFingerprint(registration.id, draft);
+    const fingerprint = draftFingerprint(
+      registration.id,
+      draft,
+      workflowAction?.id,
+    );
     let current =
       checkpoint?.fingerprint === fingerprint
         ? checkpoint
@@ -1590,26 +1602,38 @@ export function ApproveRegistrationModal({
         addLog({
           stage: "register",
           status: "started",
-          message: "Mengirim approval Customer Register",
+          message: workflowAction
+            ? `Menjalankan workflow ${workflowAction.action}`
+            : "Mengirim approval Customer Register",
+        });
+        const approvalPayload = buildCustomerRegisterApprovePayload({
+          nbid,
+          gpid,
+          gcid,
+          bcid,
         });
         try {
           await requestJson(
-            "Submit Customer Register",
+            "Menyimpan hasil approval Customer Register",
             getQueryUrl(
               `${API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER}/${registration.id}`,
               { fields: ["*"] },
             ),
             "PUT",
-            buildCustomerRegisterApprovePayload({ nbid, gpid, gcid, bcid }),
+            approvalPayload,
           );
         } catch (caught) {
           const requestError = caught instanceof RequestError ? caught : null;
           if (!requestError?.outcomeUnknown) throw caught;
           const verify = await requestJson(
-            "Memeriksa hasil submit",
+            "Memeriksa hasil penyimpanan approval",
             getQueryUrl(
               `${API_CONFIG.ENDPOINTS.CUSTOMER_REGISTER}/${registration.id}`,
-              { fields: ["id", "status", "docstatus"] },
+              {
+                fields: workflowAction
+                  ? ["id", "nbid", "gpid", "gcid"]
+                  : ["id", "status", "docstatus"],
+              },
             ),
             "GET",
           ).catch(() => null);
@@ -1617,11 +1641,25 @@ export function ApproveRegistrationModal({
             verify && typeof verify === "object" && "data" in verify
               ? verify.data
               : null;
-          const submitted =
+          const updateWasApplied =
             row &&
             typeof row === "object" &&
-            Number("docstatus" in row ? row.docstatus : 0) === 1;
-          if (!submitted) throw requestError;
+            (workflowAction
+              ? Number("gpid" in row ? row.gpid : 0) === Number(gpid) &&
+                Number("gcid" in row ? row.gcid : 0) === Number(gcid)
+              : Number("docstatus" in row ? row.docstatus : 0) === 1);
+          if (!updateWasApplied) throw requestError;
+        }
+
+        if (workflowAction) {
+          if (!token) throw new Error("Sesi tidak tersedia");
+          await executeWorkflowAction({
+            token,
+            resourceName: "customer_register",
+            documentId: Number(registration.id),
+            actionId: workflowAction.id,
+            payload: approvalPayload,
+          });
         }
         current = updateCheckpoint(current, {
           completedStages: [
@@ -1633,7 +1671,9 @@ export function ApproveRegistrationModal({
       addLog({
         stage: "register",
         status: "submitted",
-        message: "Customer Register Submitted; sinkronisasi Saga berjalan",
+        message: workflowAction
+          ? `Workflow ${workflowAction.action} berhasil dijalankan`
+          : "Customer Register Submitted; sinkronisasi Saga berjalan",
       });
       setCommitStage("completed");
       persistCheckpoint(null);
@@ -1642,7 +1682,9 @@ export function ApproveRegistrationModal({
       window.dispatchEvent(new Event("ekatalog:gc_update"));
       window.dispatchEvent(new Event("ekatalog:bc_update"));
       onSuccess(
-        `Approval registrasi "${registration.company.name}" berhasil dikirim — sinkronisasi berjalan.`,
+        workflowAction
+          ? `${workflowAction.action} untuk registrasi "${registration.company.name}" berhasil dijalankan.`
+          : `Approval registrasi "${registration.company.name}" berhasil dikirim — sinkronisasi berjalan.`,
       );
     } catch (caught) {
       const requestError = caught instanceof RequestError ? caught : null;
