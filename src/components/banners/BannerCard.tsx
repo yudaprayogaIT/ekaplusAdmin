@@ -156,7 +156,7 @@ export default function BannerCard({
 
         <div className="flex items-center justify-between gap-3">
           <div className="text-sm font-medium text-gray-600">
-            {banner.order ? `#${banner.order}` : "-"}
+            {banner.sort_by ? `#${banner.sort_by}` : "-"}
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <button
@@ -281,7 +281,11 @@ export default function BannerCard({
 
         {/* Meta Info */}
         <div className="flex items-center justify-between text-xs text-gray-500 mb-3 pb-3 border-b border-gray-100">
-          <span>{banner.order ? `Order: #${banner.order}` : "Belum diurutkan"}</span>
+          <span>
+            {banner.sort_by
+              ? `Urutan: #${banner.sort_by}`
+              : "Belum diurutkan"}
+          </span>
         </div>
 
         {/* Actions */}

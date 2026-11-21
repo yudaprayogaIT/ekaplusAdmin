@@ -32,6 +32,9 @@ export type Item = {
   description?: string;
   category?: string; // Item category
   group?: string; // Item group
+  packing_shape?: string | null;
+  diameter?: string | number | null;
+  compression_rate?: string | number | null;
   disabled?: number;
 };
 

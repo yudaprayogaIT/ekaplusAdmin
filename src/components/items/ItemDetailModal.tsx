@@ -24,7 +24,7 @@ import {
 } from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
 
-type Branch = { id: number; name: string };
+type Branch = { id: number; name: string; city?: string };
 
 type Variant = {
   id: number | string;
@@ -44,6 +44,12 @@ function displayValue(value: unknown) {
   return value === null || value === undefined || value === ""
     ? "-"
     : String(value);
+}
+
+function formatPercentage(value: unknown) {
+  if (value === null || value === undefined || value === "") return "-";
+  const normalized = String(value).trim();
+  return normalized.endsWith("%") ? normalized : `${normalized}%`;
 }
 
 function InfoCell({ label, value }: { label: string; value: unknown }) {
@@ -353,7 +359,7 @@ export default function ItemDetailModal({
       try {
         const response = await apiFetch(
           getQueryUrl(API_CONFIG.ENDPOINTS.BRANCH, {
-            fields: ["id", "branch_name"],
+            fields: ["id", "branch_name", "city"],
           }),
           {
             method: "GET",
@@ -364,20 +370,24 @@ export default function ItemDetailModal({
         if (!response.ok) return;
 
         const json = await response.json();
-        const names = new Map<number, string>(
+        const branchDetails = new Map<number, Omit<Branch, "id">>(
           (json.data || []).map(
-            (branch: { id: number; branch_name: string }) => [
+            (branch: { id: number; branch_name: string; city?: string }) => [
               branch.id,
-              branch.branch_name,
+              { name: branch.branch_name, city: branch.city },
             ],
           ),
         );
         if (!cancelled) {
           setBranches(
-            itemBranches.map((branch) => ({
-              ...branch,
-              name: names.get(branch.id) || branch.name,
-            })),
+            itemBranches.map((branch) => {
+              const detail = branchDetails.get(branch.id);
+              return {
+                ...branch,
+                name: detail?.name || branch.name,
+                city: detail?.city || branch.city,
+              };
+            }),
           );
         }
       } finally {
@@ -486,6 +496,7 @@ export default function ItemDetailModal({
     ["Panjang", item.length ?? item.panjang, "CM"],
     ["Lebar", item.width ?? item.lebar, "CM"],
     ["Tinggi", item.height ?? item.tinggi, "CM"],
+    ["Diameter", item.diameter, "CM"],
     ["Berat Bersih", item.weight, "KG"],
   ];
 
@@ -585,6 +596,10 @@ export default function ItemDetailModal({
                       <InfoCell label="Kategori" value={item.category} />
                       <InfoCell label="Subkategori" value={item.subcategory} />
                       <InfoCell label="UOM" value={item.uom} />
+                      <InfoCell
+                        label="Jenis Barang (Packing Shape)"
+                        value={item.packing_shape}
+                      />
                       <div className="min-w-0 border-b border-slate-100 py-3">
                         <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">
                           Generator
@@ -628,6 +643,10 @@ export default function ItemDetailModal({
                         label="Standard Colly Item"
                         value={item.standard_colly_item}
                       />
+                      <InfoCell
+                        label="Compression Rate"
+                        value={formatPercentage(item.compression_rate)}
+                      />
                       <InfoCell label="NAma Item PPN" value={item.ppn_name} />
                       <InfoCell label="UOM PPN" value={item.uom_ppn} />
                       {/* <InfoCell
@@ -656,11 +675,11 @@ export default function ItemDetailModal({
                         </p>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 rounded-xl border border-slate-100 bg-slate-50/60 sm:grid-cols-4 sm:divide-x sm:divide-slate-100">
+                    <div className="grid grid-cols-2 rounded-xl border border-slate-100 bg-slate-50/60 sm:grid-cols-5 sm:divide-x sm:divide-slate-100">
                       {dimensions.map(([label, value, unit], index) => (
                         <div
                           key={String(label)}
-                          className={`border-b border-slate-100 px-4 py-4 sm:border-b-0 ${index === 3 ? "text-rose-600" : "text-slate-900"}`}
+                          className={`border-b border-slate-100 px-4 py-4 sm:border-b-0 ${index === 4 ? "text-rose-600" : "text-slate-900"}`}
                         >
                           <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 sm:text-[11px]">
                             {label}
@@ -690,7 +709,7 @@ export default function ItemDetailModal({
                     )}
                   </section>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-4">
                     <section className="rounded-xl border border-gray-200 p-4">
                       <SectionTitle
                         icon={<FaMapMarkerAlt />}
@@ -703,15 +722,18 @@ export default function ItemDetailModal({
                           Memuat cabang...
                         </p>
                       ) : branches.length > 0 ? (
-                        <div className="grid max-h-48 grid-cols-1 gap-2 overflow-y-auto pr-1 xl:grid-cols-2">
+                        <div className="grid max-h-48 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-4">
                           {branches.map((branch) => (
                             <div
                               key={branch.id}
                               className="flex min-w-0 items-center gap-2.5 rounded-lg bg-emerald-50 px-3 py-2.5 text-sm font-medium text-emerald-800"
                             >
                               <FaCheckCircle className="shrink-0 text-emerald-500" />
-                              <span className="truncate" title={branch.name}>
-                                {branch.name}
+                              <span
+                                className="truncate"
+                                title={branch.city || branch.name}
+                              >
+                                {branch.city || branch.name}
                               </span>
                             </div>
                           ))}

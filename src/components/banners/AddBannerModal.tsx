@@ -325,9 +325,9 @@ export default function AddBannerModal({
         "button_display",
         showButton === 1 ? buttonDisplay.trim() : "",
       );
-      // Order is managed from Banner List; preserve it silently on edit.
-      if (initial?.order !== null && initial?.order !== undefined) {
-        formData.append("order", initial.order.toString());
+      // Sort order is managed from Banner List; preserve it silently on edit.
+      if (initial?.sort_by !== null && initial?.sort_by !== undefined) {
+        formData.append("sort_by", initial.sort_by.toString());
       }
 
       // Handle image upload

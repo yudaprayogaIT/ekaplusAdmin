@@ -32,6 +32,9 @@ import {
   FaGripVertical,
   FaLock,
   FaImage,
+  FaEdit,
+  FaSave,
+  FaTimes,
 } from "react-icons/fa";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -101,6 +104,9 @@ export default function BannerList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [reordering, setReordering] = useState(false);
+  const [isEditingOrder, setIsEditingOrder] = useState(false);
+  const [orderChanged, setOrderChanged] = useState(false);
+  const orderSnapshotRef = useRef<Banner[] | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, {
@@ -178,7 +184,8 @@ export default function BannerList() {
                 type: item.type as Banner["type"],
                 type_value: item.type_value,
                 disabled: item.disabled as 0 | 1,
-                order: typeof item.order === "number" ? item.order : null,
+                sort_by:
+                  typeof item.sort_by === "number" ? item.sort_by : null,
                 show_button: item.show_button === 1 ? 1 : 0,
                 button_display: item.button_display,
                 created_at: item.created_at,
@@ -261,7 +268,8 @@ export default function BannerList() {
             type: item.type as Banner["type"],
             type_value: item.type_value,
             disabled: item.disabled as 0 | 1,
-            order: typeof item.order === "number" ? item.order : null,
+            sort_by:
+              typeof item.sort_by === "number" ? item.sort_by : null,
             show_button: item.show_button === 1 ? 1 : 0,
             button_display: item.button_display,
             created_at: item.created_at,
@@ -301,7 +309,7 @@ export default function BannerList() {
 
   function createBannerFormData(
     banner: Banner,
-    overrides: Partial<Pick<Banner, "disabled" | "order">> = {},
+    overrides: Partial<Pick<Banner, "disabled" | "sort_by">> = {},
   ) {
     const nextBanner = { ...banner, ...overrides };
     const formData = new FormData();
@@ -311,8 +319,8 @@ export default function BannerList() {
     formData.append("disabled", nextBanner.disabled.toString());
     formData.append("show_button", nextBanner.show_button.toString());
     formData.append("button_display", nextBanner.button_display || "");
-    if (nextBanner.order !== null) {
-      formData.append("order", nextBanner.order.toString());
+    if (nextBanner.sort_by !== null) {
+      formData.append("sort_by", nextBanner.sort_by.toString());
     }
     if (nextBanner.image) {
       const imageUuidMatch = nextBanner.image.match(/\/files\/(.+)$/);
@@ -324,7 +332,7 @@ export default function BannerList() {
     return formData;
   }
 
-  async function updateBanner(banner: Banner, order?: number) {
+  async function updateBanner(banner: Banner, sortBy?: number) {
     if (!token) throw new Error("Not authenticated");
     const response = await apiFetch(
       getResourceUrl(API_CONFIG.ENDPOINTS.BANNER, banner.id),
@@ -333,7 +341,7 @@ export default function BannerList() {
         headers: { Authorization: `Bearer ${token}` },
         body: createBannerFormData(
           banner,
-          order === undefined ? {} : { order },
+          sortBy === undefined ? {} : { sort_by: sortBy },
         ),
       },
     );
@@ -348,7 +356,7 @@ export default function BannerList() {
   async function persistOrder(rows: Banner[]) {
     const maxOrder = Math.max(
       rows.length,
-      ...rows.map((banner) => banner.order || 0),
+      ...rows.map((banner) => banner.sort_by || 0),
     );
     const temporaryBase = maxOrder + rows.length + 1000;
     await Promise.all(
@@ -361,39 +369,44 @@ export default function BannerList() {
     );
   }
 
-  async function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id || searchQuery.trim() || reordering) {
-      return;
+  function startEditingOrder() {
+    orderSnapshotRef.current = banners.map((banner) => ({ ...banner }));
+    setOrderChanged(false);
+    setError(null);
+    setIsEditingOrder(true);
+  }
+
+  function cancelEditingOrder() {
+    if (orderSnapshotRef.current) {
+      setBanners(orderSnapshotRef.current);
     }
+    orderSnapshotRef.current = null;
+    setOrderChanged(false);
+    setError(null);
+    setIsEditingOrder(false);
+  }
 
-    const previous = [...banners].sort((a, b) => {
-      const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
-      const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
-      return orderA - orderB || a.id - b.id;
-    });
-    const oldIndex = previous.findIndex((banner) => banner.id === active.id);
-    const newIndex = previous.findIndex((banner) => banner.id === over.id);
-    if (oldIndex < 0 || newIndex < 0) return;
+  async function saveOrder() {
+    if (!isEditingOrder || !orderChanged || reordering) return;
 
-    const reordered = arrayMove(previous, oldIndex, newIndex).map(
-      (banner, index) => ({ ...banner, order: index + 1 }),
-    );
-    setBanners(reordered);
+    const orderedBanners = [...banners]
+      .sort((a, b) => {
+        const orderA = a.sort_by ?? Number.MAX_SAFE_INTEGER;
+        const orderB = b.sort_by ?? Number.MAX_SAFE_INTEGER;
+        return orderA - orderB || a.id - b.id;
+      })
+      .map((banner, index) => ({ ...banner, sort_by: index + 1 }));
+
     setReordering(true);
     setError(null);
     try {
-      await persistOrder(reordered);
-      localStorage.setItem(SNAP_KEY, JSON.stringify(reordered));
+      await persistOrder(orderedBanners);
+      setBanners(orderedBanners);
+      localStorage.setItem(SNAP_KEY, JSON.stringify(orderedBanners));
+      orderSnapshotRef.current = null;
+      setOrderChanged(false);
+      setIsEditingOrder(false);
     } catch (reorderError) {
-      const restored = previous.map((banner, index) => ({
-        ...banner,
-        order: index + 1,
-      }));
-      setBanners(restored);
-      try {
-        await persistOrder(restored);
-      } catch {}
       setError(
         reorderError instanceof Error
           ? reorderError.message
@@ -402,6 +415,34 @@ export default function BannerList() {
     } finally {
       setReordering(false);
     }
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (
+      !isEditingOrder ||
+      !over ||
+      active.id === over.id ||
+      searchQuery.trim() ||
+      reordering
+    ) {
+      return;
+    }
+
+    const previous = [...banners].sort((a, b) => {
+      const orderA = a.sort_by ?? Number.MAX_SAFE_INTEGER;
+      const orderB = b.sort_by ?? Number.MAX_SAFE_INTEGER;
+      return orderA - orderB || a.id - b.id;
+    });
+    const oldIndex = previous.findIndex((banner) => banner.id === active.id);
+    const newIndex = previous.findIndex((banner) => banner.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const reordered = arrayMove(previous, oldIndex, newIndex).map(
+      (banner, index) => ({ ...banner, sort_by: index + 1 }),
+    );
+    setBanners(reordered);
+    setOrderChanged(true);
   }
 
   async function toggleBannerStatus(banner: Banner) {
@@ -592,8 +633,8 @@ export default function BannerList() {
   // The persisted order is the only display order; name/date sorting would
   // make drag-and-drop ambiguous.
   const sortedBanners = [...filteredBanners].sort((a, b) => {
-    const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
-    const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
+    const orderA = a.sort_by ?? Number.MAX_SAFE_INTEGER;
+    const orderB = b.sort_by ?? Number.MAX_SAFE_INTEGER;
     return orderA - orderB || a.id - b.id;
   });
 
@@ -615,15 +656,56 @@ export default function BannerList() {
           </p>
         </div>
 
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={handleAdd}
-          className="flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-red-500 to-red-600 px-4 py-2.5 text-sm font-medium text-white shadow-md shadow-red-200 transition-all hover:shadow-lg"
-        >
-          <FaPlus className="w-4 h-4" />
-          <span>Tambah Banner</span>
-        </motion.button>
+        <div className="flex flex-wrap items-center gap-2">
+          {isEditingOrder ? (
+            <>
+              <button
+                type="button"
+                onClick={cancelEditingOrder}
+                disabled={reordering}
+                className="flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <FaTimes className="h-4 w-4" />
+                <span>Batal</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveOrder()}
+                disabled={!orderChanged || reordering}
+                className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-md shadow-blue-200 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+              >
+                <FaSave className="h-4 w-4" />
+                <span>{reordering ? "Menyimpan..." : "Simpan Urutan"}</span>
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={startEditingOrder}
+              disabled={Boolean(searchQuery.trim()) || banners.length < 2}
+              className="flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+              title={
+                searchQuery.trim()
+                  ? "Hapus pencarian untuk mengubah urutan"
+                  : "Ubah urutan banner"
+              }
+            >
+              <FaEdit className="h-4 w-4" />
+              <span>Edit Urutan</span>
+            </button>
+          )}
+
+          <motion.button
+            whileHover={isEditingOrder ? undefined : { scale: 1.02 }}
+            whileTap={isEditingOrder ? undefined : { scale: 0.98 }}
+            onClick={handleAdd}
+            disabled={isEditingOrder}
+            className="flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-red-500 to-red-600 px-4 py-2.5 text-sm font-medium text-white shadow-md shadow-red-200 transition-all hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+          >
+            <FaPlus className="w-4 h-4" />
+            <span>Tambah Banner</span>
+          </motion.button>
+        </div>
       </div>
 
       {/* Search & Filter */}
@@ -637,8 +719,9 @@ export default function BannerList() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                disabled={isEditingOrder}
                 placeholder="Cari banner..."
-                className="w-full rounded-lg border border-gray-200 py-2.5 pl-9 pr-3 text-sm transition-all focus:border-transparent focus:ring-2 focus:ring-red-500"
+                className="w-full rounded-lg border border-gray-200 py-2.5 pl-9 pr-3 text-sm transition-all focus:border-transparent focus:ring-2 focus:ring-red-500 disabled:cursor-not-allowed disabled:bg-gray-100"
               />
             </div>
 
@@ -678,9 +761,13 @@ export default function BannerList() {
             <span>
               {reordering
                 ? "Menyimpan urutan..."
+                : isEditingOrder
+                  ? orderChanged
+                    ? "Urutan berubah — simpan atau batalkan"
+                    : "Tarik handle untuk mengubah urutan"
                 : searchQuery.trim()
                   ? "Hapus pencarian untuk mengatur urutan"
-                  : "Tarik handle untuk mengatur urutan"}
+                  : "Klik Edit Urutan untuk mulai mengatur"}
             </span>
           </div>
         </div>
@@ -712,7 +799,7 @@ export default function BannerList() {
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
-          onDragEnd={(event) => void handleDragEnd(event)}
+          onDragEnd={handleDragEnd}
         >
           <SortableContext
             items={sortedBanners.map((banner) => banner.id)}
@@ -737,7 +824,11 @@ export default function BannerList() {
                       <SortableBannerItem
                         key={banner.id}
                         id={banner.id}
-                        disabled={Boolean(searchQuery.trim()) || reordering}
+                        disabled={
+                          !isEditingOrder ||
+                          Boolean(searchQuery.trim()) ||
+                          reordering
+                        }
                       >
                         <BannerCard
                           banner={banner}
@@ -758,7 +849,11 @@ export default function BannerList() {
                   <SortableBannerItem
                     key={banner.id}
                     id={banner.id}
-                    disabled={Boolean(searchQuery.trim()) || reordering}
+                    disabled={
+                      !isEditingOrder ||
+                      Boolean(searchQuery.trim()) ||
+                      reordering
+                    }
                   >
                     <BannerCard
                       banner={banner}

@@ -12,7 +12,7 @@ export type Banner = {
   type: BannerType;
   type_value: string | null;
   disabled: 0 | 1;
-  order: number | null;
+  sort_by: number | null;
   show_button: 0 | 1;
   button_display: string | null;
   created_at: string;
@@ -35,7 +35,7 @@ export type BannerAPIResponse = {
     type: string;
     type_value: string | null;
     disabled: number;
-    order: number | null;
+    sort_by: number | null;
     show_button: number;
     button_display: string | null;
     created_at: string;

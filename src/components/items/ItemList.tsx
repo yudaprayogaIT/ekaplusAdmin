@@ -28,6 +28,8 @@ import {
   FaExclamationTriangle,
   FaFileExcel,
   FaSpinner,
+  FaMapMarkerAlt,
+  FaCheck,
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -93,12 +95,14 @@ export type Item = {
   lebar?: string;
   tinggi?: string;
   diameter?: string;
+  packing_shape?: string | null;
   length?: string | number | null;
   width?: string | number | null;
   height?: string | number | null;
   weight?: string | number | null;
   purchasing?: string | number | null;
   standard_colly_item?: string | number | null;
+  compression_rate?: string | number | null;
   default_expense_account?: string | null;
   default_income_account?: string | null;
   ppn_name?: string | null;
@@ -111,6 +115,7 @@ export type Item = {
   branches?: Array<{
     id: number;
     name: string;
+    city?: string;
   }>;
 };
 
@@ -136,12 +141,14 @@ type ItemDetailResponse = Partial<{
   lebar: string;
   tinggi: string;
   diameter: string;
+  packing_shape: string | null;
   length: string | number | null;
   width: string | number | null;
   height: string | number | null;
   weight: string | number | null;
   purchasing: string | number | null;
   standard_colly_item: string | number | null;
+  compression_rate: string | number | null;
   default_expense_account: string | null;
   default_income_account: string | null;
   ppn_name: string | null;
@@ -151,9 +158,10 @@ type ItemDetailResponse = Partial<{
   last_item_updater: string | null;
   version: number;
   branches: Array<{
-    branch?: number | { id?: number; branch_name?: string };
+    branch?: number | { id?: number; branch_name?: string; city?: string };
     branch_id?: number;
     branch_name?: string;
+    city?: string;
   }>;
 }>;
 
@@ -172,6 +180,7 @@ function enrichItemDetail(item: Item, detail: ItemDetailResponse): Item {
           return {
             id,
             name: nested?.branch_name ?? row.branch_name ?? `Cabang #${id}`,
+            city: nested?.city ?? row.city,
           };
         })
         .filter((branch) => branch.id > 0)
@@ -204,12 +213,14 @@ function enrichItemDetail(item: Item, detail: ItemDetailResponse): Item {
     lebar: detail.lebar ?? item.lebar,
     tinggi: detail.tinggi ?? item.tinggi,
     diameter: detail.diameter ?? item.diameter,
+    packing_shape: detail.packing_shape ?? item.packing_shape,
     length: detail.length ?? item.length,
     width: detail.width ?? item.width,
     height: detail.height ?? item.height,
     weight: detail.weight ?? item.weight,
     purchasing: detail.purchasing ?? item.purchasing,
     standard_colly_item: detail.standard_colly_item ?? item.standard_colly_item,
+    compression_rate: detail.compression_rate ?? item.compression_rate,
     default_expense_account:
       detail.default_expense_account ?? item.default_expense_account,
     default_income_account:
@@ -235,7 +246,10 @@ type ItemAPIResponse = {
     item_code: string;
     item_desc?: string | null;
     item_group: string;
+    diameter?: string | null;
+    packing_shape?: string | null;
     item_category: string;
+    compression_rate?: string | number | null;
     generator_item?: string;
     uom?: string;
     image: string | null;
@@ -272,6 +286,11 @@ type SortField =
   | "created_at"
   | "updated_at";
 type SortDirection = "asc" | "desc";
+
+type BranchOption = {
+  id: number;
+  label: string;
+};
 
 const SNAP_KEY = "ekatalog_items_snapshot";
 
@@ -310,6 +329,17 @@ export default function ItemList() {
   const [showOnlyUnmapped, setShowOnlyUnmapped] = useState(
     urlState.showOnlyUnmapped,
   );
+  const initialBranchId = Number(searchParams.get("branch") || 0);
+  const [selectedBranchId, setSelectedBranchId] = useState(
+    Number.isInteger(initialBranchId) && initialBranchId > 0
+      ? initialBranchId
+      : 0,
+  );
+  const [branchOptions, setBranchOptions] = useState<BranchOption[]>([]);
+  const [loadingBranches, setLoadingBranches] = useState(false);
+  const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
+  const [branchSearch, setBranchSearch] = useState("");
+  const branchDropdownRef = useRef<HTMLDivElement | null>(null);
 
   // Infinite-scroll state
   const [currentPage, setCurrentPage] = useState(1);
@@ -339,6 +369,7 @@ export default function ItemList() {
     message: string;
   } | null>(null);
   const routedDetailRequestRef = useRef<number | null>(null);
+  const detailRequestRef = useRef(0);
   const hasLoadedOnceRef = useRef(false);
   const latestListRequestRef = useRef(0);
 
@@ -355,6 +386,30 @@ export default function ItemList() {
   useEffect(() => {
     setRouteDetailId(searchRouteDetailId);
   }, [searchRouteDetailId]);
+
+  useEffect(() => {
+    const branchId = Number(searchParams.get("branch") || 0);
+    setSelectedBranchId(
+      Number.isInteger(branchId) && branchId > 0 ? branchId : 0,
+    );
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!branchDropdownOpen) return;
+
+    function closeBranchDropdown(event: MouseEvent) {
+      if (
+        branchDropdownRef.current &&
+        !branchDropdownRef.current.contains(event.target as Node)
+      ) {
+        setBranchDropdownOpen(false);
+        setBranchSearch("");
+      }
+    }
+
+    document.addEventListener("mousedown", closeBranchDropdown);
+    return () => document.removeEventListener("mousedown", closeBranchDropdown);
+  }, [branchDropdownOpen]);
 
   useEffect(() => {
     if (!exportNotice) return;
@@ -423,6 +478,7 @@ export default function ItemList() {
     sort_order?: SortDirection,
     page: number = 1,
     search?: string,
+    branchId?: number,
   ): Promise<{
     items: Item[];
     totalItems: number;
@@ -437,8 +493,8 @@ export default function ItemList() {
       alias: string;
       table: string;
       fields: string[];
-      parent_key: string;
-      parent_value: string;
+      parent_key?: string;
+      parent_value?: string;
     }
 
     const itemSpec: {
@@ -458,6 +514,9 @@ export default function ItemList() {
         "item_name",
         "item_category",
         "item_group",
+        "packing_shape",
+        "diameter",
+        "compression_rate",
         "disabled",
       ],
       limit: itemsPerPage,
@@ -471,11 +530,25 @@ export default function ItemList() {
           parent_key: "item",
           parent_value: "id",
         },
+        {
+          alias: "branches",
+          table: "item_branches",
+          fields: [
+            "branch",
+            "branch.branch_name",
+            "branch.id",
+            "branch.city",
+          ],
+        },
       ],
     };
 
-    if (filterTriples.length > 0) {
-      itemSpec.filters = filterTriples;
+    const resolvedFilters: FilterTriple[] = branchId
+      ? [...filterTriples, ["branches.branch.id", "=", branchId]]
+      : filterTriples;
+
+    if (resolvedFilters.length > 0) {
+      itemSpec.filters = resolvedFilters;
     }
 
     if (search) {
@@ -531,6 +604,9 @@ export default function ItemList() {
         group: item.item_group,
         item_group: item.item_group,
         category: item.item_category,
+        packing_shape: item.packing_shape,
+        diameter: item.diameter ?? undefined,
+        compression_rate: item.compression_rate,
         generator_item: item.generator_item || "",
         image: getFileUrl(item.image),
         description: item.item_desc || undefined,
@@ -594,6 +670,9 @@ export default function ItemList() {
     if (routeDetailId !== null) {
       params.set("id", String(routeDetailId));
     }
+    if (selectedBranchId > 0) {
+      params.set("branch", String(selectedBranchId));
+    }
 
     const newUrl = params.toString() ? `?${params.toString()}` : "";
     router.replace(newUrl, { scroll: false });
@@ -603,6 +682,7 @@ export default function ItemList() {
     sortDirection,
     debouncedSearch,
     showOnlyUnmapped,
+    selectedBranchId,
     routeDetailId,
     router,
   ]);
@@ -638,6 +718,7 @@ export default function ItemList() {
           sortDirection,
           page,
           debouncedSearch,
+          selectedBranchId,
         );
 
         // A slower response from an older search must not overwrite the
@@ -702,6 +783,7 @@ export default function ItemList() {
       sortDirection,
       sortField,
       token,
+      selectedBranchId,
     ],
   );
 
@@ -796,6 +878,8 @@ export default function ItemList() {
   }
 
   async function openDetail(item: Item, updateRoute = true) {
+    const requestId = ++detailRequestRef.current;
+
     if (updateRoute) {
       setRouteDetailId(item.id);
       const params = new URLSearchParams(window.location.search);
@@ -807,12 +891,13 @@ export default function ItemList() {
       );
     }
 
+    // Open immediately with list data, then enrich it with the detail response.
+    // This also prevents the route effect from starting a duplicate request.
+    setDetailItem(item);
+    setDetailOpen(true);
+
     // Fetch detail item dengan branches menggunakan childs
-    if (!token) {
-      setDetailItem(item);
-      setDetailOpen(true);
-      return;
-    }
+    if (!token) return;
 
     try {
       const headers = getAuthHeaders(token);
@@ -826,7 +911,12 @@ export default function ItemList() {
             {
               alias: "branches",
               table: "item_branches",
-              fields: ["branch", "branch.id", "branch.branch_name"],
+              fields: [
+                "branch",
+                "branch.id",
+                "branch.branch_name",
+                "branch.city",
+              ],
             },
           ],
         },
@@ -844,22 +934,17 @@ export default function ItemList() {
 
         const itemWithBranches = enrichItemDetail(item, detailItem);
 
-        setDetailItem(itemWithBranches);
-        setDetailOpen(true);
-      } else {
-        // Fallback: buka modal dengan data yang ada
-        setDetailItem(item);
-        setDetailOpen(true);
+        if (requestId === detailRequestRef.current) {
+          setDetailItem(itemWithBranches);
+        }
       }
     } catch {
-      // console.error("Failed to fetch item detail:", error);
-      // Fallback: buka modal dengan data yang ada
-      setDetailItem(item);
-      setDetailOpen(true);
+      // Keep the list data already shown in the modal as a fallback.
     }
   }
 
   function closeDetail() {
+    detailRequestRef.current += 1;
     setDetailOpen(false);
     setDetailItem(null);
     setRouteDetailId(null);
@@ -1042,6 +1127,57 @@ export default function ItemList() {
     loadProductsAndCategories();
   }, [loadProductsAndCategories]);
 
+  useEffect(() => {
+    if (!token || !isAuthenticated) {
+      setBranchOptions([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadBranchOptions() {
+      if (!token) return;
+      setLoadingBranches(true);
+      try {
+        const rows = await fetchAllQueryRows<{
+          id: number;
+          branch_name?: string | null;
+          name?: string | null;
+          city?: string | null;
+        }>({
+          endpoint: API_CONFIG.ENDPOINTS.BRANCH,
+          spec: { fields: ["id", "branch_name", "name", "city"] },
+          token,
+          errorMessage: "Failed to fetch branches",
+        });
+        if (cancelled) return;
+
+        setBranchOptions(
+          rows
+            .map((branch) => ({
+              id: Number(branch.id),
+              label:
+                branch.city?.trim() ||
+                branch.branch_name?.trim() ||
+                branch.name?.trim() ||
+                `Cabang #${branch.id}`,
+            }))
+            .filter((branch) => Number.isInteger(branch.id) && branch.id > 0)
+            .sort((a, b) => a.label.localeCompare(b.label, "id")),
+        );
+      } catch {
+        if (!cancelled) setBranchOptions([]);
+      } finally {
+        if (!cancelled) setLoadingBranches(false);
+      }
+    }
+
+    void loadBranchOptions();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, token]);
+
   // Listen for product updates
   React.useEffect(() => {
     const handleProductsUpdate = () => {
@@ -1060,6 +1196,13 @@ export default function ItemList() {
 
   // Filtering for mapping status remains client-side because it uses child data.
   let displayedItems = items;
+
+  const selectedBranchLabel =
+    branchOptions.find((branch) => branch.id === selectedBranchId)?.label ||
+    "Semua Branch";
+  const visibleBranchOptions = branchOptions.filter((branch) =>
+    branch.label.toLowerCase().includes(branchSearch.trim().toLowerCase()),
+  );
 
   // Filter for unmapped items
   if (showOnlyUnmapped) {
@@ -1293,6 +1436,124 @@ export default function ItemList() {
                 onApply={handleApplyFilters}
                 dropdownAlign="right"
               />
+
+              <div className="relative" ref={branchDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBranchDropdownOpen((open) => !open);
+                    setBranchSearch("");
+                  }}
+                  disabled={loadingBranches}
+                  aria-haspopup="listbox"
+                  aria-expanded={branchDropdownOpen}
+                  className={`flex min-w-[170px] max-w-[220px] items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-wait disabled:opacity-60 ${
+                    selectedBranchId > 0
+                      ? "border-blue-500 bg-blue-50 text-blue-700"
+                      : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
+                  }`}
+                  title="Filter item berdasarkan branch"
+                >
+                  <FaMapMarkerAlt className="h-3.5 w-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate text-left">
+                    {loadingBranches ? "Memuat branch..." : selectedBranchLabel}
+                  </span>
+                  <FaChevronDown
+                    className={`h-3 w-3 shrink-0 transition-transform ${
+                      branchDropdownOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+
+                <AnimatePresence>
+                  {branchDropdownOpen && !loadingBranches ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                      transition={{ duration: 0.12 }}
+                      className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl"
+                    >
+                      <div className="border-b border-gray-100 p-2.5">
+                        <div className="relative">
+                          <FaSearch className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                          <input
+                            type="text"
+                            value={branchSearch}
+                            onChange={(event) =>
+                              setBranchSearch(event.target.value)
+                            }
+                            placeholder="Cari branch..."
+                            autoFocus
+                            className="w-full rounded-lg border border-gray-200 py-2 pl-8 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                          />
+                        </div>
+                      </div>
+
+                      <div
+                        role="listbox"
+                        aria-label="Pilih branch"
+                        className="max-h-64 overflow-y-auto p-1.5"
+                      >
+                        {!branchSearch && (
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={selectedBranchId === 0}
+                            onClick={() => {
+                              setSelectedBranchId(0);
+                              setBranchDropdownOpen(false);
+                              setBranchSearch("");
+                            }}
+                            className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                              selectedBranchId === 0
+                                ? "bg-blue-50 font-semibold text-blue-700"
+                                : "text-gray-700 hover:bg-gray-50"
+                            }`}
+                          >
+                            <span className="flex-1">Semua Branch</span>
+                            {selectedBranchId === 0 && (
+                              <FaCheck className="h-3 w-3 text-blue-600" />
+                            )}
+                          </button>
+                        )}
+
+                        {visibleBranchOptions.map((branch) => (
+                          <button
+                            key={branch.id}
+                            type="button"
+                            role="option"
+                            aria-selected={selectedBranchId === branch.id}
+                            onClick={() => {
+                              setSelectedBranchId(branch.id);
+                              setBranchDropdownOpen(false);
+                              setBranchSearch("");
+                            }}
+                            className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                              selectedBranchId === branch.id
+                                ? "bg-blue-50 font-semibold text-blue-700"
+                                : "text-gray-700 hover:bg-gray-50"
+                            }`}
+                          >
+                            <span className="min-w-0 flex-1 truncate">
+                              {branch.label}
+                            </span>
+                            {selectedBranchId === branch.id && (
+                              <FaCheck className="h-3 w-3 shrink-0 text-blue-600" />
+                            )}
+                          </button>
+                        ))}
+
+                        {visibleBranchOptions.length === 0 && (
+                          <p className="px-3 py-6 text-center text-sm text-gray-500">
+                            Branch tidak ditemukan
+                          </p>
+                        )}
+                      </div>
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
+              </div>
 
               {/* Unmapped Items Filter */}
               <motion.button
